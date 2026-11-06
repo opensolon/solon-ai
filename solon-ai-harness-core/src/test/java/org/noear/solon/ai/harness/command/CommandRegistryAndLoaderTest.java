@@ -3,6 +3,7 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -77,7 +78,7 @@ class CommandRegistryAndLoaderTest {
     @Test
     void loadFromMissingDirectoryIsSilent() {
         CommandRegistry registry = new CommandRegistry();
-        registry.load(java.nio.file.Paths.get("no/such/dir"));
+        registry.load(FileMountSource.of("no/such/dir"), "");
         assertTrue(registry.names().isEmpty());
     }
 
@@ -92,7 +93,7 @@ class CommandRegistryAndLoaderTest {
         Files.write(base.resolve("notes.txt"), "x".getBytes(StandardCharsets.UTF_8));
 
         CommandRegistry registry = new CommandRegistry();
-        MarkdownCommandLoader.loadFromDirectory(base, registry);
+        MarkdownCommandLoader.loadFrom(FileMountSource.of(base), "", registry);
 
         assertEquals(java.util.Arrays.asList("commit", "deploy:staging"), registry.names());
 

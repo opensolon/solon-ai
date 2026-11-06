@@ -19,7 +19,6 @@ import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -36,16 +35,8 @@ public class CommandRegistry {
     private final Map<String, Command> commands = new ConcurrentHashMap<>();
 
     /**
-     * 从目录加载
-     *
-     * @param baseDir 目录
-     */
-    public void load(Path baseDir) {
-        MarkdownCommandLoader.loadFromDirectory(baseDir, this);
-    }
-
-    /**
-     * 从挂载来源的目录加载（本地、db、http 均可）
+     * 从挂载来源的目录加载（本地、db、http 均可；本地目录用 {@code FileMountSource.of(dir)}）。
+     * 目录不存在时静默返回。
      *
      * @param source 挂载来源
      * @param dir    来源内目录（空串表示根）

@@ -63,9 +63,17 @@ public class MountManager {
     /**
      * 创建挂载管理器并指定工作区来源。
      *
-     * <p>工作区来源是文件工具（read/write/edit/ls/grep/glob）的解析目标；为 null 时按 workDir 创建本地来源。
-     * bash、LSP、构建校验始终在 workDir（计算侧本地副本）上运行：传入非本地来源时，
-     * 宿主必须自行保证 workDir 与该来源同步，否则两类工具会看到不同的内容。</p>
+     * <p>为 null 时按 workDir 创建本地来源（等同 {@link #MountManager(String)}）。</p>
+     *
+     * <p><b>警告：远程工作区尚未打通，目前只应传入指向 workDir 的本地来源。</b>当前版本中：</p>
+     * <ul>
+     *   <li>模型文件工具（read/write/edit/ls/grep/glob）对相对路径始终走 workDir 本地文件，
+     *       不经过本来源；{@link #resolve(String)} 也只接受本地来源；</li>
+     *   <li>bash、LSP、构建校验同样只在 workDir 上运行；</li>
+     *   <li>只有 harness 写入工作区的产物（子任务超长结果、生成的子代理定义）和工作区命令加载经本来源读写。</li>
+     * </ul>
+     * <p>因此传入非本地来源会造成读写分裂：例如子任务结果写到了远端，模型却在本地读不到。
+     * 在工作区同步机制（计算侧拉取 / 回写本地副本）落地之前，宿主必须自行保证 workDir 与该来源内容一致。</p>
      *
      * @param workDir         工作区目录（计算侧本地路径）
      * @param workspaceSource 工作区来源；可为 null

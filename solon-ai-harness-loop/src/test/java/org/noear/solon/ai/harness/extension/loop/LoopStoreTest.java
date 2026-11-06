@@ -3,6 +3,7 @@ package org.noear.solon.ai.harness.extension.loop;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -53,7 +54,7 @@ class LoopStoreTest {
 
     private LoopExtension loaded(java.util.function.Predicate<String> alive) {
         LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
-                .storeFile(tasksFile()).sessionAlive(alive).build();
+                .store(FileMountSource.of(dir), "tasks.json").sessionAlive(alive).build();
         ext.scheduler().load();
         return ext;
     }

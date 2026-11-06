@@ -697,9 +697,9 @@ Command cmd = engine.resolveCommand(input);   // 未以命令前缀开头 / 只�
 ```java
 CommandRegistry registry = engine.getCommandRegistry();
 
-// 1) 从目录加载 Markdown 自定义命令
-registry.load(Paths.get(userHome, engine.getHarnessCommands()));      // ~/.solon/commands/
-registry.load(Paths.get(workspace, engine.getHarnessCommands()));     // ./.solon/commands/
+// 1) 从挂载来源加载 Markdown 自定义命令（本地/db/http 均可）
+registry.load(FileMountSource.of(Paths.get(userHome, engine.getHarnessCommands())), ""); // ~/.solon/commands/
+registry.load(engine.getWorkspaceSource(), engine.getHarnessCommands());                // ./.solon/commands/
 
 // 2) 注册代码实现的命令
 registry.register(new HelpCommand());
@@ -877,7 +877,7 @@ GoalExtension goal = engine.addExtensionIfAbsent(
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension()); // /queue
 SteerExtension steer = engine.addExtensionIfAbsent(new SteerExtension()); // /steer
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()  // /loop
-        .storeFile(dataDir.resolve("tasks.json"))        // 缺省 null = 只在内存
+        .store(engine.getDataSource(), "tasks.json")    // 跟随引擎数据来源（本地/db/http）；也可 .storeFile(path)；缺省 = 只在内存
         .sessionAlive(id -> sessionExists(id))           // 加载时孤儿清理；缺省恒 true
         .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
         .build());

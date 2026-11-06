@@ -17,15 +17,21 @@ package org.noear.solon.ai.talents.memory.md;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,19 +43,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * MD 方案的共享数据层：统一管理 MD 文件读写、内存缓存与搜索索引。
  *
+ * <p>每个作用域对应一个 {@link MountSource}（本地目录、db、http 均可），条目是来源根下的 {@code <storeKey>.md}。
+ * 本地目录用 {@code FileMountSource.of(dir)}；远程来源下 MD 文件可在多实例间共享，但缓存与索引仍在各进程内存中，
+ * 其他实例的写入要在重新加载（重建实例）后才能检索到；按 key 的 {@link #get} 在缓存未命中时会回源读取。</p>
+ *
  * <p>Store 层和 Search 层共享同一个 MdMemoryData 实例，保证：
  * <ul>
- *   <li>启动时从 MD 文件目录全量加载，重启后搜索索引不丢失</li>
+ *   <li>启动时从各作用域来源全量加载，重启后搜索索引不丢失</li>
  *   <li>写入 MD 文件的同时更新内存缓存和搜索索引，保证存搜一致性</li>
  *   <li>读取优先走内存缓存，避免重复磁盘 I/O</li>
  *   <li>分词结果内联到索引条目，随条目生命周期自动释放，无缓存泄漏风险</li>
  *   <li>Front Matter 中保存完整 storeKey，消除文件名还原的不确定性</li>
- *   <li>原子写入自动降级（兼容 Windows/FAT32/NFS/Docker overlay）</li>
+ *   <li>原子写入由来源保证（本地来源为临时文件 + 替换，不支持原子移动时自动降级）</li>
  *   <li>TTL 过期支持启动时清理和定期后台清理</li>
  * </ul>
  *
@@ -62,11 +71,11 @@ public class MemoryMdData implements AutoCloseable {
     private static final String FRONT_MATTER_DELIMITER = "---";
 
     /**
-     * 作用域目录映射（scope → 物理目录）。
+     * 作用域来源映射（scope → 挂载来源，条目放在来源根下）。
      * 使用 LinkedHashMap 保证迭代顺序（低→高），高优先级域覆盖低优先级域的同 key 条目。
      * 建议插入顺序：user → workspace。
      */
-    private final Map<String, Path> scopeDirMap;
+    private final Map<String, MountSource> scopeDirMap;
 
     /**
      * 内存缓存：cacheKey → MemoryEntry
@@ -86,29 +95,58 @@ public class MemoryMdData implements AutoCloseable {
     private ScheduledExecutorService cleanupScheduler;
 
     /**
+     * 基于本地目录创建（目录不存在时创建）。
+     *
      * @param scopeDirMap 作用域目录映射，需使用 LinkedHashMap 保证迭代顺序（低→高优先级）
+     * @deprecated 4.2.0，改用 {@link #of(Map)}（本地目录传 {@code FileMountSource.of(dir)}）
      */
+    @Deprecated
     public MemoryMdData(Map<String, Path> scopeDirMap) {
-        // 用 LinkedHashMap 保序，消除 HashMap 迭代序不确定性
-        if (scopeDirMap instanceof LinkedHashMap) {
-            this.scopeDirMap = scopeDirMap;
-        } else {
-            this.scopeDirMap = new LinkedHashMap<>(scopeDirMap);
+        this(toSources(scopeDirMap), true);
+    }
+
+    private MemoryMdData(Map<String, MountSource> scopeSourceMap, boolean ignored) {
+        if (scopeSourceMap == null || scopeSourceMap.isEmpty()) {
+            throw new IllegalArgumentException("scope source map must not be empty");
         }
+        // 用 LinkedHashMap 保序，消除 HashMap 迭代序不确定性
+        this.scopeDirMap = new LinkedHashMap<>(scopeSourceMap);
 
         init();
     }
 
-    private void init() {
-        for (String scope : scopeDirMap.keySet()) {
-            Path dir = scopeDirMap.get(scope);
+    /**
+     * 基于挂载来源创建（本地、db、http 均可）。
+     *
+     * @param scopeSourceMap 作用域来源映射（条目放在来源根下）；须为 LinkedHashMap 等有序 Map，顺序为低→高优先级
+     * @return 数据层
+     * @since 4.2.0
+     */
+    public static MemoryMdData of(Map<String, MountSource> scopeSourceMap) {
+        return new MemoryMdData(scopeSourceMap, true);
+    }
+
+    private static Map<String, MountSource> toSources(Map<String, Path> scopeDirMap) {
+        Map<String, MountSource> sources = new LinkedHashMap<>();
+        for (Map.Entry<String, Path> e : scopeDirMap.entrySet()) {
+            Path dir = e.getValue();
             try {
                 Files.createDirectories(dir);
-            } catch (IOException e) {
-                throw new RuntimeException("Failed to create memory storage directory: " + dir, e);
+            } catch (IOException ex) {
+                throw new RuntimeException("Failed to create memory storage directory: " + dir, ex);
             }
-            loadFromDisk(dir, scope);
-            cleanupTmpFiles(dir);
+            sources.put(e.getKey(), FileMountSource.of(dir));
+        }
+        return sources;
+    }
+
+    private void init() {
+        for (Map.Entry<String, MountSource> e : scopeDirMap.entrySet()) {
+            if (e.getValue() == null) {
+                throw new IllegalArgumentException("Memory scope source must not be null: " + e.getKey());
+            }
+            loadFromDisk(e.getValue(), e.getKey());
+            cleanupTmpFiles(e.getValue());
         }
     }
 
@@ -134,8 +172,8 @@ public class MemoryMdData implements AutoCloseable {
             String storedTime = getNow();
 
             // 1. 写 MD 文件（Front Matter 中保存完整 storeKey 和 scope，消除还原歧义）
-            Path file = resolveFile(storeKey, scopeDirMap.get(effectiveScope));
-            writeMdFile(file, storeKey, effectiveScope, time, importance, ttl, storedTime, content);
+            MountSource source = scopeDirMap.get(effectiveScope);
+            writeMdFile(source, resolveFile(storeKey, source), storeKey, effectiveScope, time, importance, ttl, storedTime, content);
 
             // 2. 更新内存缓存（scope 维度隔离，避免跨域同 key 覆盖）
             cache.put(buildCacheKey(userId, key, effectiveScope),
@@ -242,10 +280,11 @@ public class MemoryMdData implements AutoCloseable {
         String storeKey = buildStoreKey(userId, key);
 
         IOException failure = null;
-        for (Map.Entry<String, Path> entry : scopeDirMap.entrySet()) {
-            Path file = resolveFile(storeKey, entry.getValue());
+        for (Map.Entry<String, MountSource> entry : scopeDirMap.entrySet()) {
+            MountSource source = entry.getValue();
+            String file = resolveFile(storeKey, source);
             try {
-                boolean deleted = Files.deleteIfExists(file);
+                boolean deleted = source.deleteIfExists(file);
                 if (!deleted) {
                     LOG.debug("MdMemoryData remove: file not found (normal for multi-scope), userId={}, key={}, file={}", userId, key, file);
                 } else {
@@ -406,38 +445,65 @@ public class MemoryMdData implements AutoCloseable {
     // ==================== 启动加载 ====================
 
     /**
-     * 从磁盘全量加载 MD 文件到缓存和搜索索引
+     * 从作用域来源全量加载 MD 文件到缓存和搜索索引（仅根下的直接子文件）
      */
-    private void loadFromDisk(Path baseDir, String scope) {
+    private void loadFromDisk(MountSource source, String scope) {
         int expiredCount = 0;
         int loadedCount = 0;
-        try (Stream<Path> files = Files.list(baseDir)) {
-            List<Path> mdFiles = files.filter(p -> p.getFileName().toString().endsWith(".md"))
-                                      .collect(Collectors.toList());
-
-            for (Path file : mdFiles) {
-                LoadResult lr = loadSingleFile(file, scope);
-                if (lr == LoadResult.EXPIRED) {
-                    expiredCount++;
-                } else if (lr == LoadResult.LOADED) {
-                    loadedCount++;
-                }
+        for (MountEntry file : listFiles(source)) {
+            if (!file.getName().endsWith(".md")) {
+                continue;
             }
-        } catch (IOException e) {
-            LOG.error("MdMemoryData loadFromDisk error", e);
+            LoadResult lr = loadSingleFile(source, file.getPath(), scope);
+            if (lr == LoadResult.EXPIRED) {
+                expiredCount++;
+            } else if (lr == LoadResult.LOADED) {
+                loadedCount++;
+            }
         }
 
         if (loadedCount > 0 || expiredCount > 0) {
             LOG.info("MdMemoryData loaded {} entries from {} ({} expired cleaned)",
-                    loadedCount, baseDir, expiredCount);
+                    loadedCount, source.getLocation(), expiredCount);
+        }
+    }
+
+    /**
+     * 列出来源根下的文件；根尚不存在（如远程来源还没有任何条目）视为空。
+     */
+    private List<MountEntry> listFiles(MountSource source) {
+        try {
+            if (!source.isDirectory("")) {
+                return Collections.emptyList();
+            }
+            List<MountEntry> files = new ArrayList<>();
+            for (MountEntry entry : source.list("")) {
+                if (entry != null && !entry.isDirectory()) {
+                    files.add(entry);
+                }
+            }
+            return files;
+        } catch (IOException | RuntimeException e) {
+            LOG.error("MdMemoryData list error: {}", source.getLocation(), e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 按 UTF-8 读取并按行拆分（与 Files.readAllLines 同义：\n、\r\n、\r 均为行尾，末尾空行不计）。
+     */
+    private static List<String> readLines(MountSource source, String file) throws IOException {
+        String text = new String(source.readBytes(file), StandardCharsets.UTF_8);
+        try (BufferedReader reader = new BufferedReader(new StringReader(text))) {
+            return reader.lines().collect(Collectors.toList());
         }
     }
 
     private enum LoadResult { LOADED, EXPIRED, SKIPPED }
 
-    private LoadResult loadSingleFile(Path file, String dirScope) {
+    private LoadResult loadSingleFile(MountSource source, String file, String dirScope) {
         try {
-            FrontMatter fm = parseFrontMatter(Files.readAllLines(file, StandardCharsets.UTF_8));
+            FrontMatter fm = parseFrontMatter(readLines(source, file));
             if (fm == null) {
                 return LoadResult.SKIPPED;
             }
@@ -446,7 +512,7 @@ public class MemoryMdData implements AutoCloseable {
             String storeKey = fm.storeKey;
             if (storeKey == null || storeKey.isEmpty()) {
                 // 兼容旧格式文件：文件名即 storeKey（当前格式 storeKey + ".md"）
-                storeKey = fileNameToStoreKey(file.getFileName().toString());
+                storeKey = fileNameToStoreKey(fileNameOf(file));
                 LOG.warn("MdMemoryData: file has no name field, heuristic restore may be inaccurate: {}", file);
             }
 
@@ -455,7 +521,7 @@ public class MemoryMdData implements AutoCloseable {
                 try {
                     LocalDateTime stored = LocalDateTime.parse(fm.storedTime, FORMATTER);
                     if (Duration.between(stored, LocalDateTime.now()).getSeconds() > fm.ttl) {
-                        Files.deleteIfExists(file);
+                        source.deleteIfExists(file);
                         return LoadResult.EXPIRED;
                     }
                 } catch (Exception ignored) {
@@ -490,35 +556,25 @@ public class MemoryMdData implements AutoCloseable {
     // ==================== MD 文件读写 ====================
 
     /**
-     * 写入 MD 文件（原子写入 + 自动降级）
+     * 写入 MD 文件（整体覆盖写；原子性由来源保证，本地来源为临时文件 + 替换并自动降级）
      */
-    private void writeMdFile(Path file, String storeKey, String scope, String time, int importance, int ttl,
-                             String storedTime, String content) throws IOException {
+    private void writeMdFile(MountSource source, String file, String storeKey, String scope, String time,
+                             int importance, int ttl, String storedTime, String content) throws IOException {
         String md = buildMdContent(storeKey, scope, time, importance, ttl, storedTime, content);
-
-        Files.createDirectories(file.getParent());
-        Path tmpFile = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.write(tmpFile, md.getBytes(StandardCharsets.UTF_8));
-
-        try {
-            Files.move(tmpFile, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            // 降级为普通 rename（Windows/FAT32/NFS/Docker overlay 等环境）
-            Files.move(tmpFile, file, StandardCopyOption.REPLACE_EXISTING);
-        }
+        source.writeString(file, md);
     }
 
     /**
      * 从 MD 文件加载单条记忆（缓存未命中时调用）
      */
-    private MemoryEntry loadFromMdFile(String storeKey, String scope, Path scopeBaseDir) {
-        Path file = resolveFile(storeKey, scopeBaseDir);
-        if (!Files.exists(file)) {
-            return null;
-        }
+    private MemoryEntry loadFromMdFile(String storeKey, String scope, MountSource source) {
+        String file = resolveFile(storeKey, source);
 
         try {
-            FrontMatter fm = parseFrontMatter(Files.readAllLines(file, StandardCharsets.UTF_8));
+            if (!source.exists(file)) {
+                return null;
+            }
+            FrontMatter fm = parseFrontMatter(readLines(source, file));
             if (fm == null) {
                 return null;
             }
@@ -529,14 +585,14 @@ public class MemoryMdData implements AutoCloseable {
 
             // 先检查 TTL，过期的直接删除文件返回 null，避免无意义的补写 I/O
             if (isExpired(tempEntry)) {
-                try { Files.deleteIfExists(file); } catch (IOException ignored) {}
+                try { source.deleteIfExists(file); } catch (IOException ignored) {}
                 return null;
             }
 
             // 未过期且 Front Matter 中缺少 storeKey 或 scope 时补写（兼容旧文件）
             if (fm.storeKey == null || fm.storeKey.isEmpty() || fm.scope == null || fm.scope.isEmpty()) {
                 try {
-                    writeMdFile(file, storeKey, scope, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.content);
+                    writeMdFile(source, file, storeKey, scope, fm.time, fm.importance, fm.ttl, fm.storedTime, fm.content);
                 } catch (IOException ignored) {
                 }
             }
@@ -580,29 +636,37 @@ public class MemoryMdData implements AutoCloseable {
      *       重启后等于静默丢记忆。</li>
      * </ul>
      */
-    private Path resolveFile(String storeKey, Path scopeBaseDir) {
+    private String resolveFile(String storeKey, MountSource source) {
         if (storeKey.indexOf('/') >= 0 || storeKey.indexOf('\\') >= 0) {
             throw new IllegalArgumentException("Illegal memory key (path separator not allowed): " + storeKey);
         }
 
-        Path base = scopeBaseDir.normalize();
-        Path file = base.resolve(storeKey + ".md").normalize();
-        if (!base.equals(file.getParent())) {
+        String file = storeKey + ".md";
+        String normalized;
+        try {
+            normalized = source.normalize(file);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Illegal memory key (must resolve inside scope dir): " + storeKey, e);
+        }
+        if (!file.equals(normalized)) {
             throw new IllegalArgumentException("Illegal memory key (must resolve inside scope dir): " + storeKey);
         }
         return file;
     }
 
+    private static String fileNameOf(String path) {
+        int slash = path.lastIndexOf('/');
+        return slash < 0 ? path : path.substring(slash + 1);
+    }
+
     /**
-     * 清理残留的 .tmp 文件（writeMdFile 中 move 失败时可能残留）
+     * 清理残留的 .tmp 文件（原子写中途进程退出时可能残留）
      */
-    private void cleanupTmpFiles(Path baseDir) {
-        try (Stream<Path> files = Files.list(baseDir)) {
-            files.filter(p -> p.getFileName().toString().endsWith(".tmp"))
-                 .forEach(p -> {
-                     try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-                 });
-        } catch (IOException ignored) {
+    private void cleanupTmpFiles(MountSource source) {
+        for (MountEntry file : listFiles(source)) {
+            if (file.getName().endsWith(".tmp")) {
+                try { source.deleteIfExists(file.getPath()); } catch (IOException | RuntimeException ignored) {}
+            }
         }
     }
 

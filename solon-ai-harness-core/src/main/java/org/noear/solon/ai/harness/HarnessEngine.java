@@ -242,7 +242,10 @@ public class HarnessEngine {
     }
 
     /**
-     * 工作区来源（模型文件工具的解析目标；harness 写入工作区的产物也经它落地）。
+     * 工作区来源（harness 写入工作区的产物经它落地，如子任务超长结果、生成的子代理定义）。
+     *
+     * <p>当前引擎总是按 workspace 创建本地来源；模型文件工具与 bash 也都直接操作 workspace 本地文件。
+     * 远程工作区需要先有同步机制，见 {@code MountManager(String, MountSource)} 的说明。</p>
      *
      * @since 4.2.0
      */

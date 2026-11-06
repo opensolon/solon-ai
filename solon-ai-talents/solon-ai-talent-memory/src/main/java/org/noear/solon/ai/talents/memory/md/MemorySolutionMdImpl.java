@@ -20,6 +20,7 @@ import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
 import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -34,6 +35,10 @@ import java.util.Map;
  *   <li>读取和搜索都走内存缓存</li>
  *   <li>后台定期清理过期条目</li>
  * </ul>
+ *
+ * <p><b>存储位置</b>：每个作用域是一个 {@link MountSource}，MD 文件可以放在本地，也可以放在 db / http 等远程来源（算存分离）。
+ * 注意缓存与索引在各进程内存中：同一来源被多个实例同时使用时，其他实例的写入要在重建本实例后才能检索到
+ * （按 key 读取在缓存未命中时会回源）。需要多实例实时一致时，请用 Redis（{@link MemoryStorer}）+ 向量库（{@link MemorySearcher}）方案。</p>
  *
  * @author noear
  * @since 3.10.5
@@ -50,12 +55,32 @@ public class MemorySolutionMdImpl implements MemorySolution, AutoCloseable {
      * 例如 {@code user → workspace}，后者覆盖前者。
      *
      * @param scopeDirMap 作用域目录映射
+     * @deprecated 4.2.0，改用 {@link #of(Map)}（本地目录传 {@code FileMountSource.of(dir)}）
      */
+    @Deprecated
     public MemorySolutionMdImpl(Map<String, Path> scopeDirMap) {
-        data = new MemoryMdData(scopeDirMap).enableAutoCleanup(3600);
+        this(new MemoryMdData(scopeDirMap));
+    }
+
+    private MemorySolutionMdImpl(MemoryMdData data) {
+        this.data = data.enableAutoCleanup(3600);
 
         storeProvider = new MemoryStorerMdImpl(data);
         searchProvider = new MemorySearcherMdImpl(data);
+    }
+
+    /**
+     * 基于挂载来源创建（本地、db、http 均可）。
+     *
+     * <p>须使用 LinkedHashMap 等有序 Map（低→高优先级），例如 {@code user → workspace}，后者覆盖前者；
+     * 条目放在各来源根下。</p>
+     *
+     * @param scopeSourceMap 作用域来源映射
+     * @return 记忆方案
+     * @since 4.2.0
+     */
+    public static MemorySolutionMdImpl of(Map<String, MountSource> scopeSourceMap) {
+        return new MemorySolutionMdImpl(MemoryMdData.of(scopeSourceMap));
     }
 
     @Override

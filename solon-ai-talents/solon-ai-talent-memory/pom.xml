@@ -22,6 +22,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-talent-mount</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.yomahub</groupId>
             <artifactId>roguemap-core</artifactId>
             <version>${roguemap.version}</version>

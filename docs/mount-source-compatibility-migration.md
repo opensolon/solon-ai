@@ -108,13 +108,16 @@ mounts.register(Mount.builder()
 
 ### 4.2 工作区
 
-工作区不需要再创建第二个目录配置。`MountManager` 内部持有工作区的 `FileMountSource`：
+工作区不需要再创建第二个目录配置。`MountManager` 内部持有工作区来源（默认是 workDir 上的 `FileMountSource`）：
 
 ```java
-FileMountSource workspace = mounts.getWorkspaceSource();
+MountSource workspace = mounts.getWorkspaceSource(); // 4.2.0 起返回接口类型
 ```
 
-相对路径、`.`、`./path` 和 `@workspace/path` 都会解析到工作区来源。普通挂载则使用 `@alias/path`。
+`resolveResource` 把相对路径、`.`、`./path` 和 `@workspace/path` 都解析到工作区来源。普通挂载则使用 `@alias/path`。
+
+> 注意：`MountManager(workDir, workspaceSource)` 目前只应传入指向 workDir 的本地来源。模型文件工具对相对路径、bash、LSP 都直接操作 workDir 本地文件，
+> 传入远程来源会造成读写分裂；远程工作区需要先有同步机制（详见该构造器的 Javadoc）。
 
 ## 5. ClasspathMountSource 用法
 

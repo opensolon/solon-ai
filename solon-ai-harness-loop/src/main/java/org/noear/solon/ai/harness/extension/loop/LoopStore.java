@@ -4,7 +4,6 @@
  */
 package org.noear.solon.ai.harness.extension.loop;
 
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.talents.mount.source.MoveOptions;
 import org.noear.snack4.Feature;
@@ -14,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -46,19 +44,6 @@ final class LoopStore {
     private final List<ONode> foreign = Collections.synchronizedList(new ArrayList<>());
     /** 只读模式：文件读不出来或损坏文件备份失败时置位，之后 save 一律跳过。 */
     private volatile boolean readOnly;
-
-    /** 本地文件存储（null = 纯内存）。 */
-    static LoopStore ofFile(Path file) {
-        if (file == null) {
-            return new LoopStore(null, null);
-        }
-        Path abs = file.toAbsolutePath().normalize();
-        Path parent = abs.getParent();
-        if (parent == null) {
-            throw new IllegalArgumentException("Invalid loop store file: " + file);
-        }
-        return new LoopStore(FileMountSource.of(parent), abs.getFileName().toString());
-    }
 
     /**
      * @param source 存储来源（null = 纯内存）

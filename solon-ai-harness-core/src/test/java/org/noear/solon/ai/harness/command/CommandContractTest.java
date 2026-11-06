@@ -3,7 +3,9 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -178,8 +180,8 @@ class CommandContractTest {
     @Test
     void loadFromDirectoryIgnoresMissingDir() {
         CommandRegistry registry = new CommandRegistry();
-        MarkdownCommandLoader.loadFromDirectory(
-                java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), "no-such-dir-xyz"), registry);
+        MarkdownCommandLoader.loadFrom(FileMountSource.of(
+                Paths.get(System.getProperty("java.io.tmpdir"), "no-such-dir-xyz")), "", registry);
 
         assertTrue(registry.all().isEmpty());
     }

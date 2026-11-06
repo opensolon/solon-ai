@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.mount.source.FindOptions;
 import org.noear.solon.ai.talents.mount.source.MountEntry;
 import org.noear.solon.ai.talents.mount.source.MountSource;
@@ -26,32 +25,17 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Arrays;
 
 /**
- * 从命令目录（本地目录或任意挂载来源）加载 Markdown 自定义命令
+ * 从挂载来源的命令目录加载 Markdown 自定义命令（本地目录用 {@code FileMountSource.of(dir)}）
  *
  * @author noear
  * @since 4.2.0
  */
 public class MarkdownCommandLoader {
     private static final Logger LOG = LoggerFactory.getLogger(MarkdownCommandLoader.class);
-
-    /**
-     * 扫描本地目录（含子目录），注册 .md 文件为命令（委托 {@link #loadFrom(MountSource, String, CommandRegistry)}）。
-     *
-     * @param baseDir  命令目录根路径
-     * @param registry 注册表
-     */
-    public static void loadFromDirectory(Path baseDir, CommandRegistry registry) {
-        if (baseDir == null || !Files.isDirectory(baseDir)) {
-            return;
-        }
-        loadFrom(FileMountSource.of(baseDir), "", registry);
-    }
 
     /**
      * 从挂载来源的目录（含子目录）加载 .md 命令：{@code deploy/staging.md → deploy:staging}。

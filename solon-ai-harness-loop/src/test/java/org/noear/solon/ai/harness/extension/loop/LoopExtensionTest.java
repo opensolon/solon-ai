@@ -9,6 +9,7 @@ import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.command.AgentTaskIntent;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -67,7 +68,7 @@ class LoopExtensionTest {
                 + "\"createdAt\":\"2026-01-01T00:00:00Z\",\"autoInterval\":false,\"enabled\":true,"
                 + "\"sessionId\":\"s1\"}]}").getBytes("UTF-8"));
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).storeFile(store).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
 
         HarnessEngine engine = engine(loop);
 
@@ -88,8 +89,8 @@ class LoopExtensionTest {
         Files.write(storeA, json.getBytes("UTF-8"));
         Files.write(storeB, json.getBytes("UTF-8"));
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension a = builder(jm).storeFile(storeA).build();
-        LoopExtension b = builder(jm).storeFile(storeB).build();
+        LoopExtension a = builder(jm).store(FileMountSource.of(workspace), storeA.getFileName().toString()).build();
+        LoopExtension b = builder(jm).store(FileMountSource.of(workspace), storeB.getFileName().toString()).build();
         engine(a);
         engine(b);
 
@@ -123,7 +124,7 @@ class LoopExtensionTest {
     void removeSessionStopsAndDeletesTasksOfThatSessionOnly() throws Exception {
         Path store = workspace.resolve("tasks.json");
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).storeFile(store).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         loop.schedule("s2", LoopSpec.of("b").everyMinutes(5));
@@ -145,7 +146,7 @@ class LoopExtensionTest {
     void detachUnloadsJobsButKeepsRecords() throws Exception {
         Path store = workspace.resolve("tasks.json");
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).storeFile(store).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertEquals(1, jm.jobs.size());
@@ -203,7 +204,7 @@ class LoopExtensionTest {
     @Test
     void inFlightRoundAfterDetachDoesNotWipeStore() throws Exception {
         Path store = workspace.resolve("tasks.json");
-        LoopExtension loop = builder(null).storeFile(store).build();
+        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -232,7 +233,7 @@ class LoopExtensionTest {
     @Test
     void reattachLoadsAgainAndPersistsAgain() throws Exception {
         Path store = workspace.resolve("tasks.json");
-        LoopExtension loop = builder(null).storeFile(store).build();
+        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
         HarnessEngine first = engine(loop);
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         first.shutdown();
