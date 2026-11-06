@@ -4,9 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountType;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

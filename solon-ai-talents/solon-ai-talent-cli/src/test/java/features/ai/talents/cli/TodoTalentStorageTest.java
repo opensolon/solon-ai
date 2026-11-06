@@ -3,8 +3,8 @@ package features.ai.talents.cli;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.talents.cli.TodoTalent;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.source.MemoryMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,7 +21,7 @@ public class TodoTalentStorageTest {
 
     @Test
     void readWriteThroughNonLocalSource() throws Exception {
-        MemoryMountSource source = new MemoryMountSource();
+        InMemoryMountSource source = new InMemoryMountSource();
         TodoTalent todo = new TodoTalent(source, "sessions");
 
         assertNull(todo.readTodo(null, "s1"));
@@ -52,7 +52,7 @@ public class TodoTalentStorageTest {
 
     @Test
     void rejectsUnsafeSessionId() {
-        TodoTalent todo = new TodoTalent(new MemoryMountSource(), "sessions/");
+        TodoTalent todo = new TodoTalent(new InMemoryMountSource(), "sessions/");
         for (String bad : new String[]{"..", ".", "", "a/b", "a\\b", "../agents", null}) {
             assertThrows(IllegalArgumentException.class, () -> todo.readTodo(null, bad), String.valueOf(bad));
             assertThrows(IllegalArgumentException.class, () -> todo.writeTodo(null, bad, "x"), String.valueOf(bad));

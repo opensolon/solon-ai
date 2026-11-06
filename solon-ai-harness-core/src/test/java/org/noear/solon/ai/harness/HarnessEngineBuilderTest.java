@@ -13,9 +13,9 @@ import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountType;
 
 import java.net.Proxy;
 import java.nio.file.Path;

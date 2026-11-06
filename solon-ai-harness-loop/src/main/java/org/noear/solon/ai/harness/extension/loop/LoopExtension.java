@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.harness.extension.loop;
 
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
@@ -38,11 +38,11 @@ import java.util.function.UnaryOperator;
  *
  * <pre>{@code
  * // 最简：一行装配，缺省执行器经 engine.handle(...) 同步跑一轮
- * engine.addExtensionIfAbsent(LoopExtension.builder().store(engine.getDataSource(), "tasks.json").build());
+ * engine.addExtensionIfAbsent(LoopExtension.builder().store(engine.getStateSource(), "tasks.json").build());
  *
  * // 完整：
  * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
- *         .store(engine.getDataSource(), "tasks.json")             // 本地/db/http；缺省 = 只在内存
+ *         .store(engine.getStateSource(), "tasks.json")             // 本地/db/http；缺省 = 只在内存
  *         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id)))   // 孤儿清理；缺省恒 true
  *         .maxErrors(() -> 3)                                      // 任务级连续失败阈值；每次实时读
  *         .triggerWrapper(r -> withLogScope(r))                    // 调度线程包装；缺省原样执行
@@ -292,7 +292,7 @@ public class LoopExtension extends AbsHarnessExtension {
         }
 
         /**
-         * 任务存储到挂载来源（本地、db、http 均可）。通常传 {@code engine.getDataSource()}，
+         * 任务存储到挂载来源（本地、db、http 均可）。通常传 {@code engine.getStateSource()}，
          * 本地目录用 {@code FileMountSource.of(dir)}；不设置则只在内存、不持久化。
          *
          * @param source 存储来源（null = 只在内存）

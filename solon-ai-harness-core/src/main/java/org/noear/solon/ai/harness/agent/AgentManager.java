@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.harness.agent;
 
-import org.noear.solon.ai.talents.mount.catalog.AgentCatalog;
-import org.noear.solon.ai.talents.mount.catalog.AgentDescriptor;
+import org.noear.solon.ai.mount.catalog.AgentCatalog;
+import org.noear.solon.ai.mount.catalog.AgentDescriptor;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;

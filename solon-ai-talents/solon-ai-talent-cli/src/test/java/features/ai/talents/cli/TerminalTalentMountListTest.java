@@ -4,11 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.ShellCommandFactory;
 import org.noear.solon.ai.talents.cli.ShellMode;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
-import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.MountType;
+import org.noear.solon.ai.mount.source.ClasspathMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -77,7 +77,7 @@ public class TerminalTalentMountListTest {
             Files.write(pool.resolve("tool.md"), "# tool".getBytes());
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@pool1").type(MountType.FILES)
-                    .source(FileMountSource.of(pool)).writeable(true).build());
+                    .source(FileMountSource.of(pool)).writable(true).build());
 
             String instruction = new TerminalTalent(manager).getInstruction(null);
             String line = mountLine(instruction, "@pool1");
@@ -100,7 +100,7 @@ public class TerminalTalentMountListTest {
             manager.register(Mount.builder().alias("@cp").type(MountType.SKILLS)
                     .source(ClasspathMountSource.of(
                             Thread.currentThread().getContextClassLoader(), "test-skills"))
-                    .writeable(false).build());
+                    .writable(false).build());
 
             String instruction = new TerminalTalent(manager).getInstruction(null);
             String line = mountLine(instruction, "@cp");
@@ -125,7 +125,7 @@ public class TerminalTalentMountListTest {
             // 模拟内置挂载：本地 shell 可达但 visible=false（与 @harness 的注册形态一致）
             manager.register(Mount.builder().alias("@builtin").type(MountType.AGENTS)
                     .source(FileMountSource.of(pool))
-                    .writeable(false)
+                    .writable(false)
                     .visible(false)
                     .build());
 

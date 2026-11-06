@@ -27,7 +27,6 @@
         <module>../../solon-ai-talents/solon-ai-talent-lsp</module>
         <module>../../solon-ai-talents/solon-ai-talent-mail</module>
         <module>../../solon-ai-talents/solon-ai-talent-memory</module>
-        <module>../../solon-ai-talents/solon-ai-talent-mount</module>
         <module>../../solon-ai-talents/solon-ai-talent-pdf</module>
         <module>../../solon-ai-talents/solon-ai-talent-social</module>
         <module>../../solon-ai-talents/solon-ai-talent-sys</module>

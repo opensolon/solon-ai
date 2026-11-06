@@ -127,7 +127,7 @@ class HarnessExtensionLifecycleTest {
     void builtinMountProtectionStillHolds() {
         // Builder.mountAdd 使用 normalizeMountAlias：不带 @ 前缀的同名内置挂载也要被拦截
         assertThrows(IllegalArgumentException.class, () ->
-                builder().mountAdd(org.noear.solon.ai.talents.mount.Mount.builder()
+                builder().mountAdd(org.noear.solon.ai.mount.Mount.builder()
                         .alias("harness-agents")
                         .build()));
     }

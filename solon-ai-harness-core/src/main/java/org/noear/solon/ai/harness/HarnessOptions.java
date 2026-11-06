@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -31,7 +31,7 @@ import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.NonSerializable;
@@ -140,7 +140,7 @@ class HarnessOptions implements NonSerializable {
     private HITLInterceptor hitlInterceptor;
     private MemorySolutionProvider memoryProvider;
     /** harness 状态数据来源（TODO 清单等会话级状态）；null = 工作区下的 harnessHome 目录。 */
-    private volatile MountSource dataSource;
+    private volatile MountSource stateSource;
 
     HarnessOptions(String workspace, String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -190,22 +190,22 @@ class HarnessOptions implements NonSerializable {
      * <p>与工作区来源分开：工作区是模型可见的代码与产物；数据来源是 harness 自身状态，不注册进挂载表，
      * 模型的文件工具无法访问。</p>
      */
-    MountSource getDataSource() {
-        MountSource tmp = dataSource;
+    MountSource getStateSource() {
+        MountSource tmp = stateSource;
         if (tmp == null) {
             synchronized (this) {
-                tmp = dataSource;
+                tmp = stateSource;
                 if (tmp == null) {
                     Path root = Paths.get(workspace == null ? "." : workspace).resolve(harnessHome);
-                    tmp = dataSource = FileMountSource.of(root.toAbsolutePath().normalize());
+                    tmp = stateSource = FileMountSource.of(root.toAbsolutePath().normalize());
                 }
             }
         }
         return tmp;
     }
 
-    void setDataSource(MountSource dataSource) {
-        this.dataSource = dataSource;
+    void setStateSource(MountSource stateSource) {
+        this.stateSource = stateSource;
     }
 
     // ========== getter / setter ==========

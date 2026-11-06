@@ -1,0 +1,396 @@
+package features.ai.mount;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.mount.*;
+import org.noear.solon.ai.mount.catalog.DefaultAgentCatalog;
+import org.noear.solon.ai.mount.catalog.DefaultSkillCatalog;
+import org.noear.solon.ai.mount.source.ClasspathMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.FindOptions;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class MountManagerTest {
+    @TempDir
+    Path tempDir;
+
+    @Test
+    public void registerAliasWithoutAtShouldBeNormalized() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("pool"));
+        MountManager manager = new MountManager(tempDir.toString());
+
+        Mount mount = manager.register(Mount.builder()
+                .alias("pool")
+                .source(FileMountSource.of(pool))
+                .type(MountType.SKILLS)
+                .build());
+
+        assertEquals("@pool", mount.getAlias());
+        assertSame(mount, manager.getMount("pool"));
+        assertTrue(manager.hasMount("@pool"));
+        assertEquals(pool.resolve("note.txt"), manager.resolve(tempDir, "@pool/note.txt"));
+        assertSame(mount, manager.remove("pool"));
+        assertFalse(manager.hasMount("@pool"));
+        assertNull(manager.remove("pool"));
+    }
+
+    @Test
+    public void registerInvalidAliasShouldReject() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertThrows(IllegalArgumentException.class, () -> register(manager, ""));
+        assertThrows(IllegalArgumentException.class, () -> register(manager, "@"));
+        assertThrows(IllegalArgumentException.class, () -> register(manager, "@pool/sub"));
+        assertThrows(IllegalArgumentException.class, () -> register(manager, "@pool\\sub"));
+        assertThrows(IllegalArgumentException.class, () -> register(manager, "@pool name"));
+    }
+
+    @Test
+    public void resolveMountPathShouldRejectDotDotEscape() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("pool"));
+        MountManager manager = new MountManager(tempDir.toString());
+        register(manager, "@pool", pool);
+
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@pool/../outside.txt"));
+    }
+
+    @Test
+    public void resolveDisabledOrUnknownAtPathShouldFailClosed() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("pool"));
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder()
+                .alias("@pool")
+                .source(FileMountSource.of(pool))
+                .type(MountType.SKILLS)
+                .enabled(false)
+                .build());
+
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@pool/a.txt"));
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@missing/a.txt"));
+    }
+
+    @Test
+    public void mountListOrderShouldFollowRegistrationOrderAndSnapshot() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+        register(manager, "@b", Files.createDirectory(tempDir.resolve("b")));
+        register(manager, "@a", Files.createDirectory(tempDir.resolve("a")));
+        register(manager, "@c", Files.createDirectory(tempDir.resolve("c")));
+
+        Collection<Mount> snapshot = manager.getMounts();
+        ArrayList<String> aliases = new ArrayList<>();
+        snapshot.forEach(m -> aliases.add(m.getAlias()));
+        assertEquals("@b", aliases.get(0));
+        assertEquals("@a", aliases.get(1));
+        assertEquals("@c", aliases.get(2));
+        assertThrows(UnsupportedOperationException.class, snapshot::clear);
+        assertThrows(UnsupportedOperationException.class, () -> manager.getMountKeySet().clear());
+        manager.remove("@a");
+        assertEquals(3, snapshot.size());
+        assertEquals(2, manager.getMountKeySet().size());
+    }
+
+    @Test
+    public void fileMountFindShouldReturnNoEntriesWhenMaxEntriesIsZero() throws Exception {
+        Path root = Files.createDirectory(tempDir.resolve("find-root"));
+        Files.write(root.resolve("file.txt"), "content".getBytes());
+        FileMountSource source = FileMountSource.of(root);
+
+        assertTrue(source.find("", FindOptions.builder().maxEntries(0).build()).isEmpty());
+    }
+
+    @Test
+    public void fileMountShouldResolveResource() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("skills"));
+        Path demo = Files.createDirectory(pool.resolve("demo"));
+        Files.write(demo.resolve("SKILL.md"), "---\nname: demo\ndescription: Demo skill\n---\n".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        Mount mount = register(manager, "skills", pool);
+
+        assertSame(mount, manager.getMount("skills"));
+        assertEquals(pool, ((FileMountSource) mount.getSource()).getRootPath());
+        assertSame(mount, manager.resolveResource("@skills/demo/SKILL.md").getMount());
+        assertEquals(1, manager.getMounts().size());
+        assertSame(mount, manager.remove("skills"));
+        assertTrue(manager.getMounts().isEmpty());
+    }
+
+    @Test
+    public void agentCatalogShouldFilterByMountAndRefresh() throws Exception {
+        Path first = Files.createDirectory(tempDir.resolve("agents-a"));
+        Path second = Files.createDirectory(tempDir.resolve("agents-b"));
+        Files.write(first.resolve("review.md"), "---\nname: review\ndescription: test\n---\nreview".getBytes());
+        Files.write(second.resolve("deploy.md"), "---\nname: deploy\ndescription: test\n---\ndeploy".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("agents-a").source(FileMountSource.of(first))
+                .type(MountType.AGENTS).build());
+        manager.register(Mount.builder().alias("agents-b").source(FileMountSource.of(second))
+                .type(MountType.AGENTS).build());
+        DefaultAgentCatalog catalog = new DefaultAgentCatalog(manager);
+
+        assertEquals(2, catalog.getAgents().size());
+        assertEquals(1, catalog.getAgentsByMount("agents-a").size());
+        assertEquals("review", catalog.getAgentsByMount("@agents-a").iterator().next().getName());
+        assertTrue(catalog.getAgentsByMount("missing").isEmpty());
+
+        Files.delete(first.resolve("review.md"));
+        catalog.refreshByMount("agents-a");
+        assertTrue(catalog.getAgentsByMount("agents-a").isEmpty());
+        assertSame(first, ((FileMountSource) manager.getMount("agents-a").getSource()).getRootPath());
+    }
+
+    @Test
+    public void agentNameShouldComeFromFrontmatterAndMissingNameShouldBeSkipped() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("named-agents"));
+        Files.write(pool.resolve("file-name.md"), "---\nname: declared-name\ndescription: declared description\n---\nprompt".getBytes());
+        Files.write(pool.resolve("missing-name.md"), "---\ndescription: no name\n---\nprompt".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("named-agents").source(FileMountSource.of(pool))
+                .type(MountType.AGENTS).build());
+        DefaultAgentCatalog catalog = new DefaultAgentCatalog(manager);
+
+        assertNotNull(catalog.getAgent("declared-name"));
+        assertNull(catalog.getAgent("file-name"));
+        assertEquals("declared description", catalog.getAgent("declared-name").getDescription());
+        assertEquals(1, catalog.getAgents().size());
+    }
+
+    @Test
+    public void replacingMountShouldUpdateCatalogAfterRefresh() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("old"));
+        Files.write(pool.resolve("old.md"), "---\nname: old\ndescription: test\n---\nold".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("agents").source(FileMountSource.of(pool))
+                .type(MountType.AGENTS).build());
+        DefaultAgentCatalog catalog = new DefaultAgentCatalog(manager);
+        assertNotNull(catalog.getAgent("old"));
+        Mount replacement = manager.register(Mount.builder().alias("agents").type(MountType.FILES)
+                .source(FileMountSource.of(tempDir)).build());
+        catalog.refreshByMount("agents");
+        assertSame(replacement, manager.getMount("agents"));
+        assertNull(catalog.getAgent("old"));
+        assertEquals(1, manager.getMounts().size());
+        assertEquals(tempDir, ((FileMountSource) manager.resolveResource("@agents").getSource()).getRootPath());
+    }
+
+    @Test
+    public void workspaceAliasShouldBeReservedAndResolveConsistently() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertThrows(IllegalArgumentException.class, () -> register(manager, "workspace"));
+        assertThrows(IllegalArgumentException.class, () -> manager.register(Mount.builder()
+                .alias("@workspace").source(FileMountSource.of(tempDir)).build()));
+        assertEquals(tempDir, manager.resolve(tempDir, "@workspace"));
+        assertEquals(tempDir.resolve("note.txt"), manager.resolve(tempDir, "@workspace\\note.txt"));
+        assertEquals(tempDir.resolve("note.txt"), manager.resolveResource("@workspace/note.txt").getLocalPath().orElse(null));
+        assertNull(manager.resolveResource("@workspace").getMount());
+        assertThrows(SecurityException.class, () -> manager.resolveResource("@workspace/../outside"));
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@workspace/../outside"));
+        assertThrows(SecurityException.class, () -> manager.resolveResource("@workspace-other/file"));
+    }
+
+    @Test
+    public void localResolveShouldRejectEscapesAndNonLocalSources() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "../outside"));
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "/outside"));
+        Path link = tempDir.resolve("link");
+        Files.createSymbolicLink(link, tempDir.getParent());
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "link/other"));
+        manager.register(Mount.builder().alias("virtual").type(MountType.SKILLS)
+                .source(ClasspathMountSource.of("test-skills")).build());
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@virtual/demo/SKILL.md"));
+        assertEquals("classpath", manager.resolveResource("@virtual/demo/SKILL.md").getSource().getScheme());
+    }
+
+    @Test
+    public void disallowSkillLivesInCatalogAndSurvivesRefresh() {
+        MountManager manager = new MountManager(tempDir.toString());
+        DefaultSkillCatalog catalog = new DefaultSkillCatalog(manager);
+        catalog.disallowSkill("@skills/demo");
+        assertTrue(catalog.getDisallowSkills().contains("@skills/demo"));
+        assertTrue(catalog.isSkillDisallowed("@skills/demo"));
+        catalog.refresh();
+        assertTrue(catalog.isSkillDisallowed("@skills/demo"), "刷新不清空禁用列表");
+        catalog.allowSkill("@skills/demo");
+        assertFalse(catalog.isSkillDisallowed("@skills/demo"));
+        catalog.setDisallowSkills(java.util.Collections.singleton("@skills/other"));
+        assertTrue(catalog.isSkillDisallowed("@skills/other"));
+        // 空/null 别名不生效
+        catalog.disallowSkill("");
+        catalog.allowSkill(null);
+        assertFalse(catalog.isSkillDisallowed(null));
+        catalog.setDisallowSkills(null);
+        assertTrue(catalog.getDisallowSkills().isEmpty());
+    }
+
+    // --- MountListener ---
+
+    @Test
+    public void listenersAreNotifiedOutsideLockAndIsolated() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+        java.util.List<String> events = new java.util.ArrayList<>();
+        // 抛异常的监听器不影响挂载操作，也不影响后续监听器
+        manager.addListener(new MountListener() {
+            @Override
+            public void onMountRegistered(Mount mount) {
+                throw new IllegalStateException("boom");
+            }
+        });
+        MountListener recorder = new MountListener() {
+            @Override
+            public void onMountRegistered(Mount mount) {
+                // 回调时挂载表已更新，可安全读取（不在管理器锁内）
+                events.add("+" + mount.getAlias() + ":" + manager.hasMount(mount.getAlias()));
+            }
+
+            @Override
+            public void onMountRemoved(Mount mount) {
+                events.add("-" + mount.getAlias() + ":" + manager.hasMount(mount.getAlias()));
+            }
+        };
+        manager.addListener(recorder);
+        manager.addListener(recorder); // 重复添加只生效一次
+
+        Mount registered = register(manager, "pool");
+        assertEquals("@pool", registered.getAlias());
+        assertSame(registered, manager.remove("pool"));
+        assertNull(manager.remove("pool"), "不存在时不通知");
+        assertEquals(java.util.Arrays.asList("+@pool:true", "-@pool:false"), events);
+
+        manager.removeListener(recorder);
+        register(manager, "pool2");
+        assertEquals(2, events.size(), "取消订阅后不再通知");
+    }
+
+    @Test
+    public void catalogsRefreshAutomaticallyOnMountChanges() throws Exception {
+        Path pool = Files.createDirectory(tempDir.resolve("auto-agents"));
+        Files.write(pool.resolve("a.md"), "---\nname: auto\ndescription: test\n---\nprompt".getBytes());
+        MountManager manager = new MountManager(tempDir.toString());
+        DefaultAgentCatalog catalog = new DefaultAgentCatalog(manager);
+        assertNull(catalog.getAgent("auto"));
+
+        manager.register(Mount.builder().alias("auto").source(FileMountSource.of(pool))
+                .type(MountType.AGENTS).build());
+        assertNotNull(catalog.getAgent("auto"), "注册后无需手动刷新");
+
+        manager.remove("auto");
+        assertNull(catalog.getAgent("auto"), "移除后无需手动刷新");
+    }
+
+    // --- resolveResource 分支 ---
+
+    @Test
+    public void resolveResourceShouldHandleBlankDotAndWorkspaceForms() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+
+        // null/空/. → 工作区根
+        assertEquals("", manager.resolveResource(null).getSourcePath());
+        assertEquals("", manager.resolveResource("").getSourcePath());
+        assertEquals("", manager.resolveResource(".").getSourcePath());
+        assertEquals("@workspace", manager.resolveResource(null).getMountAlias());
+        assertSame(manager.getWorkspaceSource(), manager.resolveResource(null).getSource());
+        assertNull(manager.resolveResource(null).getMount());
+
+        // 相对路径 → 工作区子路径
+        assertEquals("a/b.md", manager.resolveResource("a/b.md").getSourcePath());
+        assertEquals("a/b.md", manager.resolveResource("./a/b.md").getSourcePath());
+
+        // @workspace 别名 → 工作区
+        assertEquals("", manager.resolveResource("@workspace").getSourcePath());
+        assertEquals("note.txt", manager.resolveResource("@workspace/note.txt").getSourcePath());
+
+        // @workspace-xxx 不是保留别名，作为普通挂载名查找 → 未注册时拒绝
+        assertThrows(SecurityException.class, () -> manager.resolveResource("@workspace-other/f"));
+    }
+
+    @Test
+    public void resolveResourceShouldRejectEscapeUnderMountAndWorkspace() throws Exception {
+        MountManager manager = new MountManager(tempDir.toString());
+        // ".." 片段保留在归一化结果中 → 拒绝
+        assertThrows(SecurityException.class, () -> manager.resolveResource("../outside"));
+        assertThrows(SecurityException.class, () -> manager.resolveResource("a/../../outside"));
+
+        // 前导 "/" 在 normalize 中被剥离，绝对路径降级为工作区相对路径（与 resolve() 的显式拦截不同）
+        org.noear.solon.ai.mount.ResolvedResource degraded =
+                manager.resolveResource("/absolute/path");
+        assertEquals("absolute/path", degraded.getSourcePath());
+    }
+
+    @Test
+    public void resolveShouldReturnWorkDirForBlankAndDot() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertEquals(tempDir, manager.resolve(tempDir, null));
+        assertEquals(tempDir, manager.resolve(tempDir, ""));
+        assertEquals(tempDir, manager.resolve(tempDir, "."));
+    }
+
+    @Test
+    public void registerNullMountOrSourceShouldReject() {
+        MountManager manager = new MountManager(tempDir.toString());
+        assertThrows(IllegalArgumentException.class, () -> manager.register(null));
+        assertThrows(IllegalArgumentException.class, () -> manager.register(
+                Mount.builder().alias("@x").build()));
+        assertThrows(IllegalArgumentException.class, () -> manager.getMount(null));
+    }
+
+    private Mount register(MountManager manager, String alias) {
+        return register(manager, alias, tempDir);
+    }
+
+    private Mount register(MountManager manager, String alias, Path path) {
+        return manager.register(Mount.builder()
+                .alias(alias)
+                .source(FileMountSource.of(path))
+                .type(MountType.SKILLS)
+                .build());
+    }
+
+    // --- 跟随外部链接（Windows Junction / 目录重解析点） ---
+
+    @Test
+    public void trustedMountShouldResolveLinkTargetForExplicitAccess() throws Exception {
+        // 前置缺陷：FileMountSource 已放行，但 MountManager.checkedLocalPath 又按真实路径拦一次，
+        // 导致“发现阶段能列出、显式访问 @alias/path 却报 SecurityException”的不一致。
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                !System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path root = Files.createDirectory(tempDir.resolve("skills"));
+        Path outside = Files.createTempDirectory("mount-manager-trusted-outside");
+        try {
+            Files.createDirectories(outside.resolve("ego-browser"));
+            Files.write(outside.resolve("ego-browser/SKILL.md"), "# demo".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            Files.createSymbolicLink(root.resolve("ego-browser"), outside.resolve("ego-browser"));
+
+            MountManager strictManager = new MountManager(tempDir.toString());
+            strictManager.register(Mount.builder().alias("@strict").source(FileMountSource.of(root))
+                    .type(MountType.SKILLS).build());
+            assertThrows(SecurityException.class, () -> strictManager.resolve(tempDir, "@strict/ego-browser/SKILL.md"));
+
+            MountManager trustedManager = new MountManager(tempDir.toString());
+            trustedManager.register(Mount.builder().alias("@trusted").source(FileMountSource.of(root, true))
+                    .type(MountType.SKILLS).build());
+
+            Path resolved = trustedManager.resolve(tempDir, "@trusted/ego-browser/SKILL.md");
+            // 注意：macOS 上 /var 与 /private/var 是同一位置的不同写法，两边都取 realpath 再比
+            assertEquals(outside.resolve("ego-browser/SKILL.md").toRealPath().toString(), resolved.toRealPath().toString());
+            assertTrue(Files.exists(resolved));
+        } finally {
+            Files.walk(outside).sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+        }
+    }
+
+    @Test
+    public void trustedMountShouldStillRejectDotDotInLogicalPath() throws Exception {
+        // 跟随外部链接不等于放弃语法级越界拒绝
+        Path root = Files.createDirectory(tempDir.resolve("skills2"));
+        MountManager manager = new MountManager(tempDir.toString());
+        manager.register(Mount.builder().alias("@trusted2").source(FileMountSource.of(root, true))
+                .type(MountType.SKILLS).build());
+
+        assertThrows(SecurityException.class, () -> manager.resolve(tempDir, "@trusted2/../outside.txt"));
+    }
+}

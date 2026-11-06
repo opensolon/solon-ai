@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 
 public class TerminalTalentCommandSessionTest {

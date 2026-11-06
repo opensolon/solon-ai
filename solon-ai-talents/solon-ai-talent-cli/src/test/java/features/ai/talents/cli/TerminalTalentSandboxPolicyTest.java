@@ -6,10 +6,10 @@ import org.noear.solon.ai.talents.cli.ShellMode;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.MountType;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,7 +66,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
-                    .writeable(false)
+                    .writable(false)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -92,7 +92,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
-                    .writeable(true)
+                    .writable(true)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -119,7 +119,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@user-agents")
                     .source(FileMountSource.of(missingAgentsDir))
                     .type(MountType.AGENTS)
-                    .writeable(true)
+                    .writable(true)
                     .build();
             mountManager.register(mount);
 
@@ -153,13 +153,13 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(poolDir))
                     .type(MountType.SKILLS)
-                    .writeable(false)
+                    .writable(false)
                     .build());
             mountManager.register(Mount.builder()
                     .alias("@pool1")
                     .source(FileMountSource.of(pool1Dir))
                     .type(MountType.SKILLS)
-                    .writeable(false)
+                    .writable(false)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -187,7 +187,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
                     .enabled(false)
-                    .writeable(false)
+                    .writable(false)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -221,7 +221,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
-                    .writeable(true)
+                    .writable(true)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -276,7 +276,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(mountDir))
                     .type(MountType.SKILLS)
-                    .writeable(false)
+                    .writable(false)
                     .build());
 
             TerminalTalent talent = new TerminalTalent(mountManager);
@@ -355,7 +355,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@pool")
                     .source(FileMountSource.of(pool))
                     .type(MountType.SKILLS)
-                    .writeable(true)
+                    .writable(true)
                     .build());
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
@@ -404,7 +404,7 @@ public class TerminalTalentSandboxPolicyTest {
                     .alias("@user-agents")
                     .source(FileMountSource.of(pool))
                     .type(MountType.AGENTS)
-                    .writeable(true)
+                    .writable(true)
                     .build();
             mountManager.register(mount);
 

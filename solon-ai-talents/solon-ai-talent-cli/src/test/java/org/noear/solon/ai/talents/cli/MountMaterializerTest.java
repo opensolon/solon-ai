@@ -4,12 +4,12 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
-import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.source.MountEntry;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.MountType;
+import org.noear.solon.ai.mount.source.ClasspathMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.MountEntry;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -294,7 +294,7 @@ class MountMaterializerTest {
     }
 
     /** 声明可物化但 materialize() 返回空的桩：验证 ensureMaterialized 拒绝空快照。 */
-    private static class EmptyMaterializeSource implements org.noear.solon.ai.talents.mount.source.MountSource {
+    private static class EmptyMaterializeSource implements org.noear.solon.ai.mount.source.MountSource {
         @Override public String getScheme() { return "empty"; }
         @Override public String normalize(String path) { return path; }
         @Override public MountEntry stat(String path) { return null; }
@@ -302,23 +302,23 @@ class MountMaterializerTest {
             return java.util.Collections.emptyList();
         }
         @Override public java.util.List<MountEntry> find(String path,
-                                                         org.noear.solon.ai.talents.mount.source.FindOptions options) {
+                                                         org.noear.solon.ai.mount.source.FindOptions options) {
             return java.util.Collections.emptyList();
         }
         @Override public java.io.InputStream openRead(String path) {
             return new java.io.ByteArrayInputStream(new byte[0]);
         }
         @Override public java.io.OutputStream openWrite(String path,
-                org.noear.solon.ai.talents.mount.source.WriteOptions options) {
+                org.noear.solon.ai.mount.source.WriteOptions options) {
             return new java.io.ByteArrayOutputStream();
         }
         @Override public void delete(String path) { }
         @Override public void move(String source, String target,
-                org.noear.solon.ai.talents.mount.source.MoveOptions options) { }
-        @Override public org.noear.solon.ai.talents.mount.source.MountCapabilities capabilities() {
-            return new org.noear.solon.ai.talents.mount.source.MountCapabilities(
-                    true, false, true, false, false, false,
-                    false, false, false, true);
+                org.noear.solon.ai.mount.source.MoveOptions options) { }
+        @Override public org.noear.solon.ai.mount.source.MountCapabilities capabilities() {
+            return org.noear.solon.ai.mount.source.MountCapabilities.builder()
+                    .readable(true).searchable(true).materializable(true)
+                    .build();
         }
         // materialize 不覆写：走接口默认的返回空
     }

@@ -15,16 +15,12 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
-import org.noear.solon.ai.agent.react.intercept.HITL;
-import org.noear.solon.ai.agent.react.intercept.HITLAction;
-import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
@@ -34,32 +30,19 @@ import org.noear.solon.ai.agent.react.intercept.compress.KeyInfoExtractionStrate
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.ai.chat.content.Contents;
-import org.noear.solon.ai.chat.content.MediaBlock;
-import org.noear.solon.ai.chat.content.TextBlock;
-import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.agent.task.GenerateTalent;
 import org.noear.solon.ai.harness.agent.task.TaskTalent;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
-import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
-import org.noear.solon.ai.harness.command.CommandDispatcher;
-import org.noear.solon.ai.harness.command.CommandContextFactory;
-import org.noear.solon.ai.harness.command.ParsedCommand;
-import org.noear.solon.ai.harness.input.AgentMentions;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputAttachments;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
-import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.turn.InputGate;
 import org.noear.solon.ai.harness.spi.InputBacklog;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
@@ -68,8 +51,10 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
-import org.noear.solon.ai.talents.mount.*;
-import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
+import org.noear.solon.ai.mount.*;
+import org.noear.solon.ai.mount.catalog.*;
+import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
@@ -86,7 +71,6 @@ import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
 import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
-import org.noear.solon.ai.talents.mount.catalog.*;
 import org.noear.solon.ai.talents.web.CodeSearchTalent;
 import org.noear.solon.ai.talents.web.WebfetchTalent;
 import org.noear.solon.ai.talents.web.WebsearchTalent;
@@ -133,8 +117,9 @@ public class HarnessEngine {
 
     private final HarnessOptions options;
 
-    private final SkillCatalog skillCatalog;
-    private final AgentCatalog agentCatalog;
+    /** 引擎自建的默认技能目录（订阅挂载变更、持有技能禁用列表）。 */
+    private final DefaultSkillCatalog skillCatalog;
+    private final DefaultAgentCatalog agentCatalog;
 
     private final CodeTalent codeTalent;
     private final TodoTalent todoTalent;
@@ -237,8 +222,8 @@ public class HarnessEngine {
      *
      * @since 4.2.0
      */
-    public MountSource getDataSource() {
-        return options.getDataSource();
+    public MountSource getStateSource() {
+        return options.getStateSource();
     }
 
     /**
@@ -636,35 +621,35 @@ public class HarnessEngine {
      * 获取被禁用的技能集合（按 aliasPath）
      */
     public Collection<String> getDisallowedSkills() {
-        return Collections.unmodifiableCollection(options.getMountManager().getDisallowSkills());
+        return skillCatalog.getDisallowSkills();
     }
 
     /**
      * 判断技能是否被禁用（按 aliasPath）
      */
     public boolean isSkillDisallowed(String aliasPath) {
-        return options.getMountManager().getDisallowSkills().contains(aliasPath);
+        return skillCatalog.isSkillDisallowed(aliasPath);
     }
 
     /**
      * 动态禁用一个技能（按 aliasPath）
      */
     public void disallowSkill(String aliasPath) {
-        options.getMountManager().disallowSkill(aliasPath);
+        skillCatalog.disallowSkill(aliasPath);
     }
 
     /**
      * 动态允许一个技能（按 aliasPath）
      */
     public void allowSkill(String aliasPath) {
-        options.getMountManager().allowSkill(aliasPath);
+        skillCatalog.allowSkill(aliasPath);
     }
 
     /**
      * 批量重置被禁用的技能集合（按 aliasPath）
      */
     public void disallowSkillReset(Collection<String> disallowedSkills) {
-        options.getMountManager().setDisallowSkills(disallowedSkills);
+        skillCatalog.setDisallowSkills(disallowedSkills);
     }
 
     public Collection<AgentDescriptor> getAgents() {
@@ -1353,17 +1338,18 @@ public class HarnessEngine {
                 .type(MountType.AGENTS)
                 .primary(true)
                 .enabled(true)
-                .writeable(false)
+                .writable(false)
                 // 内置挂载不在上层展示（隐藏类路径实现细节）；不影响解析与使用
                 .visible(false)
                 .source(ClasspathMountSource.of(HarnessEngine.class.getClassLoader(), BUILTIN_AGENT_PATH))
                 .build());
 
-        this.skillCatalog = mountManager.getSkillCatalog();
-        this.agentCatalog = mountManager.getAgentCatalog();
+        // 目录由引擎创建并订阅挂载变更（MountManager 只管挂载表，不认识技能/子代理）
+        this.skillCatalog = new DefaultSkillCatalog(mountManager);
+        this.agentCatalog = new DefaultAgentCatalog(mountManager);
 
         // 清单是会话级状态：经数据来源读写（默认 <workspace>/<harnessHome>/sessions/<sid>/TODO.md，与旧路径一致）
-        this.todoTalent = new TodoTalent(options.getDataSource(), "sessions/");
+        this.todoTalent = new TodoTalent(options.getStateSource(), "sessions/");
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
@@ -2141,8 +2127,8 @@ public class HarnessEngine {
          *
          * @since 4.2.0
          */
-        public Builder dataSource(MountSource dataSource) {
-            options.setDataSource(dataSource);
+        public Builder stateSource(MountSource stateSource) {
+            options.setStateSource(stateSource);
             return this;
         }
 

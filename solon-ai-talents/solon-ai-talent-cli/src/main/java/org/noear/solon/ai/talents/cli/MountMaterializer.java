@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.talents.cli;
 
-import org.noear.solon.ai.talents.mount.Mount;
+import org.noear.solon.ai.mount.Mount;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;

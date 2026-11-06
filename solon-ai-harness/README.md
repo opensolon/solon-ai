@@ -877,7 +877,7 @@ GoalExtension goal = engine.addExtensionIfAbsent(
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension()); // /queue
 SteerExtension steer = engine.addExtensionIfAbsent(new SteerExtension()); // /steer
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()  // /loop
-        .store(engine.getDataSource(), "tasks.json")    // 跟随引擎数据来源（本地/db/http）；也可 .storeFile(path)；缺省 = 只在内存
+        .store(engine.getStateSource(), "tasks.json")    // 跟随引擎状态来源（本地/db/http）；本地目录用 FileMountSource.of(dir)；缺省 = 只在内存
         .sessionAlive(id -> sessionExists(id))           // 加载时孤儿清理；缺省恒 true
         .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
         .build());

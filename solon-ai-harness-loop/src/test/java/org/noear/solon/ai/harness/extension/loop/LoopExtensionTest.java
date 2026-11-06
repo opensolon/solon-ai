@@ -9,7 +9,7 @@ import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.command.AgentTaskIntent;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

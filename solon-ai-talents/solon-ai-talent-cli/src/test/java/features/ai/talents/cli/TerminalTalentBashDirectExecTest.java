@@ -18,7 +18,7 @@ import org.noear.solon.ai.talents.cli.ShellCommandFactory;
 import org.noear.solon.ai.talents.cli.ShellMode;
 import org.noear.solon.ai.talents.cli.TerminalSessionManager;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 
 /**
  * 验证同步 bash 与 bash_start 对齐：共用 ShellCommandFactory，直接 shell -c 执行，不落临时脚本。

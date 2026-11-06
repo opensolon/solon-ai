@@ -17,7 +17,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 
 /**
  * Windows 侧 shell 方案推定，以及自有文件工具对 UTF-8 BOM 的容忍。

@@ -15,9 +15,9 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import org.noear.solon.ai.talents.mount.source.FindOptions;
-import org.noear.solon.ai.talents.mount.source.MountEntry;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FindOptions;
+import org.noear.solon.ai.mount.source.MountEntry;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.slf4j.Logger;

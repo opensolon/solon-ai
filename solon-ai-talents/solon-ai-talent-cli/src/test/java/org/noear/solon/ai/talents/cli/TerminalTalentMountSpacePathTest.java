@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.MountManager;
 
 /**
  * 逻辑路径 @alias 展开：物理路径含空格时自动加引号，避免 shell 按空白拆分成多个参数。

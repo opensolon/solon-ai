@@ -20,7 +20,7 @@ import org.noear.solon.ai.talents.memory.MemorySolution;
 import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.ai.talents.memory.search.MemorySearcherMdImpl;
 import org.noear.solon.ai.talents.memory.store.MemoryStorerMdImpl;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 
 import java.nio.file.Path;
 import java.util.Map;

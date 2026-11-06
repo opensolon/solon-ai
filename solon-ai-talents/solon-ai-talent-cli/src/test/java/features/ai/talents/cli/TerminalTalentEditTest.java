@@ -2,7 +2,7 @@ package features.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

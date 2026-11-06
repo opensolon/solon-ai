@@ -5,9 +5,9 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountType;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,7 +26,7 @@ class HarnessAgentMountTest {
         assertNotNull(builtin);
         assertFalse(builtin.isVisible());
         assertTrue(builtin.isEnabled());
-        assertFalse(builtin.isWriteable());
+        assertFalse(builtin.isWritable());
         assertNotNull(engine.getAgentCatalog().getAgent("plan"));
         AgentDefinition plan = engine.getAgentManager().getAgent("plan");
         assertEquals("plan", plan.getName());

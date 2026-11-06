@@ -3,7 +3,7 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

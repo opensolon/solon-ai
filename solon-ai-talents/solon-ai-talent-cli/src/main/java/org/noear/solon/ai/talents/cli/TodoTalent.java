@@ -18,8 +18,8 @@ package org.noear.solon.ai.talents.cli;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
@@ -51,7 +51,7 @@ public class TodoTalent extends AbsTalent {
     public static final String PARAM_TODOS = "todos";
 
     private final String relativeDir;
-    private final MountSource dataSource;
+    private final MountSource stateSource;
     private final String sessionsDir;
 
     private BiFunction<String, String, Path> workPathHook;
@@ -72,23 +72,23 @@ public class TodoTalent extends AbsTalent {
 
     public TodoTalent(String relativeDir) {
         this.relativeDir = relativeDir;
-        this.dataSource = null;
+        this.stateSource = null;
         this.sessionsDir = null;
     }
 
     /**
      * 基于挂载来源存储清单。
      *
-     * @param dataSource  数据来源（不可为 null）
+     * @param stateSource  状态来源（不可为 null）
      * @param sessionsDir 来源内的会话目录前缀（如 {@code "sessions/"}；可空表示来源根）
      * @since 4.2.0
      */
-    public TodoTalent(MountSource dataSource, String sessionsDir) {
-        if (dataSource == null) {
-            throw new IllegalArgumentException("dataSource must not be null");
+    public TodoTalent(MountSource stateSource, String sessionsDir) {
+        if (stateSource == null) {
+            throw new IllegalArgumentException("stateSource must not be null");
         }
         this.relativeDir = null;
-        this.dataSource = dataSource;
+        this.stateSource = stateSource;
         String dir = sessionsDir == null ? "" : sessionsDir.replace('\\', '/');
         this.sessionsDir = dir.isEmpty() || dir.endsWith("/") ? dir : dir + "/";
     }
@@ -125,8 +125,8 @@ public class TodoTalent extends AbsTalent {
         if (workPathHook != null) {
             return new Location(FileMountSource.of(workPathHook.apply(cwd, sessionId)), TODO_FILE_NAME);
         }
-        if (dataSource != null) {
-            return new Location(dataSource, sessionsDir + sessionId + "/" + TODO_FILE_NAME);
+        if (stateSource != null) {
+            return new Location(stateSource, sessionsDir + sessionId + "/" + TODO_FILE_NAME);
         }
         Path root = relativeDir == null ? Paths.get(cwd) : Paths.get(cwd, relativeDir);
         return new Location(FileMountSource.of(root.toAbsolutePath().normalize()), sessionId + "/" + TODO_FILE_NAME);

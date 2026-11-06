@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.noear.solon.ai.talents.memory.md.MemoryMdData;
-import org.noear.solon.ai.talents.mount.source.MemoryMountSource;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,8 +33,8 @@ public class MemoryMdDataMountSourceTest {
 
     @Test
     public void putWritesMdIntoSourceAndReloadsFromIt() throws Exception {
-        MemoryMountSource user = new MemoryMountSource("user");
-        MemoryMountSource ws = new MemoryMountSource("ws");
+        InMemoryMountSource user = new InMemoryMountSource("user");
+        InMemoryMountSource ws = new InMemoryMountSource("ws");
 
         MemoryMdData data = MemoryMdData.of(scopes(user, ws));
         data.put(U1, "lang", val("偏好使用 Solon 框架", 8), -1, "workspace");
@@ -60,8 +60,8 @@ public class MemoryMdDataMountSourceTest {
 
     @Test
     public void getFallsBackToSourceOnCacheMiss() throws Exception {
-        MemoryMountSource user = new MemoryMountSource("user");
-        MemoryMountSource ws = new MemoryMountSource("ws");
+        InMemoryMountSource user = new InMemoryMountSource("user");
+        InMemoryMountSource ws = new InMemoryMountSource("ws");
         MemoryMdData a = MemoryMdData.of(scopes(user, ws));
         MemoryMdData b = MemoryMdData.of(scopes(user, ws));
         try {
@@ -76,8 +76,8 @@ public class MemoryMdDataMountSourceTest {
 
     @Test
     public void removeDeletesFromSource() throws Exception {
-        MemoryMountSource user = new MemoryMountSource("user");
-        MemoryMountSource ws = new MemoryMountSource("ws");
+        InMemoryMountSource user = new InMemoryMountSource("user");
+        InMemoryMountSource ws = new InMemoryMountSource("ws");
         MemoryMdData data = MemoryMdData.of(scopes(user, ws));
         try {
             data.put(U1, "k", val("x", 5), -1, "workspace");
@@ -92,8 +92,8 @@ public class MemoryMdDataMountSourceTest {
 
     @Test
     public void expiredEntryIsCleanedFromSourceOnLoad() throws Exception {
-        MemoryMountSource user = new MemoryMountSource("user");
-        MemoryMountSource ws = new MemoryMountSource("ws");
+        InMemoryMountSource user = new InMemoryMountSource("user");
+        InMemoryMountSource ws = new InMemoryMountSource("ws");
         ws.writeString("u1__old.md", "---\nname: \"u1__old\"\ntime: \"2020-01-01 00:00:00\"\nimportance: 5\n"
                 + "ttl: 1\nstored_at: \"2020-01-01 00:00:00\"\nscope: \"workspace\"\n---\n\n过期内容\n");
         ws.writeString("u1__new.md.tmp", "残留");
@@ -110,7 +110,7 @@ public class MemoryMdDataMountSourceTest {
 
     @Test
     public void illegalKeyIsRejected() {
-        MemoryMdData data = MemoryMdData.of(scopes(new MemoryMountSource(), new MemoryMountSource()));
+        MemoryMdData data = MemoryMdData.of(scopes(new InMemoryMountSource(), new InMemoryMountSource()));
         try {
             assertThrows(IllegalStateException.class,
                     () -> data.put(U1, "a/../../x", val("x", 5), -1, "workspace"));

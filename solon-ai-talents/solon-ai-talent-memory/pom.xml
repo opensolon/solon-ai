@@ -23,7 +23,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-talent-mount</artifactId>
+            <artifactId>solon-ai-mount</artifactId>
         </dependency>
 
         <dependency>

@@ -25,11 +25,11 @@ import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
 import org.noear.solon.ai.sandbox.config.SandboxRuntimeConfig;
-import org.noear.solon.ai.talents.mount.*;
-import org.noear.solon.ai.talents.mount.source.MountEntry;
-import org.noear.solon.ai.talents.mount.source.MountSource;
-import org.noear.solon.ai.talents.mount.source.FindOptions;
-import org.noear.solon.ai.talents.mount.source.WriteOptions;
+import org.noear.solon.ai.mount.*;
+import org.noear.solon.ai.mount.source.MountEntry;
+import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FindOptions;
+import org.noear.solon.ai.mount.source.WriteOptions;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -373,7 +373,7 @@ public class TerminalTalent extends AbsTalent {
                 if (localRoot != null) {
                     String pathStr = localRoot.toString();
                     allowRead.add(pathStr);
-                    if (mount.isWriteable()) {
+                    if (mount.isWritable()) {
                         allowWrite.add(pathStr);
                     }
                 }
@@ -610,7 +610,7 @@ public class TerminalTalent extends AbsTalent {
         // 必须与 mount_list 的过滤口径一致（enabled + visible），否则会出现“列表里没有挂载、
         // 引导词却按有挂载的形态描述”的矛盾（如内置 @harness 隐藏后仍触发挂载点说明段落）。
         boolean hasWriteableMount = mountManager.getMounts().stream()
-                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS && m.isWriteable());
+                .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS && m.isWritable());
 
         boolean hasMount = mountManager.getMounts().stream()
                 .anyMatch(m -> m.isEnabled() && m.isVisible() && m.getType() != MountType.AGENTS);
@@ -642,7 +642,7 @@ public class TerminalTalent extends AbsTalent {
                         sb.append(" description=\"").append(mount.getDescription()).append("\"");
                     }
                     sb.append(" type=\"").append(mount.getType()).append("\"");
-                    sb.append(" writeable=\"").append(mount.isWriteable()).append("\"");
+                    sb.append(" writeable=\"").append(mount.isWritable()).append("\"");
                     if (TerminalSupport.shellLocalRoot(mount.getSource()).isPresent()) {
                         sb.append(" shell=\"true\" env=\"").append(support.getEnvPlaceholder(support.toMountEnvKey(mount.getAlias()))).append("\"");
                     } else if (mount.getSource().capabilities().isMaterializable()) {
@@ -1480,7 +1480,7 @@ public class TerminalTalent extends AbsTalent {
         if (!source.capabilities().isReadable()) {
             throw new SecurityException("权限拒绝：来源不可读 " + path);
         }
-        if (write && (!mount.isWriteable() || !source.capabilities().isWritable())) {
+        if (write && (!mount.isWritable() || !source.capabilities().isWritable())) {
             throw new SecurityException("权限拒绝：该挂载来源为只读，禁止写入 " + path);
         }
         return resource;

@@ -4,8 +4,8 @@
  */
 package org.noear.solon.ai.harness.extension.loop;
 
-import org.noear.solon.ai.talents.mount.source.MountSource;
-import org.noear.solon.ai.talents.mount.source.MoveOptions;
+import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.MoveOptions;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
@@ -31,7 +31,7 @@ import java.util.Map;
  * 进入只读模式，本进程不再写盘——宁可本次修改不落盘，也不能销毁可救回的数据。</p>
  *
  * <p><b>存储介质无关</b>：经 {@link MountSource} 读写（本地文件、db、http 均可）；原子性取决于来源的
- * {@link org.noear.solon.ai.talents.mount.source.MountCapabilities#isAtomicWrite()}（本地文件来源为原子替换）。</p>
+ * {@link org.noear.solon.ai.mount.source.MountCapabilities#isAtomicWrite()}（本地文件来源为原子替换）。</p>
  *
  * <p>{@code source == null} 时为纯内存模式（测试友好），读写均为空操作。调用方负责串行化写入。</p>
  */

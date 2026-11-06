@@ -17,9 +17,9 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
-import org.noear.solon.ai.talents.mount.catalog.SkillContent;
-import org.noear.solon.ai.talents.mount.catalog.SkillDescriptor;
+import org.noear.solon.ai.mount.catalog.SkillCatalog;
+import org.noear.solon.ai.mount.catalog.SkillContent;
+import org.noear.solon.ai.mount.catalog.SkillDescriptor;
 
 import java.util.ArrayList;
 import java.util.Arrays;

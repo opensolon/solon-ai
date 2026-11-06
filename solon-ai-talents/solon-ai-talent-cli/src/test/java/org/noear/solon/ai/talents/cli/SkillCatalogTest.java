@@ -2,11 +2,11 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.talents.mount.*;
-import org.noear.solon.ai.talents.mount.catalog.DefaultSkillCatalog;
-import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
-import org.noear.solon.ai.talents.mount.catalog.SkillContent;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.*;
+import org.noear.solon.ai.mount.catalog.DefaultSkillCatalog;
+import org.noear.solon.ai.mount.catalog.SkillCatalog;
+import org.noear.solon.ai.mount.catalog.SkillContent;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,7 +28,7 @@ class SkillCatalogTest {
                 .source(FileMountSource.of(root.resolve("first"))).build());
         manager.register(Mount.builder().alias("@second").type(MountType.SKILLS)
                 .source(FileMountSource.of(root.resolve("second"))).build());
-        SkillCatalog catalog = manager.getSkillCatalog();
+        DefaultSkillCatalog catalog = new DefaultSkillCatalog(manager);
         SkillTalent talent = new SkillTalent(catalog);
 
         assertEquals(2, catalog.getSkillCount());
@@ -43,14 +43,14 @@ class SkillCatalogTest {
         assertTrue(content.getRenderedText().contains("<skill_files>"));
         assertEquals("@first/demo", content.getDescriptor().getId());
 
-        manager.disallowSkill("@first/demo");
+        catalog.disallowSkill("@first/demo");
         assertEquals(1, catalog.getSkillCount());
         assertNull(catalog.readContent("@first/demo"));
         assertFalse(talent.skilllist().contains("@first/demo"));
         assertTrue(talent.skilllist().contains("@second/demo"));
         assertFalse(talent.getInstruction(null).contains("@first/demo"));
         assertFalse(talent.skillsearch("demo").contains("@first/demo"));
-        manager.allowSkill("@first/demo");
+        catalog.allowSkill("@first/demo");
         assertNotNull(catalog.readContent("@first/demo"));
     }
 

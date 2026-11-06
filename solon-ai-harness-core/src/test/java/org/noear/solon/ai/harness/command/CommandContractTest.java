@@ -3,7 +3,7 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Paths;
 import java.util.Arrays;

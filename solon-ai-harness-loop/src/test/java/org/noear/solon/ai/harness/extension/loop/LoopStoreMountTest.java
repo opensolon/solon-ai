@@ -2,7 +2,7 @@ package org.noear.solon.ai.harness.extension.loop;
 
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.talents.mount.source.MemoryMountSource;
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 算存分离：任务存储经挂载来源（这里用非本地的内存来源代替 db / http），不依赖本地文件系统。
  */
 class LoopStoreMountTest {
-    private static LoopExtension loaded(MemoryMountSource source) {
+    private static LoopExtension loaded(InMemoryMountSource source) {
         LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .store(source, "loop/tasks.json").build();
         ext.scheduler().load();
@@ -19,7 +19,7 @@ class LoopStoreMountTest {
 
     @Test
     void roundTripThroughNonLocalSource() throws Exception {
-        MemoryMountSource source = new MemoryMountSource();
+        InMemoryMountSource source = new InMemoryMountSource();
         LoopExtension first = loaded(source);
         LoopTask task = first.schedule("s1", LoopSpec.of("hello").everyMinutes(10));
 
@@ -35,7 +35,7 @@ class LoopStoreMountTest {
 
     @Test
     void corruptContentIsBackedUpInsideSource() throws Exception {
-        MemoryMountSource source = new MemoryMountSource();
+        InMemoryMountSource source = new InMemoryMountSource();
         source.writeString("loop/tasks.json", "{not json");
         LoopExtension ext = loaded(source);
         ext.schedule("s1", LoopSpec.of("x").everyMinutes(10));

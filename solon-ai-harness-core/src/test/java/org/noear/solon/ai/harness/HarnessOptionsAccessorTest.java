@@ -362,16 +362,16 @@ class HarnessOptionsAccessorTest {
      */
     /** 数据来源：缺省为 <workspace>/<harnessHome> 本地目录；显式设置后原样返回。 */
     @Test
-    void dataSourceDefaultsToHarnessHomeAndIsReplaceable() {
+    void stateSourceDefaultsToHarnessHomeAndIsReplaceable() {
         HarnessOptions o = new HarnessOptions("work", ".soloncode");
-        org.noear.solon.ai.talents.mount.source.MountSource def = o.getDataSource();
-        assertSame(def, o.getDataSource(), "缺省来源只创建一次");
+        org.noear.solon.ai.mount.source.MountSource def = o.getStateSource();
+        assertSame(def, o.getStateSource(), "缺省来源只创建一次");
         assertTrue(def.getLocation().replace('\\', '/').endsWith("work/.soloncode"), def.getLocation());
 
-        org.noear.solon.ai.talents.mount.source.MemoryMountSource mem =
-                new org.noear.solon.ai.talents.mount.source.MemoryMountSource();
-        o.setDataSource(mem);
-        assertSame(mem, o.getDataSource());
+        org.noear.solon.ai.mount.source.InMemoryMountSource mem =
+                new org.noear.solon.ai.mount.source.InMemoryMountSource();
+        o.setStateSource(mem);
+        assertSame(mem, o.getStateSource());
     }
 
     @Test
@@ -396,7 +396,7 @@ class HarnessOptionsAccessorTest {
                 "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
-                "setHitlInterceptor", "setMemoryProvider", "setDataSource",
+                "setHitlInterceptor", "setMemoryProvider", "setStateSource",
                 "addHttpCustomize", "addTools", "addDisallowedTools", "addModel");
 
         List<String> missing = expected.stream()

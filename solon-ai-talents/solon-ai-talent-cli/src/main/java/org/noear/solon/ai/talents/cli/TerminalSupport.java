@@ -18,10 +18,10 @@ package org.noear.solon.ai.talents.cli;
 import org.noear.solon.Utils;
 
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.ResolvedResource;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.ResolvedResource;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
@@ -868,7 +868,7 @@ public class TerminalSupport {
             if (mount == null && !"@workspace".equals(resource.getMountAlias())) {
                 throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
             }
-            if (writeMode && (mount != null && !mount.isWriteable()
+            if (writeMode && (mount != null && !mount.isWritable()
                     || !resource.getSource().capabilities().isWritable())) {
                 throw new SecurityException(
                         "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");

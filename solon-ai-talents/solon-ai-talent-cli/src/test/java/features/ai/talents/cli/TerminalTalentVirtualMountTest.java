@@ -2,12 +2,12 @@ package features.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
-import org.noear.solon.ai.talents.mount.source.FindOptions;
-import org.noear.solon.ai.talents.mount.source.MountCapabilities;
-import org.noear.solon.ai.talents.mount.source.MountEntry;
-import org.noear.solon.ai.talents.mount.source.MountSource;
-import org.noear.solon.ai.talents.mount.source.MoveOptions;
-import org.noear.solon.ai.talents.mount.source.WriteOptions;
+import org.noear.solon.ai.mount.source.FindOptions;
+import org.noear.solon.ai.mount.source.MountCapabilities;
+import org.noear.solon.ai.mount.source.MountEntry;
+import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.MoveOptions;
+import org.noear.solon.ai.mount.source.WriteOptions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -17,11 +17,11 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
-import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.Mount;
-import org.noear.solon.ai.talents.mount.MountManager;
-import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.mount.source.ClasspathMountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.MountType;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,7 +40,7 @@ public class TerminalTalentVirtualMountTest {
                     .type(MountType.FILES)
                     .source(ClasspathMountSource.of(
                             Thread.currentThread().getContextClassLoader(), "test-skills"))
-                    .writeable(false)
+                    .writable(false)
                     .build());
             TerminalTalent terminal = new TerminalTalent(manager);
 
@@ -72,7 +72,7 @@ public class TerminalTalentVirtualMountTest {
             Files.write(work.resolve("b.txt"), "hello".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@local").type(MountType.FILES)
-                    .source(FileMountSource.of(work)).writeable(false).build());
+                    .source(FileMountSource.of(work)).writable(false).build());
             TerminalTalent terminal = new TerminalTalent(manager);
             assertTrue(terminal.ls("@local", false, false, null).contains("\n"));
             assertTrue(terminal.read("@local/a.txt", null, null, null).contains("hello\n"));
@@ -90,7 +90,7 @@ public class TerminalTalentVirtualMountTest {
             VersionedSource source = new VersionedSource();
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@db").type(MountType.FILES)
-                    .source(source).writeable(true).build());
+                    .source(source).writable(true).build());
             TerminalTalent terminal = new TerminalTalent(manager);
             TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
             edit.oldStr = "original";
@@ -125,13 +125,12 @@ public class TerminalTalentVirtualMountTest {
                 @Override
                 public MountCapabilities capabilities() {
                     // 物理映射存在，但该来源不允许按本地路径访问，也不开放 bash。
-                    return new MountCapabilities(true, true, true, true, false, false,
-                            false, false, false, false);
+                    return MountCapabilities.builder().readable(true).writable(true).searchable(true).build();
                 }
             };
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@mapped").type(MountType.FILES)
-                    .source(source).writeable(true).build());
+                    .source(source).writable(true).build());
             TerminalTalent terminal = new TerminalTalent(manager);
 
             assertTrue(terminal.read("@mapped/note.txt", null, null, null).contains("original"));
@@ -162,7 +161,7 @@ public class TerminalTalentVirtualMountTest {
             };
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@unknown").type(MountType.FILES)
-                    .source(source).writeable(true).build());
+                    .source(source).writable(true).build());
             TerminalTalent terminal = new TerminalTalent(manager);
             assertTrue(terminal.read("@unknown/note.txt", null, null, null).contains("超过单文件读取上限"));
             TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
@@ -186,7 +185,7 @@ public class TerminalTalentVirtualMountTest {
             source.content = "first\nsecond\nthird\nfourth\nfifth";
             MountManager manager = new MountManager(work.toString());
             manager.register(Mount.builder().alias("@text").type(MountType.FILES)
-                    .source(source).writeable(false).build());
+                    .source(source).writable(false).build());
             TerminalTalent terminal = new TerminalTalent(manager);
             terminal.setMaxCharacterLimit(18);
             String firstPage = terminal.read("@text/note.txt", null, null, null);
@@ -237,8 +236,7 @@ public class TerminalTalentVirtualMountTest {
         @Override public void delete(String path) { }
         @Override public void move(String source, String target, MoveOptions options) { }
         @Override public MountCapabilities capabilities() {
-            return new MountCapabilities(true, true, true, true, false, false,
-                    false, false, false, false);
+            return MountCapabilities.builder().readable(true).writable(true).searchable(true).build();
         }
     }
 }

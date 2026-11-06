@@ -17,9 +17,9 @@ package org.noear.solon.ai.talents.memory.md;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
-import org.noear.solon.ai.talents.mount.source.FileMountSource;
-import org.noear.solon.ai.talents.mount.source.MountEntry;
-import org.noear.solon.ai.talents.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.MountEntry;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;

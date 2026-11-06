@@ -9,7 +9,7 @@ import java.nio.file.Path;
 import java.util.Collections;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.Utils;
-import org.noear.solon.ai.talents.mount.MountManager;
+import org.noear.solon.ai.mount.MountManager;
 
 /**
  * Windows 侧自保护护栏：{@code taskkill} / {@code Stop-Process} / 盘符根删除。

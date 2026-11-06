@@ -1,5 +1,14 @@
 ### vNEXT
 
+* **`solon-ai-talent-mount` 更名为 `solon-ai-mount`，升为通用 IO 抽象**（4.2.0；**不兼容**）:
+  * **坐标与包名**：artifact `solon-ai-talent-mount` → `solon-ai-mount`（目录移到顶层，归入 bundle1；solon-parent 同步）；包名 `org.noear.solon.ai.talents.mount` → `org.noear.solon.ai.mount`（子包 `source` / `catalog` 不变）。迁移：全局替换包名、改依赖坐标；不提供 relocation
+  * **命名修正**：`Mount.isWriteable()` / `Builder.writeable()` → `isWritable()` / `writable()`（与能力位拼写一致）；`MemoryMountSource` → `InMemoryMountSource`（避免与 talent-memory 撞词）；删除与 `getMounts()` 重复的 `MountManager.getSourceMounts()`；harness `Builder.dataSource(MountSource)` / `getDataSource()` → `stateSource(...)` / `getStateSource()`（避免与 JDBC DataSource 撞名）
+  * **`MountCapabilities`**：删除 10 参构造器，只保留 `builder()`；删除 `editable`（与 writable 重叠）与 `watchable`（无配套监听接口；本地监听改按 `isLocalPathAccessible()` 判断）
+  * **IO 层与目录解耦**：`MountManager` 不再创建/持有 `SkillCatalog`、`AgentCatalog`（删除 `getSkillCatalog()` / `getAgentCatalog()`），新增 `MountListener` + `addListener/removeListener`（挂载表更新后、锁外同步回调，异常逐个隔离）；`DefaultSkillCatalog` / `DefaultAgentCatalog` 构造时自行订阅。技能禁用列表（`disallowSkill/allowSkill/setDisallowSkills/getDisallowSkills/isSkillDisallowed`）从 `MountManager` 移入 `DefaultSkillCatalog`；`HarnessEngine` 的同名方法签名不变，改为委托引擎自建的目录
+  * **删除** `MountManager.parseRealPath` 与 `USER_HOME` 静态常量（两仓均无调用方；配置路径展开属宿主职责）
+  * **契约测试对外发布**：`org.noear.solon.ai.mount.testkit.MountSourceContract` 以 test-jar 发布（只含 testkit 包），第三方 db/http 来源以 `<type>test-jar</type>` 引入后继承即可；新增 delete 非递归、跨目录 move、目录 move 三组用例，`MountSource#delete/move` 的 javadoc 写明对应契约
+  * **验证**：mount 89、memory 117、loop 95、goal 219、queue 88、steer 72、聚合 7 全绿；harness-core 589 例 33F+5E、talent-cli 664 例 1F、soloncode-cli 1213 例 3F，失败集与此前基线一致
+
 * **会话钩子收敛 + 会话删除事件 + 「只取不建」的会话获取**（4.2.0；破坏性，接口均为 `@Preview`）:
   * **`AgentSessionProvider` 改为唯一抽象方法 `getSession(String instanceId, boolean createIfAbsent)`**：`createIfAbsent=false` 且不存在时返回 null，且不得有副作用（不建实例、不写存储、不建目录、不放缓存）。迁移：`InMemoryAgentSession::of` → `(id, create) -> InMemoryAgentSession.of(id)`（不缓存，行为与以前一致）；生产实现建议 `(id, c) -> c ? map.computeIfAbsent(id, ...) : map.get(id)`
   * **`HarnessEngine.getSessionOrNil(id)`（新）**：只取已存在的会话；`getSession(id)` 保持「不存在则新建」
