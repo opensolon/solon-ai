@@ -66,10 +66,11 @@ public final class HarnessAttrs {
     public static final String AGENT_EFFECTIVE = "session.agent.effective";
 
     /**
-     * 输入受理窗口标记（{@code InputGate} 占位期间为 {@code TRUE}）。
+     * 输入受理窗口标记（引擎 {@code handle} 受理占位期间存在）。
      *
-     * <p>表示「已受理一条输入、它的运行流尚未登记」。{@link SessionStatus} 会把它计入
-     * 占用态，否则并发请求会各自开流。宿主不应直接读写本键，用 {@code InputGate}。</p>
+     * <p>表示「已受理一条输入、它的运行流尚未登记」。值是引擎内部的占位凭据
+     * （{@link java.util.function.BooleanSupplier}：未释放且未超时为真）。{@link SessionStatus} 会把它计入
+     * 占用态，否则并发请求会各自开流。宿主不得读写本键，读状态用 {@code SessionStatus#isAdmitting()}。</p>
      *
      * @since 4.2.0
      */

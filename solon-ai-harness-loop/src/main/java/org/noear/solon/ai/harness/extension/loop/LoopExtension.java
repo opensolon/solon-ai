@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
@@ -163,10 +164,19 @@ public class LoopExtension extends AbsHarnessExtension {
     /** 缺省执行器：经唯一输入入口同步取回最终文本（程序生成的 prompt 不解析命令与 @提及）。 */
     private static LoopExecutor defaultExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
+            // 只取已存在的会话：定时轮次不得把已删除的会话重新建出来
+            AgentSession session = engine.getSessionOrNull(sessionId);
+            if (session == null) {
+                return LoopOutcome.skip("session not found");
+            }
+            InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"));
+            if (outcome.getKind() != InputOutcome.Kind.TASK) {
+                // 忙 / 待审批（REJECTED）等未受理结局：本轮跳过，不计错误
+                return LoopOutcome.skip(outcome.getRejectReason() != null
+                        ? outcome.getRejectReason() : "input not admitted: " + outcome.getKind());
+            }
             try {
-                return LoopOutcome.done(engine.handle(HarnessInput.ofProgram(engine.getSession(sessionId), prompt, "loop"))
-                        .call()
-                        .getContent());
+                return LoopOutcome.done(outcome.call().getContent());
             } catch (RuntimeException | Error e) {
                 throw e;
             } catch (Throwable e) {

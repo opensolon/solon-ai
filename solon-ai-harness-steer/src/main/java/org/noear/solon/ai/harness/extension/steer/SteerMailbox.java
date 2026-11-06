@@ -6,6 +6,7 @@ package org.noear.solon.ai.harness.extension.steer;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.lang.Nullable;
@@ -210,7 +211,8 @@ final class SteerMailbox {
         for (SteerMessage message : items) {
             boolean ok;
             try {
-                ok = backlog != null && backlog.offer(session, message.getText(), message.getOrigin()) >= 0;
+                ok = backlog != null && backlog.offer(session,
+                        HarnessInput.of(session, message.getText()).origin(message.getOrigin())) >= 0;
             } catch (RuntimeException e) {
                 LOG.warn("[SteerMailbox] enqueue steer failed for session {}: {}",
                         session.getSessionId(), e.getMessage());

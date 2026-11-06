@@ -621,48 +621,55 @@ public class FullHost {
 
 ### 3.6 受理控制：三个宿主常写错的地方已收归引擎
 
-`handle` 返回后到真正接流之间有一段「已受理、尚未登记运行流」的窗口。并发请求若各自看到空闲，会同时开流、共用一个 `ReActTrace`，表现为「刚发出就秒结束」或「两条流互相覆盖」。这段窗口、HITL 挂起期的受理判定、以及「忙态放行判定」，都是宿主每次都要做的事，现已各有一个引擎入口：
+`handle` 返回后到真正接流之间有一段「已受理、尚未登记运行流」的窗口。并发请求若各自看到空闲，会同时开流、共用一个 `ReActTrace`，表现为「刚发出就秒结束」或「两条流互相覆盖」。这段窗口、HITL 挂起期的受理判定、以及「忙态放行判定」，都已收进唯一执行入口 `engine.handle(HarnessInput)` 的第 0 步：判定与占位、入积压在同一把会话锁内完成，宿主不再接触占位凭据。
 
-**① 占用与释放：`InputGate`**
+**① 受理判定与占位：`handle` 第 0 步**
 
 ```java
-try (InputGate.Ticket ticket = InputGate.tryAcquire(session)) {
-    if (!ticket.isAcquired()) {
-        // 已被占用：按宿主策略排队 / 插话 / 拒绝
-        return;
-    }
-    InputOutcome outcome = engine.handle(hin);
-    // ... switch (outcome.getKind()) 起流
+InputOutcome outcome = engine.handle(HarnessInput.of(session, text)
+        .origin(origin)
+        .attr("reasoningEffort", effort));      // 宿主域属性：引擎不解读，进积压时原样保存
+switch (outcome.getKind()) {
+    case TASK:     run(outcome); break;            // 占位由请求自己释放；开流前失败调 outcome.discard()
+    case REPLY:    reply(origin, outcome.getCommandOutput()); drain(session); break;
+    case DEFERRED: reply(origin, "已排队（第 " + outcome.getBacklogPosition() + " 位）"); drain(session); break;
+    case REJECTED: reply(origin, outcome.getRejectDetail()); break;
+    case HITL:
+    case IGNORED:  drain(session); break;
 }
 ```
 
-- `tryAcquire` 把「判定空闲 + 占位」做成**不可分割的一个动作**，并发调用只有一者成功；
-- `Ticket.close()` 幂等，未占到时空操作，故可无条件放进 try-with-resources；
-- 占用后 `SessionStatus.isOccupied()/isAdmitting()` 都会看到这个窗口；
-- **由队列派发的那一轮不要占位**：它本身就是在空闲时被领取的，再占位会让同步完成的命令误判成忙态；
-- 判定口径刻意**不含 HITL 待审批**——审批挂起时引擎里没有运行流，是否接受旁路输入属于受理策略，由宿主用 `SessionStatus.isOccupied()` 自己先判。
+放行条件从输入本身推导，宿主不传谓词：
 
-**② HITL 挂起时不要开新回合（推荐宿主都这么做）**
+| 会话状态 | 输入 | 结局 |
+|---|---|---|
+| 空闲 | 任意 | 照常分派（`TASK` / `REPLY` / `HITL` / `IGNORED`） |
+| 忙（有运行流 / 正在受理另一条输入 / 积压里还有待执行输入） | 忙时可执行命令（`runnableWhenBusy`；`terminalOnly` 的命令仅在 `input.terminal(true)` 时算）、审批决策 | 在运行任务旁边执行，`outcome.isBesideRunning() == true`，宿主不要改写回复路由 |
+| 忙 | 其余可排队输入 | 引擎调用 `InputBacklog.offer(session, input)` 入积压，返回 `DEFERRED`（`getBacklogPosition()` 从 1 计） |
+| 忙 | 程序轮次 `HarnessInput.ofProgram(...)`（`isProgram()`）、续流、没装积压能力 | `REJECTED("busy")`（`InputOutcome.REJECT_BUSY`），不进积压 |
+| 忙 | 带附件 | `REJECTED("attachments_not_deferrable")`（`REJECT_ATTACHMENTS_NOT_DEFERRABLE`） |
+| 忙 | 积压拒收（满 / 超长 / 停用） | `REJECTED("backlog_unavailable")`（`REJECT_BACKLOG_UNAVAILABLE`） |
 
-`handle()` 在 `pendingHitl > 0` 时不走续流分支，会把新输入当成**一条全新的普通回合**。于是新的运行流与旧的未决 trace 并存，用户随后点「同意」时 `resume(true)` 若被运行态认领拒绝，表现为「审批点了没反应」，若没被拒绝则是两条流交叉写快照。**这两种都难以诊断，所以应在受理层就拒掉。**
+- **占位跟着请求走**：返回 `TASK` 时会话保持占用（`engine.status(session).isAdmitting()` 为真），直到 `outcome.getRequest().stream()` 被订阅（订阅时运行流先登记、占位后释放，无空档——宿主把订阅调度到别的线程也安全）或 `call()` 结束；
+- 宿主拿到 `TASK` 决定不执行（开流前出错、本轮已被中断等）时调用 `outcome.discard()`（幂等）；
+- 兜底：`engine.interrupt` / `prepareInterrupt` 会清除占位；占位有时限 `HarnessEngine.Builder#admissionTimeoutMs(Long)`（缺省 60000 毫秒），超时的占位不再算占用；
+- 非 `TASK` 结局在 `handle` 返回前已释放占位；
+- **程序派发线程上的一轮**（队列续发：在领取回调里同线程 `engine.handle(claim.getItem().toInput(session))`）由引擎识别（`outcome.isDispatched()` / `getDispatch()`，宿主取 `getDispatch().getOrigin()` 作回复路由），免于「有积压就延后」；其 `TASK` 同样占位，派发方据此用「返回时会话是否忙」判断已异步开流；
+- 命令内部再次调用 `handle`（命令声明任务意图的二段装配）继承外层占位，不再判定；
+- 扩展钩子 `onInput` 在受理判定通过之后才触发：被排队 / 拒绝的输入不触发，排队的输入续发时触发一次。
 
-```java
-// 受理层（入口处）：拒绝并显式提示，不要入队
-// 入队是更差的选择：审批可能永远不处理（用户走了），输入会堆积在审批之后，恢复时一次性执行一批过期指令
-if (!engine.isBusyBypassCommand(input) && engine.status(session).hasPendingHitl()) {
-    emit("hitl_pending", HitlCard.next(session));   // 把待审批工具名一并发给前端
-    return;                                         // 不 handle、不起流
-}
-```
+**② HITL 挂起时不开新回合（引擎已拦）**
 
-需要豁免的三类（缺一个就会把审批本身也拒掉）：
+若在 `pendingHitl > 0` 时把新输入当成**一条全新的普通回合**，新的运行流会与旧的未决 trace 并存，用户随后点「同意」时 `resume(true)` 若被运行态认领拒绝，表现为「审批点了没反应」，若没被拒绝则是两条流交叉写快照。因此 `handle` 第 0 步对普通输入直接返回 `REJECTED("hitl_pending")`（`InputOutcome.REJECT_HITL_PENDING`），不入积压——入积压是更差的选择：审批可能永远不处理（用户走了），输入会堆积在审批之后，恢复时一次性执行一批过期指令。宿主只需把 `getRejectDetail()` 连同 `HitlCard.next(session)` 提示给用户。
+
+引擎按输入本身豁免以下几类（缺一个就会把审批本身也拒掉）：
 
 | 输入 | 为何豁免 |
 |---|---|
-| 审批决策（`hitlAction` 非空） | 它本身就是来解开挂起的，拒掉就死锁 |
+| 审批决策（`input.hitl(...)`） | 它本身就是来解开挂起的，拒掉就死锁 |
 | `resume(true)` 续流 | 同上，只是不带新文本的续跑 |
-| `isBusyBypassCommand(input)` | `/interrupt` 这类旁路命令必须能随时放行 |
-| 队列派发的一轮 | 派发的是审批前就已入队的任务。**两难**：不豁免则队列在审批期间凝固；豁免则有把握用户会处理审批 |
+| 忙时可执行命令（`runnableWhenBusy`） | `/interrupt` 这类命令必须能随时放行 |
+| 程序派发线程上的一轮 | 派发的是审批前就已入队的任务，不豁免则队列在审批期间凝固 |
 
 口径提醒：`isBusy()` 只表示「有活跃流」，**没有**HITL。所以用 `isBusy` 做受理判定一定会漏；三者要分清：
 
@@ -851,12 +858,12 @@ HarnessEngine.of("/data/work", ".solon/")
 | `HarnessExtension#onSessionInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
 | `HarnessExtension#onSessionRemove` | 钩子（广播） | 引擎 `removeSession`（宿主永久删除会话时，先于删存储调用） | loop 删该会话任务、goal 注销该会话 job |
 | `HarnessExtension#contributeSessionStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
-| `session.InputBacklog` | 能力接口（`offer` / `hasPending`） | queue | 引擎 `admit`（有无积压能力、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
-| `session.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `admit`、`SessionTurn` |
+| `session.InputBacklog` | 能力接口（`offer(session, HarnessInput)` / `hasPending`） | queue | 引擎 `handle` 受理判定（有无积压能力、忙时 `offer` 入积压、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
+| `session.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `handle` 受理判定（识别派发轮次）、`SessionTurn` |
 
-**内核没有 queue**：`SessionStatus` 不含排队数，`AdmitDecision` 的延后结局叫 `Kind.DEFER`（不是 QUEUE），程序派发判定叫 `isDispatched()`。内核自身依赖积压的判定（受理先进先出、空闲判定）走能力方法 `InputBacklog#hasPending`——由类型系统保证实现方提供，而不是「必须贡献某个状态键」的约定。goal 调度与宿主定时任务判断「能否注入」统一用 `engine.isIdle(session)`（不占用且无积压，同一把会话锁内读取）。
+**内核没有 queue**：`SessionStatus` 不含排队数，`InputOutcome` 的延后结局叫 `Kind.DEFERRED`（不是 QUEUE），程序派发判定叫 `isDispatched()`。入积压由引擎经 `InputBacklog#offer(session, HarnessInput)` 完成，宿主域属性（`HarnessInput#attr`）由实现方原样保存。内核自身依赖积压的判定（受理先进先出、空闲判定）走能力方法 `InputBacklog#hasPending`——由类型系统保证实现方提供，而不是「必须贡献某个状态键」的约定。goal 调度与宿主定时任务判断「能否注入」统一用 `engine.isIdle(session)`（不占用且无积压，同一把会话锁内读取）。
 
-没装 queue 时：`admit` 忙态给 `REJECT("busy")`（无处可延）；steer 残留按转排队失败处理（暂存并推 `SteerDroppedEvent`）。
+没装 queue 时：`handle` 忙态返回 `REJECTED("busy")`（无处可延）；steer 残留按转排队失败处理（暂存并推 `SteerDroppedEvent`）。
 
 **会话状态是开放的**：`SessionStatus` 只有核心事实是固定字段（运行流 / HITL / 受理窗口 / 取消代数），插件事实经 `contributeSessionStatus` 贡献到类型化键 `SessionStatus.Key<T>`（`Key.count` 求和、`Key.of` 后写覆盖），新增插件事实不改核心。宿主一律 `engine.status(session)` 读全；静态 `SessionStatus.of(session)` 只有核心事实。
 
@@ -1412,7 +1419,7 @@ steer.cancelPending(session, ids);                     // 批量撤销；ids 为
 | 取消其中一条 | `cancelOnRun(session, runId, steerId)` | `SteerCancelResult`（`CANCELED`/`NOT_PENDING`/`TURN_CHANGED`/`INVALID_STEER_ID`） |
 | 一次清掉多条 / 全部 | `cancelPending(session, ids\|null)` | `SteerCancelResult`（实际取消数 + 剩余数） |
 
-**忙判定由内核自算**：按 `engine.status(session)` 的 busy 或 admitting，宿主不传谓词。
+**忙判定由内核自算**：按 `engine.status(session)` 的 busy 或 admitting（`handle` 返回 `TASK` 后占位跟着请求走，订阅或 `call()` 结束前仍算 admitting），宿主不传谓词。使用态 `/steer` 声明 `runnableWhenBusy`，忙时由 `handle` 在运行任务旁边执行（`isBesideRunning()`）。
 
 **宿主没有开流前义务**：上一任务被 interrupt / 异常终止后的残留，由拦截器在新任务 `onAgentStart` 自动转排队并推 `SteerDroppedEvent(RUN_SUPERSEDED)`。
 
@@ -2045,7 +2052,7 @@ engine.addExtension(new HarnessExtension() {
 ```
 引擎构建 ──onAttach──> [引擎就绪] ──onAgentBuild──> [代理实例]
                                         │
-                          每次输入进入 ──onInput──────────> [HITL/命令/委派]
+                    输入通过受理判定 ──onInput──────────> [HITL/命令/委派]
                           每次请求装配 ──onRequestAssemble──> [ReActRequest]
                           用户级中断   ──onSessionInterrupt─> [先清积压再停流]
                           读会话状态   ──contributeSessionStatus─> [插件事实]
@@ -2059,10 +2066,10 @@ engine.addExtension(new HarnessExtension() {
 | `onAttach` | `Builder.build()`；`addExtension()` | **否**（装配必须完成，停用时改回 true 才能挂上） |
 | `onDetach` | `removeExtension()`；`shutdown()` | **否**（清理不得被开关阻止） |
 | `onAgentBuild` | `AgentFactory.create()` 末尾，无条件 | **否**（停用由扩展自己传播给子组件） |
-| `onInput` | `handle()` 第一步 | 是 |
+| `onInput` | `handle()` 第 0 步受理判定通过之后（被排队 / 拒绝的输入不触发；排队的输入续发时触发一次） | 是 |
 | `onRequestAssemble` | `ReActRequest.options(...)` 内 | 是 |
 | `onSessionInterrupt` | `interrupt()` / `prepareInterrupt()`，先于停流 | **否**（清理类） |
-| `contributeSessionStatus` | `status()`（`admit` 也经此） | **否**（事实类） |
+| `contributeSessionStatus` | `status()` | **否**（事实类） |
 | `onSessionRemove` | `removeSession()`（永久删除；只移出内存不触发） | **否**（清理类） |
 
 **删除会话的固定顺序**（宿主）：判忙（忙则拒绝）→ `engine.removeSession(id)` → 移出内存 → 删除存储。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来。只想取「已存在」的会话（定时任务、只读查询）用 `engine.getSessionOrNull(id)`，它不会新建。
@@ -2109,7 +2116,7 @@ AgentSessionProvider provider = (id, create) -> create
 返回 `void`——**只能观察与就地改写，不能否决**（想「拦截并改成另一种结局」请走命令分发或代理侧拦截器）。
 `HarnessInput` 的模型/代理/技能等选择项有 setter，可在钩子内补默认值，这是 `void` 签名下唯一能改变后续行为的方式。
 
-命令会经内层 `handle` 再走一次（命令产物任务），因此 `onInput` 对「命令 + 其产物」会触发**两次**，实现须能容忍重复。
+命令会经内层 `handle` 再走一次（命令产物任务；内层继承外层占位，不再做受理判定），因此 `onInput` 对「命令 + 其产物」会触发**两次**，实现须能容忍重复。被排队或拒绝的输入在受理时不触发 `onInput`，排队的输入在续发时触发一次。
 
 > 注意：`addExtension` 会触发一次 `onAttach`，此刻引擎已装配完毕，任意引擎方法都可安全调用。
 > `shutdown()` 会遍历回调 `onDetach`（逐个 try/catch，清理期异常不会打断其余扩展与执行器回收）。

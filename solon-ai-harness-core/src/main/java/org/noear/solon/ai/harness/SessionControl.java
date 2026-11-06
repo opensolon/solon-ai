@@ -22,8 +22,8 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.HitlCard;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
+import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
@@ -32,6 +32,7 @@ import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.mount.catalog.*;
+import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
@@ -39,7 +40,7 @@ import java.util.*;
 /**
  * 会话控制面（包内）：受理判定、运行态快照、空闲判定与中断第一段的实现。
  *
- * <p>对应引擎门面 {@code admit / status / isIdle / isBusyBypassCommand / resolveCommand / prepareInterrupt}。
+ * <p>对应 {@code handle} 第 0 步的受理判定与引擎门面 {@code status / isIdle / isBusyBypassCommand / resolveCommand / prepareInterrupt}。
  * 这些判定共用同一把会话锁（{@code session.attrs()}）与同一组扩展回调，集中在一处才能保证口径一致。</p>
  *
  * @author noear
@@ -72,7 +73,10 @@ final class SessionControl {
             }
         }
 
-        // ② 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
+        // ② 兜底清除受理占位：宿主看到本轮已取消就不再订阅，占位不能一直留着
+        InputGate.clear(session);
+
+        // ③ 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
         return HarnessInterrupts.claim(session);
     }
 
@@ -113,11 +117,6 @@ final class SessionControl {
         }
     }
 
-    /** 引擎上是否装有积压能力（决定忙态受理给 DEFER 还是 REJECT）。 */
-    private boolean hasBacklog() {
-        return engine.getExtension(InputBacklog.class).isPresent();
-    }
-
     /** 是否有任一积压能力报告待执行输入（先进先出与空闲判定共用；逐个隔离异常）。 */
     private boolean hasPendingBacklog(AgentSession session) {
         for (HarnessExtension extension : options.getExtensions()) {
@@ -139,54 +138,110 @@ final class SessionControl {
         return command != null && !command.terminalOnly() && command.runnableWhenBusy();
     }
 
-    AdmitDecision admit(AgentSession session, String input, boolean hitlDecision,
-                        java.util.function.Predicate<String> hitlExempt) {
+    /**
+     * 受理判定（{@code handle} 第 0 步；原子：判定、占位、入积压同一把会话锁）。
+     *
+     * <p>放行条件全部从输入本身推导，宿主不再传额外谓词：审批决策与续流豁免待审批拦截；
+     * 程序派发的那一轮（当前线程在派发调用栈里）天然空闲；声明 {@code runnableWhenBusy} 的命令
+     * 忙时也可执行（{@code terminalOnly} 的命令仅在终端输入时算）。</p>
+     */
+    Admission admit(HarnessInput input) {
+        final AgentSession session = input.getSession();
         if (session == null) {
-            return AdmitDecision.admit(InputGate.Ticket.NONE);
+            return Admission.free();
         }
 
         synchronized (session.attrs()) {
             TurnDispatch dispatch = TurnDispatch.current(session);
             boolean onDispatchThread = dispatch != null && dispatch.isOnDispatchThread();
-            boolean busyCommand = isBusyBypassCommand(input);
+            boolean busyCommand = isBusyRunnable(input);
+            boolean hitlDecision = input.isHitlDecision();
 
             // 1) HITL 挂起：审批未决策前开新回合会与挂起 trace 并存，
             //    用户点「同意」时续流被运行态认领拒绝，或两条流交叉写快照。
             SessionStatus status = status(session);
             if (status.hasPendingHitl()) {
-                boolean exempt = hitlDecision || onDispatchThread
-                        || (hitlExempt != null && hitlExempt.test(input));
+                boolean exempt = hitlDecision || input.isResume() || onDispatchThread || busyCommand;
                 if (exempt == false) {
                     HitlCard next = HitlCard.next(session);
                     String toolName = next == null ? null : next.getToolName();
-                    return AdmitDecision.reject("hitl_pending",
-                            toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName);
+                    return Admission.outcome(InputOutcome.rejected(InputOutcome.REJECT_HITL_PENDING,
+                            toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName));
                 }
             }
 
-            // 2) 忙态（有活跃流 / 已在受理窗口）或积压里还有待执行输入：应延后（保证先进先出）。
-            //    程序派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
-            //    没装积压能力时无处可延：拒绝（busy）。
-            if (onDispatchThread == false && busyCommand == false
-                    && (status.isBusy() || status.isAdmitting() || hasPendingBacklog(session))) {
-                return hasBacklog() ? AdmitDecision.defer()
-                        : AdmitDecision.reject("busy", "当前任务正在执行，请稍后再试");
-            }
-
-            // 3) 程序派发的一轮：天然空闲、不占位（再占位会让同步完成的命令误判成忙态）
+            // 2) 程序派发的一轮（如积压续发）：派发方已判过空闲，直接受理。
+            //    仍要占位：派发方常以「返回时会话是否忙」判断本轮是同步完成还是已异步开流，
+            //    TASK 到开流之间没有占位会被误判成同步完成、提前收口并续发下一条（两条流并发）。
+            //    非 TASK 结局在 handle 返回前即释放，同步完成的命令不会被误判成忙。
             if (onDispatchThread) {
-                return AdmitDecision.bypassDispatch(dispatch);
+                return Admission.admitted(InputGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, dispatch);
             }
 
-            // 4) 已在真实任务上运行的旁路命令：不占启动闩、不改写回复路由
-            boolean sideCommand = busyCommand && status.isBusy();
-            if (sideCommand) {
-                return AdmitDecision.bypassSideCommand();
+            boolean busyNow = status.isBusy() || InputGate.isAdmitting(session) || hasPendingBacklog(session);
+
+            // 3) 忙时可执行命令 / 审批决策：在运行中的任务旁边执行，不占位、不改写回复路由
+            //    （审批决策不可排队；三端历史上都是直接写入决策）。
+            if ((busyCommand || hitlDecision) && busyNow) {
+                InputGate.Ticket ticket = InputGate.tryAcquire(session, options.getAdmissionTimeoutMs());
+                return Admission.admitted(ticket, status.isBusy() && ticket.isAcquired() == false, null);
+            }
+
+            // 4) 忙态（有活跃流 / 已在受理窗口）或积压里还有待执行输入：延后（保证先进先出）或拒绝。
+            if (busyNow) {
+                return Admission.outcome(deferOrReject(session, input));
             }
 
             // 5) 正常受理：判定与占位同临界区
-            return AdmitDecision.admit(InputGate.tryAcquire(session));
+            return Admission.admitted(InputGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, null);
         }
+    }
+
+    /** 忙态结局：能排队就交积压（DEFERRED），否则拒绝（REJECTED）。调用方持有会话锁。 */
+    private InputOutcome deferOrReject(AgentSession session, HarnessInput input) {
+        final String busyText = "当前任务正在执行，请稍后再试";
+
+        // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存
+        if (input.isProgram() || input.isResume()) {
+            return InputOutcome.rejected(InputOutcome.REJECT_BUSY, busyText);
+        }
+
+        InputBacklog backlog = engine.getExtension(InputBacklog.class).orElse(null);
+        if (backlog == null) {
+            return InputOutcome.rejected(InputOutcome.REJECT_BUSY, busyText);
+        }
+
+        if (input.hasAttachments()) {
+            return InputOutcome.rejected(InputOutcome.REJECT_ATTACHMENTS_NOT_DEFERRABLE,
+                    "当前任务正在执行，带附件的消息不能排队，请稍后再发");
+        }
+
+        if (Assert.isEmpty(input.getText())) {
+            return InputOutcome.ignored();
+        }
+
+        int position;
+        try {
+            position = backlog.offer(session, input);
+        } catch (Throwable e) {
+            LOG.warn("InputBacklog offer failed: {}", backlog.getClass().getName(), e);
+            position = -1;
+        }
+
+        if (position < 0) {
+            return InputOutcome.rejected(InputOutcome.REJECT_BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
+        }
+
+        return InputOutcome.deferred(position);
+    }
+
+    /** 本输入是否为「忙时可执行」的命令（terminalOnly 命令仅在终端输入时算）。 */
+    private boolean isBusyRunnable(HarnessInput input) {
+        if (input.isCommandAware() == false || input.hasAttachments() || input.isHitlDecision() || input.isResume()) {
+            return false;
+        }
+        Command command = resolveCommand(input.getText());
+        return command != null && command.runnableWhenBusy() && (command.terminalOnly() == false || input.isTerminal());
     }
 
     Command resolveCommand(String input) {

@@ -1,4 +1,4 @@
-package org.noear.solon.ai.harness.turn;
+package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.session.SessionStatus;

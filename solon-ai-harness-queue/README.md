@@ -10,7 +10,7 @@ solon-ai-harness 的会话级排队插件。在当前任务运行时，把后续
 
 | 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
 |---|---|---|---|
-| 使用态 | 任务运行中继续在对话框 / IM 里发消息，或输入 `/queue <消息>` | `engine.admit` → `DEFER` 时入队；`engine.handle` 执行 `/queue` | `enqueue` / `/queue` 命令 |
+| 使用态 | 任务运行中继续在对话框 / IM 里发消息，或输入 `/queue <消息>` | `engine.handle`（忙时由引擎经 `InputBacklog#offer` 入队并返回 `DEFERRED`；`/queue` 在运行任务旁边执行） | `InputBacklog#offer` / `/queue` 命令 |
 | 管理态 | 队列面板里点「添加 / 删除 / 立即执行 / 清空」 | 宿主自己的管理接口（HTTP 等） | `QueueExtension` 门面方法 |
 
 两种时态入队的消息，最终都由宿主的同一个续发入口（`drainLoop`）领取，再回到使用态的输入入口执行。
@@ -28,7 +28,7 @@ solon-ai-harness 的会话级排队插件。在当前任务运行时，把后续
 
 ### 1.2 生命周期：入队、领取、收口、代际保护
 
-1. **入队**：`enqueue(...)`（或 `/queue` 命令、核心经 `InputBacklog#offer` 转入）把一条 `QueueItem` 以 `PENDING` 状态追加到队尾，并随会话快照落盘。
+1. **入队**：`enqueue(...)`（或 `/queue` 命令、引擎 `handle` 忙时经 `InputBacklog#offer` 转入）把一条 `QueueItem` 以 `PENDING` 状态追加到队尾，并随会话快照落盘。
 2. **领取**：`claimNext(...)` 在会话锁内抢占领取权，然后取出队首，置为 `RUNNING` 并记为 in-flight；生成一个 `QueueClaim`（同时登记为核心槽位 `TurnDispatch`），领取瞬间绑定当前代际快照，再交给 `QueueClaimHandler`。
 3. **收口**：只有两条路径。
    - handler 返回 `true`（同步完成）：内核当场确认（acknowledge），从 in-flight 移除；
@@ -43,9 +43,13 @@ sequenceDiagram
     participant Q as QueueExtension
     participant S as 流(Agent)
 
+    participant E as 引擎(handle)
+
     U->>H: 任务运行中发来消息
-    H->>Q: enqueue(session, text, origin)
-    Q-->>H: 位置(从 1 计) / -1
+    H->>E: handle(HarnessInput)
+    E->>Q: offer(session, input)
+    Q-->>E: 位置(从 1 计) / -1
+    E-->>H: DEFERRED(getBacklogPosition) / REJECTED("backlog_unavailable")
     S-->>H: 当前任务终态
     H->>Q: drainLoop(session, canDrain, handler)
     Q->>Q: 领取权 + 队首出队(RUNNING, in-flight) + 代际快照
@@ -66,8 +70,8 @@ sequenceDiagram
 
 | 核心契约 | 本插件的实现 |
 |---|---|
-| `spi.InputBacklog#offer` | 等价于 `enqueue(session, text, origin)`（origin 为 null 时按 `InputOrigin.NONE`），受开关控制 |
-| `spi.InputBacklog#hasPending` | `pendingSize(session) > 0`，事实口径，不受开关影响；引擎 `admit` 的先进先出与 `isIdle` 依赖它 |
+| `spi.InputBacklog#offer(session, HarnessInput)` | 由引擎 `handle` 在忙时调用（宿主不必调）；保存正文、来源（null 时按 `InputOrigin.NONE`）、`selectedModel`、子代理（explicitAgent 优先，否则 selectedAgent）与宿主域属性 `getAttrs()`；受开关控制，返回位置（从 1 计）或 `-1`（满 / 超长 / 停用，引擎据此返回 `REJECTED("backlog_unavailable")`） |
+| `spi.InputBacklog#hasPending` | `pendingSize(session) > 0`，事实口径，不受开关影响；引擎 `handle` 受理判定的先进先出与 `isIdle` 依赖它 |
 | `HarnessExtension#contributeSessionStatus` | 贡献 `QueueExtension.STATUS_PENDING`（待执行数） |
 | `HarnessExtension#onSessionInterrupt` | 调用 `cancelPending`（清理类，不判开关） |
 | `HarnessExtension#onAttach` | 注册 `/queue` 命令 |
@@ -94,16 +98,16 @@ sequenceDiagram
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension());
 ```
 
-装配后，引擎 `admit` 才会对"任务运行中的普通消息"给出 `DEFER`（没装 queue 时给出 `REJECT("busy")`）；steer 插件的残留插话也会转入这里。
+装配后，引擎 `handle` 才会把"任务运行中的普通消息"自行入积压并返回 `DEFERRED`（没装 queue 时返回 `REJECTED("busy")`）；steer 插件的残留插话也会转入这里。不可排队的输入不进积压：程序轮次（`HarnessInput.ofProgram(...)`）与续流忙时返回 `REJECTED("busy")`，带附件的输入返回 `REJECTED("attachments_not_deferrable")`。
 
 ### 3.2 两种时态
 
 ```mermaid
 flowchart LR
     subgraph 使用态
-        U1["任务运行中发消息"] --> A["engine.admit"]
-        A -- DEFER --> EQ1["queue.enqueue"]
-        A -- ADMIT_BYPASS --> H["engine.handle"] --> C["/queue 命令"]
+        U1["任务运行中发消息"] --> H["engine.handle<br/>受理判定"]
+        H -- "可排队输入（引擎内部入积压，DEFERRED）" --> EQ1["InputBacklog#offer"]
+        H -- "忙时可执行命令（isBesideRunning）" --> C["/queue 命令"]
     end
     subgraph 管理态
         U2["队列面板"] --> API["宿主管理接口"] --> EQ2["enqueue / cancelItem / promote / cancelPending"]
@@ -117,11 +121,11 @@ flowchart LR
 | 对比项 | 使用态 | 管理态 |
 |---|---|---|
 | 用户动作 | 任务运行中照常发消息（自动排队）；或输入 `/queue <消息>` 显式排队 | 在队列面板里添加、删除一条、立即执行一条、清空 |
-| 宿主入口 | 统一输入入口：`engine.admit`（`DEFER` 时宿主调 `enqueue`）→ `engine.handle`（`/queue` 命令） | 宿主自己的管理接口，直接调门面 |
-| 是否经过 `admit` | 是；`/queue` 是忙态旁路命令（`ADMIT_BYPASS`），运行中也能受理 | 否 |
-| 本插件入口 | `enqueue(session, text, origin)`、`QueueCommand` | `list` / `enqueue`（带 `id` 幂等）/ `cancelItem` / `promote` / `cancelPending` |
-| 结果怎么返回 | `enqueue` 返回位置；命令回执 `outcome.getCommandOutput()` | 返回值：位置 / `boolean` / 队列快照 |
-| 只有这一态能做的 | 自动排队（`DEFER`） | 删除单条、置顶、清空、幂等入队、带模型 / agent 等执行参数入队 |
+| 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)`（忙时由引擎入积压，宿主不调 `enqueue`） | 宿主自己的管理接口，直接调门面 |
+| 是否经过 `handle` 受理判定 | 是；`/queue` 声明 `runnableWhenBusy`，运行中在运行任务旁边执行（`isBesideRunning()`） | 否 |
+| 本插件入口 | `InputBacklog#offer(session, input)`（引擎调用）、`QueueCommand` | `list` / `enqueue`（带 `id` 幂等）/ `cancelItem` / `promote` / `cancelPending` |
+| 结果怎么返回 | `DEFERRED` 的 `outcome.getBacklogPosition()`；命令回执 `outcome.getCommandOutput()` | 返回值：位置 / `boolean` / 队列快照 |
+| 只有这一态能做的 | 自动排队（`DEFERRED`，连同宿主域属性 `attr` 一起保存） | 删除单条、置顶、清空、幂等入队、带模型 / agent 等执行参数入队 |
 
 两种时态写的是**同一个队列**：忙时自动排进来的消息会出现在面板上，面板上可以删掉或置顶它们。
 
@@ -131,17 +135,19 @@ flowchart LR
 
 | 时机 | 原因 |
 |---|---|
-| 一次输入释放受理位之后（`finally`） | 覆盖"空闲时 `/queue` 入队"、同步命令等场景 |
+| 一次输入处理完之后（`REPLY` / `DEFERRED` / `HITL` / `IGNORED`，以及 `TASK` 跑完） | 覆盖"空闲时 `/queue` 入队"、同步命令、"会话只是积压未清"等场景 |
 | 任务（含 goal / loop 的一轮）终态之后 | 运行期间排进来的消息要接着发 |
 | 管理接口添加或置顶之后 | 会话可能正空闲，没有终态可等 |
 
 ```java
 queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-    QueueItem item = claim.getItem();
-    onMessage(session, item.getText(), item.getOrigin()); // 同一线程回到输入入口：admit 识别为派发轮次
+    InputOutcome outcome = engine.handle(claim.getItem().toInput(session)); // 同一线程：引擎识别为派发轮次
+    handleOutcome(session, outcome, claim.getItem().getOrigin()); // 与入站消息共用的结局处理（见 4.3）
     return true;                                         // 同步跑完：内核当场收口
 });
 ```
+
+`QueueItem#toInput(session)` 把队列项还原为续发输入：正文、来源、模型、子代理与宿主域属性（`getAttrs()`）原样带回，正文仍按命令识别。引擎在派发线程上识别出这一轮（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定。
 
 > `canDrain` 不要用 `engine.isIdle(session)`：它把积压也算作不空闲（见 1.3），队列非空时恒为 false，队列永远不会被领取。传 `null` 表示不预判，完全由队列状态决定。
 
@@ -151,10 +157,11 @@ queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
 
 | 用户动作 | 发生了什么 |
 |---|---|
-| 任务运行中发一条普通消息 | `engine.admit` 返回 `DEFER`，宿主调 `queue.enqueue(session, text, origin)`，回复"已排队（第 N 位）" |
-| 任务运行中发 `/goal ...`、`/loop ...` 等非旁路命令 | 同上：以原文入队，续发时经同一入口按命令执行 |
-| `/queue 跑完顺便把文档也更新一下` | 任务运行中也能受理（`ADMIT_BYPASS`），命令入队并回执 |
-| 空闲时 `/queue <消息>` | 照样入队；受理位释放后宿主立即续发，它会马上作为新任务执行 |
+| 任务运行中发一条普通消息 | `engine.handle` 由引擎调 `InputBacklog#offer` 入队并返回 `DEFERRED`，宿主回复"已排队（第 `getBacklogPosition()` 位）" |
+| 任务运行中发 `/goal ...`、`/loop ...` 等非忙时可执行命令 | 同上：以原文入队，续发时经同一入口按命令执行 |
+| 任务运行中发带附件的消息 | 不可排队，返回 `REJECTED("attachments_not_deferrable")` |
+| `/queue 跑完顺便把文档也更新一下` | 任务运行中也能受理（`runnableWhenBusy`，在运行任务旁边执行，`isBesideRunning() == true`），命令入队并回执 |
+| 空闲时 `/queue <消息>` | 照样入队；宿主在 `REPLY` 后立即续发，它会马上作为新任务执行 |
 
 `/queue` 回执：
 
@@ -176,19 +183,15 @@ queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
 
 ### 4.3 宿主接入：完整示例
 
-队列要真正"动起来"，宿主需要把三段串起来：**受理**（这条输入现在能不能接）→ **执行**（交给引擎）→ **续发**（受理位释放或任务终态后领取队首）。下面是一个同步执行的 IM 宿主，完整覆盖 `/queue` 命令、忙态普通消息与队列派发；`drain` 设为 public，供管理接口（5.2）复用：
+队列要真正"动起来"，宿主只需两段：**受理与执行**（`engine.handle` 一步完成，忙时可排队输入由引擎自己入积压）→ **续发**（输入处理完或任务终态后领取队首）。下面是一个同步执行的 IM 宿主，完整覆盖 `/queue` 命令、忙态普通消息与队列派发；`drain` 设为 public，供管理接口（5.2）复用：
 
 ```java
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
-import org.noear.solon.ai.harness.extension.queue.QueueItem;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
 
 public class ImQueueHost {
     private final HarnessEngine engine;
@@ -199,61 +202,60 @@ public class ImQueueHost {
         this.queue = engine.addExtensionIfAbsent(new QueueExtension());   // 注册 /queue
     }
 
-    /** 唯一输入入口：用户消息、/queue 命令、队列派发的一轮都走这里 */
-    public void onMessage(AgentSession session, String text, InputOrigin origin) {
-        // 1) 受理：忙态普通消息 → DEFER；任务运行中的 /queue → ADMIT_BYPASS；派发轮次 → ADMIT_BYPASS
-        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
-        switch (admit.getKind()) {
-            case REJECT:
-                reply(origin, admit.getRejectDetail());
-                return;
-            case DEFER: {
-                int pos = queue.enqueue(session, text, origin);
-                reply(origin, pos < 0 ? "排队失败，请稍后再试" : "已排队（第 " + pos + " 位）");
-                drain(session);          // 会话可能只是"积压未清"而并不忙：立即尝试续发
-                return;
-            }
-            default:
-                break;
-        }
+    /** 唯一输入入口：用户消息与 /queue 命令都走这里 */
+    public void onMessage(AgentSession session, String text, InputOrigin origin, String effort) {
+        // 第 0 步受理判定在 handle 内：忙态普通消息 → 引擎入积压并返回 DEFERRED；
+        // 任务运行中的 /queue → 在运行任务旁边执行（REPLY，isBesideRunning() == true）
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, text)
+                .origin(origin)
+                .attr("reasoningEffort", effort));   // 宿主域属性：进积压时原样保存，续发时原样带回
+        handleOutcome(session, outcome, origin);
+    }
 
-        // 2) 派发轮次沿用派发事务的来源（回复要回到当初排队的那个渠道）
-        TurnDispatch turn = admit.isDispatched() ? admit.getDispatch() : null;
-        InputOrigin route = (turn != null && turn.getOrigin() != InputOrigin.NONE) ? turn.getOrigin() : origin;
-
-        boolean acquired = admit.getTicket().isAcquired();
-        try (InputGate.Ticket ticket = admit.getTicket()) {
-            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(route));
-            switch (outcome.getKind()) {
-                case REPLY:      // /queue 恒为 REPLY
-                    reply(route, outcome.getCommandOutput());
-                    break;
-                case TASK:       // 普通消息（含派发出来的那一轮）：同步跑完
+    /** 结局处理：入站消息与队列派发的一轮共用 */
+    private void handleOutcome(AgentSession session, InputOutcome outcome, InputOrigin origin) {
+        // 派发轮次沿用派发事务的来源（回复要回到当初排队的那个渠道）
+        InputOrigin route = outcome.isDispatched() ? outcome.getDispatch().getOrigin() : origin;
+        switch (outcome.getKind()) {
+            case TASK:       // 普通消息（含派发出来的那一轮）：同步跑完，call() 结束即释放占位
+                try {
                     if (outcome.hasReply()) {
                         reply(route, outcome.getCommandOutput());
                     }
                     reply(route, outcome.getRequest().call().getContent());
-                    break;
-                default:
-                    break;
-            }
-        } catch (Throwable e) {
-            if (turn != null) {
-                throw new IllegalStateException("queued turn failed to start", e); // 交回派发侧回滚到队首
-            }
-            reply(route, "处理失败：" + e.getMessage());
-        } finally {
-            if (acquired) {
-                drain(session);  // 释放受理位后续发：覆盖"空闲时 /queue 入队"与同步命令场景
-            }
+                } catch (Throwable e) {
+                    outcome.discard();   // 幂等；开流前失败时确保占位释放
+                    if (outcome.isDispatched()) {
+                        throw new IllegalStateException("queued turn failed to start", e); // 交回派发侧回滚到队首
+                    }
+                    reply(route, "处理失败：" + e.getMessage());
+                }
+                drain(session);
+                break;
+            case REPLY:      // /queue 恒为 REPLY；isBesideRunning() 为真时不要改写会话的回复路由
+                reply(route, outcome.getCommandOutput());
+                drain(session);  // 覆盖"空闲时 /queue 入队"与同步命令场景
+                break;
+            case DEFERRED:   // 引擎已入积压；会话可能只是"积压未清"而并不忙：立即尝试续发
+                reply(route, "已排队（第 " + outcome.getBacklogPosition() + " 位）");
+                drain(session);
+                break;
+            case REJECTED:   // hitl_pending / busy / attachments_not_deferrable / backlog_unavailable
+                reply(route, outcome.getRejectDetail());
+                break;
+            case HITL:
+            case IGNORED:
+                drain(session);
+                break;
         }
     }
 
-    /** 续发：领取队首，在同一线程回到输入入口（使用态与管理态共用） */
+    /** 续发：领取队首，在同一线程回到 handle（使用态与管理态共用） */
     public void drain(AgentSession session) {
         queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-            QueueItem item = claim.getItem();
-            onMessage(session, item.getText(), item.getOrigin()); // 同线程调用：admit 能识别出"派发轮次"
+            // 同线程调用：引擎识别出"派发轮次"（outcome.getDispatch() 非空）
+            InputOutcome outcome = engine.handle(claim.getItem().toInput(session));
+            handleOutcome(session, outcome, claim.getItem().getOrigin());
             return true;                                         // 同步跑完，内核当场确认
         });
     }
@@ -307,18 +309,18 @@ void startStreamAsync(AgentSession session, QueueItem item) {
 ### 4.5 使用态要点
 
 1. **命令注册由插件完成**：`QueueExtension#onAttach` 已注册 `/queue`，宿主不用注册。
-2. **任务运行中的 `/queue` 必须放行**：`admit` 已按 `runnableWhenBusy` 识别它（`ADMIT_BYPASS`，不占位、不改回复路由）。宿主若有自己的忙碌拦截，至少用 `engine.isBusyBypassCommand(text)` 放行，否则 `/queue` 本身会被当成普通消息再排一次队，结束后作为命令执行，变成"排队的排队"。
-3. **空闲时的 `/queue` 也会入队**：此时没有终态可等，必须在受理位释放后立即 `drain`（示例的 `finally`），否则这条要等下一个任务结束才会被发出。
-4. **续发在同一线程回到入口**：`admit` 用 `TurnDispatch#isOnDispatchThread()` 识别派发轮次，派发轮次不占位、免于"有积压就延后"的判定。异步开流的宿主改为在领取回调里 `SessionTurn.begin(session)`，流终态 `turn.settle(ok)`（4.4）。
-5. **派发轮次的回复路由取 `TurnDispatch#getOrigin()`**：即当初入队时的来源，而不是触发续发的那次请求。
+2. **忙态由引擎处理，宿主不要自己拦**：所有输入直接交给 `engine.handle`。`/queue` 声明 `runnableWhenBusy`，运行中在运行任务旁边执行（`isBesideRunning() == true`，宿主不要据此改写回复路由）；其余可排队输入由引擎调 `InputBacklog#offer` 入队并返回 `DEFERRED`。宿主侧不要再为忙态调 `queue.enqueue`，否则会重复入队。
+3. **空闲时的 `/queue` 也会入队**：此时没有终态可等，必须在 `REPLY` 后立即 `drain`（示例的 `handleOutcome`），否则这条要等下一个任务结束才会被发出。
+4. **续发在同一线程回到 `handle`**：在领取回调里调用 `engine.handle(claim.getItem().toInput(session))`，引擎用 `TurnDispatch#isOnDispatchThread()` 识别派发轮次（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定；派发线程上的 `TASK` 同样占位，直到请求被订阅或 `call()` 结束。异步开流的宿主改为在领取回调里 `SessionTurn.begin(session)`，流终态 `turn.settle(ok)`（4.4）。
+5. **派发轮次的回复路由取 `outcome.getDispatch().getOrigin()`**：即当初入队时的来源，而不是触发续发的那次请求。
 6. **派发轮次启动失败要抛出**：抛给 `drainLoop` 的回调后，内核按领取时的代际回滚到队首并返回 `START_FAILED`，不会无限重试。
-7. **排队的可以是命令**：忙态下用户发 `/goal ...`、`/loop ...` 这类非旁路命令时，`admit` 给出 `DEFER`，它们以原文入队，续发时经同一入口按命令执行。
-8. **审批挂起**：`admit` 第 4 个参数传 `engine::isBusyBypassCommand`，让 `/queue` 在审批挂起期间仍可受理；不传则被 `REJECT("hitl_pending")`。
+7. **排队的可以是命令**：忙态下用户发 `/goal ...`、`/loop ...` 这类非忙时可执行命令时，`handle` 把它们以原文入队并返回 `DEFERRED`，续发时经同一入口按命令执行。宿主域属性（如 `attr("reasoningEffort", ...)`）随队列项保存，`toInput` 时原样带回。
+8. **审批挂起**：有待审批卡时，普通输入返回 `REJECTED("hitl_pending")`；`/queue` 等忙时可执行命令、审批决策、续流与派发轮次由引擎按输入本身豁免，宿主无需传任何谓词。
 9. **停止**：`engine.interrupt(session)` 会先清空队列再停流，终态回调里的 `drain` 不会把刚停掉的内容重新推起来。
 
 ## 五、管理态：用户在界面上操作
 
-管理态不经过 `admit` / `handle`：队列面板上的每个按钮对应一个宿主接口，接口直接调用 `QueueExtension` 门面；添加或置顶后调用使用态的续发入口（3.3），让会话空闲时立刻开始执行。
+管理态不经过 `handle`：队列面板上的每个按钮对应一个宿主接口，接口直接调用 `QueueExtension` 门面；添加或置顶后调用使用态的续发入口（3.3），让会话空闲时立刻开始执行。
 
 ### 5.1 界面动作与门面对照
 
@@ -482,7 +484,7 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 ### 5.7 管理态要点
 
 1. **添加和置顶之后要续发**：管理接口不经输入入口，没有受理位释放的时机；会话空闲时不调续发，这条要等下一次用户输入或任务终态才会执行。
-2. **续发只走一个入口**：管理接口调用的是使用态宿主的同一个 `drain`，执行仍回到 `onMessage`；不要在管理接口里自己 `engine.handle`，否则绕过受理判定、回复路由和派发收口。
+2. **续发只走一个入口**：管理接口调用的是使用态宿主的同一个 `drain`，执行在领取回调里经 `engine.handle(item.toInput(session))` 完成；不要在管理接口里自己 `engine.handle`，否则绕过受理判定、回复路由和派发收口。
 3. **同一条输入只走一个入口入队**：前端已经调了添加接口，就不要再拼成 `/queue ...` 发出去；HTTP 重试靠 `enqueue` 的 `id` 去重（同 id 已在待执行或运行中返回 -1）。
 4. **运行中那条不能删、不能置顶**：`cancelItem` / `promote` 只作用于待执行项；要停掉运行中的那条用 `engine.interrupt`，它会同时清空整个队列。
 5. **列表是快照**：`list` 读到的下一刻队首就可能被领取；"删除""立即执行"按返回值判断是否成功，不要按界面上的旧状态推断。
@@ -515,12 +517,14 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 | `getCreatedAt()` | `createdAt` | 入队时间（毫秒） |
 | `getClaimedAt()` | `claimedAt` | 领取时间（毫秒），未领取为 null，此时不输出该键 |
 | `getModel()` | `model` | 执行时使用的模型，空时不输出 |
-| `getReasoningEffort()` | `reasoningEffort` | 推理强度，空时不输出 |
-| `getThinkingMode()` | `thinkingMode` | 思考模式，空时不输出 |
+| `getReasoningEffort()` | `reasoningEffort` | 推理强度；显式字段为空时回读同名宿主域属性，空时不输出 |
+| `getThinkingMode()` | `thinkingMode` | 思考模式；显式字段为空时回读同名宿主域属性，空时不输出 |
 | `getSelectedAgent()` | `selectedAgent` | 选定的 agent，空时不输出 |
 | `hasFiles()` | `hasFiles` | 是否带附件，仅为 true 时输出 |
 | `getOrigin()` | — | 来源身份，永不为 null（缺省 `InputOrigin.NONE`） |
 | `getSource()` | `source` | `origin.getChannel()`，为 null 时不输出 |
+| `getAttrs()` | `attrs` | 宿主域属性（引擎积压入口带入的 `HarnessInput#getAttrs()`），只读、永不为 null，空时不输出 |
+| `toInput(session)` | — | 还原为续发输入（正文、来源、模型、子代理、宿主域属性），仍按命令识别；续发时交给 `engine.handle` |
 
 队列不解释 `model` 等字段，只透传与持久化，执行时由宿主自行使用。
 
@@ -569,7 +573,7 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 - **惰性恢复**：`session.attrs()` 是瞬态的。首次访问队列时，若 attrs 中没有队列，就从投影重建。
 - **RUNNING 回到队首**：投影中 `RUNNING` 的项只说明上一个进程领取过，重建时重置为 `PENDING`、清空 `claimedAt`，并排在其余待执行项之前。重启后它会被重新执行一次。
 - **非法行丢弃**：文本为空或超过 4096 字符的行在恢复时被跳过。
-- **落盘格式**：持久化键为 `id`、`text`、来源字段（`source` / `sourceUserId` / `replyTarget` / `messageId`）、`status`、`createdAt`，以及非空时的 `claimedAt`、`model`、`reasoningEffort`、`thinkingMode`、`selectedAgent`、`hasFiles`。持久化格式与展示用 `toMap()` 相互独立。
+- **落盘格式**：持久化键为 `id`、`text`、来源字段（`source` / `sourceUserId` / `replyTarget` / `messageId`）、`status`、`createdAt`，以及非空时的 `claimedAt`、`model`、`reasoningEffort`、`thinkingMode`、`selectedAgent`、`hasFiles`、`attrs`。持久化格式与展示用 `toMap()` 相互独立。
 - **代际不持久化**：代际、领取权、派发登记只存在于内存。
 - **会话删除**：队列存在会话中，随会话一起消失。
 
@@ -580,9 +584,9 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 | 方法 | 返回 | 受开关控制 | 时态 | 说明 |
 |---|---|---|---|---|
 | `enqueue(session, text)` | `int` | 是 | 使用 / 管理 | 入队，来源 `channel("queue")` |
-| `enqueue(session, text, origin)` | `int` | 是 | 使用 | 入队，携带来源（`DEFER` 时用） |
+| `enqueue(session, text, origin)` | `int` | 是 | 使用 / 管理 | 入队，携带来源（忙态排队由引擎经 `offer` 完成，宿主无需调用） |
 | `enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles)` | `int` | 是 | 管理 | 完整参数，`id` 幂等 |
-| `offer(session, text, origin)` | `int` | 是 | 内核 | `InputBacklog` 入口，同 `enqueue` |
+| `offer(session, input)` | `int` | 是 | 内核 | `InputBacklog` 入口，由引擎 `handle` 忙时调用；保存正文、来源、`selectedModel`、子代理与 `getAttrs()` |
 | `claimNext(session, handler)` | `QueueClaimStatus` | 是 | 续发 | 领取并执行队首一条 |
 | `claimNext(session, canAccept, handler)` | `QueueClaimStatus` | 是 | 续发 | 同上，带锁内原子谓词 |
 | `drainLoop(session, canDrain, handler)` | `QueueClaimStatus` | 是 | 续发 | 循环领取，返回最后一次领取结果 |

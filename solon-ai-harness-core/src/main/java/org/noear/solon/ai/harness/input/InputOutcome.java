@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.input;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.HitlCard;
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -63,8 +64,10 @@ public final class InputOutcome {
     /**
      * 宿主该做什么
      * <p>
-     * 四个值互斥且穷尽：每个值都是「本次输入已经发生的事」的一个真实结局，
-     * 新增能力（如命令权限门控）不会新增值，只会落到既有结局上。
+     * 六个值互斥且穷尽：每个值都是「本次输入已经发生的事」的一个真实结局。
+     * 新增能力（如命令权限门控）不会新增值，只会落到既有结局上；
+     * {@link #DEFERRED} 与 {@link #REJECTED} 是受理判定（{@code handle} 第 0 步）的两种结局——
+     * 「排队了」与「被拒了」宿主的处理不同（如 IM 要回报不同状态），不能并入 {@link #REPLY}。
      */
     public enum Kind {
         /**
@@ -109,10 +112,37 @@ public final class InputOutcome {
         /**
          * 输入为空（无文本也无附件），无需处理
          */
-        IGNORED
+        IGNORED,
+        /**
+         * 会话忙（有运行流 / 正在受理另一条输入 / 积压里还有待执行输入），本输入已进入积压，
+         * 空闲后续发。位置读 {@link #getBacklogPosition()}（从 1 计）。
+         * <p>
+         * 只有引擎装了积压能力（{@code InputBacklog}，如 queue 插件）且输入可排队
+         * （纯文本、非程序轮次、非审批决策、非续流）时才会给出。续发由宿主触发（执行在宿主那里）。
+         */
+        DEFERRED,
+        /**
+         * 未受理：宿主渲染 {@link #getRejectDetail()} 后收尾。原因码读 {@link #getRejectReason()}：
+         * <ul>
+         * <li>{@code hitl_pending} —— 有待审批卡，本输入不是审批决策 / 续流 / 忙时可执行命令；</li>
+         * <li>{@code busy} —— 会话忙且无处可延（没装积压能力、程序轮次、续流等不可排队的输入）；</li>
+         * <li>{@code attachments_not_deferrable} —— 会话忙且输入带附件（附件不进积压）；</li>
+         * <li>{@code backlog_unavailable} —— 会话忙，积压拒收（已满 / 超长 / 已停用）。</li>
+         * </ul>
+         */
+        REJECTED
     }
 
-    /** 宿主动作路由值（四值互斥穷尽，语义见 {@link Kind}） */
+    /** 拒绝原因：有待审批卡 */
+    public static final String REJECT_HITL_PENDING = "hitl_pending";
+    /** 拒绝原因：会话忙且无处可延 */
+    public static final String REJECT_BUSY = "busy";
+    /** 拒绝原因：会话忙且输入带附件 */
+    public static final String REJECT_ATTACHMENTS_NOT_DEFERRABLE = "attachments_not_deferrable";
+    /** 拒绝原因：会话忙，积压拒收 */
+    public static final String REJECT_BACKLOG_UNAVAILABLE = "backlog_unavailable";
+
+    /** 宿主动作路由值（六值互斥穷尽，语义见 {@link Kind}） */
     private final Kind kind;
     /** 命令名；非 null 即命令输入（含被渠道拦截未执行的情况），是 {@link #isCommand()} 的判据 */
     private final String commandName;
@@ -134,6 +164,17 @@ public final class InputOutcome {
     private final int pendingHitl;
     /** 本批挂起卡快照（仅审批决策路径有意义；其余为空集合，永不为 null） */
     private final List<HitlCard> hitlCards;
+    /** 积压位置（仅 {@link Kind#DEFERRED}，从 1 计；其余为 0） */
+    private int backlogPosition;
+    /** 拒绝原因码与展示文字（仅 {@link Kind#REJECTED}） */
+    private String rejectReason;
+    private String rejectDetail;
+    /** 本条（忙时可执行命令）是否在正在运行的任务旁边执行 */
+    private boolean besideRunning;
+    /** 本轮所属的程序派发事务（如积压续发）；非派发为 null */
+    private TurnDispatch dispatch;
+    /** 放弃执行时释放受理占位（仅 TASK 且占到了位时非空；幂等） */
+    private Runnable discarder;
 
     private InputOutcome(Kind kind, String commandName, String commandOutput,
                         ParsedCommand command, Prompt prompt, String agentName, String modelName,
@@ -174,6 +215,48 @@ public final class InputOutcome {
 
     public static InputOutcome ignored() {
         return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null, null, 0, null);
+    }
+
+    /**
+     * 已进入积压（会话忙）
+     *
+     * @param position 积压位置（从 1 计）
+     * @since 4.2.0
+     */
+    public static InputOutcome deferred(int position) {
+        InputOutcome outcome = new InputOutcome(Kind.DEFERRED, null, null, null, null, null, null, null, null, 0, null);
+        outcome.backlogPosition = position;
+        return outcome;
+    }
+
+    /**
+     * 未受理
+     *
+     * @param reason 原因码（见 {@link Kind#REJECTED}）
+     * @param detail 可展示的文字
+     * @since 4.2.0
+     */
+    public static InputOutcome rejected(String reason, @Nullable String detail) {
+        InputOutcome outcome = new InputOutcome(Kind.REJECTED, null, null, null, null, null, null, null, null, 0, null);
+        outcome.rejectReason = reason;
+        outcome.rejectDetail = detail;
+        return outcome;
+    }
+
+    /**
+     * 写入受理事实（引擎在 {@code handle} 第 0 步之后调用；宿主无须使用）。
+     *
+     * @param besideRunning 是否在正在运行的任务旁边执行（忙时可执行命令）
+     * @param dispatch      本轮所属的程序派发事务（可为 null）
+     * @param discarder     放弃执行时释放受理占位的动作（可为 null）
+     * @return 本实例
+     * @since 4.2.0
+     */
+    public InputOutcome admitted(boolean besideRunning, @Nullable TurnDispatch dispatch, @Nullable Runnable discarder) {
+        this.besideRunning = besideRunning;
+        this.dispatch = dispatch;
+        this.discarder = discarder;
+        return this;
     }
 
     /**
@@ -417,9 +500,89 @@ public final class InputOutcome {
         return hitlCards.isEmpty() ? null : hitlCards.get(0);
     }
 
+    // ========== 受理事实 ==========
+
+    /**
+     * 积压位置（仅 {@link Kind#DEFERRED}，从 1 计；其余为 0）
+     *
+     * @since 4.2.0
+     */
+    public int getBacklogPosition() {
+        return backlogPosition;
+    }
+
+    /**
+     * 拒绝原因码（仅 {@link Kind#REJECTED}，见 {@code REJECT_*} 常量；其余为 null）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    /**
+     * 拒绝的可展示文字（仅 {@link Kind#REJECTED}；其余为 null）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getRejectDetail() {
+        return rejectDetail;
+    }
+
+    /**
+     * 本条是否在正在运行的任务旁边执行（忙时可执行命令，如 {@code /interrupt}、{@code /help}）。
+     *
+     * <p>为 true 时宿主不要改写会话的回复路由（那属于正在运行的任务），回执按本条自己的来源投递。</p>
+     *
+     * @since 4.2.0
+     */
+    public boolean isBesideRunning() {
+        return besideRunning;
+    }
+
+    /**
+     * 本轮是否由程序派发而来（如积压续发，且就在派发调用栈里）。
+     *
+     * @since 4.2.0
+     */
+    public boolean isDispatched() {
+        return dispatch != null;
+    }
+
+    /**
+     * 本轮所属的程序派发事务（非派发为 null）。宿主据此取回复路由来源（{@link TurnDispatch#getOrigin()}）。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public TurnDispatch getDispatch() {
+        return dispatch;
+    }
+
+    /**
+     * 放弃执行（仅 {@link Kind#TASK} 有意义；幂等，其余结局为空操作）。
+     *
+     * <p>受理占位跟着请求走：正常订阅 {@code getRequest().stream()} 或调用 {@code call()} 时由请求自己释放，
+     * 宿主<b>不需要</b>调用本方法。只有拿到 TASK 后决定不执行（开流前出错、本轮已被中断等）时调用，
+     * 会话立即恢复可受理；不调用也有占位时限兜底，但期间新输入都会进积压。</p>
+     *
+     * @since 4.2.0
+     */
+    public void discard() {
+        Runnable r = discarder;
+        if (r != null) {
+            discarder = null;
+            r.run();
+        }
+    }
+
     @Override
     public String toString() {
         return "InputOutcome{" + kind + (commandName != null ? ", cmd=" + commandName : "")
-                + (agentName != null ? ", agent=" + agentName : "") + "}";
+                + (agentName != null ? ", agent=" + agentName : "")
+                + (rejectReason != null ? ", reject=" + rejectReason : "")
+                + (kind == Kind.DEFERRED ? ", position=" + backlogPosition : "") + "}";
     }
 }

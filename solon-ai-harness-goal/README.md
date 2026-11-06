@@ -12,7 +12,7 @@
 
 | 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
 |---|---|---|---|
-| 使用态 | 对话框 / IM 里输入 `/goal 让测试全绿` | `engine.admit` → `engine.handle` | `/goal` 命令（引擎内分派） |
+| 使用态 | 对话框 / IM 里输入 `/goal 让测试全绿` | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/goal` 命令（引擎内分派） |
 | 管理态 | 任务面板里点「新建 / 编辑 / 暂停 / 删除」 | 宿主自己的管理接口（HTTP 等） | `GoalExtension` 门面方法 |
 
 ---
@@ -180,7 +180,7 @@ assert ext.hasActiveGoals() == false; // 无调度器时恒为 false
 ```mermaid
 flowchart LR
     subgraph 使用态
-        U1["对话框 / IM 输入"] --> A["engine.admit"] --> H["engine.handle"] --> C["/goal 命令"]
+        U1["对话框 / IM 输入"] --> H["engine.handle<br/>受理判定 + 分派"] --> C["/goal 命令"]
     end
     subgraph 管理态
         U2["任务面板按钮"] --> API["宿主管理接口"]
@@ -194,8 +194,8 @@ flowchart LR
 | 对比项 | 使用态 | 管理态 |
 |---|---|---|
 | 用户动作 | 在对话中输入 `/goal 目标`、`/goal pause` 等 | 在任务面板里新建、编辑、暂停、恢复、立即执行、清除 |
-| 宿主入口 | 统一输入入口：`engine.admit` 判忙 → `engine.handle` | 宿主自己的管理接口，直接调门面 |
-| 是否经过 `admit` 判忙 | 是：goal 的一轮正在跑时，`/goal ...` 被 `DEFER` 排队 | 否：随时可调，门面自己保证时序（如 `update` 先停流再改写） |
+| 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)` | 宿主自己的管理接口，直接调门面 |
+| 是否经过 `handle` 受理判定 | 是：goal 的一轮正在跑时，`/goal ...` 由引擎入积压，返回 `DEFERRED` | 否：随时可调，门面自己保证时序（如 `update` 先停流再改写） |
 | 本插件入口 | `GoalCommand`（引擎内分派，宿主不用注册） | `create` / `get` / `update` / `pause` / `resume` / `trigger` / `remove` |
 | 结果怎么返回 | 回执文本：`outcome.getCommandOutput()` | 返回值：`GoalTask` 快照 / `boolean` / 异常 |
 | 只有这一态能做的 | — | 编辑目标与预算（`update`）、立即跑一轮（`trigger`）、`runNow(false)`、`displayObjective` |
@@ -215,7 +215,11 @@ goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
     if (session == null) {
         return GoalOutcome.skip("session not found");
     }
-    ReActResponse resp = engine.handle(HarnessInput.ofProgram(session, prompt, "web")).call();
+    InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "web"));
+    if (outcome.getKind() != InputOutcome.Kind.TASK) {
+        return GoalOutcome.skip("not runnable: " + outcome.getKind()); // 如忙时 REJECTED("busy")，不计失败
+    }
+    ReActResponse resp = outcome.getRequest().call();
     pushToClient(sid, resp.getContent());               // 把这一轮的输出送回界面
     boolean hasToolCalls = resp.getTrace() != null && resp.getTrace().getToolCallCount() > 0;
     long tokens = resp.getMetrics() != null ? resp.getMetrics().getTotalTokens() : 0L;
@@ -289,7 +293,7 @@ goal.registerValidator(
 | 会话 | 作用于本次输入所在会话 `ctx.getSession()` |
 | 结局 | 恒为 `Kind.REPLY`：命令只建目标或改状态并回执，**不在本次 `handle` 里开流**；后续轮次由调度器驱动，别等 `getRequest()` |
 | 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用 |
-| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务（含 goal 自己的一轮）运行中输入的 `/goal ...`，`engine.admit` 给出 `DEFER`（排队）；没装 queue 时给出 `REJECT("busy")` |
+| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务（含 goal 自己的一轮）运行中输入的 `/goal ...`，`engine.handle` 由引擎入积压并返回 `DEFERRED`；没装 queue 时返回 `REJECTED("busy")` |
 | 开关 | `engine.setExtensionEnabled(goal, false)` 后命令回执 `/goal 已停用。发送 /help 查看可用命令。` |
 | 回执格式 | 缺省缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
 
@@ -307,8 +311,6 @@ import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -333,7 +335,11 @@ public class ImGoalHost {
                 return GoalOutcome.skip("no session or reply route");   // 本轮放弃，不计错误
             }
             try {
-                ReActResponse resp = engine.handle(HarnessInput.ofProgram(session, prompt, "goal")).call();
+                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal"));
+                if (outcome.getKind() != InputOutcome.Kind.TASK) {
+                    return GoalOutcome.skip("not runnable: " + outcome.getRejectReason()); // 程序轮次忙时不进积压
+                }
+                ReActResponse resp = outcome.getRequest().call();
                 reply(route, resp.getContent());
                 // 完成判定依赖真实的工具证据与 token：从 trace 读，不要从文本猜
                 boolean hasToolCalls = resp.getTrace() != null && resp.getTrace().getToolCallCount() > 0;
@@ -355,41 +361,46 @@ public class ImGoalHost {
 
     /** 输入入口：/goal 命令与普通消息共用 */
     public void onMessage(AgentSession session, String text, InputOrigin origin) {
-        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
-        switch (admit.getKind()) {
-            case REJECT:
-                reply(origin, admit.getRejectDetail());
-                return;
-            case DEFER:   // goal 的一轮正在跑时发来的 /goal pause 等：排队，本轮结束后执行
-                int pos = queue.enqueue(session, text, origin);
-                reply(origin, pos < 0 ? "排队失败，请稍后再试" : "当前一轮结束后执行（第 " + pos + " 位）");
-                return;
-            default:
-                break;
-        }
+        dispatch(session, HarnessInput.of(session, text).origin(origin));
+    }
 
-        routes.put(session.getSessionId(), origin);   // 调度轮次的输出回到这里
-
-        boolean acquired = admit.getTicket().isAcquired();
-        try (InputGate.Ticket ticket = admit.getTicket()) {
-            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
-            if (outcome.getKind() == InputOutcome.Kind.REPLY) {
-                reply(origin, outcome.getCommandOutput());          // /goal 的回执
-            } else if (outcome.getKind() == InputOutcome.Kind.TASK) {
-                reply(origin, outcome.getRequest().call().getContent());
-            }
-        } catch (Throwable e) {
-            reply(origin, "处理失败：" + e.getMessage());
-        } finally {
-            if (acquired) {
+    /** 受理与执行：入站消息与积压续发共用同一个 handle 入口 */
+    private void dispatch(AgentSession session, HarnessInput input) {
+        InputOutcome outcome = engine.handle(input);   // 第 0 步受理判定：忙时可排队输入由引擎入积压
+        InputOrigin origin = outcome.isDispatched() ? outcome.getDispatch().getOrigin() : input.getOrigin();
+        switch (outcome.getKind()) {
+            case TASK:
+                routes.put(session.getSessionId(), origin);   // 调度轮次的输出回到这里
+                try {
+                    reply(origin, outcome.getRequest().call().getContent());   // call() 结束即释放占位
+                } catch (Throwable e) {
+                    outcome.discard();   // 幂等；开流前失败时确保占位释放
+                    reply(origin, "处理失败：" + e.getMessage());
+                }
                 drain(session);
-            }
+                break;
+            case REPLY:
+                routes.put(session.getSessionId(), origin);
+                reply(origin, outcome.getCommandOutput());   // /goal 的回执
+                drain(session);
+                break;
+            case DEFERRED:   // goal 的一轮正在跑时发来的 /goal pause 等：引擎已入积压，本轮结束后执行
+                reply(origin, "当前一轮结束后执行（第 " + outcome.getBacklogPosition() + " 位）");
+                drain(session);
+                break;
+            case REJECTED:
+                reply(origin, outcome.getRejectDetail());
+                break;
+            case HITL:
+            case IGNORED:
+                drain(session);
+                break;
         }
     }
 
     private void drain(AgentSession session) {
         queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-            onMessage(session, claim.getItem().getText(), claim.getItem().getOrigin());
+            dispatch(session, claim.getItem().toInput(session));   // 同一线程：引擎识别为派发轮次
             return true;
         });
     }
@@ -408,20 +419,20 @@ public class ImGoalHost {
 
 ### 4.4 使用态要点
 
-1. **命令立目标，调度器跑轮次**：`/goal <目标>` 与管理态的 `goal.create(...)` 是同一条路径；创建后首轮由调度器异步发起（命令解析出的 `GoalSpec` 保持缺省 `runNow = true`）。首轮开始时如果宿主还没释放这次输入的受理位，或队列里还有积压，`engine.isIdle` 为假，这一轮会被跳过，5 秒后的下一次轮询再跑，属正常现象。
+1. **命令立目标，调度器跑轮次**：`/goal <目标>` 与管理态的 `goal.create(...)` 是同一条路径；创建后首轮由调度器异步发起（命令解析出的 `GoalSpec` 保持缺省 `runNow = true`）。首轮开始时如果会话仍被占用（例如另一条输入的占位尚未随请求释放），或队列里还有积压，`engine.isIdle` 为假，这一轮会被跳过，5 秒后的下一次轮询再跑，属正常现象。
 2. **执行器决定输出去向**：内置缺省执行器只把结果记进 `lastResult`，不会推送给任何渠道；需要让用户看到每一轮的宿主必须按通道注册执行器，并自行保存会话到渠道的回复路由。
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
-4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。
-5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）被 `DEFER` 进队列。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
+4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
+5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）由 `handle` 入积压并返回 `DEFERRED`。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
 6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session)`，再 `goal.pause(sid, null)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
 7. **单槽冲突在回执里**：已有非终态 goal 时命令不会抛异常，只回执 `WARN`；管理态 `create` 则抛 `IllegalStateException`。
-8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入在 `admit` 中天然豁免（第 3 个参数传 `true`），续流完成后 goal 才继续。
+8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED("hitl_pending")`；续流完成后 goal 才继续。
 
 ---
 
 ## 五、管理态：用户在界面上操作
 
-管理态不经过 `admit` / `handle`：界面上的每个按钮对应一个宿主接口，接口直接调用 `GoalExtension` 门面。状态变化经监听器推回界面。
+管理态不经过 `handle`：界面上的每个按钮对应一个宿主接口，接口直接调用 `GoalExtension` 门面。状态变化经监听器推回界面。
 
 ### 5.1 界面动作与门面对照
 

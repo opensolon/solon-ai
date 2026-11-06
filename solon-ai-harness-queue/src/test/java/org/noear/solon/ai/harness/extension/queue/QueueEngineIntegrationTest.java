@@ -6,7 +6,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
@@ -25,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <ol>
  *   <li>{@code onSessionInterrupt}：{@code engine.interrupt} / {@code prepareInterrupt} 先清队列再停流，无流也清；</li>
- *   <li>{@code InputBacklog}：引擎按能力接口找到本插件，{@code status} 带出自有键 {@code STATUS_PENDING}、有积压时 {@code isIdle} 为假、忙态 {@code admit} 给 DEFER；</li>
- *   <li>{@code TurnDispatch}：派发登记在核心槽位，{@code admit} 识别为派发轮次；</li>
+ *   <li>{@code InputBacklog}：引擎按能力接口找到本插件，{@code status} 带出自有键 {@code STATUS_PENDING}、有积压时 {@code isIdle} 为假、忙态 {@code handle} 由引擎自己入队并给 DEFERRED（附件、选择、宿主属性原样保存）；</li>
+ *   <li>{@code TurnDispatch}：派发登记在核心槽位，{@code handle} 识别为派发轮次（不占位、带回派发事务）；</li>
  *   <li>{@code /queue} 命令经引擎全链路。</li>
  * </ol>
  */
@@ -35,8 +34,16 @@ class QueueEngineIntegrationTest {
     Path workspace;
 
     private HarnessEngine engine() {
+        // 假模型（不可达地址）：受理判定类用例需要装配出请求，但不开流
+        org.noear.solon.ai.chat.ChatConfig model = new org.noear.solon.ai.chat.ChatConfig();
+        model.setName("fake");
+        model.setModel("fake-model");
+        model.setApiUrl("http://localhost:1/v1");
+        model.setApiKey("test");
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .modelAdd(model)
+                .defaultModel("fake")
                 .build();
         engine.addExtensionIfAbsent(new QueueExtension());
         return engine;
@@ -118,15 +125,74 @@ class QueueEngineIntegrationTest {
         InputBacklog backlog = engine.getExtension(InputBacklog.class).orElse(null);
         assertTrue(backlog instanceof QueueExtension);
 
-        assertEquals(1, backlog.offer(session, "a", InputOrigin.NONE));
+        assertEquals(1, backlog.offer(session, HarnessInput.of(session, "a")));
         assertEquals(1, (int) engine.status(session).get(QueueExtension.STATUS_PENDING));
         assertTrue(backlog.hasPending(session));
         assertFalse(engine.isIdle(session), "有积压即不空闲（goal/定时任务据此不插队）");
-        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "b", false, null).getKind(),
-                "空闲但有积压：延后（先进先出）");
+        InputOutcome deferred = engine.handle(HarnessInput.of(session, "b"));
+        assertEquals(InputOutcome.Kind.DEFERRED, deferred.getKind(), "空闲但有积压：延后（先进先出）");
+        assertEquals(2, deferred.getBacklogPosition());
 
         busy(session);
-        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "b", false, null).getKind());
+        assertEquals(InputOutcome.Kind.DEFERRED, engine.handle(HarnessInput.of(session, "c")).getKind());
+        assertEquals(3, QueueStore.pendingSize(session), "引擎自己入队，宿主不再 enqueue");
+    }
+
+    @Test
+    void deferredInputKeepsSelectionsAndHostAttrsForRedispatch() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+        busy(session);
+
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, "排队的消息")
+                .origin(InputOrigin.of("feishu", "u1", "chat1", "m1"))
+                .selectedModel("gpt-x")
+                .selectedAgent("coder")
+                .attr("reasoningEffort", "high")
+                .attr("thinkingMode", "deep"));
+        assertEquals(InputOutcome.Kind.DEFERRED, outcome.getKind());
+
+        QueueItem item = QueueStore.snapshot(session).get(0);
+        assertEquals("gpt-x", item.getModel());
+        assertEquals("coder", item.getSelectedAgent());
+        assertEquals("high", item.getReasoningEffort(), "宿主属性按约定键回读");
+        assertEquals("deep", item.getAttrs().get("thinkingMode"));
+        assertEquals("feishu", item.getOrigin().getChannel());
+
+        // 落盘投影可还原（重启续发不丢宿主属性）
+        QueueItem restored = QueueItem.fromMap(item.toPersistMap());
+        assertEquals("high", restored.getAttrs().get("reasoningEffort"));
+
+        HarnessInput back = restored.toInput(session);
+        assertEquals("排队的消息", back.getText());
+        assertEquals("gpt-x", back.getSelectedModel());
+        assertEquals("coder", back.getSelectedAgent());
+        assertEquals("deep", back.getAttr("thinkingMode"));
+        assertEquals("m1", back.getOrigin().getMessageId());
+    }
+
+    @Test
+    void busyInputWithAttachmentsIsRejectedNotQueued() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+        busy(session);
+
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, "看看附件").reference("a.txt"));
+        assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
+        assertEquals(InputOutcome.REJECT_ATTACHMENTS_NOT_DEFERRABLE, outcome.getRejectReason());
+        assertEquals(0, QueueStore.pendingSize(session));
+    }
+
+    @Test
+    void busyProgramInputIsRejectedNotQueued() {
+        HarnessEngine engine = engine();
+        AgentSession session = InMemoryAgentSession.of();
+        busy(session);
+
+        InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, "goal 的一轮", "goal"));
+        assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
+        assertEquals(InputOutcome.REJECT_BUSY, outcome.getRejectReason());
+        assertEquals(0, QueueStore.pendingSize(session), "程序轮次不进积压");
     }
 
     @Test
@@ -134,10 +200,15 @@ class QueueEngineIntegrationTest {
         HarnessEngine engine = engine();
         QueueExtension queue = engine.getExtension(QueueExtension.class).get();
         AgentSession session = InMemoryAgentSession.of();
-        queue.offer(session, "a", InputOrigin.NONE);
+        queue.offer(session, HarnessInput.of(session, "a"));
 
         queue.setEnabled(false);
-        assertTrue(queue.offer(session, "b", InputOrigin.NONE) < 0, "停用即拒收");
+        assertTrue(queue.offer(session, HarnessInput.of(session, "b")) < 0, "停用即拒收");
+
+        busy(session);
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, "c"));
+        assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind(), "积压拒收时明确拒绝，而不是假装排上了");
+        assertEquals(InputOutcome.REJECT_BACKLOG_UNAVAILABLE, outcome.getRejectReason());
         assertEquals(1, (int) engine.status(session).get(QueueExtension.STATUS_PENDING), "积压是事实口径，不受开关影响");
         assertTrue(queue.hasPending(session), "hasPending 同为事实口径");
     }
@@ -155,9 +226,12 @@ class QueueEngineIntegrationTest {
         queue.claimNext(session, claim -> {
             TurnDispatch current = TurnDispatch.current(session);
             assertTrue(current instanceof QueueClaim);
-            AdmitDecision admit = engine.admit(session, "a", false, null);
-            assertEquals(AdmitDecision.Kind.ADMIT_BYPASS, admit.getKind());
+            InputOutcome admit = engine.handle(claim.getItem().toInput(session));
+            assertEquals(InputOutcome.Kind.TASK, admit.getKind());
             assertSame(current, admit.getDispatch());
+            assertTrue(engine.status(session).isAdmitting(), "派发轮次的 TASK 占位到开流：返回时判忙=已异步开流");
+            admit.discard();
+            assertFalse(engine.status(session).isAdmitting(), "放弃后释放：同步完成判定成立");
             checked.incrementAndGet();
             return true;
         });

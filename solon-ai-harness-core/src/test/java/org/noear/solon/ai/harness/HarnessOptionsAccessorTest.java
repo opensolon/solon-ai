@@ -108,6 +108,12 @@ class HarnessOptionsAccessorTest {
         o.setMaxTurns(null);
         assertEquals(7, o.getMaxTurns());
 
+        assertEquals(60_000L, o.getAdmissionTimeoutMs(), "受理占位时限缺省 60 秒");
+        o.setAdmissionTimeoutMs(5_000L);
+        o.setAdmissionTimeoutMs(null);
+        assertEquals(5_000L, o.getAdmissionTimeoutMs());
+        assertThrows(IllegalArgumentException.class, () -> o.setAdmissionTimeoutMs(0L), "时限必须为正");
+
         o.setAutoRethink(false);
         o.setAutoRethink(null);
         assertFalse(o.isAutoRethink());
@@ -386,7 +392,7 @@ class HarnessOptionsAccessorTest {
         // 与上方用例点名的 setter 集合比对
         List<String> covered = Arrays.asList(
                 "setSystemPrompt", "setUserAgent", "setHttpProxy", "setHttpCustomize",
-                "setMaxTurns", "setAutoRethink", "setSessionWindowSize",
+                "setMaxTurns", "setAdmissionTimeoutMs", "setAutoRethink", "setSessionWindowSize",
                 "setCompressionMaxMessages", "setCompressionMaxContextRatio",
                 "setCompressionDefaultContextLength",
                 "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount",

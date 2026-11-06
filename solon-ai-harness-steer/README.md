@@ -10,7 +10,7 @@
 
 | 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
 |---|---|---|---|
-| 使用态 | 任务运行中在对话框 / IM 里输入 `/steer 改用 PostgreSQL 方言` | `engine.admit`（`ADMIT_BYPASS`）→ `engine.handle` | `/steer` 命令（不比对轮次） |
+| 使用态 | 任务运行中在对话框 / IM 里输入 `/steer 改用 PostgreSQL 方言` | `engine.handle`（忙时可执行命令，在运行任务旁边执行） | `/steer` 命令（不比对轮次） |
 | 管理态 | 界面上的插话输入框、待生效列表、撤销 / 清空按钮 | 宿主自己的接口（HTTP 等） | `steerOnRun` / `pending` / `cancelOnRun` / `cancelPending`（按轮次绑定） |
 
 ---
@@ -112,7 +112,7 @@ SteerLimits limits = steer.getLimits();   // 投递与提示文案读同一份�
 ```mermaid
 flowchart LR
     subgraph 使用态
-        U1["运行中输入 /steer ..."] --> A["engine.admit<br/>ADMIT_BYPASS"] --> H["engine.handle"] --> C["SteerCommand<br/>steer(session, text, origin)"]
+        U1["运行中输入 /steer ..."] --> H["engine.handle<br/>忙时可执行，在运行任务旁边执行"] --> C["SteerCommand<br/>steer(session, text, origin)"]
     end
     subgraph 管理态
         U2["插话输入框 / 撤销按钮"] --> API["宿主接口"] --> F["steerOnRun / cancelOnRun<br/>pending / cancelPending"]
@@ -126,7 +126,7 @@ flowchart LR
 | 对比项 | 使用态 | 管理态 |
 |---|---|---|
 | 用户动作 | 任务运行中在对话框里输入 `/steer <补充内容>` | 在插话输入框里提交；在待生效列表里撤销一条或清空 |
-| 宿主入口 | 统一输入入口：`engine.admit`（运行中给出 `ADMIT_BYPASS`）→ `engine.handle` | 宿主自己的接口，直接调门面 |
+| 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)`（运行中在运行任务旁边执行，`isBesideRunning() == true`） | 宿主自己的接口，直接调门面 |
 | 轮次绑定 | 不比对：投给"当前正在跑的那一轮" | 严格比对：带上前端看到的 `runId`，换轮了就返回 `TURN_CHANGED` |
 | 幂等 | 无（同一内容输两次投两次） | 前端生成 `steerId`，重试返回 `DUPLICATE_STEER_ID` |
 | 结果怎么返回 | 回执文本 `outcome.getCommandOutput()` | `SteerResult` / `SteerCancelResult` 状态码，映射成 HTTP 应答 |
@@ -186,14 +186,14 @@ outcome.getRequest().stream().doOnNext(e -> {
 | 项 | 说明 |
 |---|---|
 | 注册 | `SteerExtension#onAttach` 自动注册，宿主不用注册 |
-| 忙态 | `runnableWhenBusy() == true`：任务运行中 `admit` 给出 `ADMIT_BYPASS`（不占位、不改回复路由） |
+| 忙态 | `SteerCommand` 声明 `runnableWhenBusy() == true`：任务运行中 `handle` 第 0 步放行，在运行任务旁边执行（`outcome.isBesideRunning() == true`，宿主不要改写回复路由） |
 | 渠道 | `terminalOnly() == false`：Web / IM / 桌面都能用，无需 `.terminal(true)` |
 | 结局 | 恒为 `Kind.REPLY`，不会产生 `TASK` |
 | 来源 | 取宿主透传的 `origin`；渠道为空时命令补成 `"command"`。插话没被注入而转排队时，排队项沿用这份来源 |
 
 ### 4.3 宿主接入：完整示例
 
-命令只负责投递，"任务运行中能不能把这条输入交给引擎"由宿主的受理层决定。推荐用 `engine.admit(...)` 统一判定，它已经知道 `/steer` 是忙态旁路命令：
+命令只负责投递，"任务运行中能不能把这条输入交给引擎"由 `engine.handle` 第 0 步的受理判定决定，它已经知道 `/steer` 是忙时可执行命令；宿主只管把输入交给 `handle` 并按结局分支：
 
 ```java
 import org.noear.solon.ai.agent.AgentSession;
@@ -203,8 +203,6 @@ import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
 
 public class ImInputHandler {
     private final HarnessEngine engine;
@@ -218,44 +216,49 @@ public class ImInputHandler {
 
     /** IM 渠道的一条入站消息（可能是普通消息，也可能是 /steer ...） */
     public void onMessage(AgentSession session, String text, InputOrigin origin) {
-        // 1) 受理判定（判定与占位同一临界区）；第 4 个参数让 /steer 在审批挂起期间也能受理
-        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
-        switch (admit.getKind()) {
-            case REJECT:   // "hitl_pending"：有待审批卡；"busy"：引擎没装 queue 无处可延
-                reply(origin, admit.getRejectDetail());
-                return;
-            case DEFER:    // 任务运行中的普通消息：排到后面
-                queue.enqueue(session, text, origin);
-                return;
-            default:       // ADMIT / ADMIT_BYPASS（任务运行中的 /steer 走这里，不占位）
-                break;
-        }
-
-        // 2) 交给引擎：命令识别、执行、回执都在 handle 内完成
-        try (InputGate.Ticket ticket = admit.getTicket()) {      // ADMIT_BYPASS 时为空凭据，close 为空操作
-            boolean sideCommand = admit.getKind() == AdmitDecision.Kind.ADMIT_BYPASS && !admit.isDispatched();
-            if (!sideCommand) {
-                setReplyRoute(session, origin);                   // 旁路命令不能改写运行中任务的回复目标
-            }
-
-            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
-            switch (outcome.getKind()) {
-                case REPLY:   // /steer 恒为 REPLY：把回执发回来源渠道即可
-                    reply(origin, outcome.getCommandOutput());
-                    break;
-                case TASK:    // 普通消息：同步跑完（异步开流请参照核心文档的受理窗口说明）
+        // 受理判定、命令识别、执行、回执都在 handle 内完成（判定与占位、入积压同一把会话锁）
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
+        switch (outcome.getKind()) {
+            case TASK:       // 普通消息：同步跑完；占位由请求自己释放
+                setReplyRoute(session, origin);
+                try {
                     if (outcome.hasReply()) {
                         reply(origin, outcome.getCommandOutput());
                     }
-                    String answer = outcome.getRequest().call().getContent();
-                    reply(origin, answer);
-                    break;
-                default:
-                    break;
-            }
-        } catch (Throwable e) {
-            reply(origin, "处理失败：" + e.getMessage());
+                    reply(origin, outcome.getRequest().call().getContent());
+                } catch (Throwable e) {
+                    outcome.discard();   // 幂等；开流前失败时确保占位释放
+                    reply(origin, "处理失败：" + e.getMessage());
+                }
+                drain(session);
+                break;
+            case REPLY:      // /steer 恒为 REPLY：把回执发回来源渠道即可
+                if (!outcome.isBesideRunning()) {
+                    setReplyRoute(session, origin);   // 在运行任务旁边执行的命令不能改写运行中任务的回复目标
+                }
+                reply(origin, outcome.getCommandOutput());
+                drain(session);
+                break;
+            case DEFERRED:   // 任务运行中的普通消息：引擎已入积压
+                reply(origin, "已排队（第 " + outcome.getBacklogPosition() + " 位）");
+                drain(session);
+                break;
+            case REJECTED:   // "hitl_pending"：有待审批卡；"busy"：引擎没装 queue 无处可延；等
+                reply(origin, outcome.getRejectDetail());
+                break;
+            case HITL:
+            case IGNORED:
+                drain(session);
+                break;
         }
+    }
+
+    private void drain(AgentSession session) {
+        queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
+            InputOutcome outcome = engine.handle(claim.getItem().toInput(session)); // 同一线程：派发轮次
+            // 按上面的结局分支处理，回复路由取 outcome.getDispatch().getOrigin()（略）
+            return true;
+        });
     }
 
     private void reply(InputOrigin origin, String text) { /* 按 origin.getChannel()/getReplyTarget() 回投 */ }
@@ -263,19 +266,18 @@ public class ImInputHandler {
 }
 ```
 
-不想让用户输入命令前缀的渠道（如 IM 里"任务运行中发的消息一律当作插话"），可以在 `DEFER` 分支里改为直接调门面，并自己决定失败时的降级：
+不想让用户输入命令前缀的渠道（如 IM 里"任务运行中发的消息一律当作插话"），可以在交给 `handle` 之前先试着直接调门面；插话没生效时再照常交给 `handle`，忙时由引擎入积压（`DEFERRED`），宿主不必自己 `enqueue`：
 
 ```java
-case DEFER: {
+if (engine.status(session).isBusy() && !text.startsWith("/")) {
     SteerResult r = steer.steer(session, text, origin);   // origin 随插话保存，转排队后回复路由不丢
     if (r.isSteered()) {
         reply(origin, "已插话（待生效 " + r.getPendingCount() + " 条）");
-    } else {
-        queue.enqueue(session, text, origin);             // 邮箱满、刚好换轮等：降级为排队
-        reply(origin, "已排队，当前任务结束后执行");
+        return;
     }
-    return;
+    // 邮箱满、刚好换轮等：继续交给 handle，由引擎决定排队或直接执行
 }
+onMessage(session, text, origin);
 ```
 
 ### 4.4 停、改、重排
@@ -298,10 +300,10 @@ if (engine.interrupt(session)) {
 ### 4.5 使用态要点
 
 1. **注册不需要宿主做**：`SteerExtension#onAttach` 已注册命令；宿主只要不自己再注册一个同名命令。
-2. **忙态放行靠 `admit`**：任务运行中输入 `/steer ...`，`admit` 返回 `ADMIT_BYPASS`（不占位）；不用 `admit` 的宿主，至少要用 `engine.isBusyBypassCommand(text)` 放行，否则 `/steer` 会被宿主自己的忙碌拦截挡住或排进队列，变成"任务结束后才插话"，永远是 `NOT_RUNNING`。
-3. **空闲时也能受理**：此时 `admit` 返回 `ADMIT`，命令照常执行并回复"当前无正在执行的任务可插话……"，不会被当成普通消息发给模型。
-4. **旁路命令不改回复路由**：运行中任务的回复目标属于那个任务；`/steer` 的回执直接回给本条消息的来源。
-5. **审批挂起期间**：`admit` 对非豁免输入返回 `REJECT("hitl_pending")`。示例第 4 个参数传 `engine::isBusyBypassCommand`，同时放行 `/steer`、`/queue` 等声明了 `runnableWhenBusy` 的命令。
+2. **忙态放行由 `handle` 完成**：`SteerCommand` 声明 `runnableWhenBusy`，任务运行中输入 `/steer ...`，`handle` 第 0 步放行并在运行任务旁边执行（`isBesideRunning() == true`）。宿主不要在 `handle` 之前自己拦忙，否则 `/steer` 会被挡住或排进队列，变成"任务结束后才插话"，永远是 `NOT_RUNNING`。
+3. **空闲时也能受理**：此时命令照常执行（`REPLY`，`isBesideRunning() == false`）并回复"当前无正在执行的任务可插话……"，不会被当成普通消息发给模型。
+4. **在运行任务旁边执行的命令不改回复路由**：运行中任务的回复目标属于那个任务；`/steer` 的回执直接回给本条消息的来源。
+5. **审批挂起期间**：`handle` 对普通输入返回 `REJECTED("hitl_pending")`；`/steer`、`/queue` 等声明了 `runnableWhenBusy` 的命令、审批决策与续流由引擎按输入本身豁免，宿主无需传谓词。
 6. **回执怎么落地**：缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `getCommandOutput()` 一次取回；CLI 想实时写终端，再给 `HarnessInput` 配 `commandContextFactory(...)`。
 7. **不要两条路都走**：已经用门面 `steer.steer(...)` 投递过的内容，不要再拼成 `/steer ...` 交给 `handle`，会投递两次。
 
@@ -309,7 +311,7 @@ if (engine.interrupt(session)) {
 
 ## 五、管理态：用户在界面上操作
 
-Web / 桌面界面通常有专门的插话输入框和"待生效"气泡列表。这些按钮不经 `admit` / `handle`，由宿主接口直接调门面。与命令最大的区别是**按轮次绑定**：前端在任务结束、下一轮开始的窄窗里提交的插话，必须能识别出"已经不是我看到的那一轮了"。
+Web / 桌面界面通常有专门的插话输入框和"待生效"气泡列表。这些按钮不经 `handle`，由宿主接口直接调门面。与命令最大的区别是**按轮次绑定**：前端在任务结束、下一轮开始的窄窗里提交的插话，必须能识别出"已经不是我看到的那一轮了"。
 
 ### 5.1 界面动作与门面对照
 

@@ -52,22 +52,83 @@ import java.util.*;
 /**
  * 输入受理流水线（包内）：{@link HarnessEngine#handle(HarnessInput)} 的实现。
  *
- * <p>一次输入的五段处理：扩展预处理 → HITL 决策 / 续流 → 命令识别与执行 → 子代理解析与附件前缀 →
+ * <p>一次输入先过第 0 步受理判定（占位 / 入积压 / 拒绝，见 {@link SessionControl#admit}），
+ * 再做五段处理：扩展预处理 → HITL 决策 / 续流 → 命令识别与执行 → 子代理解析与附件前缀 →
  * Prompt 构建与请求装配。引擎只保留对外门面与文档，实现集中在这里，便于单独阅读与演进。</p>
  *
  * @author noear
  * @since 4.2.0
  */
 final class InputPipeline {
+    /**
+     * 本线程上已受理（正在装配）的会话：命令内部再次调用 {@code handle} 时继承外层占位，
+     * 不再判定（否则会被外层自己的「受理中」拒掉）。
+     */
+    private static final ThreadLocal<IdentityHashMap<AgentSession, Boolean>> ADMITTED_ON_THREAD =
+            ThreadLocal.withInitial(IdentityHashMap::new);
+
     private final HarnessEngine engine;
     private final HarnessOptions options;
+    private final SessionControl sessionControl;
 
-    InputPipeline(HarnessEngine engine, HarnessOptions options) {
+    InputPipeline(HarnessEngine engine, HarnessOptions options, SessionControl sessionControl) {
         this.engine = engine;
         this.options = options;
+        this.sessionControl = sessionControl;
     }
 
+    /**
+     * 唯一执行入口：第 0 步受理判定（占位 / 入积压 / 拒绝），再装配。
+     */
     InputOutcome handle(HarnessInput input) {
+        final AgentSession session = input.getSession();
+        final Map<AgentSession, Boolean> admittedOnThread = ADMITTED_ON_THREAD.get();
+
+        if (session == null || admittedOnThread.containsKey(session)) {
+            // 无会话（如一次性摘要）或命令内部重入：不判定、不占位
+            return assemble(input);
+        }
+
+        // ========== 0. 受理判定（判定、占位、入积压同一把会话锁）==========
+        Admission admission = sessionControl.admit(input);
+        if (admission.getOutcome() != null) {
+            return admission.getOutcome();
+        }
+
+        final InputGate.Ticket ticket = admission.getTicket();
+        InputOutcome outcome;
+        admittedOnThread.put(session, Boolean.TRUE);
+        try {
+            outcome = assemble(input);
+        } catch (RuntimeException | Error e) {
+            ticket.close();
+            throw e;
+        } finally {
+            admittedOnThread.remove(session);
+            if (admittedOnThread.isEmpty()) {
+                ADMITTED_ON_THREAD.remove();
+            }
+        }
+
+        // 占位跟着请求走：TASK 由请求在开流 / 调用结束时释放；其余结局当场释放
+        Runnable discarder = null;
+        if (ticket.isAcquired()) {
+            if (outcome.getKind() == InputOutcome.Kind.TASK && outcome.getRequest() instanceof AdmittedRequest) {
+                AdmittedRequest request = (AdmittedRequest) outcome.getRequest();
+                request.bind(ticket);
+                discarder = request::release;
+            } else {
+                ticket.close();
+            }
+        }
+
+        return outcome.admitted(admission.isBesideRunning(), admission.getDispatch(), discarder);
+    }
+
+    /**
+     * 装配（受理之后的五段处理）。
+     */
+    private InputOutcome assemble(HarnessInput input) {
         for(HarnessExtension extension: options.getExtensions()) {
             if (extension.isEnabled()) {
                 extension.onInput(engine, input);

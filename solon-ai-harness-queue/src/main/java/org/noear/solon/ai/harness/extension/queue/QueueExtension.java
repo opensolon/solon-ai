@@ -8,6 +8,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
@@ -80,10 +81,20 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     // ==================== InputBacklog（核心能力契约） ====================
 
-    /** 积压入口（= {@link #enqueue(AgentSession, String, InputOrigin)}，受开关控制）。 */
+    /**
+     * 积压入口（引擎 {@code handle} 受理判定为忙时调用；受开关控制）。
+     *
+     * <p>保存续发还原所需的事实：正文、来源、显式模型与子代理选择、宿主域属性
+     * （{@link HarnessInput#getAttrs()}，原样保存，续发经 {@link QueueItem#toInput} 原样带回）。</p>
+     */
     @Override
-    public int offer(AgentSession session, String text, InputOrigin origin) {
-        return enqueue(session, text, origin == null ? InputOrigin.NONE : origin);
+    public int offer(AgentSession session, HarnessInput input) {
+        if (input == null || isEnabled() == false) {
+            return -1;
+        }
+        String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
+        return QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
+                null, null, agent, false, input.getAttrs());
     }
 
     /**

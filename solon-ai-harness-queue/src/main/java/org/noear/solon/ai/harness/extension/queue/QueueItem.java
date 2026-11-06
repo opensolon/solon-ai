@@ -4,8 +4,11 @@
  */
 package org.noear.solon.ai.harness.extension.queue;
 
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -28,6 +31,8 @@ public final class QueueItem {
     private String thinkingMode;
     private String selectedAgent;
     private boolean hasFiles;
+    /** 宿主域属性（引擎积压入口带入的 {@code HarnessInput#getAttrs()}；原样保存，不解读） */
+    private final Map<String, String> attrs;
 
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
         this(id, text, origin, createdAt, status, null, null, null, null, false);
@@ -36,6 +41,12 @@ public final class QueueItem {
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
                      String model, String reasoningEffort, String thinkingMode,
                      String selectedAgent, boolean hasFiles) {
+        this(id, text, origin, createdAt, status, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles, null);
+    }
+
+    QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
+                     String model, String reasoningEffort, String thinkingMode,
+                     String selectedAgent, boolean hasFiles, Map<String, String> attrs) {
         this.id = id == null || id.trim().isEmpty() ? "q_" + UUID.randomUUID() : id;
         this.text = text;
         this.origin = origin == null ? InputOrigin.NONE : origin;
@@ -46,6 +57,9 @@ public final class QueueItem {
         this.thinkingMode = thinkingMode;
         this.selectedAgent = selectedAgent;
         this.hasFiles = hasFiles;
+        this.attrs = attrs == null || attrs.isEmpty()
+                ? Collections.<String, String>emptyMap()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(attrs));
     }
 
     public String getId() { return id; }
@@ -54,8 +68,35 @@ public final class QueueItem {
     public String getStatus() { return status; }
     public Long getClaimedAt() { return claimedAt; }
     public String getModel() { return model; }
-    public String getReasoningEffort() { return reasoningEffort; }
-    public String getThinkingMode() { return thinkingMode; }
+    /** 推理强度：完整参数入队的显式值优先，其次宿主域属性 {@code reasoningEffort}。 */
+    public String getReasoningEffort() { return reasoningEffort != null ? reasoningEffort : attrs.get("reasoningEffort"); }
+    /** 思考模式：完整参数入队的显式值优先，其次宿主域属性 {@code thinkingMode}。 */
+    public String getThinkingMode() { return thinkingMode != null ? thinkingMode : attrs.get("thinkingMode"); }
+    /**
+     * 宿主域属性（只读，永不为 null；引擎积压入口带入的 {@code HarnessInput#getAttrs()}）。
+     *
+     * @since 4.2.0
+     */
+    public Map<String, String> getAttrs() { return attrs; }
+
+    /**
+     * 还原为续发输入：正文、来源、模型、子代理与宿主域属性原样带回。
+     *
+     * <p>正文是「已受理的文本」，但仍按命令识别——用户排队的 {@code /xxx} 续发时照常执行
+     * （宿主不需要的话自行 {@code commandAware(false)}）。</p>
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput toInput(AgentSession session) {
+        HarnessInput input = HarnessInput.of(session, text)
+                .origin(origin)
+                .selectedModel(model)
+                .selectedAgent(selectedAgent)
+                .attrs(attrs);
+        if (reasoningEffort != null) input.attr("reasoningEffort", reasoningEffort);
+        if (thinkingMode != null) input.attr("thinkingMode", thinkingMode);
+        return input;
+    }
     public String getSelectedAgent() { return selectedAgent; }
     public boolean hasFiles() { return hasFiles; }
     /** 运行状态：仅 harness 队列内核可写（宿主不得改写 in-flight 状态）。 */
@@ -97,6 +138,7 @@ public final class QueueItem {
         if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
         if (hasFiles) map.put("hasFiles", true);
         if (origin.getChannel() != null) map.put("source", origin.getChannel());
+        if (!attrs.isEmpty()) map.put("attrs", new LinkedHashMap<>(attrs));
         return map;
     }
 
@@ -119,6 +161,7 @@ public final class QueueItem {
         if (thinkingMode != null && !thinkingMode.isEmpty()) map.put("thinkingMode", thinkingMode);
         if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
         if (hasFiles) map.put("hasFiles", true);
+        if (!attrs.isEmpty()) map.put("attrs", new LinkedHashMap<>(attrs));
         return map;
     }
 
@@ -131,12 +174,20 @@ public final class QueueItem {
         QueueItem item = new QueueItem(id, text.trim(), origin,
                 number(map.get("createdAt"), System.currentTimeMillis()), value(map.get("status")),
                 value(map.get("model")), value(map.get("reasoningEffort")), value(map.get("thinkingMode")),
-                value(map.get("selectedAgent")), Boolean.TRUE.equals(map.get("hasFiles")));
+                value(map.get("selectedAgent")), Boolean.TRUE.equals(map.get("hasFiles")), attrs(map.get("attrs")));
         item.setClaimedAt(numberObject(map.get("claimedAt")));
         return item;
     }
 
     private static String value(Object value) { return value == null ? null : String.valueOf(value); }
+    private static Map<String, String> attrs(Object value) {
+        if (!(value instanceof Map)) return null;
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) value).entrySet()) {
+            if (e.getKey() != null && e.getValue() != null) result.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
+        }
+        return result;
+    }
     private static long number(Object value, long fallback) {
         Long result = numberObject(value);
         return result == null || result <= 0 ? fallback : result;

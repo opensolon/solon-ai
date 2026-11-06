@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
@@ -216,9 +217,15 @@ public class GoalExtension extends AbsHarnessExtension {
             if (session == null) {
                 return GoalOutcome.skip("session not found");
             }
+            InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal"));
+            if (outcome.getKind() != InputOutcome.Kind.TASK) {
+                // 忙 / 待审批（REJECTED）等未受理结局：本轮跳过，不计失败（goal 自己有重试节奏）
+                return GoalOutcome.skip(outcome.getRejectReason() != null
+                        ? outcome.getRejectReason() : "input not admitted: " + outcome.getKind());
+            }
             ReActResponse response;
             try {
-                response = engine.handle(HarnessInput.ofProgram(session, prompt, "goal")).call();
+                response = outcome.call();
             } catch (Exception | Error e) {
                 throw e;
             } catch (Throwable e) {

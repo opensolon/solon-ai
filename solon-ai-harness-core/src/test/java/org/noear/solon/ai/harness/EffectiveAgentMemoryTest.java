@@ -77,7 +77,8 @@ class EffectiveAgentMemoryTest {
         InMemoryAgentSession session = InMemoryAgentSession.of();
 
         // 首轮：生效代理被记忆
-        e.handle(HarnessInput.of(session, "你好"));
+        //只装配不开流：放弃本轮，释放受理占位（否则下一次 handle 会被判忙）
+        e.handle(HarnessInput.of(session, "你好")).discard();
 
         // 续流：不带 selectedAgent / explicitAgent（无状态宿主的审批请求场景）
         InputOutcome outcome = e.handle(HarnessInput.of(session, null).resume(true));
@@ -91,7 +92,8 @@ class EffectiveAgentMemoryTest {
     void resumeWithExplicitAgentOverridesMemory() {
         HarnessEngine e = engine();
         InMemoryAgentSession session = InMemoryAgentSession.of();
-        e.handle(HarnessInput.of(session, "你好"));
+        //只装配不开流：放弃本轮，释放受理占位（否则下一次 handle 会被判忙）
+        e.handle(HarnessInput.of(session, "你好")).discard();
 
         InputOutcome outcome = e.handle(HarnessInput.of(session, null).resume(true)
                 .selectedAgent("main"));
@@ -117,7 +119,8 @@ class EffectiveAgentMemoryTest {
         HarnessEngine e = engine();
         InMemoryAgentSession session = InMemoryAgentSession.of();
         // 先确立记忆值
-        e.handle(HarnessInput.of(session, "你好"));
+        //只装配不开流：放弃本轮，释放受理占位（否则下一次 handle 会被判忙）
+        e.handle(HarnessInput.of(session, "你好")).discard();
 
         // 过期审批卡：决策未命中任何挂起任务 → HITL（未续流）
         InputOutcome outcome = e.handle(HarnessInput.of(session, null)

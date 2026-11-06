@@ -32,7 +32,7 @@ import java.util.function.BinaryOperator;
  * <p>快照由两部分组成：</p>
  * <ul>
  *     <li><b>核心事实</b>（固定字段）：运行流（{@link SessionRuns}）、待审批挂起卡（{@link HitlCard}）、
- *         输入受理窗口（{@link org.noear.solon.ai.harness.turn.InputGate}）、取消代数。漏查任何一个都会导致真实故障：
+ *         输入受理窗口（引擎 {@code handle} 第 0 步的占位）、取消代数。漏查任何一个都会导致真实故障：
  *         漏查 HITL 会把审批中的会话判成空闲、新输入直接顶掉挂起任务。</li>
  *     <li><b>扩展事实</b>（开放槽位）：由插件经 {@code HarnessExtension#contributeSessionStatus} 贡献，按 {@link Key} 读取。
  *         核心不预设插件有哪些事实——新增插件事实不需要修改本类。</li>
@@ -154,7 +154,8 @@ public final class SessionStatus {
     /**
      * 是否正处在「输入已受理、运行流尚未登记」的窗口内。
      *
-     * @see org.noear.solon.ai.harness.turn.InputGate
+     * <p>占位由引擎 {@code handle} 在受理时取得、运行流登记后释放；超过占位时限的占位不算。</p>
+     *
      * @since 4.2.0
      */
     public boolean isAdmitting() {
@@ -264,8 +265,11 @@ public final class SessionStatus {
                 this.busy = activeRunCount > 0;
                 this.pendingHitl = HitlCard.pendingCount(session);
                 this.cancelGeneration = SessionRuns.cancelCount(session);
-                // 与 turn.InputGate#isAdmitting 同口径；直接读核心登记键，避免 session 反向依赖 turn
-                this.admitting = Boolean.TRUE.equals(session.attrs().get(HarnessAttrs.INPUT_ADMITTING));
+                // 与引擎 InputGate#isValidMark 同口径：登记值是凭据本身（BooleanSupplier，未释放且未超时为真）
+                Object mark = session.attrs().get(HarnessAttrs.INPUT_ADMITTING);
+                this.admitting = mark instanceof java.util.function.BooleanSupplier
+                        ? ((java.util.function.BooleanSupplier) mark).getAsBoolean()
+                        : Boolean.TRUE.equals(mark);
             }
         }
 

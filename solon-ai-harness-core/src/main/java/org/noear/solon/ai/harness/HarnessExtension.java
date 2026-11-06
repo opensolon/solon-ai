@@ -189,9 +189,10 @@ public interface HarnessExtension extends AiSwitchable {
     /**
      * 输入进入引擎（输入级观察）
      *
-     * <p><b>调用点</b>：{@code HarnessEngine.handle(...)} 的<b>第一步</b>，早于 HITL 决策、续流判定、
-     * 空输入判空与命令分发。凡走 {@code handle} 的输入都会经过本钩子：用户消息、HITL 审批、
-     * 续流、命令触发。需注意：命令若声明了任务意图（{@code AgentTaskIntent}，如 {@code /continue}），
+     * <p><b>调用点</b>：{@code HarnessEngine.handle(...)} 受理判定（第 0 步）<b>通过之后</b>的第一步，
+     * 早于 HITL 决策、续流判定、空输入判空与命令分发。被排队（DEFERRED）或拒绝（REJECTED）的输入
+     * 不经过本钩子——排队的输入续发时再进 {@code handle}，只触发一次。凡受理的输入都会经过本钩子：
+     * 用户消息、HITL 审批、续流、命令触发。需注意：命令若声明了任务意图（{@code AgentTaskIntent}，如 {@code /continue}），
      * {@code CommandDispatcher} 会带着命令产物（{@code commandAware=false}、{@code origin=NONE}）
      * 重新进一次 {@code handle}，因此「命令 + 其产物任务」会触发<b>两次</b>——
      * 实现须能容忍重复（例如幂等处理，或按 {@code input.isCommandAware()} 区分手输与命令产物，

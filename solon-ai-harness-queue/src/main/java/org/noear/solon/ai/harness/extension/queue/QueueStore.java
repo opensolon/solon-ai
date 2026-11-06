@@ -118,6 +118,14 @@ final class QueueStore {
     public static int enqueue(AgentSession session, String text, InputOrigin origin,
                               String id, String model, String reasoningEffort,
                               String thinkingMode, String selectedAgent, boolean hasFiles) {
+        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles, null);
+    }
+
+    /** 完整入队（含宿主域属性；属性原样保存与落盘）。 */
+    public static int enqueue(AgentSession session, String text, InputOrigin origin,
+                              String id, String model, String reasoningEffort,
+                              String thinkingMode, String selectedAgent, boolean hasFiles,
+                              Map<String, String> attrs) {
         if (session == null || text == null) return -1;
         String normalized = text.trim();
         if (normalized.isEmpty() || normalized.length() > MAX_TEXT_LENGTH) return -1;
@@ -131,7 +139,7 @@ final class QueueStore {
             }
             QueueItem item = new QueueItem(id, normalized,
                     origin, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
-                    thinkingMode, selectedAgent, hasFiles);
+                    thinkingMode, selectedAgent, hasFiles, attrs);
             q.offerLast(item);
             saveLocked(session, q);
             return q.size();

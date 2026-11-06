@@ -12,7 +12,7 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 
 | 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
 |---|---|---|---|
-| 使用态 | 对话框 / IM 里输入 `/loop 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.admit` → `engine.handle` | `/loop` 命令；模型调用 `loop_add` 等工具 |
+| 使用态 | 对话框 / IM 里输入 `/loop 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/loop` 命令；模型调用 `loop_add` 等工具 |
 | 管理态 | 定时任务面板里点「新建 / 编辑 / 启停 / 立即执行 / 删除」 | 宿主自己的管理接口（HTTP 等） | `LoopExtension` 门面方法 |
 
 ---
@@ -137,7 +137,7 @@ LoopExtension loop = LoopExtension.builder()
 ```mermaid
 flowchart LR
     subgraph 使用态
-        U1["对话框 / IM 输入"] --> A["engine.admit"] --> H["engine.handle"]
+        U1["对话框 / IM 输入"] --> H["engine.handle<br/>受理判定 + 分派"]
         H --> C["/loop 命令"]
         H --> T["模型调用 loop_add 等工具"]
     end
@@ -153,11 +153,11 @@ flowchart LR
 | 对比项 | 使用态 | 管理态 |
 |---|---|---|
 | 用户动作 | 在对话中输入 `/loop 30m 检查 CI`；或用自然语言让模型建任务 | 在任务面板里新建、编辑、启停、立即执行、删除 |
-| 宿主入口 | 统一输入入口：`engine.admit` 判忙 → `engine.handle` | 宿主自己的管理接口，直接调门面 |
-| 是否经过 `admit` 判忙 | 是：任务运行中输入的 `/loop ...` 被 `DEFER` 排队；模型工具在任务内执行 | 否：随时可调 |
+| 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)` | 宿主自己的管理接口，直接调门面 |
+| 是否经过 `handle` 受理判定 | 是：任务运行中输入的 `/loop ...` 由引擎入积压，返回 `DEFERRED`；模型工具在任务内执行 | 否：随时可调 |
 | 本插件入口 | `LoopCommand`（引擎内分派）、`LoopTalent`（`loop_add` / `loop_list` / `loop_control`） | `schedule` / `update` / `pause` / `resume` / `toggle` / `trigger` / `remove` / `list` |
 | 结果怎么返回 | 命令：回执文本 `outcome.getCommandOutput()`；工具：JSON 交给模型 | 返回值：`LoopTask` 快照 / `boolean` / 异常 |
-| 只有这一态能做的 | 命令删除正在执行的任务时顺带中断（4.5 第 5 条）；`loop_add` 可建一次性任务 | 修改任务（`update`）、宿主扩展字段（`extra`）、跨会话列表（`listAll`） |
+| 只有这一态能做的 | `loop_add` 可建一次性任务 | 修改任务（`update`）、宿主扩展字段（`extra`）、跨会话列表（`listAll`） |
 
 两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop ls` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（3.4），与任务是哪种时态创建的无关。
 
@@ -217,13 +217,13 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 | 会话 | 命令作用于 `ctx.getSession().getSessionId()`，即本次输入所在会话 |
 | 结局 | 恒为 `Kind.REPLY`：命令只改任务表并回执，不在本次 `handle` 里开流 |
 | 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用；不需要 `.terminal(true)` |
-| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.admit` 给出 `DEFER`（排队，空闲后执行）；没装 queue 时给出 `REJECT("busy")` |
+| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.handle` 由引擎入积压并返回 `DEFERRED`（空闲后执行）；没装 queue 时返回 `REJECTED("busy")` |
 | 开关 | `loop.setEnabled(false)` 只关模型工具，`/loop` 照常可用 |
 | 回执格式 | 缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
 
 ### 4.3 命令与工具共用的流程
 
-1. 用户输入 → 宿主 `engine.admit` 判忙 → `engine.handle`；
+1. 用户输入 → 宿主 `engine.handle`（第 0 步受理判定：忙时可排队输入由引擎入积压并返回 `DEFERRED`）；
 2. `/loop ...`：引擎识别命令，`LoopCommand` 调用与管理态相同的 `schedule` / `pause` / `resume` / `remove`，结局 `REPLY`；
 3. 普通消息：结局 `TASK`，模型在这一轮里调用 `loop_add` 等工具，工具同样走 `schedule` 等门面；
 4. 到点后调度器调用执行器跑一轮，执行器把输出送回渠道。
@@ -241,8 +241,6 @@ import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -270,9 +268,12 @@ public class ImLoopHost {
                 return LoopOutcome.skip("no session or reply route");  // 不计错误
             }
             try {
-                // 程序输入：不识别命令与 @提及，来源标记为 loop
-                String text = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"))
-                        .call().getContent();
+                // 程序输入：不识别命令与 @提及，来源标记为 loop；忙时 REJECTED("busy")，不进积压
+                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"));
+                if (outcome.getKind() != InputOutcome.Kind.TASK) {
+                    return LoopOutcome.skip("not runnable: " + outcome.getRejectReason());  // 不计错误
+                }
+                String text = outcome.getRequest().call().getContent();
                 reply(route, text);
                 return LoopOutcome.done(text);
             } finally {
@@ -283,41 +284,46 @@ public class ImLoopHost {
 
     /** 输入入口：/loop 命令与普通消息共用 */
     public void onMessage(AgentSession session, String text, InputOrigin origin) {
-        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
-        switch (admit.getKind()) {
-            case REJECT:
-                reply(origin, admit.getRejectDetail());
-                return;
-            case DEFER:   // 任务（含 loop 的一轮）运行中发来的 /loop：排队，空闲后按命令执行
-                int pos = queue.enqueue(session, text, origin);
-                reply(origin, pos < 0 ? "排队失败，请稍后再试" : "当前任务结束后执行（第 " + pos + " 位）");
-                return;
-            default:
-                break;
-        }
+        dispatch(session, HarnessInput.of(session, text).origin(origin));
+    }
 
-        routes.put(session.getSessionId(), origin);   // 记下回复路由，供定时轮次使用
-
-        boolean acquired = admit.getTicket().isAcquired();
-        try (InputGate.Ticket ticket = admit.getTicket()) {
-            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
-            if (outcome.getKind() == InputOutcome.Kind.REPLY) {
-                reply(origin, outcome.getCommandOutput());          // /loop 的回执
-            } else if (outcome.getKind() == InputOutcome.Kind.TASK) {
-                reply(origin, outcome.getRequest().call().getContent()); // 模型可能在这一轮里调用了 loop_add
-            }
-        } catch (Throwable e) {
-            reply(origin, "处理失败：" + e.getMessage());
-        } finally {
-            if (acquired) {
+    /** 受理与执行：入站消息与积压续发共用同一个 handle 入口 */
+    private void dispatch(AgentSession session, HarnessInput input) {
+        InputOutcome outcome = engine.handle(input);   // 第 0 步受理判定：忙时可排队输入由引擎入积压
+        InputOrigin origin = outcome.isDispatched() ? outcome.getDispatch().getOrigin() : input.getOrigin();
+        switch (outcome.getKind()) {
+            case TASK:
+                routes.put(session.getSessionId(), origin);   // 记下回复路由，供定时轮次使用
+                try {
+                    reply(origin, outcome.getRequest().call().getContent()); // 模型可能在这一轮里调用了 loop_add
+                } catch (Throwable e) {
+                    outcome.discard();   // 幂等；开流前失败时确保占位释放
+                    reply(origin, "处理失败：" + e.getMessage());
+                }
                 drain(session);
-            }
+                break;
+            case REPLY:
+                routes.put(session.getSessionId(), origin);
+                reply(origin, outcome.getCommandOutput());   // /loop 的回执
+                drain(session);
+                break;
+            case DEFERRED:   // 任务（含 loop 的一轮）运行中发来的 /loop：引擎已入积压，空闲后按命令执行
+                reply(origin, "当前任务结束后执行（第 " + outcome.getBacklogPosition() + " 位）");
+                drain(session);
+                break;
+            case REJECTED:
+                reply(origin, outcome.getRejectDetail());
+                break;
+            case HITL:
+            case IGNORED:
+                drain(session);
+                break;
         }
     }
 
     private void drain(AgentSession session) {
         queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-            onMessage(session, claim.getItem().getText(), claim.getItem().getOrigin());
+            dispatch(session, claim.getItem().toInput(session));   // 同一线程：引擎识别为派发轮次
             return true;
         });
     }
@@ -338,9 +344,9 @@ public class ImLoopHost {
 
 1. **命令建任务，执行器跑任务**：`/loop`、`loop_add` 与管理态的 `loop.schedule(...)` 建出的是同一种任务；到点后统一经执行器执行，命令本身从不开流。
 2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
-3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。
-4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息被 `DEFER` 进队列；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
-5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop stop <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务、不会中断。要立刻停掉正在跑的一轮，用宿主的停止入口 `engine.interrupt(session)`，再 `loop.remove(sid, taskId)`。不经 `admit`、直接在忙时执行命令的宿主（如命令行终端）才会走到命令里"顺带中断"的分支。
+3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。判空闲与开轮之间仍有窗口：`ofProgram` 的程序轮次忙时返回 `REJECTED("busy")`、不进积压，执行器在非 `TASK` 时返回 `skip`（缺省执行器即如此；它用 `engine.getSessionOrNull(sessionId)` 取会话，会话不存在时也 skip）。
+4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息由 `handle` 入积压并返回 `DEFERRED`；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
+5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop stop <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务、不会中断。要立刻停掉正在跑的一轮，用宿主的停止入口 `engine.interrupt(session)`（或忙时可执行的 `/interrupt` 命令），再 `loop.remove(sid, taskId)`。所有宿主（Web、IM、命令行终端）都经 `handle` 受理，忙时输入的 `/loop stop` 一律排队；命令里"顺带中断"的分支只是防御性兜底。
 6. **中断不删任务**：`engine.interrupt` 只停当前一轮，定时任务照常保留，下次到点继续。
 7. **删除会话要先调 `engine.removeSession`**：它回调 `onSessionRemove`，删除该会话的全部任务并注销 job；顺序颠倒时，定时任务可能在删除过程中触发并把会话重新建出来。
 8. **一次性任务不能用命令建**：`/loop` 只支持间隔与 cron；一次性提醒让模型用 `loop_add` 的 `at` 参数，或走管理态 `LoopSpec.at(...)`。
@@ -349,7 +355,7 @@ public class ImLoopHost {
 
 ## 5. 管理态：用户在界面上操作
 
-管理态不经过 `admit` / `handle`：面板上的每个按钮对应一个宿主接口，接口直接调用 `LoopExtension` 门面。loop 门面只按 `sessionId` 字符串寻址，不需要会话对象。
+管理态不经过 `handle`：面板上的每个按钮对应一个宿主接口，接口直接调用 `LoopExtension` 门面。loop 门面只按 `sessionId` 字符串寻址，不需要会话对象。
 
 ### 5.1 界面动作与门面对照
 

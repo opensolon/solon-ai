@@ -26,7 +26,7 @@ import org.noear.solon.lang.Preview;
  *
  * <p>这是核心持有的<b>会话事实槽位</b>（attrs 键 {@link HarnessAttrs#TURN_DISPATCH}）：
  * 由插件在「程序代替用户发起一轮」时登记（当前实现是 queue 插件的 {@code QueueDispatch}），
- * 引擎的 {@code admit(...)} 与 {@link org.noear.solon.ai.harness.turn.SessionTurn} 只经本接口读取，不认识具体实现。</p>
+ * 引擎 {@code handle(...)} 的受理判定与 {@link org.noear.solon.ai.harness.turn.SessionTurn} 只经本接口读取，不认识具体实现。</p>
  *
  * <p><b>为什么是槽位而不是扩展钩子</b>：读取方要在 {@code synchronized (session.attrs())} 内、
  * 甚至没有引擎引用的地方（{@link org.noear.solon.ai.harness.turn.SessionTurn#begin}）判定，读一次 attrs 最便宜，
@@ -37,7 +37,7 @@ import org.noear.solon.lang.Preview;
  * 注销一律用 {@link #unbind}（只注销自己，避免抹掉别人的登记）。</p>
  *
  * <p><b>两个线程判定必须分开用</b>：{@link #isOnDispatchThread()} 回答「当前线程就在派发调用栈里」
- * （入口判定：不要再占受理位、不要自己入队）；{@link #isCurrent()} 回答「会话仍有这条未收口派发」
+ * （入口判定：受理直接放行、不要自己入队）；{@link #isCurrent()} 回答「会话仍有这条未收口派发」
  * （流终态在异步线程上判定）。</p>
  *
  * @author noear

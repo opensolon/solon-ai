@@ -20,7 +20,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
+import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.spi.InputBacklog;
@@ -61,8 +62,16 @@ class HarnessPluginContractTest {
     Path workspace;
 
     private HarnessEngine engine() {
+        // 假模型（不可达地址）：受理判定类用例需要装配出请求，但不开流
+        org.noear.solon.ai.chat.ChatConfig model = new org.noear.solon.ai.chat.ChatConfig();
+        model.setName("fake");
+        model.setModel("fake-model");
+        model.setApiUrl("http://localhost:1/v1");
+        model.setApiKey("test");
         return HarnessEngine.of(workspace.toString(), null)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .modelAdd(model)
+                .defaultModel("fake")
                 .build();
     }
 
@@ -92,9 +101,13 @@ class HarnessPluginContractTest {
         boolean busyAtInterrupt;
 
         @Override
-        public int offer(AgentSession session, String text, InputOrigin origin) {
-            offered.add(text);
+        public int offer(AgentSession session, HarnessInput input) {
+            offered.add(input.getText());
             return offered.size();
+        }
+
+        int offer(AgentSession session, String text) {
+            return offer(session, HarnessInput.of(session, text));
         }
 
         /** 内核受理靠的是能力方法（类型系统保证），不是状态键 */
@@ -158,7 +171,7 @@ class HarnessPluginContractTest {
         engine.addExtension(backlog);
 
         AgentSession session = InMemoryAgentSession.of();
-        backlog.offer(session, "排队一", InputOrigin.NONE);
+        backlog.offer(session, "排队一");
         AtomicInteger disposed = busy(session);
 
         assertTrue(engine.interrupt(session));
@@ -175,12 +188,12 @@ class HarnessPluginContractTest {
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);
         AgentSession session = InMemoryAgentSession.of();
-        backlog.offer(session, "排队一", InputOrigin.NONE);
+        backlog.offer(session, "排队一");
 
         assertFalse(engine.interrupt(session), "无运行流时返回 false");
         assertEquals(1, backlog.interrupts, "没有流也要清积压");
 
-        backlog.offer(session, "排队二", InputOrigin.NONE);
+        backlog.offer(session, "排队二");
         busy(session);
         try (org.noear.solon.ai.harness.turn.InterruptPlan plan = engine.prepareInterrupt(session)) {
             assertEquals(2, backlog.interrupts, "两段式的第一段就回调");
@@ -397,9 +410,9 @@ class HarnessPluginContractTest {
         assertSame(a, engine.getExtension(InputBacklog.class).orElse(null), "按能力接口查找首个实现");
 
         AgentSession session = InMemoryAgentSession.of();
-        a.offer(session, "1", InputOrigin.NONE);
-        b.offer(session, "2", InputOrigin.NONE);
-        b.offer(session, "3", InputOrigin.NONE);
+        a.offer(session, "1");
+        b.offer(session, "2");
+        b.offer(session, "3");
 
         assertEquals(3, (int) engine.status(session).get(STUB_PENDING), "插件自有计数键：多提供者求和");
         assertFalse(SessionStatus.of(session).has(STUB_PENDING), "静态 of 只读核心事实");
@@ -418,7 +431,7 @@ class HarnessPluginContractTest {
         engine.addExtension(b);
         assertTrue(engine.isIdle(session));
 
-        b.offer(session, "排在后面的积压", InputOrigin.NONE);
+        b.offer(session, "排在后面的积压");
         assertFalse(engine.isIdle(session), "任一积压能力有待执行项即不空闲（不只看首个）");
         b.offered.clear();
 
@@ -438,7 +451,9 @@ class HarnessPluginContractTest {
         engine.addExtension(new Broken());
         AgentSession session = InMemoryAgentSession.of();
         assertTrue(engine.isIdle(session), "单个积压能力异常按无积压计");
-        assertEquals(AdmitDecision.Kind.ADMIT, engine.admit(session, "hello", false, null).getKind());
+        InputOutcome outcome = engine.handle(HarnessInput.of(session, "hello"));
+        assertEquals(InputOutcome.Kind.TASK, outcome.getKind());
+        outcome.discard();
     }
 
     @Test
@@ -447,12 +462,16 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         busy(session);
 
-        AdmitDecision noBacklog = engine.admit(session, "hello", false, null);
-        assertEquals(AdmitDecision.Kind.REJECT, noBacklog.getKind(), "没装积压能力时无队可入");
+        InputOutcome noBacklog = engine.handle(HarnessInput.of(session, "hello"));
+        assertEquals(InputOutcome.Kind.REJECTED, noBacklog.getKind(), "没装积压能力时无处可延");
         assertEquals("busy", noBacklog.getRejectReason());
 
-        engine.addExtension(new StubBacklog());
-        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "hello", false, null).getKind());
+        StubBacklog backlog = new StubBacklog();
+        engine.addExtension(backlog);
+        InputOutcome deferred = engine.handle(HarnessInput.of(session, "hello"));
+        assertEquals(InputOutcome.Kind.DEFERRED, deferred.getKind());
+        assertEquals(1, deferred.getBacklogPosition());
+        assertEquals("hello", backlog.offered.get(0), "引擎自己入积压，宿主不再 enqueue");
     }
 
     @Test
@@ -461,9 +480,9 @@ class HarnessPluginContractTest {
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);
         AgentSession session = InMemoryAgentSession.of();
-        backlog.offer(session, "先来的", InputOrigin.NONE);
+        backlog.offer(session, "先来的");
 
-        assertEquals(AdmitDecision.Kind.DEFER, engine.admit(session, "后来的", false, null).getKind(),
+        assertEquals(InputOutcome.Kind.DEFERRED, engine.handle(HarnessInput.of(session, "后来的")).getKind(),
                 "有积压时空闲也要排队（先进先出）");
     }
 
@@ -479,10 +498,13 @@ class HarnessPluginContractTest {
         assertNull(TurnDispatch.bind(session, dispatch));
         assertSame(dispatch, session.attrs().get(HarnessAttrs.TURN_DISPATCH));
 
-        AdmitDecision admit = engine.admit(session, "派发的一轮", false, null);
-        assertEquals(AdmitDecision.Kind.ADMIT_BYPASS, admit.getKind());
+        InputOutcome admit = engine.handle(HarnessInput.of(session, "派发的一轮"));
+        assertEquals(InputOutcome.Kind.TASK, admit.getKind(), "程序派发的一轮天然空闲");
         assertTrue(admit.isDispatched());
         assertSame(dispatch, admit.getDispatch());
+        assertTrue(engine.status(session).isAdmitting(), "派发轮次的 TASK 同样占位到开流（派发方据此判断已异步开流）");
+        admit.discard();
+        assertFalse(engine.status(session).isAdmitting());
 
         SessionTurn turn = SessionTurn.begin(session);
         assertSame(dispatch, turn.dispatch());
@@ -559,7 +581,7 @@ class HarnessPluginContractTest {
     @Test
     void corePublicApiHasNoQueueVocabulary() {
         Class<?>[] types = {SessionStatus.class, SessionStatus.Builder.class, SessionStatus.Key.class,
-                AdmitDecision.class, AdmitDecision.Kind.class, InputBacklog.class, TurnDispatch.class,
+                InputOutcome.class, InputOutcome.Kind.class, InputBacklog.class, TurnDispatch.class,
                 HarnessExtension.class, HarnessAttrs.class};
         List<String> violations = new ArrayList<>();
         for (Class<?> type : types) {

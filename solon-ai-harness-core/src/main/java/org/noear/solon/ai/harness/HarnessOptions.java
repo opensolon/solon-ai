@@ -74,6 +74,8 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 执行控制 ==========
     private volatile int maxTurns = 20;
+    /** 受理占位时限（毫秒）：handle 返回 TASK 后宿主始终不开流时，会话最多被占这么久 */
+    private volatile long admissionTimeoutMs = InputGate.DEFAULT_TIMEOUT_MS;
     private volatile boolean autoRethink = true;
 
     // ========== 会话与压缩 ==========
@@ -266,6 +268,19 @@ class HarnessOptions implements NonSerializable {
 
     int getMaxTurns() {
         return maxTurns;
+    }
+
+    long getAdmissionTimeoutMs() {
+        return admissionTimeoutMs;
+    }
+
+    void setAdmissionTimeoutMs(Long admissionTimeoutMs) {
+        if (admissionTimeoutMs != null) {
+            if (admissionTimeoutMs <= 0) {
+                throw new IllegalArgumentException("admissionTimeoutMs must be > 0: " + admissionTimeoutMs);
+            }
+            this.admissionTimeoutMs = admissionTimeoutMs;
+        }
     }
 
     void setMaxTurns(Integer maxTurns) {

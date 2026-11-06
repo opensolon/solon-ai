@@ -25,8 +25,10 @@ import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -116,6 +118,10 @@ public final class HarnessInput {
     private boolean terminal;
     /** 续流模式：不产生新输入，仅按会话挂起的 tool_calls 续跑；文本与附件均被忽略 */
     private boolean resume;
+    /** 程序代替用户发起的一轮（{@link #ofProgram}）：忙时直接拒绝、不进积压 */
+    private boolean program;
+    /** 宿主域附加属性（如推理强度、思考模式）：引擎不解读，进积压时原样保存、续发时原样带回 */
+    private Map<String, String> attrs;
 
     private HarnessInput(AgentSession session, String text) {
         this.session = session;
@@ -145,10 +151,84 @@ public final class HarnessInput {
      * @since 4.2.0
      */
     public static HarnessInput ofProgram(@Nullable AgentSession session, @Nullable String text, @Nullable String channel) {
-        return new HarnessInput(session, text)
+        HarnessInput input = new HarnessInput(session, text)
                 .commandAware(false)
                 .agentAware(false)
                 .origin(InputOrigin.channel(channel));
+        input.program = true;
+        return input;
+    }
+
+    /**
+     * 是否为程序代替用户发起的一轮（{@link #ofProgram} 创建）。
+     *
+     * <p>受理口径：会话忙时直接 {@link InputOutcome.Kind#REJECTED}（{@code "busy"}），不进积压——
+     * 程序轮次有自己的重试节奏，入积压反而会抢在用户消息前面或重复执行。</p>
+     *
+     * @since 4.2.0
+     */
+    public boolean isProgram() {
+        return program;
+    }
+
+    /**
+     * 附加一项宿主域属性（引擎不解读；null 值即移除）。
+     *
+     * <p>用于「忙时进积压、空闲后续发」也要带上的宿主参数（如推理强度、思考模式）：
+     * 积压实现原样保存、续发时原样带回。</p>
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput attr(String key, @Nullable String value) {
+        if (key == null) {
+            return this;
+        }
+
+        if (value == null) {
+            if (attrs != null) {
+                attrs.remove(key);
+            }
+        } else {
+            if (attrs == null) {
+                attrs = new LinkedHashMap<>();
+            }
+            attrs.put(key, value);
+        }
+
+        return this;
+    }
+
+    /**
+     * 批量附加宿主域属性（null 忽略；null 值的项即移除）。
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput attrs(@Nullable Map<String, String> values) {
+        if (values != null) {
+            for (Map.Entry<String, String> entry : values.entrySet()) {
+                attr(entry.getKey(), entry.getValue());
+            }
+        }
+        return this;
+    }
+
+    /**
+     * 宿主域属性（未设置时为 null）。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getAttr(String key) {
+        return attrs == null || key == null ? null : attrs.get(key);
+    }
+
+    /**
+     * 全部宿主域属性（只读；未设置时为空表，永不为 null）。
+     *
+     * @since 4.2.0
+     */
+    public Map<String, String> getAttrs() {
+        return attrs == null ? Collections.<String, String>emptyMap() : Collections.unmodifiableMap(attrs);
     }
 
     // ========== 读取 ==========

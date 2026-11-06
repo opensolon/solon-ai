@@ -40,8 +40,6 @@ import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
@@ -1305,8 +1303,8 @@ public class HarnessEngine {
 
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
-        this.inputPipeline = new InputPipeline(this, options);
         this.sessionControl = new SessionControl(this, options, commandRegistry);
+        this.inputPipeline = new InputPipeline(this, options, sessionControl);
 
         //上下文压缩拦截器默认处理
         if (options.getCompressionInterceptor() == null) {
@@ -1625,7 +1623,9 @@ public class HarnessEngine {
 
         final String agentName = targetAgent.name();
 
-        return targetAgent.prompt(prompt)
+        // 与 targetAgent.prompt(prompt) 等价（ReActAgent 内部即 new ReActRequest(agent, prompt)），
+        // 换成能携带受理占位的子类：handle 受理的 TASK 由请求自己在开流时释放占位。
+        return new AdmittedRequest(targetAgent, prompt)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
@@ -1652,10 +1652,17 @@ public class HarnessEngine {
 
 
     /**
-     * 处理一次完整输入（唯一入口）
+     * 处理一次完整输入（唯一执行入口）
      * <p>
-     * 一次调用完成五件事：命令识别与执行、HITL 决策应用、附件装配 + 子代理解析、
+     * 第 0 步是受理判定（与占位、入积压同一把会话锁）：会话忙时可排队的输入进积压
+     * （{@link InputOutcome.Kind#DEFERRED}），不可排队或有待审批卡时拒绝（{@link InputOutcome.Kind#REJECTED}）；
+     * 程序派发的一轮、忙时可执行的命令（{@code runnableWhenBusy}）与审批决策按输入本身放行。
+     * 受理之后一次调用完成五件事：命令识别与执行、HITL 决策应用、附件装配 + 子代理解析、
      * Prompt 构建、请求装配。宿主只需关心「回执怎么渲染」与「流怎么消费」。
+     *
+     * <p><b>占位由引擎管</b>：返回 TASK 时会话保持占用，直到请求开流（{@code stream()} 订阅，运行流已登记）
+     * 或 {@code call()} 结束——宿主把订阅调度到别的线程也不会出现两条流并发。宿主拿到 TASK 决定不执行时调
+     * {@link InputOutcome#discard()}；其余结局在返回前已释放。</p>
      *
      * <p>HITL 决策与续流可合并为一次调用：{@code .hitl(action, callId).resume(true)} 会在写入决策后
      * 尝试续流。是否真的续流由引擎自检后决定，宿主只 switch {@link InputOutcome.Kind}：</p>
@@ -1681,6 +1688,12 @@ public class HarnessEngine {
      *         break;
      *     case REPLY:  // 只有回执（含命令在本渠道不可用）
      *         render(outcome.getCommandOutput());
+     *         break;
+     *     case DEFERRED: // 会话忙，已进积压：回执排队位置，并触发宿主自己的续发
+     *         ackQueued(outcome.getBacklogPosition());
+     *         break;
+     *     case REJECTED: // 未受理（待审批 / 忙且无处可延 / 附件不能排队）
+     *         renderError(outcome.getRejectReason(), outcome.getRejectDetail());
      *         break;
      *     case HITL:   // 决策已写入但未续流（未传 resume），是否恢复流由宿主决定
      *     default:     // IGNORED：无事可做
@@ -1808,7 +1821,8 @@ public class HarnessEngine {
      * <b>且</b>没有任何积压能力报告待执行输入（{@link InputBacklog#hasPending}）——有积压时注入等于插队。
      * 两项在同一把会话锁内读取，结果一致。</p>
      *
-     * <p>给 goal 调度、宿主定时任务等「程序代替用户发起一轮」的场景用；用户输入请用 {@link #admit}。</p>
+     * <p>给 goal 调度、宿主定时任务等「程序代替用户发起一轮」的场景做预判用；
+     * 真正的受理仍在 {@link #handle(HarnessInput)} 第 0 步（忙时程序轮次得到 {@code REJECTED("busy")}）。</p>
      *
      * @return session 为 null 时返回 false（无从注入）
      * @since 4.2.0
@@ -1837,51 +1851,6 @@ public class HarnessEngine {
      */
     public boolean isBusyBypassCommand(@Nullable String input) {
         return sessionControl.isBusyBypassCommand(input);
-    }
-
-    /**
-     * 输入受理判定：这条输入现在该走哪条路（原子：判定与占位同临界区）。
-     *
-     * <p><b>为什么要有它</b>：入口最易写错的一段不是「怎么装配」，而是「现在能不能接」。
-     * 它要同时看运行流、受理窗口、待审批卡、积压、是否程序派发、是否忙态旁路命令，
-     * 六个判定分散在三个包，宿主每次都要各查一遍并自行组合。Web 端这份判定曾长达 50 余行，
-     * 且用到的每个原语其实都已由 harness 提供。</p>
-     *
-     * <p><b>口径固定</b>：忙态一律为「有活跃流或已在受理窗口」（{@link InputGate#tryAcquire} 同口径），
-     * 待审批卡另判。宿主不得传入自己的忙判定——这正是历史上最容易漂移的一处。</p>
-     *
-     * <p><b>本方法不做</b>：不执行入积压、不渲染回执、不发终态。{@link AdmitDecision.Kind#DEFER}
-     * 由宿主交给积压插件（推理强度/思考模式属于宿主域概念）；
-     * {@link AdmitDecision.Kind#REJECT} 由宿主渲染拒因。</p>
-     *
-     * <p><b>没有积压能力时</b>（引擎上未装 {@link InputBacklog}）：忙态给 {@code REJECT("busy")}，
-     * 而不是宿主无处可延的 {@code DEFER}。</p>
-     *
-     * <p>典型用法：</p>
-     * <pre>{@code
-     * AdmitDecision admit = engine.admit(session, input, hitlDecision, hitlExempt);
-     * switch (admit.getKind()) {
-     *     case REJECT: renderError(admit.getRejectReason(), admit.getRejectDetail()); return;
-     *     case DEFER:  offerToBacklogAndDrain(); return;
-     *     default:     break;  // ADMIT / ADMIT_BYPASS
-     * }
-     * try (InputGate.Ticket ticket = admit.getTicket()) {
-     *     InputOutcome outcome = engine.handle(input);
-     *     // ... 起流
-     * }
-     * }</pre>
-     *
-     * @param session      目标会话（可为 null：按空闲处理）
-     * @param input        原始输入（用于识别忙态旁路命令；可为 null）
-     * @param hitlDecision 本输入是否携带 HITL 决策（决策输入总是豁免挂起拦截）
-     * @param hitlExempt   额外豁免谓词（可为 null）。用于「续流 / 特定命令」等宿主域豁免；
-     *                     宿主不传时只按 {@code hitlDecision} 与「队列派发」判豁免
-     * @since 4.2.0
-     */
-    public AdmitDecision admit(@Nullable AgentSession session, @Nullable String input,
-                               boolean hitlDecision,
-                               Predicate<String> hitlExempt) {
-        return sessionControl.admit(session, input, hitlDecision, hitlExempt);
     }
 
     /**
@@ -1980,6 +1949,20 @@ public class HarnessEngine {
 
         public Builder maxTurns(Integer maxTurns) {
             options.setMaxTurns(maxTurns);
+            return this;
+        }
+
+        /**
+         * 受理占位时限（毫秒，缺省 60000）。
+         *
+         * <p>{@code handle} 返回 TASK 时会话被占位，直到请求开流（{@code stream()} 被订阅）或
+         * {@code call()} 结束。宿主拿到 TASK 却始终不开流（且没有 {@code discard()}）时，超过时限的占位不再算占用，
+         * 会话不会被永久卡住。</p>
+         *
+         * @since 4.2.0
+         */
+        public Builder admissionTimeoutMs(Long admissionTimeoutMs) {
+            options.setAdmissionTimeoutMs(admissionTimeoutMs);
             return this;
         }
 
