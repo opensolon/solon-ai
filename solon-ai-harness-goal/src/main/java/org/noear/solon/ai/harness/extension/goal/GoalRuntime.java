@@ -242,6 +242,16 @@ class GoalRuntime {
     }
 
     /**
+     * 取已存在的会话（不存在返回 null，不新建）。调度轮次用：会话被删后不得把它重建出来。
+     *
+     * <p>与 {@link #sessionOf} 不同，解析异常会向外抛出——调用方要能区分「确实不存在」与「暂时取不到」。</p>
+     */
+    AgentSession sessionOrNil(String sessionId) {
+        if (engine == null || sessionId == null) return null;
+        return engine.getSessionOrNil(sessionId);
+    }
+
+    /**
      * 执行一轮：按注册顺序取首个认领者（无人认领时用内置兜底）；仍无执行者时返回 null。
      *
      * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回结论」。
@@ -359,7 +369,7 @@ class GoalRuntime {
     boolean shouldSkipSession(String sessionId) {
         if (engine == null) return false;
         try {
-            AgentSession session = engine.getSession(sessionId);
+            AgentSession session = engine.getSessionOrNil(sessionId);
             if (session == null) return true;
             return engine.isIdle(session) == false;
         } catch (Throwable e) {

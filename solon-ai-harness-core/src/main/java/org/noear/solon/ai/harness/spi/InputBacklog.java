@@ -37,7 +37,7 @@ import org.noear.solon.lang.Preview;
  * <p><b>为什么 {@link #hasPending} 是方法而不是状态键</b>：内核自己的受理判定依赖它。
  * 若做成 {@code SessionStatus} 的键，键就得定义在内核（内核由此认识了「排队数」），
  * 且「实现方必须贡献该键」只是约定、编译器无法检查。做成接口方法则由类型系统保证。
- * 展示用的数量属于插件事实，由实现方自己定义键并经 {@code onStatus} 贡献（如
+ * 展示用的数量属于插件事实，由实现方自己定义键并经 {@code contributeSessionStatus} 贡献（如
  * {@code QueueExtension.STATUS_PENDING}），内核不读。</p>
  *
  * <p><b>开关口径</b>：{@link #offer} 受实现方 {@code isEnabled()} 控制（停用即拒收，返回负数）；

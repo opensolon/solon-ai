@@ -110,7 +110,7 @@ public class TaskTalentSchedulingTest {
     @Test
     public void unknownAgentOnlyFailsItsOwnTask(@org.junit.jupiter.api.io.TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
 
         List<TaskTalent.MultiTaskOp> tasks = new ArrayList<>();
@@ -131,7 +131,7 @@ public class TaskTalentSchedulingTest {
     @Test
     public void instructionSeparatesListItems(@org.junit.jupiter.api.io.TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         String instruction = engine.getTaskTalent().getInstruction(null);
 
@@ -145,7 +145,7 @@ public class TaskTalentSchedulingTest {
     @Test
     public void instructionNoLongerMentionsBatchSplit(@org.junit.jupiter.api.io.TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         String instruction = engine.getTaskTalent().getInstruction(null);
 
@@ -160,7 +160,7 @@ public class TaskTalentSchedulingTest {
     @Test
     public void negativeConcurrencyIsRejected(@org.junit.jupiter.api.io.TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,

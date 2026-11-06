@@ -105,7 +105,7 @@ public class SteerExtension extends AbsHarnessExtension {
     }
 
     @Override
-    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+    public void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend optionsAmend) {
         if (isDelegated == false) {
             optionsAmend.interceptorAdd(interceptor);
         }
@@ -118,10 +118,10 @@ public class SteerExtension extends AbsHarnessExtension {
      * 锁序为「会话锁 → 插话状态锁」，插话状态锁内从不回取会话锁，故可在会话锁内安全调用。</p>
      */
     @Override
-    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+    public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
         SteerState state = SteerState.peek(session);
         if (state != null) {
-            status.put(STATUS_PENDING, state.size());
+            builder.put(STATUS_PENDING, state.size());
         }
     }
 

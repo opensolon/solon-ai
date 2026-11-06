@@ -42,7 +42,7 @@ class HarnessEngineBuilderTest {
 
     private HarnessEngine.Builder builder() {
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of);
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id));
     }
 
     private static ChatConfig model(String name) {

@@ -42,7 +42,7 @@ class InterruptCommandTest {
 
     private HarnessEngine engine() {
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
     }
 

@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.agent;
 
-import org.noear.solon.lang.NonNull;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 /**
@@ -34,13 +34,17 @@ public interface AgentSessionProvider {
      *
      * <p>逻辑约定：</p>
      * <ul>
-     * <li>若会话已存在，则返回现有实例（保持上下文连续）。</li>
-     * <li>若不存在，则按需创建（Lazy loading）并初始化新会话。</li>
+     * <li>若会话已存在，则返回现有实例（保持上下文连续）；存储中已存在但未加载的，允许加载并缓存。</li>
+     * <li>若不存在且 {@code createIfAbsent=true}，则按需创建并初始化新会话（不得返回 null）。</li>
+     * <li>若不存在且 {@code createIfAbsent=false}，则返回 null，且不得产生任何副作用
+     *     （不建实例、不写存储、不建目录、不放入缓存）。</li>
      * </ul>
      *
-     * @param instanceId instanceId 会话实例标识
-     * @return 关联的 AgentSession 实例（不应返回 null）
+     * @param instanceId     会话实例标识
+     * @param createIfAbsent 不存在时是否新建
+     * @return 关联的 AgentSession 实例；仅当 {@code createIfAbsent=false} 且不存在时为 null
+     * @since 4.2.0
      */
-    @NonNull
-    AgentSession getSession(String instanceId);
+    @Nullable
+    AgentSession getSession(String instanceId, boolean createIfAbsent);
 }

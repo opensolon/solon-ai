@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 本类把它收敛为一处，由 {@code HarnessEngine#interrupt(AgentSession)} 调用。</p>
  *
  * <p><b>只管核心语义</b>：本类不认识任何插件。用户级中断的插件参与（如 queue 清积压）由引擎在调用本类
- * <b>之前</b>回调 {@code HarnessExtension#onInterrupt}，以此维持「先清积压再停流」的顺序。
+ * <b>之前</b>回调 {@code HarnessExtension#onSessionInterrupt}，以此维持「先清积压再停流」的顺序。
  * 因此宿主<b>必须</b>经引擎中断（{@code engine.interrupt} / {@code engine.prepareInterrupt}）；
  * 本类的 {@link #claim} 只是引擎内部的核心认领步骤，只停流、不会清积压。</p>
  *
@@ -54,7 +54,7 @@ final class HarnessInterrupts {
     /**
      * 中断的核心认领步骤：原子认领运行句柄（不停流、不写取消消息；<b>不含插件参与</b>）。
      *
-     * <p>由 {@code HarnessEngine#prepareInterrupt} 在回调完扩展的 {@code onInterrupt} 之后调用。
+     * <p>由 {@code HarnessEngine#prepareInterrupt} 在回调完扩展的 {@code onSessionInterrupt} 之后调用。
      * 宿主不要直接调用：绕过引擎就绕过了插件参与（如清积压）。</p>
      *
      * <p>「判定忙碌」与「摘下句柄」由 {@link SessionRuns#claim(AgentSession)} 在同一临界区完成：

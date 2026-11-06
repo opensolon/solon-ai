@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * LoopExtension 装配与钩子契约：
- * 命令注册、加载、onStatus 计数、onDetach 卸载 job 保留记录、job 名工作区前缀、
+ * 命令注册、加载、contributeSessionStatus 计数、onDetach 卸载 job 保留记录、job 名工作区前缀、
  * 开关只关工具、D2 任务级连续错误、D3 /loop pause|resume、/loop stop 仅在运行中才中断、
  * P1 摘除后在途一轮不得清空 tasks.json、P3 修改运行中的任务不并发也不丢新定义。
  */
@@ -40,14 +40,14 @@ class LoopExtensionTest {
         final AtomicInteger count = new AtomicInteger();
 
         @Override
-        public void onInterrupt(HarnessEngine engine, AgentSession session) {
+        public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
             count.incrementAndGet();
         }
     }
 
     private HarnessEngine engine(HarnessExtension... extensions) {
         HarnessEngine.Builder b = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(id -> sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)));
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id));
         for (HarnessExtension e : extensions) {
             b.extensionAdd(e);
         }
@@ -102,6 +102,28 @@ class LoopExtensionTest {
         LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
         loop.toggle("s1", b.getId()); // 暂停的也计入
         assertEquals(2, engine.status(s).get(LoopExtension.STATUS_TASKS).intValue());
+    }
+
+    @Test
+    void removeSessionStopsAndDeletesTasksOfThatSessionOnly() throws Exception {
+        Path store = workspace.resolve("tasks.json");
+        FakeJobManager jm = new FakeJobManager();
+        LoopExtension loop = builder(jm).storeFile(store).build();
+        HarnessEngine engine = engine(loop);
+        loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
+        loop.schedule("s2", LoopSpec.of("b").everyMinutes(5));
+        assertEquals(2, jm.jobs.size());
+
+        engine.removeSession("s1");
+
+        assertTrue(loop.list("s1").isEmpty(), "onSessionRemove 必须删除该会话的任务");
+        assertEquals(1, loop.list("s2").size(), "其它会话不受影响");
+        assertEquals(1, jm.jobs.size(), "该会话的 job 必须注销");
+        String json = new String(Files.readAllBytes(store), "UTF-8");
+        assertFalse(json.contains("\"s1\""), "tasks.json 里不得再有该会话");
+        assertFalse(sessions.containsKey("s1"), "删除流程不得把会话建出来");
+
+        engine.removeSession("s1"); // 幂等
     }
 
     @Test

@@ -956,7 +956,7 @@ public class AgentController {
     @Post
     @Mapping("/chat")
     public String chat(@Body ChatRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId());
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
         ReActResponse resp = engine.prompt(req.getMessage())
             .session(session)
             .call();
@@ -982,7 +982,7 @@ public class AgentController {
     @Post
     @Mapping("/approve")
     public String approve(@Body ApproveRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId());
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {
@@ -1024,7 +1024,7 @@ public class AgentController {
     @Post
     @Mapping("/reject")
     public String reject(@Body RejectRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId());
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {
@@ -1047,7 +1047,7 @@ public class AgentController {
     @Post
     @Mapping("/skip")
     public String skip(@Body SkipRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId());
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {

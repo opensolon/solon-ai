@@ -16,7 +16,7 @@ import org.noear.solon.test.SolonTest;
 public class AgentDefaultTest {
     @Test
     public void case1() {
-        HarnessEngine engine = HarnessEngine.of(".", ".").sessionProvider(InMemoryAgentSession::of).build();
+        HarnessEngine engine = HarnessEngine.of(".", ".").sessionProvider((id, c) -> InMemoryAgentSession.of(id)).build();
         org.noear.solon.ai.harness.agent.AgentManager agentManager = engine.getAgentManager();
 
         AgentDefinition bash = agentManager.getAgent("bash");

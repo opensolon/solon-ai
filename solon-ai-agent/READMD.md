@@ -266,14 +266,18 @@ public class AgentSessoinConfig {
     //@Bean
     public AgentSessionProvider redisSession(RedisClient redisClient) {
         Map<String, AgentSession> map = new ConcurrentHashMap<>();
-        return (sessionId) -> map.computeIfAbsent(sessionId, k -> new RedisAgentSession(k, redisClient));
+        return (sessionId, createIfAbsent) -> createIfAbsent
+                ? map.computeIfAbsent(sessionId, k -> new RedisAgentSession(k, redisClient))
+                : map.get(sessionId);
     }
 
     // 使用内存会话存储（默认）
     @Bean
     public AgentSessionProvider inMemorySessoin() {
         Map<String, AgentSession> map = new ConcurrentHashMap<>();
-        return (sessionId) -> map.computeIfAbsent(sessionId, k -> new InMemoryAgentSession(k));
+        return (sessionId, createIfAbsent) -> createIfAbsent
+                ? map.computeIfAbsent(sessionId, k -> new InMemoryAgentSession(k))
+                : map.get(sessionId);
     }
 
     public static class Demo {
@@ -283,7 +287,7 @@ public class AgentSessoinConfig {
         ReActAgent reActAgent;
 
         public String hello() throws Throwable{
-            AgentSession session = sessionProvider.getSession("test");
+            AgentSession session = sessionProvider.getSession("test", true);
 
             return reActAgent.prompt("你好呀!")
                     .session(session)

@@ -61,7 +61,9 @@ import java.util.function.Predicate;
  * （goal 依赖 {@code goal_update} 声明完成，工具关了还继续跑只会空耗预算直到熔断）。</p>
  *
  * <p><b>钩子</b>：{@code onAttach} 装配运行态、调度与命令；{@code onRequestAssemble} 给顶层请求挂
- * {@link GoalTalent}（委派不挂）；{@code onStatus} 贡献 {@link #STATUS_GOAL}；{@code onDetach} 卸载全部 job。</p>
+ * {@link GoalTalent}（委派不挂）；{@code contributeSessionStatus} 贡献 {@link #STATUS_GOAL}；
+ * {@code onSessionRemove} 注销该会话的 job；{@code onDetach} 卸载全部 job。
+ * 调度轮次只取已存在的会话（{@code getSessionOrNil}），会话已不存在时 job 自行注销，不会把会话重新建出来。</p>
  *
  * @author noear
  * @since 3.9.2
@@ -156,7 +158,7 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     @Override
-    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+    public void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend optionsAmend) {
         // 子代理委派走临时会话，goal 是会话级能力，不挂
         if (isDelegated == false && goalTalent != null) {
             optionsAmend.talentAdd(goalTalent);
@@ -165,13 +167,21 @@ public class GoalExtension extends AbsHarnessExtension {
 
     /** 事实口径，不判开关（停用不代表 goal 消失）；首次读取时从投影 hydrate。 */
     @Override
-    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+    public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
         if (goalRuntime == null) {
             return;
         }
         GoalState gs = goalRuntime.state(session);
         if (gs != null) {
-            status.put(STATUS_GOAL, gs.getStatus());
+            builder.put(STATUS_GOAL, gs.getStatus());
+        }
+    }
+
+    /** 会话被永久删除：注销该会话的 goal job（清理类，不判开关；幂等）。goal 状态存在会话属性里，随会话一起消失。 */
+    @Override
+    public void onSessionRemove(HarnessEngine engine, String sessionId) {
+        if (goalScheduler != null) {
+            goalScheduler.unschedule(sessionId);
         }
     }
 
@@ -206,7 +216,7 @@ public class GoalExtension extends AbsHarnessExtension {
      */
     private static GoalExecutor defaultExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
-            AgentSession session = engine.getSession(sessionId);
+            AgentSession session = engine.getSessionOrNil(sessionId);
             if (session == null) {
                 return GoalOutcome.skip("session not found");
             }

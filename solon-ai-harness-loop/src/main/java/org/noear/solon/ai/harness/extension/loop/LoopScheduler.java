@@ -286,7 +286,7 @@ final class LoopScheduler {
         return result;
     }
 
-    /** 会话任务数（只读内存，无副作用；供 onStatus 在会话锁内调用）。 */
+    /** 会话任务数（只读内存，无副作用；供 contributeSessionStatus 在会话锁内调用）。 */
     int count(String sessionId) {
         List<LoopTask> tasks = sessionId == null ? null : sessionTasks.get(sessionId);
         return tasks == null ? 0 : tasks.size();
@@ -309,7 +309,7 @@ final class LoopScheduler {
 
     // ==================== 批量停止 ====================
 
-    /** 停止会话全部任务并从 tasks.json 删除该会话的记录（删除会话 / /loop stop-all）。 */
+    /** 停止会话全部任务并从 tasks.json 删除该会话的记录（onSessionRemove / /loop stop-all）。 */
     void removeAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.remove(sessionId);
         if (tasks != null) {
@@ -626,7 +626,8 @@ final class LoopScheduler {
     /**
      * 会话是否应跳过本轮（口径为引擎的 {@code isIdle}：占用或有积压即不空闲）。
      *
-     * <p>与 goal 的差异（故意的）：取不到会话时不跳过——宿主的专用会话可能尚未实例化。</p>
+     * <p>与 goal 的差异（故意的）：取不到会话时不跳过——宿主的专用会话可能尚未实例化。
+     * 判定本身不新建会话（{@code getSessionOrNil}），是否新建由执行器决定。</p>
      */
     private boolean shouldSkipSession(String sessionId) {
         HarnessEngine e = engine;
@@ -634,7 +635,7 @@ final class LoopScheduler {
             return false;
         }
         try {
-            AgentSession session = e.getSession(sessionId);
+            AgentSession session = e.getSessionOrNil(sessionId);
             if (session == null) {
                 return false;
             }

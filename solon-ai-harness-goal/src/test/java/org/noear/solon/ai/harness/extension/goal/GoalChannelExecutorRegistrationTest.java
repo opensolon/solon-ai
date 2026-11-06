@@ -125,7 +125,7 @@ class GoalChannelExecutorRegistrationTest {
     void facadeChannelRegistrationReachesRuntime() {
         GoalExtension ext = GoalExtension.builder("ws-channel").jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
+                .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
                 .build();
 
@@ -148,7 +148,7 @@ class GoalChannelExecutorRegistrationTest {
     void jobManagerNullDisablesScheduling() {
         GoalExtension ext = GoalExtension.builder("ws-nosched").jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
+                .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
                 .build();
 

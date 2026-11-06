@@ -58,8 +58,9 @@ import java.util.function.UnaryOperator;
  *
  * <p><b>钩子</b>：{@code onAttach} 绑定引擎、注册 /loop、加载并调度 tasks.json；{@code onRequestAssemble}
  * 给顶层请求挂 {@link LoopTalent}（委派不挂：子代理走临时会话，建出来的任务会成为孤儿）；
- * {@code onStatus} 贡献 {@link #STATUS_TASKS}；{@code onDetach} 卸载全部 job 但保留记录。
- * 不实现 {@code onInterrupt}：用户中断不应删除或暂停定时任务。</p>
+ * {@code contributeSessionStatus} 贡献 {@link #STATUS_TASKS}；{@code onSessionRemove} 停止并删除该会话全部任务；
+ * {@code onDetach} 卸载全部 job 但保留记录。
+ * 不实现 {@code onSessionInterrupt}：用户中断不应删除或暂停定时任务。</p>
  *
  * <p><b>开关语义</b>：{@link #setEnabled} 只关模型工具（引擎对停用扩展不回调 {@code onRequestAssemble}）；
  * /loop 命令与已有定时任务照常运行。</p>
@@ -135,7 +136,7 @@ public class LoopExtension extends AbsHarnessExtension {
     }
 
     @Override
-    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+    public void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend optionsAmend) {
         if (isDelegated == false) {
             optionsAmend.talentAdd(loopTalent);
         }
@@ -143,8 +144,14 @@ public class LoopExtension extends AbsHarnessExtension {
 
     /** 事实口径，不判开关；只读内存计数（可能在会话锁内调用，无 IO、无其它锁）。 */
     @Override
-    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
-        status.put(STATUS_TASKS, scheduler.count(session.getSessionId()));
+    public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
+        builder.put(STATUS_TASKS, scheduler.count(session.getSessionId()));
+    }
+
+    /** 会话被永久删除：停止并删除该会话全部任务（清理类，不判开关；幂等）。 */
+    @Override
+    public void onSessionRemove(HarnessEngine engine, String sessionId) {
+        scheduler.removeAll(sessionId);
     }
 
     /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转），tasks.json 记录保留。 */
@@ -232,7 +239,7 @@ public class LoopExtension extends AbsHarnessExtension {
         return scheduler.listAll();
     }
 
-    /** 停止会话全部任务并删除记录（用于删除会话）。 */
+    /** 停止会话全部任务并删除记录（用于 /loop stop-all；删除会话走 {@code engine.removeSession} → onSessionRemove）。 */
     public void removeAll(String sessionId) {
         scheduler.removeAll(sessionId);
     }

@@ -34,7 +34,7 @@ import java.util.function.BinaryOperator;
  *     <li><b>核心事实</b>（固定字段）：运行流（{@link SessionRuns}）、待审批挂起卡（{@link HitlCard}）、
  *         输入受理窗口（{@link org.noear.solon.ai.harness.turn.InputGate}）、取消代数。漏查任何一个都会导致真实故障：
  *         漏查 HITL 会把审批中的会话判成空闲、新输入直接顶掉挂起任务。</li>
- *     <li><b>扩展事实</b>（开放槽位）：由插件经 {@code HarnessExtension#onStatus} 贡献，按 {@link Key} 读取。
+ *     <li><b>扩展事实</b>（开放槽位）：由插件经 {@code HarnessExtension#contributeSessionStatus} 贡献，按 {@link Key} 读取。
  *         核心不预设插件有哪些事实——新增插件事实不需要修改本类。</li>
  * </ul>
  *

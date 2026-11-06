@@ -66,9 +66,9 @@ final class SessionControl {
         // ① 扩展中断参与（先于停流）：逐个隔离异常，任何扩展都不能阻止中断生效
         for (HarnessExtension extension : options.getExtensions()) {
             try {
-                extension.onInterrupt(engine, session);
+                extension.onSessionInterrupt(engine, session);
             } catch (Throwable e) {
-                LOG.warn("Extension onInterrupt failed: {}", extension.getClass().getName(), e);
+                LOG.warn("Extension onSessionInterrupt failed: {}", extension.getClass().getName(), e);
             }
         }
 
@@ -81,13 +81,27 @@ final class SessionControl {
         if (session != null) {
             for (HarnessExtension extension : options.getExtensions()) {
                 try {
-                    extension.onStatus(engine, session, builder);
+                    extension.contributeSessionStatus(engine, session, builder);
                 } catch (Throwable e) {
-                    LOG.warn("Extension onStatus failed: {}", extension.getClass().getName(), e);
+                    LOG.warn("Extension contributeSessionStatus failed: {}", extension.getClass().getName(), e);
                 }
             }
         }
         return builder.build();
+    }
+
+    /**
+     * 永久删除会话的引擎侧善后：逐个回调 {@code onSessionRemove}（不判 isEnabled，逐个隔离异常）。
+     * 不取会话实例（取了可能把已删会话重建出来）。
+     */
+    void removeSession(String sessionId) {
+        for (HarnessExtension extension : options.getExtensions()) {
+            try {
+                extension.onSessionRemove(engine, sessionId);
+            } catch (Throwable e) {
+                LOG.warn("Extension onSessionRemove failed: {}", extension.getClass().getName(), e);
+            }
+        }
     }
 
     boolean isIdle(AgentSession session) {

@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * queue 插件经核心契约接入引擎的集成验证（插件独立后，原核心测试里的队列语义收归这里）：
  *
  * <ol>
- *   <li>{@code onInterrupt}：{@code engine.interrupt} / {@code prepareInterrupt} 先清队列再停流，无流也清；</li>
+ *   <li>{@code onSessionInterrupt}：{@code engine.interrupt} / {@code prepareInterrupt} 先清队列再停流，无流也清；</li>
  *   <li>{@code InputBacklog}：引擎按能力接口找到本插件，{@code status} 带出自有键 {@code STATUS_PENDING}、有积压时 {@code isIdle} 为假、忙态 {@code admit} 给 DEFER；</li>
  *   <li>{@code TurnDispatch}：派发登记在核心槽位，{@code admit} 识别为派发轮次；</li>
  *   <li>{@code /queue} 命令经引擎全链路。</li>
@@ -36,7 +36,7 @@ class QueueEngineIntegrationTest {
 
     private HarnessEngine engine() {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         engine.addExtensionIfAbsent(new QueueExtension());
         return engine;
@@ -58,7 +58,7 @@ class QueueEngineIntegrationTest {
         return disposed;
     }
 
-    // ---------- onInterrupt ----------
+    // ---------- onSessionInterrupt ----------
 
     @Test
     void interruptCancelsPendingQueueItemsSoTheyAreNotRedispatched() {

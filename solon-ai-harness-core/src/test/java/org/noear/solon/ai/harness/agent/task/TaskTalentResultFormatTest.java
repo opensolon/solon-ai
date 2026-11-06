@@ -169,7 +169,7 @@ public class TaskTalentResultFormatTest {
     @Test
     public void oversizedResultSpillsToFilesDir(@TempDir Path workspace) throws Exception {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         TaskTalent talent = engine.getTaskTalent();
 
@@ -196,7 +196,7 @@ public class TaskTalentResultFormatTest {
     @Test
     public void shortResultDoesNotSpill(@TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         TaskTalent talent = engine.getTaskTalent();
 
@@ -210,7 +210,7 @@ public class TaskTalentResultFormatTest {
     @Test
     public void taskIdIsSanitizedAgainstPathTraversal(@TempDir Path workspace) {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         TaskTalent talent = engine.getTaskTalent();
 

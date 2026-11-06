@@ -37,7 +37,7 @@ class InputCommandAwareTest {
         model.setApiKey("test");
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model)
                 .defaultModel("fake")
                 .build();

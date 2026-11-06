@@ -46,8 +46,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 插件化契约（核心侧）：核心只经三种机制与插件协作，且不认识任何具体插件。
  *
  * <ol>
- *   <li>钩子 {@link HarnessExtension#onInterrupt}：用户级中断在停流之前回调、异常隔离、只停流的程序中断不回调；</li>
- *   <li>钩子 {@link HarnessExtension#onStatus}：扩展事实经开放槽位贡献、按键合并、异常隔离、不判开关；</li>
+ *   <li>钩子 {@link HarnessExtension#onSessionInterrupt}：用户级中断在停流之前回调、异常隔离、只停流的程序中断不回调；</li>
+ *   <li>钩子 {@link HarnessExtension#contributeSessionStatus}：扩展事实经开放槽位贡献、按键合并、异常隔离、不判开关；</li>
  *   <li>能力接口 {@link InputBacklog}：{@code getExtension(接口)} 可查、
  *       {@code admit} 忙态有积压能力 → QUEUE，没有 → REJECT(busy)；</li>
  *   <li>会话槽位 {@link TurnDispatch}：admit / SessionTurn 只认接口；</li>
@@ -62,7 +62,7 @@ class HarnessPluginContractTest {
 
     private HarnessEngine engine() {
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
     }
 
@@ -105,12 +105,12 @@ class HarnessPluginContractTest {
 
         /** 展示用的数量是插件自有事实：键由插件自己定义 */
         @Override
-        public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+        public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
             status.put(STUB_PENDING, offered.size());
         }
 
         @Override
-        public void onInterrupt(HarnessEngine engine, AgentSession session) {
+        public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
             interrupts++;
             busyAtInterrupt = SessionRuns.isBusy(session);
             offered.clear();
@@ -149,10 +149,10 @@ class HarnessPluginContractTest {
         }
     }
 
-    // ==================== 钩子：onInterrupt ====================
+    // ==================== 钩子：onSessionInterrupt ====================
 
     @Test
-    void onInterruptRunsBeforeStreamIsStopped() {
+    void onSessionInterruptRunsBeforeStreamIsStopped() {
         HarnessEngine engine = engine();
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);
@@ -170,7 +170,7 @@ class HarnessPluginContractTest {
     }
 
     @Test
-    void onInterruptAlsoRunsWhenNoStreamAndForTwoPhase() {
+    void onSessionInterruptAlsoRunsWhenNoStreamAndForTwoPhase() {
         HarnessEngine engine = engine();
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);
@@ -194,7 +194,7 @@ class HarnessPluginContractTest {
         HarnessEngine engine = engine();
         engine.addExtension(new HarnessExtension() {
             @Override
-            public void onInterrupt(HarnessEngine engine, AgentSession session) {
+            public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
                 throw new IllegalStateException("boom");
             }
         });
@@ -231,7 +231,78 @@ class HarnessPluginContractTest {
         assertNull(engine().prepareInterrupt(null));
     }
 
-    // ==================== 钩子：onStatus（开放事实槽位） ====================
+    // ==================== 钩子：onSessionRemove ====================
+
+    /** 记录 onSessionRemove 的扩展桩 */
+    static class RemoveRecorder extends AbsHarnessExtension {
+        final List<String> removed = new ArrayList<>();
+
+        @Override
+        public void onSessionRemove(HarnessEngine engine, String sessionId) {
+            removed.add(sessionId);
+        }
+    }
+
+    @Test
+    void removeSessionNotifiesAllExtensionsEvenDisabledAndIsolatesFailures() {
+        HarnessEngine engine = engine();
+        RemoveRecorder disabled = new RemoveRecorder();
+        disabled.setEnabled(false);
+        engine.addExtension(disabled);
+        engine.addExtension(new HarnessExtension() {
+            @Override
+            public void onSessionRemove(HarnessEngine engine, String sessionId) {
+                throw new IllegalStateException("boom");
+            }
+        });
+        RemoveRecorder after = new RemoveRecorder();
+        engine.addExtension(after);
+
+        engine.removeSession("s1");
+
+        assertEquals(java.util.Collections.singletonList("s1"), disabled.removed, "清理类钩子不判开关");
+        assertEquals(java.util.Collections.singletonList("s1"), after.removed, "单个扩展异常不影响后续扩展");
+    }
+
+    @Test
+    void removeSessionIgnoresBlankIdAndNeverTouchesSessionProvider() {
+        AtomicInteger providerCalls = new AtomicInteger();
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
+                .sessionProvider((id, c) -> {
+                    providerCalls.incrementAndGet();
+                    return InMemoryAgentSession.of(id);
+                })
+                .build();
+        RemoveRecorder recorder = new RemoveRecorder();
+        engine.addExtension(recorder);
+        int baseline = providerCalls.get();
+
+        engine.removeSession(null);
+        engine.removeSession("");
+        assertTrue(recorder.removed.isEmpty(), "空 ID 直接返回");
+
+        engine.removeSession("s1");
+        assertEquals(1, recorder.removed.size());
+        assertEquals(baseline, providerCalls.get(), "删除流程不得取会话（会把会话重建出来）");
+    }
+
+    @Test
+    void getSessionOrNilDoesNotCreate() {
+        java.util.Map<String, AgentSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .build();
+
+        assertNull(engine.getSessionOrNil("s1"));
+        assertNull(engine.getSessionOrNil(null));
+        assertNull(engine.getSessionOrNil(""));
+        assertTrue(sessions.isEmpty(), "取不到时不得新建");
+
+        AgentSession created = engine.getSession("s1");
+        assertSame(created, engine.getSessionOrNil("s1"));
+    }
+
+    // ==================== 钩子：contributeSessionStatus（开放事实槽位） ====================
 
     /** 插件自定义的事实键（核心不认识它） */
     static final SessionStatus.Key<String> PLUGIN_PHASE = SessionStatus.Key.of("stub.phase", "idle");
@@ -247,7 +318,7 @@ class HarnessPluginContractTest {
         }
 
         @Override
-        public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+        public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
             status.put(PLUGIN_PHASE, phase).put(PLUGIN_COUNT, count);
         }
     }
@@ -280,7 +351,7 @@ class HarnessPluginContractTest {
         HarnessEngine engine = engine();
         engine.addExtension(new HarnessExtension() {
             @Override
-            public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+            public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
                 throw new IllegalStateException("boom");
             }
         });

@@ -18,7 +18,7 @@ public class DemoApp {
         //--- 1. 初始化
         HarnessEngine engine = HarnessEngine.of("/data/work/", ".tmp")
                 .systemPrompt("xxx")
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .toolsAdd(ToolName.TOOL_ALL_FULL) //设定工具权限
                 .disallowedToolsAdd(ToolName.TOOL_ALL_FULL)
                 .mountAdd(Mount.builder()

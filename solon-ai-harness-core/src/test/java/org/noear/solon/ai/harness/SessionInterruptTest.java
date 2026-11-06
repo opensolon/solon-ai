@@ -43,12 +43,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>null 会话安全。</li>
  * </ol>
  *
- * <p>「先清积压再停流」已上提为引擎的扩展钩子（{@code HarnessExtension#onInterrupt}），
+ * <p>「先清积压再停流」已上提为引擎的扩展钩子（{@code HarnessExtension#onSessionInterrupt}），
  * 顺序契约见 {@code HarnessPluginContractTest}，队列语义见 queue 插件的 {@code QueueInterruptTest}。</p>
  */
 class SessionInterruptTest {
 
-    /** 核心一步式中断（= 认领 + 提交，不含插件参与；引擎入口另有 onInterrupt 回调） */
+    /** 核心一步式中断（= 认领 + 提交，不含插件参与；引擎入口另有 onSessionInterrupt 回调） */
     private static boolean interrupt(AgentSession session) {
         org.noear.solon.ai.harness.turn.InterruptPlan plan = HarnessInterrupts.claim(session);
         return plan != null && plan.commit();

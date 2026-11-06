@@ -41,7 +41,7 @@ class BuiltinCommandsSystemTest {
      *  /queue、/steer、/goal 随插件模块独立，其引擎链路测试在各插件模块内（XxxCommandEngineTest）。 */
     private HarnessEngine engineWithBuiltins() {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(realModel())
                 .defaultModel(realModel().getModel())
                 .build();

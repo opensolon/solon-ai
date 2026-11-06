@@ -61,7 +61,7 @@
 ```java
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区, 引擎根目录
         .systemPrompt("你是一名 AI 编程助手")
-        .sessionProvider(InMemoryAgentSession::of)                  // 必填
+        .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「九、扩展点」）
         .modelAdd(new ChatConfig().then(cfg -> {
             cfg.setName("deepseek");                               // 模型别名
             cfg.setApiUrl("https://api.deepseek.com");
@@ -345,7 +345,7 @@ public class MinimalHost {
 
     public MinimalHost(String workspace) {
         this.engine = HarnessEngine.of(workspace, ".solon/")
-                .sessionProvider(InMemoryAgentSession::of)              // 必填
+                .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填
                 .modelAdd(new ChatConfig().then(cfg -> {
                     cfg.setName("deepseek");
                     cfg.setApiUrl("https://api.deepseek.com");
@@ -430,7 +430,7 @@ public class FullHost {
 
     public FullHost(String workspace) {
         this.engine = HarnessEngine.of(workspace, ".solon/")
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
                 .modelAdd(new ChatConfig().then(cfg -> {
                     cfg.setName("deepseek");
                     cfg.setApiUrl("https://api.deepseek.com");
@@ -844,12 +844,13 @@ HarnessEngine.of("/data/work", ".solon/")
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），宿主不接触 goal 运行态、调度器、命令类，也不接触 queue 的存储实现。命令本身的语法与回执未变，终端用户无感知。
 
-**会话能力是独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer` / `solon-ai-harness-loop`，按需引入（或用聚合包 `solon-ai-harness-all` 一次引齐，见 §1.1；引入不等于装配）。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化的三种协作机制」）：
+**会话能力是独立插件模块（4.2.0+）**：`solon-ai-harness-goal` / `solon-ai-harness-queue` / `solon-ai-harness-steer` / `solon-ai-harness-loop`，按需引入（或用聚合包 `solon-ai-harness-all` 一次引齐，见 §1.1；引入不等于装配）。核心模块不认识它们，它们之间也互不依赖，只经核心契约协作（见 `HarnessExtension` 类注释「插件化协作规则」）：
 
 | 契约 | 类型 | 提供方 | 消费方 |
 |---|---|---|---|
-| `HarnessExtension#onInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
-| `HarnessExtension#onStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
+| `HarnessExtension#onSessionInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
+| `HarnessExtension#onSessionRemove` | 钩子（广播） | 引擎 `removeSession`（宿主永久删除会话时，先于删存储调用） | loop 删该会话任务、goal 注销该会话 job |
+| `HarnessExtension#contributeSessionStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
 | `session.InputBacklog` | 能力接口（`offer` / `hasPending`） | queue | 引擎 `admit`（有无积压能力、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
 | `session.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `admit`、`SessionTurn` |
 
@@ -857,7 +858,7 @@ HarnessEngine.of("/data/work", ".solon/")
 
 没装 queue 时：`admit` 忙态给 `REJECT("busy")`（无处可延）；steer 残留按转排队失败处理（暂存并推 `SteerDroppedEvent`）。
 
-**会话状态是开放的**：`SessionStatus` 只有核心事实是固定字段（运行流 / HITL / 受理窗口 / 取消代数），插件事实经 `onStatus` 贡献到类型化键 `SessionStatus.Key<T>`（`Key.count` 求和、`Key.of` 后写覆盖），新增插件事实不改核心。宿主一律 `engine.status(session)` 读全；静态 `SessionStatus.of(session)` 只有核心事实。
+**会话状态是开放的**：`SessionStatus` 只有核心事实是固定字段（运行流 / HITL / 受理窗口 / 取消代数），插件事实经 `contributeSessionStatus` 贡献到类型化键 `SessionStatus.Key<T>`（`Key.count` 求和、`Key.of` 后写覆盖），新增插件事实不改核心。宿主一律 `engine.status(session)` 读全；静态 `SessionStatus.of(session)` 只有核心事实。
 
 ```java
 SessionStatus st = engine.status(session);
@@ -1537,7 +1538,7 @@ boolean engine.interrupt(@Nullable AgentSession session);
 
 | # | 动作 | 为何要这个顺序 |
 |---|---|---|
-| ① | 清排队（queue 插件的 `onInterrupt`，含已被 drain 暂存的项） | **必须早于停流**：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚停掉的任务重新推起来 |
+| ① | 清排队（queue 插件的 `onSessionInterrupt`，含已被 drain 暂存的项） | **必须早于停流**：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚停掉的任务重新推起来 |
 | ② | 取消 `SessionRuns` 登记的全部运行句柄 | 无活跃句柄时直接返回 `false`，不写取消消息（但**取消代数仍会推进**，见下） |
 | ③ | 补写取消消息（带 `META_RUN_ID`） | 让前端把气泡挂到正确轮次 |
 | ④ | `updateSnapshot()` | 中断时 agent 收尾被跳过，trace 与取消消息需一并持久化 |
@@ -1993,12 +1994,21 @@ public interface HarnessExtension extends AiSwitchable {
     default void onInput(HarnessEngine engine, HarnessInput input) { }
 
     /** ④ 请求级装配：每次 ReActRequest 装配（覆盖用户输入/HITL 恢复/续流/命令产物/子代理委派） */
-    default void onRequestAssemble(HarnessEngine engine, boolean isDelegated,
-                                   String agentName, ReActOptionsAmend optionsAmend) { }
+    default void onRequestAssemble(HarnessEngine engine, String agentName,
+                                   boolean isDelegated, ReActOptionsAmend optionsAmend) { }
+
+    /** ⑥ 会话中断：interrupt / prepareInterrupt 先于停流回调（清积压等） */
+    default void onSessionInterrupt(HarnessEngine engine, AgentSession session) { }
+
+    /** ⑦ 会话状态：engine.status(session) 时收集插件事实（只读、廉价、无副作用） */
+    default void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) { }
+
+    /** ⑧ 会话删除：engine.removeSession(sessionId) 时回调（撤掉该会话的定时任务；只给 id，不得 getSession） */
+    default void onSessionRemove(HarnessEngine engine, String sessionId) { }
 }
 ```
 
-**五个钩子全部 default**，只覆写要用的那几个：
+**八个钩子全部 default**，只覆写要用的那几个。命名约定：`on*` 是引擎发通知，`contribute*` 是引擎收集信息，带 `Session` 的是会话级回调：
 
 ```java
 engine.addExtension(new HarnessExtension() {
@@ -2021,8 +2031,8 @@ engine.addExtension(new HarnessExtension() {
     }
 
     @Override
-    public void onRequestAssemble(HarnessEngine engine, boolean isDelegated,
-                                  String agentName, ReActOptionsAmend o) {
+    public void onRequestAssemble(HarnessEngine engine, String agentName,
+                                  boolean isDelegated, ReActOptionsAmend o) {
         // 请求级装配：isDelegated=true 是 task/multitask 委派（临时会话），会话级能力不要挂
         if (isDelegated == false) {
             o.interceptorAdd(myRequestInterceptor);
@@ -2038,6 +2048,9 @@ engine.addExtension(new HarnessExtension() {
                                         │
                           每次输入进入 ──onInput──────────> [HITL/命令/委派]
                           每次请求装配 ──onRequestAssemble──> [ReActRequest]
+                          用户级中断   ──onSessionInterrupt─> [先清积压再停流]
+                          读会话状态   ──contributeSessionStatus─> [插件事实]
+                          永久删除会话 ──onSessionRemove────> [撤掉该会话的定时任务]
                                         │
                           removeExtension/shutdown ──onDetach──> [清理]
 ```
@@ -2049,6 +2062,20 @@ engine.addExtension(new HarnessExtension() {
 | `onAgentBuild` | `AgentFactory.create()` 末尾，无条件 | **否**（停用由扩展自己传播给子组件） |
 | `onInput` | `handle()` 第一步 | 是 |
 | `onRequestAssemble` | `ReActRequest.options(...)` 内 | 是 |
+| `onSessionInterrupt` | `interrupt()` / `prepareInterrupt()`，先于停流 | **否**（清理类） |
+| `contributeSessionStatus` | `status()`（`admit` 也经此） | **否**（事实类） |
+| `onSessionRemove` | `removeSession()`（永久删除；只移出内存不触发） | **否**（清理类） |
+
+**删除会话的固定顺序**（宿主）：判忙（忙则拒绝）→ `engine.removeSession(id)` → 移出内存 → 删除存储。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来。只想取「已存在」的会话（定时任务、只读查询）用 `engine.getSessionOrNil(id)`，它不会新建。
+
+**会话提供者**（`AgentSessionProvider#getSession(id, createIfAbsent)`）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。生产实现应缓存实例：
+
+```java
+Map<String, AgentSession> map = new ConcurrentHashMap<>();
+AgentSessionProvider provider = (id, create) -> create
+        ? map.computeIfAbsent(id, InMemoryAgentSession::of)
+        : map.get(id);
+```
 
 #### `onAgentBuild` vs `onRequestAssemble` 的分工
 

@@ -37,9 +37,10 @@ import java.util.Map;
  * 队列执行从此只剩一条领取路径。</p>
  *
  * <p><b>与核心的协作</b>（核心不认识队列，只认契约）：实现能力接口 {@link InputBacklog}
- * （引擎忙态受理与先进先出、空闲判定、steer 残留转排队都经它）；覆写 {@link #onStatus} 贡献
+ * （引擎忙态受理与先进先出、空闲判定、steer 残留转排队都经它）；覆写 {@link #contributeSessionStatus} 贡献
  * 自有事实键 {@link #STATUS_PENDING}；
- * 覆写 {@link #onInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code TurnDispatch}。</p>
+ * 覆写 {@link #onSessionInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code TurnDispatch}。
+ * 队列存在会话属性里，随会话一起消失，无需覆写 {@code onSessionRemove}。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -73,7 +74,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * 用户级中断：清空待执行并递增代际（引擎保证先于停流回调；清理类，不判开关）。
      */
     @Override
-    public void onInterrupt(HarnessEngine engine, AgentSession session) {
+    public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
         QueueStore.cancelPending(session);
     }
 
@@ -99,8 +100,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * 会话状态贡献：{@link #STATUS_PENDING}（事实口径，不受开关影响；只读内存态，可在会话锁内调用）。
      */
     @Override
-    public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
-        status.put(STATUS_PENDING, QueueStore.pendingSize(session));
+    public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
+        builder.put(STATUS_PENDING, QueueStore.pendingSize(session));
     }
 
     /**

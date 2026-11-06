@@ -334,7 +334,7 @@ class HarnessOptionsAccessorTest {
         HarnessOptions o = fresh();
         assertNull(o.getSessionProvider());
 
-        o.setSessionProvider(org.noear.solon.ai.agent.session.InMemoryAgentSession::of);
+        o.setSessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id));
         assertNotNull(o.getSessionProvider());
 
         o.setHitlInterceptor(new org.noear.solon.ai.agent.react.intercept.HITLInterceptor());

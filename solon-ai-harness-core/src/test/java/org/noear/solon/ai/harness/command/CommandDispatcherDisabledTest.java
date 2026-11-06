@@ -29,7 +29,7 @@ class CommandDispatcherDisabledTest {
 
     private HarnessEngine newEngine() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
     }
 

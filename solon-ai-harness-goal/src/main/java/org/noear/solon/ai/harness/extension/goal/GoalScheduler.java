@@ -92,10 +92,32 @@ class GoalScheduler {
                 .fixedDelay(ROUND_INTERVAL_MS)
                 .initialDelay(runNow ? 0 : ROUND_INTERVAL_MS);
 
+        // 先登记再注册：runNow 时 job 可能立即触发，而触发体会校验登记
+        scheduled.add(sessionId);
+        try {
+            addJob(jobName, scheduledAnno, sessionId);
+        } catch (RuntimeException e) {
+            scheduled.remove(sessionId);
+            throw e;
+        }
+
+        LOG.info("Goal job registered: {}", jobName);
+    }
+
+    private void addJob(String jobName, ScheduledAnno scheduledAnno, String sessionId) {
         jobManager.jobAdd(jobName, scheduledAnno, ctx -> {
             try {
-                AgentSession session = goalRuntime.sessionOf(sessionId);
-                if (session == null) return;
+                if (scheduled.contains(sessionId) == false) {
+                    return; // 已注销（如会话被删），挡住注销前已在排队的那一次触发
+                }
+
+                // 只取已存在的会话：会话已被删（含宿主没走 removeSession 的情况）就注销自己，不重建会话
+                AgentSession session = goalRuntime.sessionOrNil(sessionId);
+                if (session == null) {
+                    unschedule(sessionId);
+                    LOG.info("Goal job removed, session not found: {}", jobName);
+                    return;
+                }
 
                 GoalState gs = goalRuntime.state(session);
                 if (gs == null || !gs.getStatus().isActive()) {
@@ -114,9 +136,6 @@ class GoalScheduler {
                 LOG.error("Goal job '{}' failed: {}", jobName, e.getMessage());
             }
         });
-
-        scheduled.add(sessionId);
-        LOG.info("Goal job registered: {}", jobName);
     }
 
     /** 注销会话的 goal job。 */

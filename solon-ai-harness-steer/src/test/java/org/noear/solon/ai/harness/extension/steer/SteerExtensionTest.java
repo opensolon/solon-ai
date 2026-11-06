@@ -29,7 +29,7 @@ class SteerExtensionTest {
 
     private HarnessEngine newEngine() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
     }
 
@@ -316,7 +316,7 @@ class SteerExtensionTest {
         assertNull(SteerProtocol.textOf(null));
     }
 
-    // ==================== 状态贡献（onStatus）与键登记 ====================
+    // ==================== 状态贡献（contributeSessionStatus）与键登记 ====================
 
     @Test
     void pendingCountIsContributedToEngineStatus() {

@@ -578,7 +578,7 @@ public class TaskTalent extends AbsTalent {
 
                             for (HarnessExtension extension : engine.getExtensions()) {
                                 if (extension.isEnabled()) {
-                                    extension.onRequestAssemble(engine, true, agent.name(), o);
+                                    extension.onRequestAssemble(engine, agent.name(), true, o);
                                 }
                             }
                         })
@@ -599,7 +599,7 @@ public class TaskTalent extends AbsTalent {
 
                             for (HarnessExtension extension : engine.getExtensions()) {
                                 if (extension.isEnabled()) {
-                                    extension.onRequestAssemble(engine, true, agent.name(), o);
+                                    extension.onRequestAssemble(engine, agent.name(), true, o);
                                 }
                             }
                         })

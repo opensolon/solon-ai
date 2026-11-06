@@ -20,7 +20,7 @@ class HarnessAgentMountTest {
 
     @Test
     void builtinAgentsUseHiddenClasspathMount() {
-        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString()).sessionProvider(InMemoryAgentSession::of).build();
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString()).sessionProvider((id, c) -> InMemoryAgentSession.of(id)).build();
 
         Mount builtin = engine.getMount("@harness-agents");
         assertNotNull(builtin);
@@ -44,7 +44,7 @@ class HarnessAgentMountTest {
         writeAgent(other, "other", "other");
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .mountAdd(agentMount(first))
                 .build();
         assertEquals(1, engine.getAgentsByMount("agents").size());

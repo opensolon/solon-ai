@@ -36,7 +36,7 @@ class HarnessEngineTalentAccessorTest {
         c.setApiKey("k");
 
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
                 .memoryProvider(cwd -> null)
                 .modelAdd(c)
                 .defaultModel("m")
@@ -71,7 +71,7 @@ class HarnessEngineTalentAccessorTest {
     @Test
     void memoryTalentIsNullWhenProviderAbsent() {
         HarnessEngine e = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
                 .build();
 
         // 未注入 memoryProvider 时，记忆 talent 不装配（访问器返回 null）

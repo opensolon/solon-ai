@@ -40,7 +40,7 @@ class GoalExtensionTest {
 
     private HarnessEngine.Builder engineBuilder() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(id -> sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)));
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id));
     }
 
     private GoalExtension attached(String ws) {

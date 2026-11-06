@@ -26,29 +26,38 @@ import org.noear.solon.lang.Preview;
 /**
  * Harness 扩展接口
  *
- * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断、会话状态」切成 7 个回调点，扩展只需覆写自己要用的那几个。
- * 按发生顺序排列：</p>
+ * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断、会话状态、会话删除」切成 8 个回调点，
+ * 扩展只需覆写自己要用的那几个。按发生顺序排列：</p>
  *
  * <pre>
- * build()/addExtension ──onAttach────────────&gt; [引擎就绪，可注册命令/资源]
+ * build()/addExtension ──onAttach────────────────&gt; [引擎就绪，可注册命令/资源]
  *
- * 每次构建代理     ──onAgentBuild──────&gt; [ReActAgent 实例]
+ * 每次构建代理     ──onAgentBuild──────────&gt; [ReActAgent 实例]
  *
- * 每次输入进引擎   ──onInput──────────&gt; [HITL / 续流 / 命令 / 委派解析]
+ * 每次输入进引擎   ──onInput──────────────&gt; [HITL / 续流 / 命令 / 委派解析]
  *
- * 每次请求装配     ──onRequestAssemble─&gt; [ReActRequest]
+ * 每次请求装配     ──onRequestAssemble─────&gt; [ReActRequest]
  *
- * 用户级中断       ──onInterrupt───────&gt; [先于停流：清积压等]
+ * 用户级中断       ──onSessionInterrupt────&gt; [先于停流：清积压等]
  *
- * 读取会话状态     ──onStatus──────────&gt; [贡献插件自定义的事实键]
+ * 读取会话状态     ──contributeSessionStatus&gt; [贡献插件自定义的事实键]
  *
- * remove/shutdown  ──onDetach─────────&gt; [引擎级清理]
+ * 永久删除会话     ──onSessionRemove───────&gt; [撤掉该会话的定时任务等]
+ *
+ * remove/shutdown  ──onDetach─────────────&gt; [引擎级清理]
  * </pre>
  *
- * <h3>插件化的三种协作机制（各管一类，不要混用）</h3>
+ * <h3>命名约定</h3>
+ * <ul>
+ *     <li>{@code on*}：引擎向扩展<b>发通知</b>（扩展观察或参与）。</li>
+ *     <li>{@code contribute*}：引擎向扩展<b>收集信息</b>（扩展往组装器里贡献事实，不得有副作用）。</li>
+ *     <li>{@code onSession*} / {@code contributeSession*}：会话级回调；其余为引擎级、代理级或请求级。</li>
+ * </ul>
+ *
+ * <h3>插件化协作规则（各管一类，不要混用）</h3>
  * <ol>
- *     <li><b>引擎通知或征集所有扩展 → 用本接口的钩子</b>（一对多广播，如 {@link #onInterrupt}；
- *         一对多汇集，如 {@link #onStatus}）。</li>
+ *     <li><b>引擎通知或征集所有扩展 → 用本接口的钩子</b>（一对多广播，如 {@link #onSessionInterrupt}、
+ *         {@link #onSessionRemove}；一对多汇集，如 {@link #contributeSessionStatus}）。</li>
  *     <li><b>一个扩展向引擎或另一个扩展提供服务 → 用核心定义的能力接口</b>，实现类同时实现它，
  *         消费方用 {@code engine.getExtension(能力接口.class)} 查找（如
  *         {@link org.noear.solon.ai.harness.spi.InputBacklog}）。不要把领域能力做成本接口的
@@ -65,7 +74,7 @@ import org.noear.solon.lang.Preview;
  * 核心 {@code HarnessAttrs} 只登记引擎自己的键与核心持有的槽位。</p>
  * <p>核心模块不得 import 任何插件包；插件之间也不互相 import，只经核心契约协作。</p>
  *
- * <h3>开关（{@link #isEnabled()}）语义：五个不看，两个看</h3>
+ * <h3>开关（{@link #isEnabled()}）语义：六个不看，两个看</h3>
  * <table border="1">
  *     <caption>各钩子是否受 {@link #isEnabled()} 控制</caption>
  *     <tr><th>钩子</th><th>是否判 {@code isEnabled()}</th><th>原因</th></tr>
@@ -76,9 +85,11 @@ import org.noear.solon.lang.Preview;
  *             「挂上但停用」比「不挂」更容易在运行期恢复</td></tr>
  *     <tr><td>{@link #onDetach}</td><td><b>否</b></td>
  *         <td>清理不得被开关阻止，否则停用前占用的资源永远无法释放</td></tr>
- *     <tr><td>{@link #onInterrupt}</td><td><b>否</b></td>
+ *     <tr><td>{@link #onSessionInterrupt}</td><td><b>否</b></td>
  *         <td>同属清理类：停用前积压的任务也必须随用户停止一起作废</td></tr>
- *     <tr><td>{@link #onStatus}</td><td><b>否</b></td>
+ *     <tr><td>{@link #onSessionRemove}</td><td><b>否</b></td>
+ *         <td>同属清理类：停用前为该会话建的定时任务也必须随会话一起撤掉</td></tr>
+ *     <tr><td>{@link #contributeSessionStatus}</td><td><b>否</b></td>
  *         <td>事实类：停用不代表已有的事实消失（停用前已入队的任务仍在队列里）</td></tr>
  *     <tr><td>{@link #onInput}</td><td>是</td><td>纯运行期钩子，停用即不参与本次输入</td></tr>
  *     <tr><td>{@link #onRequestAssemble}</td><td>是</td><td>纯运行期钩子，停用即不参与本次请求</td></tr>
@@ -86,7 +97,7 @@ import org.noear.solon.lang.Preview;
  *
  * <h3>实现约定</h3>
  * <ul>
- *     <li>七个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
+ *     <li>八个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
  *     <li>需要运行期开关能力时继承 {@link AbsHarnessExtension}（已实现 {@link #isEnabled()}/
  *         {@link #setEnabled(Boolean)}）；直接 {@code implements} 时 {@link AiSwitchable} 的默认实现是
  *         {@code isEnabled() = true} 且 {@code setEnabled} 空操作——即恒启用且无法关闭，
@@ -241,13 +252,13 @@ public interface HarnessExtension extends AiSwitchable {
      * 若由 {@code engine.prompt(...)} 直调发起，则<b>不经过</b> {@code onInput}（后者只挂在 {@code handle} 入口）。</p>
      *
      * @param engine        引擎
+     * @param agentName     生效代理名（顶层请求取实际目标代理，可能是子代理）
      * @param isDelegated   是否委派执行的子代理任务（{@code task}/{@code multitask}）；
      *                      {@code false} 表示顶层请求（含面板选中的子代理）
-     * @param agentName     生效代理名（顶层请求取实际目标代理，可能是子代理）
      * @param optionsAmend  本次请求的选项修正器
      * @since 4.2.0
      */
-    default void onRequestAssemble(HarnessEngine engine, boolean isDelegated, String agentName, ReActOptionsAmend optionsAmend) {
+    default void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend optionsAmend) {
 
     }
 
@@ -270,7 +281,7 @@ public interface HarnessExtension extends AiSwitchable {
      * @param session 被中断的会话（非 null）
      * @since 4.2.0
      */
-    default void onInterrupt(HarnessEngine engine, AgentSession session) {
+    default void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
 
     }
 
@@ -291,10 +302,35 @@ public interface HarnessExtension extends AiSwitchable {
      *
      * @param engine  引擎
      * @param session 会话（非 null）
-     * @param status  快照组装器（经 {@link SessionStatus.Builder#put} 贡献事实）
+     * @param builder 快照组装器（经 {@link SessionStatus.Builder#put} 贡献事实）
      * @since 4.2.0
      */
-    default void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
+    default void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
+
+    }
+
+    /**
+     * 会话被永久删除（会话级清理）
+     *
+     * <p><b>调用点</b>：只由 {@code HarnessEngine.removeSession(sessionId)} 触发，表示<b>永久删除</b>。
+     * 只是把会话移出内存、下次还会重建的场景（如回退、关闭连接）不触发。</p>
+     *
+     * <p><b>时序保证</b>：在宿主移出内存、删除存储<b>之前</b>回调——扩展先撤掉定时任务，
+     * 再由宿主删数据，避免定时任务在中间时段触发，把会话重新建出来。</p>
+     *
+     * <p><b>典型用途</b>：撤掉本扩展为该会话建的定时任务与会话外的持久化状态（loop 任务、goal 调度）。
+     * 存在会话属性里的状态随会话一起消失，不必处理。</p>
+     *
+     * <p><b>注意</b>：只传 {@code sessionId}，实现里<b>不得</b>调用 {@code engine.getSession(sessionId)}
+     * （会把会话重新建出来）；不判 {@code isEnabled()}（清理类）；实现须<b>幂等</b>
+     * （宿主可能重试，或对不存在的会话调用）且<b>不得阻塞</b>；
+     * 引擎逐个 try/catch，单个扩展的异常只记告警。</p>
+     *
+     * @param engine    引擎
+     * @param sessionId 被删除的会话标识（非空）
+     * @since 4.2.0
+     */
+    default void onSessionRemove(HarnessEngine engine, String sessionId) {
 
     }
 }

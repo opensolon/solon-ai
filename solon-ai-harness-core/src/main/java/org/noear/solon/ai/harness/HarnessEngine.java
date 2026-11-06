@@ -1428,8 +1428,49 @@ public class HarnessEngine {
     }
 
 
+    /**
+     * 获取会话（不存在则新建）
+     *
+     * <p>只想取已存在的会话、不想顺带新建时，用 {@link #getSessionOrNil(String)}。</p>
+     */
     public AgentSession getSession(String instanceId) {
-        return options.getSessionProvider().getSession(instanceId);
+        return options.getSessionProvider().getSession(instanceId, true);
+    }
+
+    /**
+     * 获取已存在的会话（不存在返回 null，且不新建）
+     *
+     * <p>给定时任务、只读查询等「会话必须已存在」的场景用：用 {@link #getSession(String)}
+     * 会把已删除的会话重新建出来。是否「存在」由会话提供者判定。</p>
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public AgentSession getSessionOrNil(String instanceId) {
+        if (instanceId == null || instanceId.isEmpty()) {
+            return null;
+        }
+        return options.getSessionProvider().getSession(instanceId, false);
+    }
+
+    /**
+     * 永久删除会话的引擎侧善后：通知全部扩展 {@link HarnessExtension#onSessionRemove}
+     * （如撤掉该会话的定时任务）。
+     *
+     * <p><b>只做通知</b>：不取会话实例、不删存储、不判忙——这三件归宿主。
+     * 宿主删除顺序固定为：判忙（忙则拒绝）→ 本方法 → 移出内存 → 删除存储。
+     * 本方法必须在删除存储之前调用，否则定时任务可能在中间时段触发，把会话重新建出来。</p>
+     *
+     * <p>只是把会话移出内存（下次还会重建）时<b>不要</b>调用本方法。</p>
+     *
+     * @param sessionId 会话标识（null 或空串直接返回）
+     * @since 4.2.0
+     */
+    public void removeSession(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return;
+        }
+        sessionControl.removeSession(sessionId);
     }
 
 
@@ -1550,7 +1591,7 @@ public class HarnessEngine {
 
                     for (HarnessExtension extension : getExtensions()) {
                         if (extension.isEnabled()) {
-                            extension.onRequestAssemble(this, false, agentName, o);
+                            extension.onRequestAssemble(this, agentName, false, o);
                         }
                     }
                 });
@@ -1624,7 +1665,7 @@ public class HarnessEngine {
      * 释放运行流句柄、补写取消消息（带 runId 元数据）与快照。
      * {@code /interrupt} 命令也走本方法，不存在第二套中断逻辑。</p>
      *
-     * <p><b>先清积压再停流</b>：{@link HarnessExtension#onInterrupt} 保证在认领/停流之前回调。
+     * <p><b>先清积压再停流</b>：{@link HarnessExtension#onSessionInterrupt} 保证在认领/停流之前回调。
      * 停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务重新推起来。</p>
      *
      * <pre>{@code
@@ -1707,7 +1748,7 @@ public class HarnessEngine {
      * 读取会话运行态快照（核心事实 + 各扩展贡献的事实，一次读全）
      *
      * <p>宿主的「能不能接新输入」判定需要同时看运行流、挂起卡、积压等多项。读一次快照即可，不要自己拼。
-     * 核心事实由 {@link SessionStatus#builder} 读定，扩展事实由 {@link HarnessExtension#onStatus} 贡献
+     * 核心事实由 {@link SessionStatus#builder} 读定，扩展事实由 {@link HarnessExtension#contributeSessionStatus} 贡献
      * （按插件自定义的 {@link SessionStatus.Key} 读取，如 {@code QueueExtension.STATUS_PENDING}）。</p>
      *
      * <p>只想问「现在能不能注入一轮程序任务」用 {@link #isIdle(AgentSession)}，不要自己拼。</p>

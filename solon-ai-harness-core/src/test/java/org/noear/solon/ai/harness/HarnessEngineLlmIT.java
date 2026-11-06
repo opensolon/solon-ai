@@ -47,7 +47,7 @@ class HarnessEngineLlmIT {
         config.setStandard(ro.getStandard());
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(InMemoryAgentSession::of)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(config)
                 .defaultModel(config.getModel())
                 .build();
