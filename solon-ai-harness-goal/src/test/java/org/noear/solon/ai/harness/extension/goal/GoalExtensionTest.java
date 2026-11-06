@@ -43,8 +43,8 @@ class GoalExtensionTest {
                 .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id));
     }
 
-    private GoalExtension attached(String ws) {
-        GoalExtension ext = GoalExtension.builder(ws).jobManager(null).build();
+    private GoalExtension attached() {
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         engineBuilder().extensionAdd(ext).build();
         return ext;
     }
@@ -57,7 +57,7 @@ class GoalExtensionTest {
 
     @Test
     void builderAssemblesFullChainAndRegistersCommand() {
-        GoalExtension ext = GoalExtension.builder("ws-test").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         HarnessEngine engine = engineBuilder().extensionAdd(ext).build();
 
         assertNotNull(ext.getGoalRuntime(), "挂接后 GoalRuntime 应已组装");
@@ -70,7 +70,7 @@ class GoalExtensionTest {
     @Test
     void listenerIsPreregisteredThroughBuilderAndReceivesSnapshots() {
         List<GoalTask> received = new ArrayList<>();
-        GoalExtension ext = GoalExtension.builder("ws-l")
+        GoalExtension ext = GoalExtension.builder()
                 .jobManager(null)
                 .listener((sid, task, removed) -> received.add(task))
                 .build();
@@ -83,12 +83,12 @@ class GoalExtensionTest {
 
     @Test
     void commandRegistrationIsIdempotentWhenHostAlreadyRegistered() {
-        GoalExtension first = attached("ws-first");
+        GoalExtension first = attached();
         GoalCommand hostCommand = new GoalCommand(first);
 
         HarnessEngine engine = engineBuilder().build();
         engine.getCommandRegistry().register(hostCommand);
-        engine.addExtension(GoalExtension.builder("ws-dup").jobManager(null).build());
+        engine.addExtension(GoalExtension.builder().jobManager(null).build());
 
         assertSame(hostCommand, engine.getCommandRegistry().find("goal"), "已注册的同名命令应保持原实例");
     }
@@ -97,7 +97,7 @@ class GoalExtensionTest {
 
     @Test
     void createReturnsSnapshotAndGetLocatesByTaskId() {
-        GoalExtension ext = attached("ws-create");
+        GoalExtension ext = attached();
         session("s1");
 
         GoalTask t = ext.create("s1", GoalSpec.of("让测试全绿").maxTokens(100).maxIterations(5));
@@ -115,7 +115,7 @@ class GoalExtensionTest {
 
     @Test
     void createRejectsSecondActiveGoal() {
-        GoalExtension ext = attached("ws-single");
+        GoalExtension ext = attached();
         ext.create("s1", GoalSpec.of("目标一"));
         assertThrows(IllegalStateException.class, () -> ext.create("s1", GoalSpec.of("目标二")), "单槽");
     }
@@ -124,7 +124,7 @@ class GoalExtensionTest {
     @Test
     void createWithDisplayObjectiveBroadcastsOnce() {
         List<String> objectives = new ArrayList<>();
-        GoalExtension ext = GoalExtension.builder("ws-display")
+        GoalExtension ext = GoalExtension.builder()
                 .jobManager(null)
                 .listener((sid, task, removed) -> objectives.add(task.getObjective()))
                 .build();
@@ -143,7 +143,7 @@ class GoalExtensionTest {
     /** 快照只读：宿主拿到的对象不能修改运行态。 */
     @Test
     void snapshotIsDetachedFromRuntime() {
-        GoalExtension ext = attached("ws-snap");
+        GoalExtension ext = attached();
         GoalTask before = ext.create("s1", GoalSpec.of("目标"));
         assertTrue(ext.pause("s1", before.getId()));
         assertEquals(GoalTask.Status.PURSUING, before.getStatus(), "旧快照不随运行态变化");
@@ -152,7 +152,7 @@ class GoalExtensionTest {
 
     @Test
     void toMapIsTheStandardView() {
-        GoalExtension ext = attached("ws-map");
+        GoalExtension ext = attached();
         GoalTask t = ext.create("s1", GoalSpec.of("目标").maxTokens(50));
         Map<String, Object> view = t.toMap();
 
@@ -172,7 +172,7 @@ class GoalExtensionTest {
 
     @Test
     void pauseResumeRemoveBySessionAndTaskId() {
-        GoalExtension ext = attached("ws-str");
+        GoalExtension ext = attached();
         GoalTask t = ext.create("s-str", GoalSpec.of("目标"));
 
         assertFalse(ext.pause("s-str", "not-a-goal-id"), "taskId 不匹配不得误伤");
@@ -196,7 +196,7 @@ class GoalExtensionTest {
 
     @Test
     void triggerOnlyForActiveGoal() {
-        GoalExtension ext = attached("ws-trig");
+        GoalExtension ext = attached();
         GoalTask t = ext.create("s1", GoalSpec.of("目标"));
         ext.pause("s1", t.getId());
         assertFalse(ext.trigger("s1", t.getId()), "非活跃态不能触发");
@@ -206,7 +206,7 @@ class GoalExtensionTest {
 
     @Test
     void updateKeepsUnsetFieldsAndDoesNotChangeStatusWhenPaused() {
-        GoalExtension ext = attached("ws-upd");
+        GoalExtension ext = attached();
         GoalTask t = ext.create("s1", GoalSpec.of("旧目标").maxTokens(100L).maxDurationMs(5000L).maxIterations(7));
         ext.pause("s1", t.getId());
 
@@ -229,7 +229,7 @@ class GoalExtensionTest {
     @Test
     void updateActiveGoalStopsThenResumes() {
         List<String> order = new ArrayList<>();
-        GoalExtension ext = GoalExtension.builder("ws-upd-active")
+        GoalExtension ext = GoalExtension.builder()
                 .jobManager(null)
                 .listener((sid, task, removed) -> order.add(task.getStatus().name()))
                 .build();
@@ -247,7 +247,7 @@ class GoalExtensionTest {
 
     @Test
     void updateTerminalGoalIsRejected() {
-        GoalExtension ext = attached("ws-upd-term");
+        GoalExtension ext = attached();
         GoalTask t = ext.create("s1", GoalSpec.of("目标"));
         AgentSession s = session("s1");
         GoalState gs = ext.getGoalRuntime().state(s);
@@ -293,7 +293,7 @@ class GoalExtensionTest {
 
     @Test
     void recoverIsNullSafeWithoutScheduler() {
-        GoalExtension ext = attached("ws-rec");
+        GoalExtension ext = attached();
 
         assertEquals(0, ext.recover(Arrays.asList("a", "b"), id -> GoalTask.Status.PURSUING));
         assertEquals(0, ext.recover(null, id -> GoalTask.Status.PURSUING));
@@ -306,7 +306,7 @@ class GoalExtensionTest {
     @Test
     void disableHidesCommandButKeepsItRegistered() {
         HarnessEngine engine = engineBuilder().build();
-        GoalExtension ext = GoalExtension.builder("ws-switch").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         engine.addExtension(ext);
 
         assertNotNull(engine.getCommandRegistry().find("goal"), "默认启用时可见");
@@ -321,7 +321,7 @@ class GoalExtensionTest {
     /** goal 状态经开放事实槽位进入 engine.status；不判开关。 */
     @Test
     void goalStatusIsContributedToEngineStatus() {
-        GoalExtension ext = GoalExtension.builder("ws-status").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         HarnessEngine engine = engineBuilder().extensionAdd(ext).build();
         AgentSession session = session("s-status");
 
@@ -343,7 +343,7 @@ class GoalExtensionTest {
     @Test
     void goalKeysAreRegisteredInGoalAttrs() {
         assertEquals("session.goal", GoalAttrs.GOAL);
-        GoalExtension ext = attached("ws-attrs");
+        GoalExtension ext = attached();
         AgentSession session = session("s-attrs");
         ext.create("s-attrs", GoalSpec.of("目标"));
 

@@ -123,7 +123,7 @@ class GoalChannelExecutorRegistrationTest {
 
     @Test
     void facadeChannelRegistrationReachesRuntime() {
-        GoalExtension ext = GoalExtension.builder("ws-channel").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
                 .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
@@ -138,7 +138,7 @@ class GoalChannelExecutorRegistrationTest {
 
     @Test
     void facadeRegistrationBeforeAttachFailsFast() {
-        GoalExtension ext = GoalExtension.builder("ws-early").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         assertThrows(IllegalStateException.class,
                 () -> ext.addExecutor("cli", id -> true, (id, p) -> null),
                 "未挂接就注册属于装配顺序错误，必须当场失败而不是静默丢失");
@@ -146,7 +146,7 @@ class GoalChannelExecutorRegistrationTest {
 
     @Test
     void jobManagerNullDisablesScheduling() {
-        GoalExtension ext = GoalExtension.builder("ws-nosched").jobManager(null).build();
+        GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
                 .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
                 .extensionAdd(ext)

@@ -6,6 +6,7 @@
   * **`HarnessEngine.removeSession(id)` + 钩子 `HarnessExtension#onSessionRemove(engine, sessionId)`（新）**：永久删除会话时通知全部扩展（不判开关、逐个隔离异常、不取会话实例）；宿主顺序固定为「判忙 → removeSession → 移出内存 → 删存储」；只移出内存（回退、关连接）不触发
   * **钩子改名/调参**：`onInterrupt` → `onSessionInterrupt`；`onStatus(engine, session, status)` → `contributeSessionStatus(engine, session, builder)`；`onRequestAssemble(engine, isDelegated, agentName, amend)` → `onRequestAssemble(engine, agentName, isDelegated, amend)`（与 `onAgentBuild` 前两位对齐）。命名约定：`on*` 发通知、`contribute*` 收集信息、带 `Session` 的为会话级
   * **插件**：loop 实现 `onSessionRemove`（删该会话任务与记录），忙判定改用 `getSessionOrNil`；goal 实现 `onSessionRemove`（注销 job），调度轮次/忙判定/缺省执行器改用 `getSessionOrNil`，会话不存在时 job 自行注销——修复「会话删除后 goal job 每 5 秒把会话重建出来且永不注销」；queue/steer 仅改名
+  * **goal / loop 去掉 workspaceId**（破坏性）：`GoalExtension.builder(String)` / `LoopExtension.builder(String)` → `builder()`；job 名前缀改为按扩展实例自动生成的进程内序号（`goal-<n>:<sessionId>`、`loop-<n>:<taskId>`），多个实例共用 JobManager 不再依赖宿主传唯一标识防撞名；删除 `GoalExtension.Builder#workspace(String)`，验证器固定在 `engine.getWorkspace()` 下执行（修复未传目录时把工作区 ID 当路径用）；`/loop` 仅在设置了存储文件时提示「persisted」
   * **验证**：harness core 584 例 33F+5E（与 stash 基线失败集逐项一致），goal 217 / queue 88 / steer 72 / loop 93 / 聚合 7 全绿；新增契约测试：`HarnessPluginContractTest` 3 例（停用扩展也收到、异常隔离、删除流程不调 provider、`getSessionOrNil` 不新建）、`LoopExtensionTest` 1 例、`GoalSessionRemoveTest` 2 例
 
 * **新增聚合包 `solon-ai-harness-all`**（4.2.0；纯新增，零破坏）:

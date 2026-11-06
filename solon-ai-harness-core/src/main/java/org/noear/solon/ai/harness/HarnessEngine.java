@@ -1185,7 +1185,7 @@ public class HarnessEngine {
      * <pre>{@code
      * engine.addExtensionIfAbsent(new SteerExtension());
      * engine.addExtensionIfAbsent(new QueueExtension());
-     * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder(id).build());
+     * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder().build());
      * }</pre>
      *
      * @param extension 待挂载的扩展（null 时返回 null）

@@ -37,9 +37,8 @@ import java.util.function.Predicate;
  * Goal（会话目标）一键装配扩展 —— goal 能力从头到尾只接触这一个类（与 {@code LoopExtension} 对称）。
  *
  * <pre>{@code
- * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder(workspaceId) // job 名：goal-<workspaceId>:<sessionId>
- *         .workspace(workspacePath)   // 验证器执行目录；缺省 = workspaceId
- *         .budget(70, 85)             // 预算提示阈值
+ * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder()
+ *         .budget(70, 85)             // 预算提示阈值（验证器在 engine.getWorkspace() 下执行）
  *         .build());                  // onAttach 内注册 /goal 命令
  * goal.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> runRound(sid, prompt));
  *
@@ -82,8 +81,6 @@ public class GoalExtension extends AbsHarnessExtension {
     /** 编辑在跑 goal 时等待旧轮次停稳的上限。 */
     static final long UPDATE_STOP_TIMEOUT_MS = 2000L;
 
-    private final String workspaceId;
-    private final String workspace;
     private final BudgetThresholds budgetThresholds;
     private final int stagnationThreshold;
     private final int maxConsecutiveErrors;
@@ -98,8 +95,6 @@ public class GoalExtension extends AbsHarnessExtension {
     private GoalCommand goalCommand;
 
     private GoalExtension(Builder b) {
-        this.workspaceId = b.workspaceId;
-        this.workspace = b.workspace != null ? b.workspace : b.workspaceId;
         this.budgetThresholds = b.budgetThresholds;
         this.stagnationThreshold = b.stagnationThreshold;
         this.maxConsecutiveErrors = b.maxConsecutiveErrors;
@@ -110,8 +105,8 @@ public class GoalExtension extends AbsHarnessExtension {
         if (jm == null && !b.jobManagerSet) {
             // 未显式关闭调度却取不到 JobManager：goal「看起来在、实际不跑」，必须让宿主看见
             LOG.warn("[Goal] No JobManager available (is solon-scheduling-simple started?); "
-                    + "goals of workspace '{}' will be stored but never advance. "
-                    + "Use builder.jobManager(null) to disable scheduling explicitly.", b.workspaceId);
+                    + "goals will be stored but never advance. "
+                    + "Use builder.jobManager(null) to disable scheduling explicitly.");
         }
         this.jobManager = jm;
     }
@@ -125,9 +120,9 @@ public class GoalExtension extends AbsHarnessExtension {
         }
     }
 
-    /** builder 入口。@param workspaceId goal job 名前缀（跨工作区防撞）；可空（仅单工作区进程安全） */
-    public static Builder builder(String workspaceId) {
-        return new Builder(workspaceId);
+    /** builder 入口（job 名前缀按实例自动生成，多个实例共用 JobManager 也不会撞名）。 */
+    public static Builder builder() {
+        return new Builder();
     }
 
     // ==================== 钩子 ====================
@@ -138,15 +133,16 @@ public class GoalExtension extends AbsHarnessExtension {
             return;
         }
         this.engine = engine;
+        // 验证器在引擎工作目录下执行（为空则不注册默认验证器）
         goalRuntime = new GoalRuntime(engine, budgetThresholds, stagnationThreshold,
-                maxConsecutiveErrors, validatorEnabled, workspace);
+                maxConsecutiveErrors, validatorEnabled, engine.getWorkspace());
         goalRuntime.setDefaultExecutor(defaultExecutor(engine));
         if (listener != null) {
             goalRuntime.addListener(listener);
         }
 
         if (jobManager != null) {
-            goalScheduler = new GoalScheduler(goalRuntime, jobManager, workspaceId);
+            goalScheduler = new GoalScheduler(goalRuntime, jobManager);
         }
 
         goalCommand = new GoalCommand(this);
@@ -409,7 +405,7 @@ public class GoalExtension extends AbsHarnessExtension {
         return recovered;
     }
 
-    /** 是否仍有 goal 在调度（工作区闲置回收判定用）。 */
+    /** 是否仍有 goal 在调度（宿主闲置回收判定用）。 */
     public boolean hasActiveGoals() {
         return goalScheduler != null && goalScheduler.hasScheduledJobs();
     }
@@ -516,10 +512,8 @@ public class GoalExtension extends AbsHarnessExtension {
 
     // ==================== Builder ====================
 
-    /** GoalExtension 构建器：workspaceId 为 job 前缀，其余全有缺省。 */
+    /** GoalExtension 构建器（全部有缺省）。 */
     public static class Builder {
-        private final String workspaceId;
-        private String workspace;
         private BudgetThresholds budgetThresholds = BudgetThresholds.defaults();
         private int stagnationThreshold = 3;
         private int maxConsecutiveErrors = 3;
@@ -528,8 +522,7 @@ public class GoalExtension extends AbsHarnessExtension {
         private boolean jobManagerSet;
         private GoalListener listener;
 
-        private Builder(String workspaceId) {
-            this.workspaceId = workspaceId;
+        private Builder() {
         }
 
         /** 预算提示阈值（警告%/紧急%），缺省 70/85。 */
@@ -553,12 +546,6 @@ public class GoalExtension extends AbsHarnessExtension {
         /** 是否启用完成前验证，缺省 true。 */
         public Builder validatorEnabled(boolean enabled) {
             this.validatorEnabled = enabled;
-            return this;
-        }
-
-        /** 验证器执行目录；缺省用 workspaceId。 */
-        public Builder workspace(String path) {
-            this.workspace = path;
             return this;
         }
 

@@ -14,7 +14,7 @@ class LoopExecutorTest {
 
     /** 无引擎、无调度、无缺省执行器：只覆盖「投递」语义。 */
     private static LoopExtension ext() {
-        return LoopExtension.builder("ws").jobManager(null).defaultExecutor(false).build();
+        return LoopExtension.builder().jobManager(null).defaultExecutor(false).build();
     }
 
     private static LoopScheduler scheduler() {
@@ -165,7 +165,7 @@ class LoopExecutorTest {
 
     @Test
     void failuresReachThresholdDisableTask() {
-        LoopScheduler scheduler = LoopExtension.builder("ws").jobManager(null).defaultExecutor(false)
+        LoopScheduler scheduler = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .maxErrors(() -> 1).build().scheduler();
         scheduler.addExecutor("cli", null, (sid, p) -> { throw new IllegalStateException("boom"); });
         LoopTask task = scheduler.schedule("cli", every5("p"));
@@ -178,7 +178,7 @@ class LoopExecutorTest {
     @Test
     void triggerWrapperWrapsEveryRound() {
         java.util.concurrent.atomic.AtomicInteger wrapped = new java.util.concurrent.atomic.AtomicInteger();
-        LoopExtension ext = LoopExtension.builder("ws").jobManager(null).defaultExecutor(false)
+        LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .triggerWrapper(r -> () -> { wrapped.incrementAndGet(); r.run(); })
                 .build()
                 .addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));

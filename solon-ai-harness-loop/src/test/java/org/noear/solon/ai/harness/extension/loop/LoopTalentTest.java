@@ -24,7 +24,7 @@ class LoopTalentTest {
     }
 
     private static LoopScheduler scheduler(int maxTasks) {
-        return LoopExtension.builder("ws").jobManager(null).defaultExecutor(false).maxTasks(maxTasks)
+        return LoopExtension.builder().jobManager(null).defaultExecutor(false).maxTasks(maxTasks)
                 .build().scheduler();
     }
 

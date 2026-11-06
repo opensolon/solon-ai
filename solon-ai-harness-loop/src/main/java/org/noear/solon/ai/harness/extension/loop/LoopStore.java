@@ -50,6 +50,11 @@ final class LoopStore {
         this.file = file == null ? null : file.toAbsolutePath().normalize();
     }
 
+    /** 是否落盘（file 非 null）。 */
+    boolean isPersistent() {
+        return file != null;
+    }
+
     /** 是否已进入只读模式（测试与诊断用）。 */
     boolean isReadOnly() {
         return readOnly;

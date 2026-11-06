@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LoopHostApiTest {
 
     private static LoopExtension ext() {
-        return LoopExtension.builder("ws").jobManager(null).defaultExecutor(false).build();
+        return LoopExtension.builder().jobManager(null).defaultExecutor(false).build();
     }
 
     // ==================== 公开面守卫 ====================

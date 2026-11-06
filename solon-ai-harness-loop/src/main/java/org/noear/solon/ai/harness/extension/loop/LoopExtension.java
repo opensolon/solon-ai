@@ -38,10 +38,10 @@ import java.util.function.UnaryOperator;
  *
  * <pre>{@code
  * // 最简：一行装配，缺省执行器经 engine.handle(...) 同步跑一轮
- * engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId).storeFile(dataDir.resolve("tasks.json")).build());
+ * engine.addExtensionIfAbsent(LoopExtension.builder().storeFile(dataDir.resolve("tasks.json")).build());
  *
  * // 完整：
- * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId) // job 名：loop-<workspaceId>:<taskId>
+ * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
  *         .storeFile(dataDir.resolve("tasks.json"))                // 缺省 null = 只在内存
  *         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id)))   // 孤儿清理；缺省恒 true
  *         .maxErrors(() -> 3)                                      // 任务级连续失败阈值；每次实时读
@@ -83,7 +83,7 @@ public class LoopExtension extends AbsHarnessExtension {
      */
     public static final SessionStatus.Key<Integer> STATUS_TASKS = SessionStatus.Key.count("loop.tasks");
 
-    /** 工作区任务总量缺省上限。 */
+    /** 本扩展实例任务总量缺省上限。 */
     public static final int DEFAULT_MAX_TASKS = 200;
     /** 任务级连续失败缺省阈值。 */
     public static final int DEFAULT_MAX_ERRORS = 3;
@@ -99,10 +99,10 @@ public class LoopExtension extends AbsHarnessExtension {
             // 未显式关闭调度却取不到 JobManager：任务「看起来在、实际不跑」，必须让宿主看见
             org.slf4j.LoggerFactory.getLogger(LoopExtension.class).warn(
                     "[Loop] No JobManager available (is solon-scheduling-simple started?); "
-                            + "loop tasks of workspace '{}' will be stored but never fire. "
-                            + "Use builder.jobManager(null) to disable scheduling explicitly.", b.workspaceId);
+                            + "loop tasks will be stored but never fire. "
+                            + "Use builder.jobManager(null) to disable scheduling explicitly.");
         }
-        this.scheduler = new LoopScheduler(new LoopStore(b.storeFile), jm, b.workspaceId,
+        this.scheduler = new LoopScheduler(new LoopStore(b.storeFile), jm,
                 b.maxTasks, b.maxErrors, b.sessionAlive, b.triggerWrapper);
         this.loopTalent = new LoopTalent(scheduler);
         this.loopCommand = new LoopCommand(scheduler);
@@ -118,9 +118,9 @@ public class LoopExtension extends AbsHarnessExtension {
         }
     }
 
-    /** builder 入口。@param workspaceId job 名前缀（跨工作区防撞）；可空（仅单工作区进程安全） */
-    public static Builder builder(String workspaceId) {
-        return new Builder(workspaceId);
+    /** builder 入口（job 名前缀按实例自动生成，多个实例共用 JobManager 也不会撞名）。 */
+    public static Builder builder() {
+        return new Builder();
     }
 
     // ==================== 钩子 ====================
@@ -183,7 +183,7 @@ public class LoopExtension extends AbsHarnessExtension {
      *
      * @return 新任务（{@code getId()} 即 taskId）
      * @throws IllegalArgumentException 规格不合法（见 {@link LoopSpec}；含 cron 无法解析或已无未来触发时刻）
-     * @throws IllegalStateException    工作区任务数已达上限
+     * @throws IllegalStateException    任务总数已达上限（{@link Builder#maxTasks}）
      */
     public LoopTask schedule(String sessionId, LoopSpec spec) {
         return scheduler.schedule(sessionId, spec);
@@ -247,7 +247,7 @@ public class LoopExtension extends AbsHarnessExtension {
     /**
      * 是否存在会自动触发的任务（启用且未取消；已暂停的不算）。
      *
-     * <p>工作区闲置回收判定用：只剩暂停任务的工作区可以回收（记录保留，下次挂接时恢复）。</p>
+     * <p>宿主闲置回收判定用：只剩暂停任务时引擎可以回收（记录保留，下次挂接时恢复）。</p>
      */
     public boolean hasActiveTasks() {
         return scheduler.hasActiveTasks();
@@ -278,7 +278,6 @@ public class LoopExtension extends AbsHarnessExtension {
     // ==================== Builder ====================
 
     public static class Builder {
-        private final String workspaceId;
         private Path storeFile;
         private Predicate<String> sessionAlive = id -> true;
         private IntSupplier maxErrors = () -> DEFAULT_MAX_ERRORS;
@@ -288,8 +287,7 @@ public class LoopExtension extends AbsHarnessExtension {
         private IJobManager jobManager;
         private boolean jobManagerSet;
 
-        private Builder(String workspaceId) {
-            this.workspaceId = workspaceId;
+        private Builder() {
         }
 
         /** 任务存储文件（tasks.json）；null = 只在内存，不落盘。 */
@@ -314,13 +312,13 @@ public class LoopExtension extends AbsHarnessExtension {
             return this;
         }
 
-        /** 工作区任务总量上限。 */
+        /** 本扩展实例任务总量上限（跨全部会话）。 */
         public Builder maxTasks(int max) {
             this.maxTasks = Math.max(1, max);
             return this;
         }
 
-        /** 触发线程包装（如按工作区打日志标）；缺省原样执行。 */
+        /** 触发线程包装（如给日志打归属标记）；缺省原样执行。 */
         public Builder triggerWrapper(UnaryOperator<Runnable> wrapper) {
             this.triggerWrapper = wrapper;
             return this;

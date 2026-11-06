@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * LoopExtension 装配与钩子契约：
- * 命令注册、加载、contributeSessionStatus 计数、onDetach 卸载 job 保留记录、job 名工作区前缀、
+ * 命令注册、加载、contributeSessionStatus 计数、onDetach 卸载 job 保留记录、job 名按实例防撞、
  * 开关只关工具、D2 任务级连续错误、D3 /loop pause|resume、/loop stop 仅在运行中才中断、
  * P1 摘除后在途一轮不得清空 tasks.json、P3 修改运行中的任务不并发也不丢新定义。
  */
@@ -55,7 +55,7 @@ class LoopExtensionTest {
     }
 
     private static LoopExtension.Builder builder(FakeJobManager jm) {
-        return LoopExtension.builder("ws/1").jobManager(jm == null ? null : jm.proxy).defaultExecutor(false);
+        return LoopExtension.builder().jobManager(jm == null ? null : jm.proxy).defaultExecutor(false);
     }
 
     // ==================== 装配 ====================
@@ -78,17 +78,32 @@ class LoopExtensionTest {
     }
 
     @Test
-    void jobNameCarriesSanitizedWorkspacePrefix() {
+    void twoInstancesNeverShareJobNames() throws Exception {
+        // 两个扩展实例共用同一个 JobManager，各自加载同 id、同会话的任务（如复制出来的 tasks.json）
+        String json = "{\"version\":2,\"tasks\":[{\"id\":\"aaaa0001\",\"prompt\":\"p\",\"intervalMinutes\":5,"
+                + "\"createdAt\":\"2026-01-01T00:00:00Z\",\"autoInterval\":false,\"enabled\":true,"
+                + "\"sessionId\":\"s1\"}]}";
+        Path storeA = workspace.resolve("a.json");
+        Path storeB = workspace.resolve("b.json");
+        Files.write(storeA, json.getBytes("UTF-8"));
+        Files.write(storeB, json.getBytes("UTF-8"));
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).build();
-        LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
+        LoopExtension a = builder(jm).storeFile(storeA).build();
+        LoopExtension b = builder(jm).storeFile(storeB).build();
+        engine(a);
+        engine(b);
 
-        String name = loop.scheduler().jobName(t);
-        assertEquals("loop-ws_1:" + t.getId(), name, "JobManager 是 JVM 单例，job 名必须带工作区前缀");
-        assertTrue(jm.jobs.contains(name));
+        LoopTask ta = a.get("s1", "aaaa0001");
+        LoopTask tb = b.get("s1", "aaaa0001");
+        String nameA = a.scheduler().jobName(ta);
+        String nameB = b.scheduler().jobName(tb);
+        assertNotEquals(nameA, nameB, "JobManager 是 JVM 单例，不同实例同 id 任务不得撞名");
+        assertTrue(nameA.startsWith("loop-") && nameA.endsWith(":aaaa0001"), nameA);
+        assertEquals(2, jm.jobs.size(), "两个 job 都必须注册上");
 
-        LoopExtension other = LoopExtension.builder("ws-2").jobManager(jm.proxy).build();
-        assertNotEquals(name, other.scheduler().jobName(t), "不同工作区同 id 不撞名");
+        a.removeAll("s1");
+        assertFalse(jm.jobs.contains(nameA));
+        assertTrue(jm.jobs.contains(nameB), "一个实例注销不得波及另一个实例的 job");
     }
 
     @Test

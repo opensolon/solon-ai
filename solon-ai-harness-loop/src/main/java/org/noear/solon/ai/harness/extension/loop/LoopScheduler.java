@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntSupplier;
 import java.util.function.Predicate;
@@ -69,6 +70,9 @@ final class LoopScheduler {
 
     private final LoopStore store;
     private final IJobManager jobManager;
+    /** 调度器实例序号（job 名前缀用，见 {@link #jobName}）。 */
+    private static final AtomicLong JOB_SEQ = new AtomicLong();
+
     private final String jobPrefix;
     private final int maxTasks;
     private final IntSupplier maxErrors;
@@ -87,29 +91,32 @@ final class LoopScheduler {
     /** 已摘除（unloadAll 置位、load 清除）。 */
     private volatile boolean detached = false;
 
-    LoopScheduler(LoopStore store, IJobManager jobManager, String workspaceId, int maxTasks,
+    LoopScheduler(LoopStore store, IJobManager jobManager, int maxTasks,
                   IntSupplier maxErrors, Predicate<String> sessionAlive, UnaryOperator<Runnable> triggerWrapper) {
         this.store = store;
         this.jobManager = jobManager;
-        this.jobPrefix = (workspaceId == null || workspaceId.isEmpty()) ? "" : sanitize(workspaceId) + ":";
+        this.jobPrefix = "loop-" + JOB_SEQ.incrementAndGet() + ":";
         this.maxTasks = maxTasks;
         this.maxErrors = maxErrors;
         this.sessionAlive = sessionAlive;
         this.triggerWrapper = triggerWrapper;
     }
 
-    /** job 名里的工作区段只保留安全字符（与 goal 同口径）。 */
-    private static String sanitize(String raw) {
-        StringBuilder sb = new StringBuilder(raw.length());
-        for (char c : raw.toCharArray()) {
-            sb.append(Character.isLetterOrDigit(c) || c == '-' || c == '_' || c == '.' ? c : '_');
-        }
-        return sb.length() == 0 ? "ws" : sb.toString();
+    /**
+     * IJobManager 注册名：{@code loop-<实例序号>:<taskId>}。
+     *
+     * <p>JobManager 是 JVM 单例，且同名 job 已存在时静默沿用旧 job（新回调被丢弃），
+     * 所以每个调度器实例取一个进程内唯一的序号做前缀，防止多个扩展实例（多引擎、重建引擎）撞名。
+     * 前缀只保证本进程内唯一：job 只在内存、不跨重启，job 名也不落盘（tasks.json 只存 taskId），
+     * 重启后序号从头计数不影响正确性。不要改成时间戳（同毫秒创建会重复）。</p>
+     */
+    String jobName(LoopTask task) {
+        return jobPrefix + task.getId();
     }
 
-    /** IJobManager 注册名：JobManager 是 JVM 单例，必须带工作区前缀防跨工作区撞名。 */
-    String jobName(LoopTask task) {
-        return "loop-" + jobPrefix + task.getId();
+    /** 是否落盘（设置了存储文件）。 */
+    boolean isPersistent() {
+        return store.isPersistent();
     }
 
     void bindEngine(HarnessEngine engine) {
@@ -130,7 +137,7 @@ final class LoopScheduler {
 
     /**
      * @throws IllegalArgumentException 规格不合法（见 {@link LoopSpec}）
-     * @throws IllegalStateException    工作区任务数已达上限
+     * @throws IllegalStateException    任务总数已达上限
      */
     LoopTask schedule(String sessionId, LoopSpec spec) {
         if (sessionId == null || sessionId.isEmpty()) {
@@ -141,7 +148,7 @@ final class LoopScheduler {
 
     /**
      * @throws IllegalArgumentException cron 无法解析，或已无未来触发时刻
-     * @throws IllegalStateException    工作区任务数已达上限
+     * @throws IllegalStateException    任务总数已达上限
      */
     LoopTask schedule(String sessionId, LoopTask task) {
         if (task.isCronMode()) {
@@ -324,7 +331,7 @@ final class LoopScheduler {
     }
 
     /**
-     * 卸载全部 job 但保留 tasks.json 记录（扩展摘除 / 工作区关闭）。
+     * 卸载全部 job 但保留 tasks.json 记录（扩展摘除 / 引擎关闭）。
      *
      * <p>先置摘除标志再清内存表：之后任何写盘（在途一轮结束、关闭时的报错、宿主的 removeAll）都跳过，
      * 否则会用空快照覆盖文件、丢掉全部任务。</p>

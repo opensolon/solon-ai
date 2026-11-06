@@ -47,7 +47,7 @@ class GoalSpecTest {
     private final java.util.Map<String, AgentSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
 
     private GoalExtension newExtension() {
-        GoalExtension ext = GoalExtension.builder("ws-spec")
+        GoalExtension ext = GoalExtension.builder()
                 .jobManager(null)   // 纯 JUnit 无 Solon 容器：显式关闭调度
                 .build();
 

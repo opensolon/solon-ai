@@ -211,7 +211,9 @@ final class LoopCommand extends AbsCommand {
         if (runNow) {
             ctx.println(ctx.color("  " + MAGENTA + "Run Now:" + RESET + " first execution immediately"));
         }
-        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " persisted in workspace tasks.json"));
+        if (tasks.isPersistent()) {
+            ctx.println(ctx.color("  " + DIM + "State:" + RESET + " persisted"));
+        }
     }
 
     private void doList(CommandContext ctx, String sessionId) {

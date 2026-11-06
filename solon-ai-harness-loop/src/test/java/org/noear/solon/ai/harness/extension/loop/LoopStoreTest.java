@@ -52,7 +52,7 @@ class LoopStoreTest {
     }
 
     private LoopExtension loaded(java.util.function.Predicate<String> alive) {
-        LoopExtension ext = LoopExtension.builder("ws").jobManager(null).defaultExecutor(false)
+        LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .storeFile(tasksFile()).sessionAlive(alive).build();
         ext.scheduler().load();
         return ext;
@@ -143,7 +143,7 @@ class LoopStoreTest {
 
     @Test
     void memoryModeNeverTouchesDisk() {
-        LoopExtension ext = LoopExtension.builder("ws").jobManager(null).build();
+        LoopExtension ext = LoopExtension.builder().jobManager(null).build();
         ext.scheduler().load();
         ext.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertFalse(Files.exists(tasksFile()));

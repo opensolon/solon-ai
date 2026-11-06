@@ -54,7 +54,7 @@
 </dependency>
 ```
 
-> 聚合包**只聚合依赖、不含代码，也不自动装配**：插件上了类路径不会自己生效，仍需宿主按 §5 显式 `addExtensionIfAbsent`（goal / loop 依赖 workspaceId、执行器、存储文件等宿主参数，无法零参自动挂载）。只写插件或只需核心契约的模块，请依赖 `solon-ai-harness`，不要依赖聚合包。
+> 聚合包**只聚合依赖、不含代码，也不自动装配**：插件上了类路径不会自己生效，仍需宿主按 §5 显式 `addExtensionIfAbsent`（goal / loop 依赖执行器、存储文件等宿主参数，无法零参自动挂载）。只写插件或只需核心契约的模块，请依赖 `solon-ai-harness`，不要依赖聚合包。
 
 ### 1.2 构建引擎
 
@@ -836,11 +836,11 @@ HarnessEngine.of("/data/work", ".solon/")
 
 | 命令 | 维护的状态 | 宿主必须额外装配 | 缺了会怎样 |
 |---|---|---|---|
-| `/goal` | 会话级目标（每会话一个） | `GoalExtension.builder(workspaceId)` + `addExtension` | 命令能创建目标，但永远不跑第二轮 |
+| `/goal` | 会话级目标（每会话一个） | `GoalExtension.builder()` + `addExtension` | 命令能创建目标，但永远不跑第二轮 |
 | `/queue` | 会话级排队队列 | `QueueExtension` + `addExtension`，任务终态调 `queue.drainLoop(...)` / `claimNext(...)` | 命令能入队，但队列永远不动 |
 | `/steer` | 当前任务的插话邮箱 | `SteerExtension` + `addExtension`（拦截器由扩展挂载） | 命令能入队，但永不注入 |
 | `/interrupt` | 无状态（只停） | 无（现成的 `engine.interrupt(session)` 即可） | 不装命令就只能由宿主自带停止按钮 |
-| `/loop` | 会话定时任务（间隔 / cron，可多条） | `LoopExtension.builder(workspaceId)` + `addExtensionIfAbsent`，宿主按通道注册执行器 | 任务能建、到点跳过（无认领只记日志，绝不记成成功） |
+| `/loop` | 会话定时任务（间隔 / cron，可多条） | `LoopExtension.builder()` + `addExtensionIfAbsent`，宿主按通道注册执行器 | 任务能建、到点跳过（无认领只记日志，绝不记成成功） |
 
 **三个能力，三个类**：每个命令从装配到运行期操作宿主都只接触一个 Extension 实例（宿主侧与 harness 的交互面收敛到一个类），宿主不接触 goal 运行态、调度器、命令类，也不接触 queue 的存储实现。命令本身的语法与回执未变，终端用户无感知。
 
@@ -873,10 +873,10 @@ GoalTask.Status goal = st.get(GoalExtension.STATUS_GOAL);  // 无 goal 为 null
 
 ```java
 GoalExtension goal = engine.addExtensionIfAbsent(
-        GoalExtension.builder(workspaceId).build()); // /goal（执行器挂接后 addExecutor）
+        GoalExtension.builder().build()); // /goal（执行器挂接后 addExecutor）
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension()); // /queue
 SteerExtension steer = engine.addExtensionIfAbsent(new SteerExtension()); // /steer
-LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder(workspaceId)  // /loop
+LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()  // /loop
         .storeFile(dataDir.resolve("tasks.json"))        // 缺省 null = 只在内存
         .sessionAlive(id -> sessionExists(id))           // 加载时孤儿清理；缺省恒 true
         .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
@@ -995,10 +995,9 @@ Goal 是「给它一个目标，它一轮轮自己跑，直到达成 / 预算耗
 GoalExtension 已把运行态、调度器、命令、Talent 全部收进一次装配；执行器在挂接后按通道注册：
 
 ```java
-GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder(workspaceId) // job 名工作区前缀（跨工作区防撞）
+GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder() // job 名前缀按实例自动生成
         .budget(70, 85)                                        // 可选，缺省 70/85
-        .stagnation(3).maxErrors(3).validatorEnabled(true)      // 可选，均为缺省值
-        .workspace(workspacePath)                              // 可选，验证器执行目录；缺省 = workspaceId
+        .stagnation(3).maxErrors(3).validatorEnabled(true)      // 可选，均为缺省值；验证器在 engine.getWorkspace() 下执行
         .build());                                             // onAttach：运行态 → 调度 → /goal 命令 → Talent
 
 goal.addExecutor("cli",     SessionIdOwnership::isCli,     cliRunner);
@@ -2258,7 +2257,7 @@ org.noear.solon.ai.harness
 11. **goal 执行器在挂接后注册**——`engine.addExtension(goal)` 之后再 `goal.addExecutor(channel, claim, executor)`；挂接前调用直接抛异常。没有宿主执行器时走内置缺省（同步 `engine.handle(...).call()`）。
 12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `queue.drainLoop(...)` / `claimNext(...)`（`QueueExtension` 实例上）；并且不要自己 `poll`，claim / ack / requeue 全在 harness 内，重复实现会丢任务。
 13. **`/steer` 不挂拦截器就永不生效**——报 `STEERED` 只代表已入邮箱。`SteerExtension` 已代劳默认挂载，**无需请求级挂载**：投递路由已改由 session 承载（宿主在轮次边界把工作区写进 `session.attrs()`），默认实例即能定位正确工作区；实现方不写路由也不丢数据（dropped 仍排入 session 队列，只是不广播）。
-14. **`GoalScheduler` 的 job 名必须带工作区前缀**——`JobManager` 是 JVM 单例而会话 ID 不全局唯一，不加前缀会让多工作区的同名会话互相覆盖（`builder(workspaceId)` 已内置）。
+14. **goal / loop 的 job 名带实例序号前缀**——`JobManager` 是 JVM 单例，同名 job 已存在时会静默沿用旧 job；插件按扩展实例自动生成进程内唯一的前缀（`goal-<序号>:<sessionId>`、`loop-<序号>:<taskId>`），宿主无需传任何标识。job 不跨重启、名字不落盘，序号重启后从头计数不影响正确性。
 15. **不要给零旋钮的能力套 builder**——goal 有 8 个可配点才用 builder；queue 零旋钮（**只有无参构造**）不需要。steer 的投递端口本身单一（`steer` / `steerOnRun` / `cancelOnRun` / `cancelPending`），但容量上限（boxSize / textLength / idLength）是真实旋钮，故提供 `builder()`；零旋钮缺省时 `new SteerExtension()` 与 `builder().build()` 等价。判据是「有没有可配点」，不是「都套 builder」也不是「都不套」——伪一致性只会增加仪式感。
 16. **`resume` 会立即跑一轮，重启恢复用 `recover`**——`recover(sessionIds, statusReader)` 只挂 job、不立即跑。
 17. **改 goal 配置走 `update(sid, taskId, patch, stopper)`**——停流时序由门面完成，`stopper` 只负责「怎么停」（渠道侧终态帧、清积压）；停不稳抛 `IllegalStateException`。
