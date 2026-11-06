@@ -1,8 +1,8 @@
-package features.ai.talents.cli;
+package features.ai.talents.todo;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.talents.cli.TodoTalent;
+import org.noear.solon.ai.talents.todo.TodoTalent;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.InMemoryMountSource;
 
@@ -31,7 +31,6 @@ public class TodoTalentStorageTest {
         assertTrue(saved.contains("pending: 1"), saved);
         assertEquals("- [x] a\n- [ ] b\n", source.readStringOrNull("sessions/s1/TODO.md"));
         assertEquals("- [x] a\n- [ ] b\n", todo.readTodo("/other/cwd", "s1"), "数据源模式下清单属于会话，与 cwd 无关");
-        assertNull(todo.getTodoPath(null, "s1"), "非本地来源没有本地路径");
     }
 
     @Test
@@ -40,7 +39,7 @@ public class TodoTalentStorageTest {
         todo.writeTodo(null, "web-1", "- [ ] x");
         Path file = tempDir.resolve("sessions/web-1/TODO.md");
         assertEquals("- [ ] x\n", new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-        assertEquals(file, todo.getTodoPath(null, "web-1"));
+        assertEquals("- [ ] x\n", todo.readTodo(null, "web-1"));
     }
 
     @Test

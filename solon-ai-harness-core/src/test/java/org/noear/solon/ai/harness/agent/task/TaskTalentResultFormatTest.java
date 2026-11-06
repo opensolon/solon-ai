@@ -19,6 +19,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -26,6 +29,9 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -214,6 +220,28 @@ public class TaskTalentResultFormatTest {
         // cwd 就是工作区根时仍走工作区来源
         talent.formatTaskResp(op(), "spill-root", true, repeat('z', 30000), false, workspace.toString());
         assertTrue(Files.isRegularFile(workspace.resolve(".files/task/spill-root/result.txt")));
+    }
+
+    /**
+     * 工作区来源不可本地访问（远程）时必须回落到本地 cwd：模型的文件工具只读本地文件，
+     * 写到远端会读写分裂。
+     */
+    @Test
+    public void spillSourceFallsBackToLocalWhenWorkspaceSourceIsRemote(@TempDir Path workspace) throws Exception {
+        MountSource remote = new InMemoryMountSource();
+
+        MountSource byWorkspace = TaskTalent.spillSourceOf(remote, workspace.toString(), null);
+        MountSource byCwd = TaskTalent.spillSourceOf(remote, workspace.toString(), workspace.toString());
+        assertNotSame(remote, byWorkspace, "远程工作区来源不得用于落盘");
+        assertNotSame(remote, byCwd, "远程工作区来源不得用于落盘");
+
+        byCwd.writeString(".files/task/t/result.txt", "abc");
+        assertTrue(Files.isRegularFile(workspace.resolve(".files/task/t/result.txt")), "必须落在本地本轮根");
+
+        // 既无 cwd 也无工作区根：远程来源不可用 → null（降级为纯截断）；本地来源仍可用
+        assertNull(TaskTalent.spillSourceOf(remote, null, null));
+        MountSource local = FileMountSource.of(workspace);
+        assertSame(local, TaskTalent.spillSourceOf(local, null, null));
     }
 
     /** 短结果不落盘：不能为普通任务制造文件系统副作用 */

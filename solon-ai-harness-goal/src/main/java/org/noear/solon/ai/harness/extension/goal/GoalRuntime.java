@@ -16,7 +16,7 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.talents.cli.TodoTalent;
+import org.noear.solon.ai.talents.todo.TodoTalent;
 import org.noear.solon.ai.harness.extension.goal.validate.BuildPassValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;

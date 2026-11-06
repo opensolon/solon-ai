@@ -257,8 +257,8 @@ public class SkillTalent extends AbsTalent {
     }
 
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
-    public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name, String __cwd) throws IOException {
-        // 从内存 Map 查找逻辑路径
+    public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name) throws IOException {
+        // 从技能目录按逻辑标识查找（与会话工作目录无关，故不接收 __cwd）
         SkillContent content = skillCatalog.readContent(name);
 
         if (content != null) {

@@ -773,9 +773,9 @@ public class TaskTalent extends AbsTalent {
      * 超长结果落盘。返回相对本轮工作目录的展示路径（如 {@code .files/task/<taskId>/result.txt}），
      * 不可用时返回 null（降级为纯截断）。
      *
-     * <p>结果要给模型用文件工具分页读取，而文件工具按 {@code __cwd} 解析相对路径，所以必须落在本轮工作目录：
-     * cwd 为空或等于工作区根时经<b>工作区来源</b>写入（可以是远程来源）；cwd 是别的目录时写入该本地目录
-     * （曾固定写工作区根，会话目录不同时模型按给出的路径读不到）。不写 harnessHome / 状态来源——模型不可见。
+     * <p>结果要给模型用文件工具分页读取，而文件工具按 {@code __cwd} 解析相对路径且<b>始终读本地文件</b>，
+     * 所以必须落在本轮工作目录的本地副本上（规则见 {@link #spillSourceOf(MountSource, String, String)}）。
+     * 不写 harnessHome / 状态来源——模型不可见。
      * {@code .files} 是与宿主共享的约定根（宿主附件在 {@code .files/uploads}）。</p>
      */
     private String trySpill(MultiTaskOp op, String taskId, String text, String cwd) {
@@ -784,8 +784,13 @@ public class TaskTalent extends AbsTalent {
                 return null;
             }
 
+            MountSource source = spillSourceOf(engine.getWorkspaceSource(), engine.getWorkspace(), cwd);
+            if (source == null) {
+                return null;
+            }
+
             String path = SPILL_DIR + "/" + safeSegment(taskId) + "/result.txt";
-            spillSourceOf(cwd).writeString(path, text);
+            source.writeString(path, text);
             return path;
         } catch (Throwable e) {
             LOG.warn("子任务结果落盘失败，降级为纯截断: task_id={}, 原因: {}", taskId, e.getMessage());
@@ -793,17 +798,29 @@ public class TaskTalent extends AbsTalent {
         }
     }
 
-    /** 落盘来源：cwd 为空或就是工作区根 → 工作区来源；否则 → 以 cwd 为根的本地来源。 */
-    private MountSource spillSourceOf(String cwd) {
-        if (Assert.isEmpty(cwd)) {
-            return engine.getWorkspaceSource();
+    /**
+     * 落盘来源。本轮根 = cwd（缺省取工作区根）：
+     * <ul>
+     *   <li>工作区来源可本地访问且其本地根就是本轮根 → 用工作区来源；</li>
+     *   <li>否则 → 以本轮根为根的本地来源。工作区来源是远程时也一样——写到远端的话，
+     *       模型用本地文件工具按给出的路径读不到（读写分裂，见 {@code MountManager(String, MountSource)} 的说明）；</li>
+     *   <li>既没有 cwd 也没有工作区根：只有本地工作区来源可用，否则返回 null（降级为纯截断）。</li>
+     * </ul>
+     */
+    static MountSource spillSourceOf(MountSource workspaceSource, String workspace, String cwd) {
+        String root = Assert.isNotEmpty(cwd) ? cwd : workspace;
+        Path localRoot = (workspaceSource == null) ? null
+                : workspaceSource.getLocalRoot().map(p -> p.toAbsolutePath().normalize()).orElse(null);
+
+        if (Assert.isEmpty(root)) {
+            return localRoot == null ? null : workspaceSource;
         }
-        Path cwdPath = Paths.get(cwd).toAbsolutePath().normalize();
-        String workspace = engine.getWorkspace();
-        if (Assert.isNotEmpty(workspace) && cwdPath.equals(Paths.get(workspace).toAbsolutePath().normalize())) {
-            return engine.getWorkspaceSource();
+
+        Path rootPath = Paths.get(root).toAbsolutePath().normalize();
+        if (rootPath.equals(localRoot)) {
+            return workspaceSource;
         }
-        return FileMountSource.of(cwdPath);
+        return FileMountSource.of(rootPath);
     }
 
     /** taskId 可能含路径分隔符或上跳（..）：只保留文件名安全字符，避免路径穿越 */

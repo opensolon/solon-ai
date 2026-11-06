@@ -2231,8 +2231,9 @@ org.noear.solon.ai.harness
 | 依赖 | 提供 |
 |---|---|
 | `solon-ai-agent` | `ReActAgent` / `ChatModel` / 压缩与 HITL 拦截器 |
-| `solon-ai-talent-cli` | `TerminalTalent`（沙箱文件与命令）、`SkillTalent`、`TodoTalent`、`ClockTalent`、`MountManager` |
+| `solon-ai-talent-cli` | `TerminalTalent`（沙箱文件与命令）、`SkillTalent`、`ClockTalent`、`MountManager` |
 | `solon-ai-talent-code` | `CodeTalent`（技术栈识别 / CODE.md） |
+| `solon-ai-talent-todo` | `TodoTalent`（会话级任务清单，经状态来源存储；旧坐标 `talents.cli.TodoTalent` 为废弃过渡类） |
 | `solon-ai-talent-web` | `WebsearchTalent` / `WebfetchTalent` / `CodeSearchTalent` |
 | `solon-ai-talent-lsp` | `LspManager` / `LspTalent` |
 | `solon-ai-talent-memory` | `MemoryTalent` / `MemorySolutionProvider` |

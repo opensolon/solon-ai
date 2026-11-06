@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.talents.cli;
+package org.noear.solon.ai.talents.todo;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -25,7 +25,6 @@ import org.noear.solon.annotation.Param;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 
 /**
@@ -38,6 +37,9 @@ import java.util.regex.Pattern;
  *   <li>兼容模式（无参 / {@link #TodoTalent(String)}）：以会话 cwd（或 cwd 下的 relativeDir）为根的本地目录。</li>
  * </ul>
  * <p>sessionId 只能是单个路径段（不含分隔符、不是 {@code .}/{@code ..}），否则拒绝，防止目录穿越。</p>
+ *
+ * <p>自 4.2.0 起从 solon-ai-talent-cli 独立为 solon-ai-talent-todo（只依赖 core 与 mount）；
+ * 旧类 {@code org.noear.solon.ai.talents.cli.TodoTalent} 保留为废弃过渡子类。</p>
  *
  * @author noear
  * @since 3.9.5
@@ -53,18 +55,6 @@ public class TodoTalent extends AbsTalent {
     private final String relativeDir;
     private final MountSource stateSource;
     private final String sessionsDir;
-
-    private BiFunction<String, String, Path> workPathHook;
-
-    /**
-     * 设置本地工作目录钩子（cwd, sessionId → 目录）。
-     *
-     * @deprecated 4.2.0 改用 {@link #TodoTalent(MountSource, String)}（经挂载来源读写，可接 db / http）
-     */
-    @Deprecated
-    public void setWorkPathHook(BiFunction<String, String, Path> workPathHook) {
-        this.workPathHook = workPathHook;
-    }
 
     public TodoTalent() {
         this((String) null);
@@ -122,9 +112,6 @@ public class TodoTalent extends AbsTalent {
 
     private Location locate(String cwd, String sessionId) {
         requireSafeSessionId(sessionId);
-        if (workPathHook != null) {
-            return new Location(FileMountSource.of(workPathHook.apply(cwd, sessionId)), TODO_FILE_NAME);
-        }
         if (stateSource != null) {
             return new Location(stateSource, sessionsDir + sessionId + "/" + TODO_FILE_NAME);
         }
@@ -133,7 +120,7 @@ public class TodoTalent extends AbsTalent {
     }
 
     /** sessionId 必须是单个路径段：拼进存储路径前拒绝分隔符、上跳与控制字符。 */
-    static void requireSafeSessionId(String sessionId) {
+    protected static void requireSafeSessionId(String sessionId) {
         if (sessionId == null || sessionId.isEmpty() || sessionId.length() > 128
                 || ".".equals(sessionId) || "..".equals(sessionId)) {
             throw new IllegalArgumentException("Invalid sessionId: " + sessionId);
@@ -154,17 +141,6 @@ public class TodoTalent extends AbsTalent {
         int slash = loc.path.lastIndexOf('/');
         String dir = slash < 0 ? "" : loc.path.substring(0, slash);
         return loc.source.getLocalPath(dir).orElse(null);
-    }
-
-    /**
-     * 获取 TODO.md 本地文件路径；数据源不是本地来源时返回 null。
-     *
-     * @deprecated 4.2.0 改用 {@link #readTodo(String, String)}（与存储介质无关）
-     */
-    @Deprecated
-    public Path getTodoPath(String cwd, String sessionId) {
-        Location loc = locate(cwd, sessionId);
-        return loc.source.getLocalPath(loc.path).orElse(null);
     }
 
     /**
@@ -192,7 +168,8 @@ public class TodoTalent extends AbsTalent {
         loc.source.writeString(loc.path, normalizeContent(markdown));
     }
 
-    private static String normalizeContent(String markdown) {
+    /** 写入前的内容规整：去首尾空白、非空时补末尾换行。 */
+    protected static String normalizeContent(String markdown) {
         String content = markdown == null ? "" : markdown.trim();
         if (!content.isEmpty() && !content.endsWith("\n")) {
             content = content + "\n";

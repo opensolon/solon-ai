@@ -59,6 +59,7 @@ import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.code.CodeTalent;
+import org.noear.solon.ai.talents.todo.TodoTalent;
 import org.noear.solon.ai.talents.lsp.LspManager;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.lsp.LspTalent;

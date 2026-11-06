@@ -68,6 +68,9 @@ public class TerminalTalent extends AbsTalent {
     public static final String PARAM_CONTENT = "content";
     public static final String PARAM_EDITS = "edits";
 
+    /** 本轮会话工作目录（由宿主经工具上下文注入，并同步到 prompt 属性） */
+    private static final String ATTR_CWD = "__cwd";
+
 
     private final ShellCommandFactory shellCommandFactory;
     private final ShellMode shellMode;
@@ -636,7 +639,7 @@ public class TerminalTalent extends AbsTalent {
                         && m.getSource().capabilities().isMaterializable());
 
         sb.append("- **路径规则**: \n");
-        sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint()).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
+        sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint(prompt)).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
 
         if (hasMount) {
             sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
@@ -1761,9 +1764,14 @@ public class TerminalTalent extends AbsTalent {
     /**
      * 工作区目录名提示（仅末级目录名，不暴露完整路径）。
      * 供指令中的定位锚点使用；取不到（未设置/根目录/空名）时返回空串，指令退回无名称形态。
+     *
+     * <p>口径必须与 {@link #getWorkPath(String)} 一致：优先取本轮会话工作目录（prompt 属性 {@code __cwd}），
+     * 缺省回落到 MountManager 的工作区根。否则会话 cwd 不在工作区时（如 goal 把会话目录切到目标项目），
+     * 引导词宣称的「解析根」与文件工具/bash 实际使用的根不一致。
      */
-    private String workspaceNameHint() {
-        String workDir = mountManager.getWorkDir();
+    String workspaceNameHint(Prompt prompt) {
+        String cwd = (prompt == null) ? null : prompt.attrAs(ATTR_CWD);
+        String workDir = Assert.isNotEmpty(cwd) ? cwd : mountManager.getWorkDir();
         if (workDir == null || workDir.isEmpty()) {
             return "";
         }

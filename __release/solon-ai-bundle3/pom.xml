@@ -31,6 +31,7 @@
         <module>../../solon-ai-talents/solon-ai-talent-social</module>
         <module>../../solon-ai-talents/solon-ai-talent-sys</module>
         <module>../../solon-ai-talents/solon-ai-talent-text2sql</module>
+        <module>../../solon-ai-talents/solon-ai-talent-todo</module>
         <module>../../solon-ai-talents/solon-ai-talent-gateway</module>
         <module>../../solon-ai-talents/solon-ai-talent-web</module>
         <module>../../solon-ai-talents/solon-ai-talent-lucene</module>
