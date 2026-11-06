@@ -758,7 +758,7 @@ public class TaskTalent extends AbsTalent {
         String spillRef = trySpill(op, taskId, text, cwd);
         if (spillRef != null) {
             body = head + "\n...[内容过长已截断：原始长度 " + text.length() + " 字符，此处保留前 " + cut
-                    + " 字符；完整结果已落盘到 " + spillRef + "，可按需读取文件]";
+                    + " 字符；完整结果已落盘到 " + spillRef + "，可按需分页读取该文件，不要重新委派该任务]";
             LOG.info("子任务结果超限已落盘: task_id={}, agent={}, 原始长度 {} 字符",
                     taskId, op.agent_name, text.length());
         } else {
