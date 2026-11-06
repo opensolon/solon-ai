@@ -126,10 +126,16 @@ public class TerminalTalent extends AbsTalent {
     private Consumer<Path> fileWarmupHook;
 
     /**
-     * 虚拟来源的物化执行缓存；默认位于用户级 ~/.soloncode/cache/mount，
+     * 虚拟来源的物化执行缓存；默认位于用户级 ~/&lt;harnessHome&gt;cache/mount，
      * 测试或特殊部署可通过包内构造器注入其它缓存根。
      */
     private final MountMaterializer materializer;
+
+    /**
+     * 宿主配置目录（规范化后以 / 结尾，如 {@code .solon/}）。受保护的 commands / agents 子目录、
+     * 物化缓存目录与搜索忽略目录都由它推导；经 harness 引擎构建时等于引擎的 harnessHome。
+     */
+    private final String harnessHome;
 
     private final Set<String> ignoreDirs = new HashSet<>(Arrays.asList(
             ".soloncode", ".claude", ".opencode",
@@ -147,6 +153,13 @@ public class TerminalTalent extends AbsTalent {
      */
     public Set<String> getIgnoreDirs() {
         return ignoreDirs;
+    }
+
+    /**
+     * 宿主配置目录（规范化后以 / 结尾）
+     */
+    public String getHarnessHome() {
+        return harnessHome;
     }
 
     public boolean isSandboxEnabled() {
@@ -377,6 +390,20 @@ public class TerminalTalent extends AbsTalent {
             denyWrite.add(cacheRoot);
         }
 
+        // 2.1) 宿主配置目录下的命令与子代理定义：与文件工具层 mandatory deny 同口径，禁止 bash 改写
+        //      （否则文件工具拦住了，模型仍可用 echo > 绕过）。工作区根与本轮工作根各登记一份。
+        for (String root : new String[]{workDir, workPath == null ? null : workPath.toString()}) {
+            if (root != null) {
+                Path base = Paths.get(root).toAbsolutePath().normalize();
+                for (String sub : new String[]{"commands", "agents"}) {
+                    String p = base.resolve(harnessHome + sub).normalize().toString();
+                    if (!denyWrite.contains(p)) {
+                        denyWrite.add(p);
+                    }
+                }
+            }
+        }
+
         // 3) 所有挂载点：凡是 shell 可达的来源（声明了 shellAccessible 且有本地根路径，不限于 FileMountSource），
         //    按可写性加入对应列表（无需 /** 后缀，startsWith 匹配覆盖子路径）。纯虚拟来源（Classpath / JDBC 等）
         //    或未开放 shell 的来源不参与 OS 沙盒白名单——文件工具走 MountSource.openRead，本就不依赖 OS 白名单。
@@ -467,9 +494,22 @@ public class TerminalTalent extends AbsTalent {
         return violationStore;
     }
 
+    /**
+     * 按缺省宿主配置目录（{@code .soloncode/}）构建；经 harness 引擎使用时由引擎传入实际的 harnessHome。
+     */
     public TerminalTalent(MountManager mountManager) {
+        this(mountManager, (String) null);
+    }
+
+    /**
+     * @param harnessHome 宿主配置目录（相对工作区，如 {@code .solon/}）；空白时按 {@code .soloncode/}。
+     *                    {@code <harnessHome>commands}、{@code <harnessHome>agents} 禁止模型改写，
+     *                    物化缓存位于 {@code ~/<harnessHome>cache/mount}
+     */
+    public TerminalTalent(MountManager mountManager, String harnessHome) {
         this(mountManager, ShellCommandFactory.detect(),
-                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir()));
+                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir(), harnessHome),
+                harnessHome);
     }
 
     /**
@@ -478,24 +518,33 @@ public class TerminalTalent extends AbsTalent {
      */
     TerminalTalent(MountManager mountManager, ShellCommandFactory shellCommandFactory) {
         this(mountManager, shellCommandFactory,
-                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir()));
+                TerminalSupport.defaultMaterializeCacheRoot(mountManager.getWorkDir(), null));
     }
 
     /** 测试/特殊部署用：显式指定用户级物化缓存根，避免测试污染真实用户目录。 */
     TerminalTalent(MountManager mountManager, ShellCommandFactory shellCommandFactory, Path cacheRoot) {
+        this(mountManager, shellCommandFactory, cacheRoot, null);
+    }
+
+    TerminalTalent(MountManager mountManager, ShellCommandFactory shellCommandFactory, Path cacheRoot, String harnessHome) {
         if (shellCommandFactory == null) {
             throw new IllegalArgumentException("shellCommandFactory is required");
         }
         this.mountManager = mountManager;
+        this.harnessHome = TerminalSupport.normalizeHarnessHome(harnessHome);
+        String hhTop = TerminalSupport.harnessHomeTopDir(this.harnessHome);
+        if (hhTop != null) {
+            ignoreDirs.add(hhTop);
+        }
 
         this.shellCommandFactory = shellCommandFactory;
         this.shellMode = shellCommandFactory.getShellMode();
         this.bashSessionManager = new TerminalSessionManager(shellCommandFactory);
 
-        this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode);
+        this.support = new TerminalSupport(mountManager, ignoreDirs, shellMode, this.harnessHome);
         this.support.setMaxCharacterLimit(this.maxCharacterLimit);
 
-        // 虚拟来源（classpath 等）的物化执行缓存默认放在用户级 ~/.soloncode/cache/mount，
+        // 虚拟来源（classpath 等）的物化执行缓存默认放在用户级 ~/<harnessHome>cache/mount，
         // 按 alias/fingerprint 复用，不随工作区和 Talent 生命周期删除。
         if (cacheRoot != null) {
             this.materializer = new MountMaterializer(cacheRoot);

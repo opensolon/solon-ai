@@ -637,7 +637,7 @@ final class LoopScheduler {
      * 会话是否应跳过本轮（口径为引擎的 {@code isIdle}：占用或有积压即不空闲）。
      *
      * <p>与 goal 的差异（故意的）：取不到会话时不跳过——宿主的专用会话可能尚未实例化。
-     * 判定本身不新建会话（{@code getSessionOrNil}），是否新建由执行器决定。</p>
+     * 判定本身不新建会话（{@code getSessionOrNull}），是否新建由执行器决定。</p>
      */
     private boolean shouldSkipSession(String sessionId) {
         HarnessEngine e = engine;
@@ -645,7 +645,7 @@ final class LoopScheduler {
             return false;
         }
         try {
-            AgentSession session = e.getSessionOrNil(sessionId);
+            AgentSession session = e.getSessionOrNull(sessionId);
             if (session == null) {
                 return false;
             }

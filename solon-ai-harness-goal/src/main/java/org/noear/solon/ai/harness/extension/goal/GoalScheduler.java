@@ -105,7 +105,7 @@ class GoalScheduler {
                 }
 
                 // 只取已存在的会话：会话已被删（含宿主没走 removeSession 的情况）就注销自己，不重建会话
-                AgentSession session = goalRuntime.sessionOrNil(sessionId);
+                AgentSession session = goalRuntime.sessionOrNull(sessionId);
                 if (session == null) {
                     unschedule(sessionId);
                     LOG.info("Goal job removed, session not found: {}", jobName);

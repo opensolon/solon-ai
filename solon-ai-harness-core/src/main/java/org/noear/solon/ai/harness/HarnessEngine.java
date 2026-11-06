@@ -1406,7 +1406,8 @@ public class HarnessEngine {
             }
         }
 
-        terminalTalent = new TerminalTalent(options.getMountManager());
+        //受保护的 <hh>commands|agents 与物化缓存 ~/<hh>cache/mount 都跟随引擎配置的 harnessHome
+        terminalTalent = new TerminalTalent(options.getMountManager(), options.getHarnessHome());
         skillTalent = new SkillTalent(this.skillCatalog);
 
         agentManager = new AgentManager(this.agentCatalog);
@@ -1441,7 +1442,7 @@ public class HarnessEngine {
     /**
      * 获取会话（不存在则新建）
      *
-     * <p>只想取已存在的会话、不想顺带新建时，用 {@link #getSessionOrNil(String)}。</p>
+     * <p>只想取已存在的会话、不想顺带新建时，用 {@link #getSessionOrNull(String)}。</p>
      */
     public AgentSession getSession(String instanceId) {
         return options.getSessionProvider().getSession(instanceId, true);
@@ -1456,7 +1457,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     @Nullable
-    public AgentSession getSessionOrNil(String instanceId) {
+    public AgentSession getSessionOrNull(String instanceId) {
         if (instanceId == null || instanceId.isEmpty()) {
             return null;
         }

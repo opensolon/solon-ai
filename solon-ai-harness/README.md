@@ -2065,7 +2065,7 @@ engine.addExtension(new HarnessExtension() {
 | `contributeSessionStatus` | `status()`（`admit` 也经此） | **否**（事实类） |
 | `onSessionRemove` | `removeSession()`（永久删除；只移出内存不触发） | **否**（清理类） |
 
-**删除会话的固定顺序**（宿主）：判忙（忙则拒绝）→ `engine.removeSession(id)` → 移出内存 → 删除存储。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来。只想取「已存在」的会话（定时任务、只读查询）用 `engine.getSessionOrNil(id)`，它不会新建。
+**删除会话的固定顺序**（宿主）：判忙（忙则拒绝）→ `engine.removeSession(id)` → 移出内存 → 删除存储。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来。只想取「已存在」的会话（定时任务、只读查询）用 `engine.getSessionOrNull(id)`，它不会新建。
 
 **会话提供者**（`AgentSessionProvider#getSession(id, createIfAbsent)`）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。生产实现应缓存实例：
 

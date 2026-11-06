@@ -1,5 +1,8 @@
 ### vNEXT
 
+* **TerminalTalent 受保护目录跟随 harnessHome**（新增面为主）：新增 `TerminalTalent(MountManager, String harnessHome)`，harness 引擎传入自身 harnessHome；文件工具强制拒绝 `<hh>commands|agents|cache/mount`、OS 沙盒对工作区根与本轮工作根下的 `<hh>commands|agents` 加 denyWrite、物化缓存改为 `~/<hh>cache/mount`、ignoreDirs 追加 `<hh>` 首段。修复引擎缺省 `.solon/` 时模型可改写 `<ws>/.solon/agents|commands`。单参构造与 `TerminalSupport.isMandatoryDenyRelativePath(rel)` 仍按 `.soloncode/`，另增双参版本
+* **`HarnessEngine.getSessionOrNil` → `getSessionOrNull`**（未发布，直接改名）：与 soloncode-cli `SessionManager.getSessionOrNull` 统一
+
 * **`solon-ai-talent-mount` 更名为 `solon-ai-mount`，升为通用 IO 抽象**（4.2.0；**不兼容**）:
   * **坐标与包名**：artifact `solon-ai-talent-mount` → `solon-ai-mount`（目录移到顶层，归入 bundle1；solon-parent 同步）；包名 `org.noear.solon.ai.talents.mount` → `org.noear.solon.ai.mount`（子包 `source` / `catalog` 不变）。迁移：全局替换包名、改依赖坐标；不提供 relocation
   * **命名修正**：`Mount.isWriteable()` / `Builder.writeable()` → `isWritable()` / `writable()`（与能力位拼写一致）；`MemoryMountSource` → `InMemoryMountSource`（避免与 talent-memory 撞词）；删除与 `getMounts()` 重复的 `MountManager.getSourceMounts()`；harness `Builder.dataSource(MountSource)` / `getDataSource()` → `stateSource(...)` / `getStateSource()`（避免与 JDBC DataSource 撞名）
@@ -11,12 +14,12 @@
 
 * **会话钩子收敛 + 会话删除事件 + 「只取不建」的会话获取**（4.2.0；破坏性，接口均为 `@Preview`）:
   * **`AgentSessionProvider` 改为唯一抽象方法 `getSession(String instanceId, boolean createIfAbsent)`**：`createIfAbsent=false` 且不存在时返回 null，且不得有副作用（不建实例、不写存储、不建目录、不放缓存）。迁移：`InMemoryAgentSession::of` → `(id, create) -> InMemoryAgentSession.of(id)`（不缓存，行为与以前一致）；生产实现建议 `(id, c) -> c ? map.computeIfAbsent(id, ...) : map.get(id)`
-  * **`HarnessEngine.getSessionOrNil(id)`（新）**：只取已存在的会话；`getSession(id)` 保持「不存在则新建」
+  * **`HarnessEngine.getSessionOrNull(id)`（新）**：只取已存在的会话；`getSession(id)` 保持「不存在则新建」
   * **`HarnessEngine.removeSession(id)` + 钩子 `HarnessExtension#onSessionRemove(engine, sessionId)`（新）**：永久删除会话时通知全部扩展（不判开关、逐个隔离异常、不取会话实例）；宿主顺序固定为「判忙 → removeSession → 移出内存 → 删存储」；只移出内存（回退、关连接）不触发
   * **钩子改名/调参**：`onInterrupt` → `onSessionInterrupt`；`onStatus(engine, session, status)` → `contributeSessionStatus(engine, session, builder)`；`onRequestAssemble(engine, isDelegated, agentName, amend)` → `onRequestAssemble(engine, agentName, isDelegated, amend)`（与 `onAgentBuild` 前两位对齐）。命名约定：`on*` 发通知、`contribute*` 收集信息、带 `Session` 的为会话级
-  * **插件**：loop 实现 `onSessionRemove`（删该会话任务与记录），忙判定改用 `getSessionOrNil`；goal 实现 `onSessionRemove`（注销 job），调度轮次/忙判定/缺省执行器改用 `getSessionOrNil`，会话不存在时 job 自行注销——修复「会话删除后 goal job 每 5 秒把会话重建出来且永不注销」；queue/steer 仅改名
+  * **插件**：loop 实现 `onSessionRemove`（删该会话任务与记录），忙判定改用 `getSessionOrNull`；goal 实现 `onSessionRemove`（注销 job），调度轮次/忙判定/缺省执行器改用 `getSessionOrNull`，会话不存在时 job 自行注销——修复「会话删除后 goal job 每 5 秒把会话重建出来且永不注销」；queue/steer 仅改名
   * **goal / loop 去掉 workspaceId**（破坏性）：`GoalExtension.builder(String)` / `LoopExtension.builder(String)` → `builder()`；job 名前缀改为按扩展实例自动生成的进程内序号（`goal-<n>:<sessionId>`、`loop-<n>:<taskId>`），多个实例共用 JobManager 不再依赖宿主传唯一标识防撞名；删除 `GoalExtension.Builder#workspace(String)`，验证器固定在 `engine.getWorkspace()` 下执行（修复未传目录时把工作区 ID 当路径用）；`/loop` 仅在设置了存储文件时提示「persisted」
-  * **验证**：harness core 584 例 33F+5E（与 stash 基线失败集逐项一致），goal 217 / queue 88 / steer 72 / loop 93 / 聚合 7 全绿；新增契约测试：`HarnessPluginContractTest` 3 例（停用扩展也收到、异常隔离、删除流程不调 provider、`getSessionOrNil` 不新建）、`LoopExtensionTest` 1 例、`GoalSessionRemoveTest` 2 例
+  * **验证**：harness core 584 例 33F+5E（与 stash 基线失败集逐项一致），goal 217 / queue 88 / steer 72 / loop 93 / 聚合 7 全绿；新增契约测试：`HarnessPluginContractTest` 3 例（停用扩展也收到、异常隔离、删除流程不调 provider、`getSessionOrNull` 不新建）、`LoopExtensionTest` 1 例、`GoalSessionRemoveTest` 2 例
 
 * **新增聚合包 `solon-ai-harness-all`**（4.2.0；纯新增，零破坏）:
   * **内容**：只有 pom，聚合 `solon-ai-harness` + `solon-ai-harness-goal` / `-queue` / `-steer` / `-loop`，一个依赖带齐核心与全部会话插件。现有模块（含 `solon-ai-harness` 本身及四个插件）不做任何改动，已有使用方与插件作者无感

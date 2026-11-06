@@ -11,7 +11,7 @@
    它们只覆盖 harness 主动读写的少数几类文件：TODO 清单、loop 任务、生成的子代理、子任务超长结果、工作区命令。
 2. 模型通过文件工具、bash、LSP、CodeTalent 对工作区的读写，都直接走本地路径 `Path(__cwd 或 workspace)`，不经过 workspaceSource。原因是远程工作区还没打通，`MountManager(String, MountSource)` 的注释里写明了这一点。
 3. 还有一类用户级或进程级的本地缓存与临时文件，与两个来源都无关：
-   - 物化缓存：`~/.soloncode/cache/mount`
+   - 物化缓存：`~/<hh>cache/mount`（soloncode-cli 即 `~/.soloncode/cache/mount`）
    - jdtls 索引：`<用户缓存目录>/solon-lsp`
    - 临时脚本：系统临时目录 `java.io.tmpdir`
 4. 会话本身（消息和快照）、记忆、技能 / 子代理 / 命令目录，由宿主注入的组件决定存放位置（sessionProvider、memoryProvider、mount、commandRegistry），引擎不认识这些位置。goal 状态存在 `session.attrs()` 里，跟着会话一起持久化；queue / steer 的数据只在内存里。
@@ -23,7 +23,7 @@
 | 获取方式 | `engine.getStateSource()` | `engine.getWorkspaceSource()`，即 `MountManager.getWorkspaceSource()` |
 | 设置方式 | `HarnessEngine.Builder.stateSource(MountSource)` | 引擎没有入口；`HarnessOptions` 固定 `new MountManager(workspace)` |
 | 缺省值 | `FileMountSource.of(<workspace>/<harnessHome>)`，延迟创建（`HarnessOptions.getStateSource`） | `FileMountSource.of(workspace)`（`MountManager` 构造） |
-| 是否注册进挂载表 | 否；但缺省根 `<ws>/<hh>` 在工作区内，模型可用相对路径 `<hh>sessions/<sid>/TODO.md` 直接读写（沙盒只强制拒绝 `.soloncode/agents`、`.soloncode/commands`）。设到工作区外才真正不可达 | 否（不是 `@alias` 挂载），但它的根就是模型工具的工作区根，`@workspace/...` 会解析到它 |
+| 是否注册进挂载表 | 否；但缺省根 `<ws>/<hh>` 在工作区内，模型可用相对路径 `<hh>sessions/<sid>/TODO.md` 直接读写（沙盒只强制拒绝 `<hh>agents`、`<hh>commands`）。设到工作区外才真正不可达 | 否（不是 `@alias` 挂载），但它的根就是模型工具的工作区根，`@workspace/...` 会解析到它 |
 | 能否换成远程 | 可以（db / http 等），算存分离的主要入口 | 现在不能，否则模型读不到 harness 写的产物（见第 5 节） |
 | 是否随 `__cwd` 变化 | 否 | 否（根固定为 workspace）；TaskTalent 在 cwd 不等于 workspace 时会改用 `FileMountSource.of(cwd)` |
 | 宿主 soloncode-cli 的取值 | `~/.soloncode/workspaces/<key>/`（`WorkspaceDataUtil.dataDir`），与会话目录同处 | 缺省值，即 `<workspace>` |
@@ -78,7 +78,7 @@
 
 | 组件 | 文件 | 根目录 | 说明 |
 |---|---|---|---|
-| MountMaterializer（talent-cli） | 虚拟挂载的物化快照 `<alias>/<fingerprint>/`，含 `.ready`、manifest、`.tmp-*` staging 目录 | `~/.soloncode/cache/mount`（取不到 `user.home` 时回退到 `<ws>/.soloncode/cache/mount`） | 让 bash 能执行 classpath 等虚拟来源里的脚本；文件工具和沙盒都禁止写入这里。目录名硬编码为 `.soloncode`，不跟随 harnessHome |
+| MountMaterializer（talent-cli） | 虚拟挂载的物化快照 `<alias>/<fingerprint>/`，含 `.ready`、manifest、`.tmp-*` staging 目录 | `~/<hh>cache/mount`（取不到 `user.home` 时回退到 `<ws>/<hh>cache/mount`） | 让 bash 能执行 classpath 等虚拟来源里的脚本；文件工具和沙盒都禁止写入这里。引擎经 `new TerminalTalent(mountManager, harnessHome)` 传入；直接构造且不传时按 `.soloncode/` |
 | ProcessExecutor / ShellCommandFactory | `solon-ai-script-*.bat/.ps1/...` | `java.io.tmpdir` | 超长或多行命令的临时脚本，用完即删 |
 | JdtlsSupport（talent-lsp） | jdtls 的 `-data` 索引目录 `jdtls-<sha1(ws)>` | `<用户缓存目录>/solon-lsp`（macOS 为 `~/Library/Caches`，Windows 为 `%LOCALAPPDATA%`，其他系统为 `~/.cache`，没有主目录时为 `tmpdir`） | 按工作区绝对路径分开存放 |
 | Websearch / Webfetch / CodeSearch / Clock / MCP / OpenAPI 网关 | — | — | 不读写本地文件 |
@@ -117,7 +117,7 @@ flowchart LR
 
 1. **“模型可见”和“经过 workspaceSource”是两回事。** 模型工具、bash、LSP、CodeTalent 都直接操作本地 cwd / ws。workspaceSource 只承接 harness 自己写的四类东西：生成的子代理、子任务超长结果、工作区命令，以及经 `@workspace` 走 `resolveResource` 的场景。所以现在 workspaceSource 实际上必须是本地来源，且根目录等于 ws。引擎也没有提供替换它的 Builder 入口，这与 MountManager 注释里的警告一致。
 2. **`getHarnessSessions()` 的含义已经和实际存储对不上。** 它返回相对 ws 的 `<hh>sessions/`，而 TODO 实际存在 `stateSource` 的 `sessions/` 下。两者只在缺省 stateSource 时巧合一致。宿主一旦设置了 stateSource（soloncode-cli 就设置了），它就只剩旧数据迁移的用途（`WorkspaceDataUtil` 迁移旧的 `<ws>/.soloncode/sessions/`）。建议在 Javadoc 里注明“相对工作区，不是 stateSource 内的路径”，或者改为提供 `stateSource` 内的会话前缀常量。
-3. **`.soloncode` 在 talent-cli 里是硬编码的。** 沙盒强制拒绝写入的 `.soloncode/commands`、`.soloncode/agents`，物化缓存目录 `.soloncode/cache/mount`，以及 ignoreDirs，都不跟随 `harnessHome`。harness 缺省的 harnessHome 是 `.solon/`，所以其他宿主用缺省值时，`<ws>/.solon/agents`、`<ws>/.solon/commands` 不在强制拒绝之列，模型可以改写子代理和命令定义。建议把强制拒绝列表做成可由 TerminalTalent 注入的配置，引擎按 harnessHome 推送进去。
+3. **（已修复，2026-11-06）`.soloncode` 曾在 talent-cli 里硬编码。** 现在 `TerminalTalent(mountManager, harnessHome)` 接收宿主配置目录，引擎传入 `options.getHarnessHome()`：文件工具强制拒绝 `<hh>commands`、`<hh>agents`、`<hh>cache/mount`；OS 沙盒对工作区根与本轮工作根下的 `<hh>commands|agents` 加入 denyWrite；物化缓存为 `~/<hh>cache/mount`；ignoreDirs 追加 `<hh>` 首段目录。不经引擎直接构造且不传时按 `.soloncode/`，保护范围不缩小。单参 `TerminalSupport.isMandatoryDenyRelativePath(rel)` 仍按 `.soloncode/`，需要指定目录用双参版本。注意 Linux bwrap 下若 `<root>/<hh>` 尚不存在，沙盒会在该位置挂只读空目录来阻止创建 deny 路径，此时 bash 也无法在 `<hh>` 下新建其它文件（与 `.claude/commands` 的处理同口径）。
 4. **CODE.md 位于 `<cwd>/<hh>`，不在 stateSource。** 它是工作区产物，模型要读，归到工作区一侧是合理的。项目已有 `.gitignore` 时，CodeTalent 追加的是整个 `<hh>` 目录（不只 CODE.md），所以缺省不进版本库；副作用是 `<hh>agents/`、`<hh>commands/`、`<hh>skills/` 也一并被忽略，团队想共享这些定义需要自己在 `.gitignore` 里反向放行。它不经过 workspaceSource，算存分离时要跟工作区一起同步。
 5. **记忆和会话完全由宿主决定。** soloncode-cli 把会话放在 `~/.soloncode/workspaces/<key>/sessions/<sid>/`，和 stateSource 下的 `sessions/<sid>/TODO.md` 是**同一个目录**，因此删除会话目录时 TODO 会一并删掉，这对宿主是好事。但这是宿主自己的约定。如果 stateSource 换成远程来源，删除会话时宿主还需要另外调用 `stateSource.deleteIfExists("sessions/<sid>/TODO.md")`。引擎的 `removeSession` 只通知扩展，不清理 TodoTalent 的数据。
 6. **MemoryTalent 的 local 作用域随 cwd 变化**（`<cwd>/.soloncode/memory/`），TODO 则按会话存放。这是有意的区分：记忆跟着项目走，清单跟着会话走。
@@ -133,7 +133,7 @@ flowchart LR
 | **本地 ws**（不经来源） | LSP 读源文件；jdtls 的项目根 |
 | **各挂载来源** | 技能（`**/SKILL.md`）、子代理（`*.md`）、`@alias` 文件访问 |
 | **宿主注入** | 会话消息和快照（含 goal 状态）、记忆 `<storeKey>.md`、IM 通道绑定（`~/<hh>channels/`，宿主私有） |
-| **用户级缓存 / 临时目录** | `~/.soloncode/cache/mount`、`<用户缓存目录>/solon-lsp/jdtls-*`、`java.io.tmpdir/solon-ai-script-*` |
+| **用户级缓存 / 临时目录** | `~/<hh>cache/mount`、`<用户缓存目录>/solon-lsp/jdtls-*`、`java.io.tmpdir/solon-ai-script-*` |
 
 ## 7. 与 soloncode-cli 的核对记录（2026-11-06）
 
@@ -153,3 +153,4 @@ flowchart LR
 1. 报告本身：技能挂载“只读 FileMountSource”表述不准；CODE.md 与 `.gitignore` 的说法自相矛盾；“stateSource 模型看不到”忽略了缺省位置在工作区内。
 2. 代码回归：`05a867d8f`（2026-11-03，删除 task_result_read）把超长结果提示里的“不要重新委派该任务”删掉了，而测试和 README 仍要求有这句，`oversizedResultSpillsToFilesDir` 从那时起一直失败并被当成“既有失败”。已恢复该提示。
 3. 宿主注释：`WorkspaceManager` 中“验证器在 engine.getWorkspace() 下执行”已过时（现按本轮 `__cwd`），已改。
+4. 后续（2026-11-06）：`HarnessEngine.getSessionOrNil` 改名为 `getSessionOrNull`，与 soloncode-cli `SessionManager.getSessionOrNull` 统一（goal 包内 `sessionOrNil` 同步改为 `sessionOrNull`）；`.soloncode` 硬编码已改为跟随 harnessHome（见第 5 节第 3 条）。

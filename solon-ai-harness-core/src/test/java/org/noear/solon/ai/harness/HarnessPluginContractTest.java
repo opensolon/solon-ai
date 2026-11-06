@@ -287,19 +287,19 @@ class HarnessPluginContractTest {
     }
 
     @Test
-    void getSessionOrNilDoesNotCreate() {
+    void getSessionOrNullDoesNotCreate() {
         java.util.Map<String, AgentSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
                 .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .build();
 
-        assertNull(engine.getSessionOrNil("s1"));
-        assertNull(engine.getSessionOrNil(null));
-        assertNull(engine.getSessionOrNil(""));
+        assertNull(engine.getSessionOrNull("s1"));
+        assertNull(engine.getSessionOrNull(null));
+        assertNull(engine.getSessionOrNull(""));
         assertTrue(sessions.isEmpty(), "取不到时不得新建");
 
         AgentSession created = engine.getSession("s1");
-        assertSame(created, engine.getSessionOrNil("s1"));
+        assertSame(created, engine.getSessionOrNull("s1"));
     }
 
     // ==================== 钩子：contributeSessionStatus（开放事实槽位） ====================

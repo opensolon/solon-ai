@@ -62,7 +62,7 @@ import java.util.function.Predicate;
  * <p><b>钩子</b>：{@code onAttach} 装配运行态、调度与命令；{@code onRequestAssemble} 给顶层请求挂
  * {@link GoalTalent}（委派不挂）；{@code contributeSessionStatus} 贡献 {@link #STATUS_GOAL}；
  * {@code onSessionRemove} 注销该会话的 job；{@code onDetach} 卸载全部 job。
- * 调度轮次只取已存在的会话（{@code getSessionOrNil}），会话已不存在时 job 自行注销，不会把会话重新建出来。</p>
+ * 调度轮次只取已存在的会话（{@code getSessionOrNull}），会话已不存在时 job 自行注销，不会把会话重新建出来。</p>
  *
  * @author noear
  * @since 3.9.2
@@ -212,7 +212,7 @@ public class GoalExtension extends AbsHarnessExtension {
      */
     private static GoalExecutor defaultExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
-            AgentSession session = engine.getSessionOrNil(sessionId);
+            AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) {
                 return GoalOutcome.skip("session not found");
             }

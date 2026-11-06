@@ -72,15 +72,29 @@ public class TerminalSupport {
     private final MountManager mountManager;
     private final Set<String> ignoreDirs;
     private final ShellMode shellMode;
+    /** 宿主配置目录（规范化后以 / 结尾，如 {@code .solon/}）；受保护子目录与物化缓存目录都由它推导。 */
+    private final String harnessHome;
+    /** 由 harnessHome 推导的受保护相对路径（commands / agents / 物化缓存）。 */
+    private final List<String> harnessDenyPaths;
     /** 可物化虚拟来源的执行缓存；null 表示未启用物化（如测试里只构造 support 时）。 */
     private volatile MountMaterializer materializer;
     /** 与物化器一致的绝对缓存根，用于文件工具层的路径拒绝。 */
     private volatile Path materializeCacheRoot;
 
     TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, ShellMode shellMode) {
+        this(mountManager, ignoreDirs, shellMode, null);
+    }
+
+    TerminalSupport(MountManager mountManager, Set<String> ignoreDirs, ShellMode shellMode, String harnessHome) {
         this.mountManager = mountManager;
         this.ignoreDirs = ignoreDirs;
         this.shellMode = shellMode;
+        this.harnessHome = normalizeHarnessHome(harnessHome);
+        this.harnessDenyPaths = harnessDenyPaths(this.harnessHome);
+    }
+
+    String getHarnessHome() {
+        return harnessHome;
     }
 
     /**
@@ -949,7 +963,7 @@ public class TerminalSupport {
             throw new SecurityException("权限拒绝：路径受保护（物化缓存）");
         }
         String rel = toPolicyRelative(policyRoot, target);
-        if (isMandatoryDenyRelativePath(rel)) {
+        if (isMandatoryDeny(rel)) {
             throw new SecurityException("权限拒绝：路径受保护 " + rel);
         }
         if (fs == null) {
@@ -1036,7 +1050,7 @@ public class TerminalSupport {
             return false;
         }
         String rel = toPolicyRelative(policyRoot, target);
-        if (isMandatoryDenyRelativePath(rel)) {
+        if (isMandatoryDeny(rel)) {
             return true;
         }
         if (fs == null) {
@@ -1074,21 +1088,63 @@ public class TerminalSupport {
 
 
     /**
-     * 用户级物化缓存目录（相对 user.home）：存放 Classpath 等虚拟来源落地后的执行快照。
-     * 缓存跨工作区复用且不随 Talent 生命周期删除。
+     * 未显式配置时的宿主配置目录。直接 new TerminalTalent（不经 harness 引擎）的使用方保持原有保护范围；
+     * 经 harness 引擎构建时由引擎传入其 harnessHome。
      */
-    static final String MATERIALIZE_CACHE_DIR = ".soloncode/cache/mount";
+    static final String DEFAULT_HARNESS_HOME = ".soloncode/";
+
+    /** 物化缓存目录相对 harnessHome 的子路径。 */
+    static final String MATERIALIZE_CACHE_SUBDIR = "cache/mount";
 
     /**
-     * 解析默认用户级缓存根；user.home 不可用时回退到工作区，确保脚本执行能力不静默失效。
+     * 规范化宿主配置目录：空白回落到 {@link #DEFAULT_HARNESS_HOME}，统一 / 分隔、去掉前导 ./、补齐结尾 /。
      */
-    static Path defaultMaterializeCacheRoot(String workDir) {
+    static String normalizeHarnessHome(String harnessHome) {
+        if (harnessHome == null || harnessHome.trim().isEmpty()) {
+            return DEFAULT_HARNESS_HOME;
+        }
+        String hh = harnessHome.trim().replace("\\", "/");
+        while (hh.startsWith("./")) {
+            hh = hh.substring(2);
+        }
+        if (hh.isEmpty() || "/".equals(hh) || ".".equals(hh)) {
+            return DEFAULT_HARNESS_HOME;
+        }
+        return hh.endsWith("/") ? hh : hh + "/";
+    }
+
+    /**
+     * harnessHome 的首段目录名（如 {@code .solon/} → {@code .solon}），用于搜索忽略；无法取得时返回 null。
+     */
+    static String harnessHomeTopDir(String harnessHome) {
+        String hh = normalizeHarnessHome(harnessHome);
+        if (hh.startsWith("/")) {
+            return null;
+        }
+        int idx = hh.indexOf('/');
+        String top = idx < 0 ? hh : hh.substring(0, idx);
+        return top.isEmpty() || ".".equals(top) || "..".equals(top) ? null : top;
+    }
+
+    /** 由 harnessHome 推导受保护的相对路径：命令定义、子代理定义、物化缓存。 */
+    static List<String> harnessDenyPaths(String harnessHome) {
+        String hh = normalizeHarnessHome(harnessHome);
+        return Collections.unmodifiableList(Arrays.asList(
+                hh + "commands", hh + "agents", hh + MATERIALIZE_CACHE_SUBDIR));
+    }
+
+    /**
+     * 解析默认用户级缓存根（{@code ~/<harnessHome>cache/mount}）；user.home 不可用时回退到工作区，
+     * 确保脚本执行能力不静默失效。
+     */
+    static Path defaultMaterializeCacheRoot(String workDir, String harnessHome) {
+        String cacheDir = normalizeHarnessHome(harnessHome) + MATERIALIZE_CACHE_SUBDIR;
         String userHome = System.getProperty("user.home");
         if (Assert.isNotEmpty(userHome)) {
-            return Paths.get(userHome).resolve(MATERIALIZE_CACHE_DIR).toAbsolutePath().normalize();
+            return Paths.get(userHome).resolve(cacheDir).toAbsolutePath().normalize();
         }
         if (Assert.isNotEmpty(workDir)) {
-            return Paths.get(workDir).resolve(MATERIALIZE_CACHE_DIR).toAbsolutePath().normalize();
+            return Paths.get(workDir).resolve(cacheDir).toAbsolutePath().normalize();
         }
         return null;
     }
@@ -1122,20 +1178,40 @@ public class TerminalSupport {
         }
     }
 
-    // mandatory deny files (same as dangerous files + cli-specific paths)
-    // 注：mcache 同时登记到 files 与 dirs——dir 分支覆盖“正好等于”与“以下子路径”，
-    // files 分支覆盖路径中任意层级出现的场景，两层匹配口径见 isMandatoryDenyRelativePath。
+    // mandatory deny：与宿主无关的固定部分（dangerous files/dirs）。
+    // 宿主配置目录下的 commands / agents / 物化缓存按 harnessHome 推导（见 harnessDenyPaths），不在此写死。
+    // 匹配口径：等于、以其为前缀、或在路径任意层级出现，见 matchesDenyEntry。
     private static final List<String> MANDATORY_DENY_FILES = Collections.unmodifiableList(Arrays.asList(
             ".gitconfig", ".gitmodules", ".bashrc", ".bash_profile", ".bash_logout",
-            ".zshrc", ".zprofile", ".profile", ".ripgreprc", ".mcp.json",
-            ".soloncode/commands", ".soloncode/agents", MATERIALIZE_CACHE_DIR
+            ".zshrc", ".zprofile", ".profile", ".ripgreprc", ".mcp.json"
     ));
 
     private static final List<String> MANDATORY_DENY_DIRS = Collections.unmodifiableList(Arrays.asList(
-            ".vscode", ".idea", ".soloncode/commands", ".soloncode/agents", ".git/hooks", MATERIALIZE_CACHE_DIR
+            ".vscode", ".idea", ".git/hooks"
     ));
 
+    /**
+     * 按缺省宿主配置目录（{@link #DEFAULT_HARNESS_HOME}）判定。实例内部按自身 harnessHome 判定，
+     * 需要指定目录时用 {@link #isMandatoryDenyRelativePath(String, String)}。
+     */
     public static boolean isMandatoryDenyRelativePath(String relativePath) {
+        return isMandatoryDenyRelativePath(relativePath, DEFAULT_HARNESS_HOME);
+    }
+
+    /**
+     * 判定相对路径是否受强制保护（固定敏感文件/目录 + {@code <harnessHome>commands|agents|cache/mount}）。
+     *
+     * @param harnessHome 宿主配置目录；空白时按 {@link #DEFAULT_HARNESS_HOME}
+     */
+    public static boolean isMandatoryDenyRelativePath(String relativePath, String harnessHome) {
+        return isMandatoryDenyRelativePath(relativePath, harnessDenyPaths(harnessHome));
+    }
+
+    private boolean isMandatoryDeny(String relativePath) {
+        return isMandatoryDenyRelativePath(relativePath, harnessDenyPaths);
+    }
+
+    private static boolean isMandatoryDenyRelativePath(String relativePath, List<String> harnessDeny) {
         if (relativePath == null) {
             return false;
         }
@@ -1143,22 +1219,29 @@ public class TerminalSupport {
         if (normalized.startsWith("./")) {
             normalized = normalized.substring(2);
         }
-        for (String denyFile : MANDATORY_DENY_FILES) {
-            if (normalized.equals(denyFile)
-                    || normalized.startsWith(denyFile + "/")
-                    || normalized.endsWith("/" + denyFile)
-                    || normalized.contains("/" + denyFile + "/")) {
+        for (String deny : MANDATORY_DENY_FILES) {
+            if (matchesDenyEntry(normalized, deny)) {
                 return true;
             }
         }
-        for (String denyDir : MANDATORY_DENY_DIRS) {
-            if (normalized.equals(denyDir) || normalized.startsWith(denyDir + "/")
-                    || normalized.endsWith("/" + denyDir)
-                    || normalized.contains("/" + denyDir + "/")) {
+        for (String deny : MANDATORY_DENY_DIRS) {
+            if (matchesDenyEntry(normalized, deny)) {
+                return true;
+            }
+        }
+        for (String deny : harnessDeny) {
+            if (matchesDenyEntry(normalized, deny)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean matchesDenyEntry(String normalized, String deny) {
+        return normalized.equals(deny)
+                || normalized.startsWith(deny + "/")
+                || normalized.endsWith("/" + deny)
+                || normalized.contains("/" + deny + "/");
     }
 
 

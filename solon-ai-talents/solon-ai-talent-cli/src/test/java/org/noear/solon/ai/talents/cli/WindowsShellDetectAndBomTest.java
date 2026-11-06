@@ -133,7 +133,7 @@ public class WindowsShellDetectAndBomTest {
     @Test
     public void talentRejectsNullShellFactory() {
         assertThrows(IllegalArgumentException.class,
-                () -> new TerminalTalent(new MountManager("."), null));
+                () -> new TerminalTalent(new MountManager("."), (ShellCommandFactory) null));
     }
 
     // ================= BOM 容忍 =================

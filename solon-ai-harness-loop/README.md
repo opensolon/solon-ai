@@ -8,6 +8,13 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 - 起始版本：4.2.0（独立模块）
 - 宿主只需接触一个类：`LoopExtension`（门面 + Builder）
 
+**两种时态**（第 3 章总览，第 4、5 章分别给出完整示例）：
+
+| 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
+|---|---|---|---|
+| 使用态 | 对话框 / IM 里输入 `/loop 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.admit` → `engine.handle` | `/loop` 命令；模型调用 `loop_add` 等工具 |
+| 管理态 | 定时任务面板里点「新建 / 编辑 / 启停 / 立即执行 / 删除」 | 宿主自己的管理接口（HTTP 等） | `LoopExtension` 门面方法 |
+
 ---
 
 ## 1. 功能介绍
@@ -43,7 +50,7 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 
 要点（均以源码为准）：
 
-- **会话忙判定由插件统一完成**：调用执行器之前用 `engine.isIdle(session)` 判定（会话通过 `getSessionOrNil` 获取，不会因判定而新建会话；取不到会话时**不跳过**）。执行器只需关心「我这个通道此刻能不能跑」（如终端是否空闲）。
+- **会话忙判定由插件统一完成**：调用执行器之前用 `engine.isIdle(session)` 判定（会话通过 `getSessionOrNull` 获取，不会因判定而新建会话；取不到会话时**不跳过**）。执行器只需关心「我这个通道此刻能不能跑」（如终端是否空闲）。
 - **错误计数是任务级、瞬态的**：一个任务失败不影响其它任务；成功一轮即清零；不持久化。阈值经 `maxErrors` 的 `IntSupplier` 每次实时读取，实际取值 `Math.max(1, supplier.getAsInt())`。
 - **退避**：第 n 次连续失败后延迟 `5 × n` 秒重试（5s、10s、15s……），重试不经调度器，不消耗一次性配额。
 - **版本与身份**：`update` 会产出同 id 的新版本替换旧版本，新旧版本共享运行锁与错误计数，因此修改执行中的任务不会与在途一轮并发，本轮结果记到新版本上。
@@ -79,28 +86,22 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 
 ---
 
-## 3. 使用说明
+## 3. 装配与两种时态
 
-### 3.1 简单示例
+### 3.1 最小装配
 
 ```java
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
-import org.noear.solon.ai.harness.extension.loop.LoopSpec;
-import org.noear.solon.ai.harness.extension.loop.LoopTask;
 
-// 装配：任务存到引擎状态来源下的 tasks.json；不注册执行器则走缺省执行器（engine.handle 同步跑一轮）
+// 任务存到引擎状态来源下的 tasks.json；不注册执行器则走缺省执行器（engine.handle 同步跑一轮）
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
         .store(engine.getStateSource(), "tasks.json")
         .build());
-
-// 每 10 分钟执行一次，并在创建后立即跑首轮
-LoopTask task = loop.schedule(sessionId, LoopSpec.of("检查 CI 是否通过").everyMinutes(10).runNow(true));
-String taskId = task.getId();
 ```
 
-### 3.2 完整示例
+装配完成后两种时态都已可用：用户输入 `/loop ...` 或让模型调用 `loop_add`（使用态），宿主也可以直接调用 `loop.schedule(...)`（管理态）。
 
-#### 装配（Builder 全配置）
+### 3.2 Builder 全配置
 
 ```java
 import org.noear.solon.ai.mount.source.FileMountSource;
@@ -117,7 +118,50 @@ LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
         .build());
 ```
 
-#### 注册执行器（按通道认领）
+`store` 接收任意 `MountSource`。测试或演示可用内存来源，并关闭调度与缺省执行器：
+
+```java
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
+
+LoopExtension loop = LoopExtension.builder()
+        .store(new InMemoryMountSource(), "loop/tasks.json")
+        .jobManager(null)            // 任务仅作元数据，不依赖 Solon 容器
+        .defaultExecutor(false)
+        .build();
+```
+
+远端（db、http 等）存储：自行实现 `org.noear.solon.ai.mount.source.MountSource` 并传入 `store(...)` 即可。本插件对来源的使用包括 `normalize`、`readStringOrNull`、`writeString`（整体写入）以及损坏备份时的 `move`；写入原子性取决于该来源的 `capabilities().isAtomicWrite()`。
+
+### 3.3 两种时态
+
+```mermaid
+flowchart LR
+    subgraph 使用态
+        U1["对话框 / IM 输入"] --> A["engine.admit"] --> H["engine.handle"]
+        H --> C["/loop 命令"]
+        H --> T["模型调用 loop_add 等工具"]
+    end
+    subgraph 管理态
+        U2["定时任务面板"] --> API["宿主管理接口"]
+    end
+    C --> L[("LoopExtension<br/>任务表 tasks.json")]
+    T --> L
+    API --> L
+    L --> J["调度器（到点）"] --> E["执行器"] --> R["engine.handle(ofProgram)"]
+```
+
+| 对比项 | 使用态 | 管理态 |
+|---|---|---|
+| 用户动作 | 在对话中输入 `/loop 30m 检查 CI`；或用自然语言让模型建任务 | 在任务面板里新建、编辑、启停、立即执行、删除 |
+| 宿主入口 | 统一输入入口：`engine.admit` 判忙 → `engine.handle` | 宿主自己的管理接口，直接调门面 |
+| 是否经过 `admit` 判忙 | 是：任务运行中输入的 `/loop ...` 被 `DEFER` 排队；模型工具在任务内执行 | 否：随时可调 |
+| 本插件入口 | `LoopCommand`（引擎内分派）、`LoopTalent`（`loop_add` / `loop_list` / `loop_control`） | `schedule` / `update` / `pause` / `resume` / `toggle` / `trigger` / `remove` / `list` |
+| 结果怎么返回 | 命令：回执文本 `outcome.getCommandOutput()`；工具：JSON 交给模型 | 返回值：`LoopTask` 快照 / `boolean` / 异常 |
+| 只有这一态能做的 | 命令删除正在执行的任务时顺带中断（4.5 第 5 条）；`loop_add` 可建一次性任务 | 修改任务（`update`）、宿主扩展字段（`extra`）、跨会话列表（`listAll`） |
+
+两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop ls` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（3.4），与任务是哪种时态创建的无关。
+
+### 3.4 执行器：到点的一轮怎么跑、输出回到哪
 
 ```java
 // 按注册顺序认领，先于缺省执行器；谓词为 null 表示认领全部
@@ -133,13 +177,338 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
                        : LoopOutcome.failed("runtime not ready")); // 与抛异常等价
 ```
 
-执行器不得返回 `null`，否则按失败计（`lastResult` 中可见）。
+执行器不得返回 `null`，否则按失败计（`lastResult` 中可见）。缺省执行器只把结果写进 `lastResult`，不推给任何渠道；需要让用户看到每一轮的宿主必须注册自己的执行器（完整写法见 4.4）。
 
-#### 创建任务（`schedule`）
+---
+
+## 4. 使用态：用户在对话中输入
+
+### 4.1 用户能输入什么
+
+```text
+/loop 30m 检查 CI 是否通过 --now      # 每 30 分钟，并立即跑首轮
+/loop cron:"0 0 9 * * ?" 汇总昨日告警  # 每天 9 点
+/loop 提醒我喝水                       # 首个参数不是间隔时，按缺省 5 分钟
+/loop ls                               # 列出本会话任务
+/loop pause <id>  /  /loop resume <id>
+/loop stop <id>   /  /loop stop-all
+```
+
+| 用法 | 说明 |
+|---|---|
+| `/loop` 或 `/loop ls` | 列出本会话任务（状态 paused / running / idle、调度、迭代、最近结果） |
+| `/loop <interval> <prompt>` | 固定间隔任务；interval 如 `30s`、`5m`、`2h` |
+| `/loop <prompt>` | 首个参数不是间隔时，按缺省 5 分钟 |
+| `/loop cron:"<expr>" <prompt>` | cron 任务（引号可为双引号或单引号） |
+| `--now` | 附加在参数中，创建后立即执行首轮；其它 `--xxx` 提示 Unknown flag |
+| `/loop stop <id>` | 删除任务；若该任务正在执行，同时中断会话当前一轮 |
+| `/loop stop-all` | 删除本会话全部任务；若有任务正在执行，同时中断会话 |
+| `/loop pause <id>` / `/loop resume <id>` | 暂停 / 恢复 |
+
+间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务。`/loop ls` 与创建回执里打印完整任务 ID，`stop` / `pause` / `resume` 需要传完整 ID。
+
+用户也可以直接用自然语言，例如"明天下午 6 点提醒我提交周报"、"每 10 分钟看一下部署好了没"：模型会调用 `loop_add`（支持 `at` 一次性时刻）、`loop_list`、`loop_control`，参数规则见 6.7。工具只挂在顶层请求上，子代理委派中不可用。
+
+### 4.2 命令的边界
+
+| 项 | 说明 |
+|---|---|
+| 注册 | `LoopExtension#onAttach` 自动注册，宿主不用注册 |
+| 会话 | 命令作用于 `ctx.getSession().getSessionId()`，即本次输入所在会话 |
+| 结局 | 恒为 `Kind.REPLY`：命令只改任务表并回执，不在本次 `handle` 里开流 |
+| 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用；不需要 `.terminal(true)` |
+| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.admit` 给出 `DEFER`（排队，空闲后执行）；没装 queue 时给出 `REJECT("busy")` |
+| 开关 | `loop.setEnabled(false)` 只关模型工具，`/loop` 照常可用 |
+| 回执格式 | 缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
+
+### 4.3 命令与工具共用的流程
+
+1. 用户输入 → 宿主 `engine.admit` 判忙 → `engine.handle`；
+2. `/loop ...`：引擎识别命令，`LoopCommand` 调用与管理态相同的 `schedule` / `pause` / `resume` / `remove`，结局 `REPLY`；
+3. 普通消息：结局 `TASK`，模型在这一轮里调用 `loop_add` 等工具，工具同样走 `schedule` 等门面；
+4. 到点后调度器调用执行器跑一轮，执行器把输出送回渠道。
+
+### 4.4 宿主接入：完整示例
+
+`/loop` 只负责"建任务"；任务到点后由**执行器**跑一轮，执行器的输出要由宿主送回渠道。所以宿主要接两处：输入入口（让命令能执行）与执行器（让到点的那一轮有去处）。
+
+```java
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.loop.LoopExtension;
+import org.noear.solon.ai.harness.extension.loop.LoopOutcome;
+import org.noear.solon.ai.harness.extension.queue.QueueExtension;
+import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.turn.AdmitDecision;
+import org.noear.solon.ai.harness.turn.InputGate;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ImLoopHost {
+    private final HarnessEngine engine;
+    private final QueueExtension queue;
+    private final LoopExtension loop;
+    /** 会话最近一次的回复路由（定时轮次没有入站消息，只能回到这里） */
+    private final Map<String, InputOrigin> routes = new ConcurrentHashMap<>();
+
+    public ImLoopHost(HarnessEngine engine) {
+        this.engine = engine;
+        this.queue = engine.addExtensionIfAbsent(new QueueExtension());
+        this.loop = engine.addExtensionIfAbsent(LoopExtension.builder()
+                .store(engine.getStateSource(), "tasks.json")       // 任务随引擎状态来源持久化
+                .sessionAlive(this::sessionExists)                   // 按会话存储判断（勿用内存会话表，重启后会误删）
+                .build());
+
+        // 执行器：认领 IM 会话（谓词应互斥），把到点的一轮跑完并送回渠道
+        loop.addExecutor("im", id -> id.startsWith("im-"), (sid, prompt) -> {
+            AgentSession session = engine.getSessionOrNull(sid);
+            InputOrigin route = routes.get(sid);
+            if (session == null || route == null) {
+                return LoopOutcome.skip("no session or reply route");  // 不计错误
+            }
+            try {
+                // 程序输入：不识别命令与 @提及，来源标记为 loop
+                String text = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"))
+                        .call().getContent();
+                reply(route, text);
+                return LoopOutcome.done(text);
+            } finally {
+                drain(session);   // 这一轮占用期间用户发来的消息被延后了：轮次结束立即续发
+            }
+        });
+    }
+
+    /** 输入入口：/loop 命令与普通消息共用 */
+    public void onMessage(AgentSession session, String text, InputOrigin origin) {
+        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
+        switch (admit.getKind()) {
+            case REJECT:
+                reply(origin, admit.getRejectDetail());
+                return;
+            case DEFER:   // 任务（含 loop 的一轮）运行中发来的 /loop：排队，空闲后按命令执行
+                int pos = queue.enqueue(session, text, origin);
+                reply(origin, pos < 0 ? "排队失败，请稍后再试" : "当前任务结束后执行（第 " + pos + " 位）");
+                return;
+            default:
+                break;
+        }
+
+        routes.put(session.getSessionId(), origin);   // 记下回复路由，供定时轮次使用
+
+        boolean acquired = admit.getTicket().isAcquired();
+        try (InputGate.Ticket ticket = admit.getTicket()) {
+            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
+            if (outcome.getKind() == InputOutcome.Kind.REPLY) {
+                reply(origin, outcome.getCommandOutput());          // /loop 的回执
+            } else if (outcome.getKind() == InputOutcome.Kind.TASK) {
+                reply(origin, outcome.getRequest().call().getContent()); // 模型可能在这一轮里调用了 loop_add
+            }
+        } catch (Throwable e) {
+            reply(origin, "处理失败：" + e.getMessage());
+        } finally {
+            if (acquired) {
+                drain(session);
+            }
+        }
+    }
+
+    private void drain(AgentSession session) {
+        queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
+            onMessage(session, claim.getItem().getText(), claim.getItem().getOrigin());
+            return true;
+        });
+    }
+
+    /** 宿主永久删除会话：先通知引擎（loop 会删掉该会话全部任务），再删存储 */
+    public void deleteSession(String sessionId) {
+        engine.removeSession(sessionId);
+        routes.remove(sessionId);
+        // ... 移出内存、删除存储
+    }
+
+    private boolean sessionExists(String sessionId) { /* 查会话存储 */ return true; }
+    private void reply(InputOrigin origin, String text) { /* 按 origin 回投渠道 */ }
+}
+```
+
+### 4.5 使用态要点
+
+1. **命令建任务，执行器跑任务**：`/loop`、`loop_add` 与管理态的 `loop.schedule(...)` 建出的是同一种任务；到点后统一经执行器执行，命令本身从不开流。
+2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
+3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。
+4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息被 `DEFER` 进队列；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
+5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop stop <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务、不会中断。要立刻停掉正在跑的一轮，用宿主的停止入口 `engine.interrupt(session)`，再 `loop.remove(sid, taskId)`。不经 `admit`、直接在忙时执行命令的宿主（如命令行终端）才会走到命令里"顺带中断"的分支。
+6. **中断不删任务**：`engine.interrupt` 只停当前一轮，定时任务照常保留，下次到点继续。
+7. **删除会话要先调 `engine.removeSession`**：它回调 `onSessionRemove`，删除该会话的全部任务并注销 job；顺序颠倒时，定时任务可能在删除过程中触发并把会话重新建出来。
+8. **一次性任务不能用命令建**：`/loop` 只支持间隔与 cron；一次性提醒让模型用 `loop_add` 的 `at` 参数，或走管理态 `LoopSpec.at(...)`。
+
+---
+
+## 5. 管理态：用户在界面上操作
+
+管理态不经过 `admit` / `handle`：面板上的每个按钮对应一个宿主接口，接口直接调用 `LoopExtension` 门面。loop 门面只按 `sessionId` 字符串寻址，不需要会话对象。
+
+### 5.1 界面动作与门面对照
+
+| 界面动作 | 门面调用 | 成功返回 | 失败时（建议的 HTTP 映射） |
+|---|---|---|---|
+| 本会话任务列表 | `loop.list(sid)` | `List<LoopTask>`，用 `toMap()` 渲染 | — |
+| 全部会话任务 | `loop.listAll()` | `Map<sessionId, List<LoopTask>>` | — |
+| 查看单个（编辑回填） | `loop.get(sid, taskId)` | `LoopTask` | null → 404 |
+| 新建 | `loop.schedule(sid, LoopSpec...)` | `LoopTask`（`getId()` 即 taskId） | 参数不合法：`IllegalArgumentException` → 400；总数达上限：`IllegalStateException` → 409 |
+| 编辑 | `loop.update(sid, taskId, LoopPatch...)` | 修改后的 `LoopTask` | null → 404；补丁不合法：`IllegalArgumentException` → 400（原任务不变） |
+| 启停开关 | `loop.toggle(sid, taskId)`，或 `pause` / `resume` | `true` | `false`：不存在 → 404 |
+| 立即执行一轮 | `loop.trigger(sid, taskId)` | `true` | `false`：不存在 → 404 |
+| 删除 | `loop.remove(sid, taskId)` | `true` | `false`：不存在 → 404 |
+| 清空本会话 | `loop.removeAll(sid)` | — | — |
+
+### 5.2 完整示例：管理接口
+
+```java
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.loop.LoopExtension;
+import org.noear.solon.ai.harness.extension.loop.LoopPatch;
+import org.noear.solon.ai.harness.extension.loop.LoopSpec;
+import org.noear.solon.ai.harness.extension.loop.LoopTask;
+import org.noear.solon.annotation.*;
+import org.noear.solon.core.handle.Result;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Controller
+@Mapping("/admin/loop")
+public class LoopAdminController {
+    @Inject
+    HarnessEngine engine;
+
+    private LoopExtension loop() {
+        return engine.getExtension(LoopExtension.class)
+                .orElseThrow(() -> new IllegalStateException("loop extension not attached"));
+    }
+
+    /** 缺省执行器到点时会按 sessionId 取会话：给不存在的会话建任务会把会话建出来，先校验（再加上宿主自己的归属校验） */
+    private boolean sessionExists(String sessionId) {
+        return sessionId != null && engine.getSessionOrNull(sessionId) != null;
+    }
+
+    @Get
+    @Mapping("list")
+    public Result<List<Map<String, Object>>> list(@Param("sessionId") String sessionId) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (LoopTask t : loop().list(sessionId)) {
+            rows.add(t.toMap());                        // 标准视图：id、prompt、cron/intervalMinutes、enabled、running……
+        }
+        return Result.succeed(rows);
+    }
+
+    @Get
+    @Mapping("all")
+    public Result<List<Map<String, Object>>> all() {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        loop().listAll().forEach((sid, tasks) -> tasks.forEach(t -> {
+            Map<String, Object> row = t.toMap();
+            row.put("sessionId", sid);                  // 跨会话列表需要带上 sessionId 供后续操作
+            rows.add(row);
+        }));
+        return Result.succeed(rows);
+    }
+
+    @Post
+    @Mapping("add")
+    public Result<String> add(@Param("sessionId") String sessionId,
+                              @Param("prompt") String prompt,
+                              @Param(value = "intervalMinutes", required = false) Integer intervalMinutes,
+                              @Param(value = "cron", required = false) String cron,
+                              @Param(value = "at", required = false) String at,        // 如 2026-12-05T18:00
+                              @Param(value = "oneShot", required = false) Boolean oneShot,
+                              @Param(value = "runNow", required = false) Boolean runNow) {
+        if (!sessionExists(sessionId)) return Result.failure(404, "Session not found");
+        try {
+            // 请求参数原样交给规格：null（及空白 cron）即未设置；优先级 at > cron > everyMinutes
+            LoopTask task = loop().schedule(sessionId, LoopSpec.of(prompt)
+                    .everyMinutes(intervalMinutes)
+                    .cron(cron)
+                    .at(at == null || at.isEmpty() ? null : LocalDateTime.parse(at))
+                    .oneShot(oneShot)
+                    .runNow(runNow));
+            return Result.succeed(task.getId());
+        } catch (IllegalArgumentException e) {
+            return Result.failure(400, e.getMessage()); // 间隔越界、cron 非法、at 不是未来时刻……
+        } catch (IllegalStateException e) {
+            return Result.failure(409, e.getMessage()); // 任务总数达到 maxTasks
+        }
+    }
+
+    @Post
+    @Mapping("update")
+    public Result<Map<String, Object>> update(@Param("sessionId") String sessionId,
+                                              @Param("taskId") String taskId,
+                                              @Param(value = "prompt", required = false) String prompt,
+                                              @Param(value = "intervalMinutes", required = false) Integer intervalMinutes,
+                                              @Param(value = "cron", required = false) String cron,
+                                              @Param(value = "runNow", required = false) Boolean runNow) {
+        try {
+            // null = 保持原值；cron 传 "" = 清除 cron、回到固定间隔
+            LoopTask t = loop().update(sessionId, taskId, LoopPatch.create()
+                    .prompt(prompt)
+                    .everyMinutes(intervalMinutes)
+                    .cron(cron)
+                    .runNow(runNow));
+            return t == null ? Result.failure(404, "Task not found") : Result.succeed(t.toMap());
+        } catch (IllegalArgumentException e) {
+            return Result.failure(400, e.getMessage());
+        }
+    }
+
+    @Post
+    @Mapping("toggle")
+    public Result<Void> toggle(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
+        return loop().toggle(sessionId, taskId) ? Result.succeed() : Result.failure(404, "Task not found");
+    }
+
+    @Post
+    @Mapping("trigger")
+    public Result<Void> trigger(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
+        LoopTask t = loop().get(sessionId, taskId);
+        if (t == null) return Result.failure(404, "Task not found");
+        if (!t.isEnabled()) return Result.failure(400, "Task is paused");   // 已暂停的任务触发后会被守卫放弃
+        loop().trigger(sessionId, taskId);                                   // 异步执行，会话忙时本轮放弃
+        return Result.succeed();
+    }
+
+    @Post
+    @Mapping("remove")
+    public Result<Void> remove(@Param("sessionId") String sessionId,
+                               @Param("taskId") String taskId,
+                               @Param(value = "stopRunning", required = false) Boolean stopRunning) {
+        LoopTask t = loop().get(sessionId, taskId);
+        if (t == null) return Result.failure(404, "Task not found");
+        if (Boolean.TRUE.equals(stopRunning) && t.isRunning()) {
+            // 与 /loop stop 同语义：顺带停掉正在跑的这一轮（interrupt 也会清空该会话的排队消息）
+            AgentSession session = engine.getSessionOrNull(sessionId);
+            if (session != null) engine.interrupt(session);
+        }
+        loop().remove(sessionId, taskId);
+        return Result.succeed();
+    }
+}
+```
+
+### 5.3 新建：LoopSpec 的几种调度
 
 ```java
 // 固定间隔：[1, 1440] 分钟；everyMinutes(null) = 缺省 5 分钟
 loop.schedule(sid, LoopSpec.of("check deploy").everyMinutes(15));
+
+// 每 10 分钟，并在创建后立即跑首轮
+loop.schedule(sid, LoopSpec.of("检查 CI 是否通过").everyMinutes(10).runNow(true));
 
 // cron：6 或 7 位（秒 分 时 日 月 周 [年]），日与周必须有一个为 ?
 loop.schedule(sid, LoopSpec.of("daily report").cron("0 0 22 * * ?"));
@@ -149,15 +518,11 @@ loop.schedule(sid, LoopSpec.of("年终提醒").cron("0 0 9 31 12 ? 2026").oneSho
 
 // 一次性时刻（服务器本地时间），自动转为带年份的 7 位 cron 并标记 oneShot
 loop.schedule(sid, LoopSpec.of("remind me").at(LocalDateTime.of(2026, 12, 5, 18, 0)));
-
-// 请求参数可原样传入：null（及空白 cron）即未设置
-LoopTask t = loop.schedule(sid, LoopSpec.of(req.prompt)
-        .everyMinutes(req.interval).cron(req.cron).runNow(req.runNow).oneShot(req.oneShot));
 ```
 
 调度方式优先级 `at > cron > everyMinutes`。校验失败抛 `IllegalArgumentException`，任务总数达上限抛 `IllegalStateException`，失败时不会留下半个任务。
 
-#### 修改任务（`update` + `LoopPatch`）
+### 5.4 编辑：update + LoopPatch
 
 ```java
 // null = 保持原值；启停、迭代、最近结果、一次性属性与扩展字段都保留
@@ -166,38 +531,16 @@ LoopTask u = loop.update(sid, taskId, LoopPatch.create()
         .everyMinutes(req.interval)    // null = 保持；越界抛 IllegalArgumentException
         .cron(req.cron)                // null = 保持；"" = 清除 cron，回到固定间隔
         .runNow(req.runNow));          // null = 保持
-if (u == null) {
-    // 任务不存在
-}
 
 // 从 cron 切回固定间隔
 loop.update(sid, taskId, LoopPatch.create().cron("").everyMinutes(30));
 ```
 
-非法补丁抛 `IllegalArgumentException`，原任务保持不变（先校验、后替换）。
+非法补丁抛 `IllegalArgumentException`，原任务保持不变（先校验、后替换）。任务正在执行时也可以修改：新版本不会与在途那一轮并发，本轮结果记到新版本上，不需要先停。
 
-#### 启停、触发、删除、查询
+### 5.5 宿主扩展字段（extra）
 
-```java
-loop.pause(sid, taskId);      // 暂停：保留记录、摘除 job；已暂停则不动
-loop.resume(sid, taskId);     // 恢复：清零错误计数并重新注册 job；已启用则不动
-loop.toggle(sid, taskId);     // 启停切换
-loop.trigger(sid, taskId);    // 立即异步执行一轮（仍经守卫；不消耗一次性配额）
-loop.remove(sid, taskId);     // 删除单个任务
-loop.removeAll(sid);          // 停止并删除本会话全部任务
-
-LoopTask one = loop.get(sid, taskId);                  // 不存在为 null
-List<LoopTask> mine = loop.list(sid);                  // 本会话全部（含已暂停）
-Map<String, List<LoopTask>> all = loop.listAll();      // 全部会话，按 sessionId 排序
-boolean active = loop.hasActiveTasks();                // 是否有启用中的任务（闲置回收判定用）
-
-Map<String, Object> view = one.toMap();                // 标准展示视图（不含扩展字段）
-int count = engine.status(session).get(LoopExtension.STATUS_TASKS);
-```
-
-`pause` / `resume` / `toggle` / `trigger` / `remove` 返回 `false` 表示任务不存在。
-
-#### 宿主扩展字段（extra）
+面板常需要给任务挂上自己的元数据（如所属自动化、显示名），用扩展字段：
 
 ```java
 import org.noear.snack4.ONode;
@@ -214,47 +557,32 @@ loop.update(sid, t.getId(), LoopPatch.create()
         .extra("legacy", null));
 ```
 
-扩展字段随任务原样持久化（插件不解析）；键为空或与核心字段同名时抛 `IllegalArgumentException`。
+扩展字段随任务原样持久化（插件不解析），`toMap()` 不含扩展字段，需要展示时由宿主自行追加；键为空或与核心字段同名时抛 `IllegalArgumentException`。
 
-#### /loop 命令与模型工具
+### 5.6 刷新界面
 
-装配后 `/loop` 命令自动注册（语法见 4.8，宿主接入见第 8 章），顶层请求自动挂上 `loop_add` / `loop_list` / `loop_control` 工具（见 4.7）。
-
-```text
-/loop 5m check if deployment finished
-/loop cron:"0 */5 * * * ? *" check status
-/loop ls
-```
-
-`loop.setEnabled(false)` 只关闭模型工具；`/loop` 命令与已有定时任务照常运行。
-
-#### 把任务存到非本地来源
-
-`store` 接收任意 `MountSource`。测试或演示可用内存来源：
+loop 没有状态监听器。面板刷新靠重新读取：`list` / `listAll` 返回的快照里有 `running`（是否正在执行）、`enabled`（被连续失败自动停用后为 false）、`currentIteration`、`lastResult`、`lastExecutedAt`。徽章计数可用状态键：
 
 ```java
-import org.noear.solon.ai.mount.source.InMemoryMountSource;
-
-InMemoryMountSource source = new InMemoryMountSource();
-LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-        .store(source, "loop/tasks.json")
-        .build());
+int count = engine.status(session).get(LoopExtension.STATUS_TASKS); // 本会话任务数（含已暂停）
+boolean active = loop.hasActiveTasks();                             // 是否有启用中的任务（闲置回收判定用）
 ```
 
-远端（db、http 等）存储：自行实现 `org.noear.solon.ai.mount.source.MountSource` 并传入 `store(...)` 即可。本插件对来源的使用包括 `normalize`、`readStringOrNull`、`writeString`（整体写入）以及损坏备份时的 `move`；写入原子性取决于该来源的 `capabilities().isAtomicWrite()`。
+### 5.7 管理态要点
 
-#### 测试中使用
-
-```java
-// 关闭调度（任务仅作元数据）与缺省执行器，不依赖 Solon 容器
-LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(false).build();
-```
+1. **先校验会话**：门面不检查会话是否存在，给任意 sessionId 都能建任务；缺省执行器到点时用 `engine.getSession(sessionId)` 取会话，可能把它新建出来。管理接口应先确认会话存在并校验归属。
+2. **不需要判忙**：管理接口随时可调。会话忙时到点的一轮会被放弃（不计错误），等下一次到点。
+3. **立即执行可能被放弃**：`trigger` 是异步的，仍经守卫：任务已暂停或会话正忙时，这一轮直接放弃；返回 `true` 只表示任务存在。
+4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.interrupt(session)` 再 `remove`（示例的 `stopRunning`）。注意 `interrupt` 会同时清空该会话 queue 里的排队消息。
+5. **自动停用后需手动恢复**：连续失败达阈值后任务 `enabled = false`，面板上应显示为"已停用"，`resume` 或 `toggle` 会清零计数并重新调度。
+6. **修改不会立即执行**：`LoopPatch.runNow` 只更新记录上的标志，立即首轮只在创建时生效；想立刻跑一轮用 `trigger`。
+7. **一次性任务只能通过 `schedule` 或 `loop_add` 创建**：`LoopPatch` 不能把普通任务改成一次性。
 
 ---
 
-## 4. 配置说明
+## 6. 配置说明
 
-### 4.1 Builder 选项
+### 6.1 Builder 选项
 
 | 方法 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -266,7 +594,7 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 | `defaultExecutor(enabled)` | `boolean` | `true` | 是否启用缺省执行器：`engine.handle(HarnessInput.ofProgram(session, prompt, "loop")).call()`，取最终文本 |
 | `jobManager(jobManager)` | `IJobManager` | `JobManager.getInstance()` | 自备调度器；显式传 null = 关闭调度（任务仅作元数据，不告警） |
 
-### 4.2 LoopSpec（创建参数）
+### 6.2 LoopSpec（创建参数）
 
 入口：`LoopSpec.of(String prompt)`。所有可选项都接受 null。
 
@@ -282,7 +610,7 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 
 `schedule` 时统一校验，失败抛 `IllegalArgumentException`：prompt 为空、间隔越界、at 不是未来时刻、一次性却没有 at/cron、一次性又要求 runNow、cron 无法解析或已无未来触发时刻、sessionId 为空。扩展字段键非法在调用 `extra` 时即抛出。
 
-### 4.3 LoopPatch（修改参数）
+### 6.3 LoopPatch（修改参数）
 
 入口：`LoopPatch.create()`。
 
@@ -296,7 +624,7 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 
 保留不变：任务 ID、创建时间、启停状态、迭代数、最近结果、一次性属性、未列出的扩展字段。修改后若任务为启用状态，会以新定义重新注册 job；cron 在注册时已不可触发则任务被自动停用并记 WARN。
 
-### 4.4 LoopTask（只读快照）
+### 6.4 LoopTask（只读快照）
 
 `LoopTask` 对宿主只读：无公开构造器，无公开修改方法。
 
@@ -333,7 +661,7 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 | `lastResult` | 有值时 | 最近结果 |
 | `lastExecutedAt` | 有值时 | ISO-8601 字符串 |
 
-### 4.5 LoopOutcome（执行结论）
+### 6.5 LoopOutcome（执行结论）
 
 | 构造 | 判定方法 | 调度器处理 |
 |---|---|---|
@@ -345,13 +673,13 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 
 `LoopExecutor` 签名：`LoopOutcome handle(String sessionId, String prompt) throws Exception`。
 
-### 4.6 状态键
+### 6.6 状态键
 
 | 常量 | 定义 | 说明 |
 |---|---|---|
 | `LoopExtension.STATUS_TASKS` | `SessionStatus.Key.count("loop.tasks")` | 本会话任务数（含已暂停）；经 `engine.status(session).get(...)` 读取，只供展示与宿主业务，内核不读 |
 
-### 4.7 模型工具（LoopTalent）
+### 6.7 模型工具（LoopTalent）
 
 只挂在顶层请求上（委派不挂）。会话 ID 由框架注入（`__sessionId`），无活跃会话时返回 `ERROR:` 文本。所有成功响应为 JSON，附带 `serverNow`（`yyyy-MM-dd'T'HH:mm:ss`）与 `timezone`，供模型换算相对时间。
 
@@ -371,24 +699,13 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 | `oneShot` | 默认 false；为 true 时必须有 `at` 或 `cron` |
 | `runNow` | 默认 false；与 `oneShot=true` 互斥 |
 
-### 4.8 /loop 命令（LoopCommand）
+### 6.8 /loop 命令（LoopCommand）
 
-| 用法 | 说明 |
-|---|---|
-| `/loop` 或 `/loop ls` | 列出本会话任务（状态 paused / running / idle、调度、迭代、最近结果） |
-| `/loop <interval> <prompt>` | 固定间隔任务；interval 如 `30s`、`5m`、`2h` |
-| `/loop <prompt>` | 首个参数不是间隔时，按缺省 5 分钟 |
-| `/loop cron:"<expr>" <prompt>` | cron 任务（引号可为双引号或单引号） |
-| `--now` | 附加在参数中，创建后立即执行首轮；其它 `--xxx` 提示 Unknown flag |
-| `/loop stop <id>` | 删除任务；若该任务正在执行，同时中断会话当前一轮 |
-| `/loop stop-all` | 删除本会话全部任务；若有任务正在执行，同时中断会话 |
-| `/loop pause <id>` / `/loop resume <id>` | 暂停 / 恢复 |
-
-间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务（需用宿主 API 或 `loop_add`）。
+语法见 4.1，命令边界见 4.2。
 
 ---
 
-## 5. 持久化格式与兼容
+## 7. 持久化格式与兼容
 
 存储内容（`store` 指定路径，如 `tasks.json`）：
 
@@ -438,32 +755,32 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 
 ---
 
-## 6. API 速查
+## 8. API 速查
 
-| 方法 | 返回 | 说明 |
-|---|---|---|
-| `LoopExtension.builder()` | `Builder` | 构建入口 |
-| `schedule(sessionId, LoopSpec)` | `LoopTask` | 新建并调度；`IllegalArgumentException` / `IllegalStateException` |
-| `update(sessionId, taskId, LoopPatch)` | `LoopTask` | 按补丁修改；null = 不存在；`IllegalArgumentException` |
-| `pause(sessionId, taskId)` | `boolean` | 暂停；false = 不存在 |
-| `resume(sessionId, taskId)` | `boolean` | 恢复并清零错误计数；false = 不存在 |
-| `toggle(sessionId, taskId)` | `boolean` | 启停切换；false = 不存在 |
-| `trigger(sessionId, taskId)` | `boolean` | 立即异步执行一轮；false = 不存在 |
-| `remove(sessionId, taskId)` | `boolean` | 删除；false = 不存在 |
-| `removeAll(sessionId)` | `void` | 删除本会话全部任务 |
-| `get(sessionId, taskId)` | `LoopTask` | 不存在为 null |
-| `list(sessionId)` | `List<LoopTask>` | 本会话全部任务（含已暂停） |
-| `listAll()` | `Map<String, List<LoopTask>>` | 全部会话，按 sessionId 排序 |
-| `hasActiveTasks()` | `boolean` | 是否存在启用且未删除的任务 |
-| `addExecutor(channel, claim, handler)` | `LoopExtension` | 注册通道执行器（可链式）；handler 为 null 时忽略 |
-| `setEnabled(Boolean)` | `void` | 只开关模型工具 |
-| `STATUS_TASKS` | `SessionStatus.Key<Integer>` | 会话任务数状态键 |
-| `DEFAULT_MAX_TASKS` / `DEFAULT_MAX_ERRORS` | `int` | 200 / 3 |
-| `LoopSpec.DEFAULT_INTERVAL_MINUTES` | `int` | 5 |
+| 方法 | 返回 | 时态 | 说明 |
+|---|---|---|---|
+| `LoopExtension.builder()` | `Builder` | 装配 | 构建入口 |
+| `addExecutor(channel, claim, handler)` | `LoopExtension` | 装配 | 注册通道执行器（可链式）；handler 为 null 时忽略 |
+| `schedule(sessionId, LoopSpec)` | `LoopTask` | 管理（`/loop`、`loop_add` 同路径） | 新建并调度；`IllegalArgumentException` / `IllegalStateException` |
+| `update(sessionId, taskId, LoopPatch)` | `LoopTask` | 管理 | 按补丁修改；null = 不存在；`IllegalArgumentException` |
+| `pause(sessionId, taskId)` | `boolean` | 管理（`/loop pause` 同路径） | 暂停；false = 不存在 |
+| `resume(sessionId, taskId)` | `boolean` | 管理（`/loop resume` 同路径） | 恢复并清零错误计数；false = 不存在 |
+| `toggle(sessionId, taskId)` | `boolean` | 管理 | 启停切换；false = 不存在 |
+| `trigger(sessionId, taskId)` | `boolean` | 管理 | 立即异步执行一轮；false = 不存在 |
+| `remove(sessionId, taskId)` | `boolean` | 管理（`/loop stop` 同路径） | 删除；false = 不存在 |
+| `removeAll(sessionId)` | `void` | 管理（`/loop stop-all` 同路径） | 删除本会话全部任务 |
+| `get(sessionId, taskId)` | `LoopTask` | 管理 | 不存在为 null |
+| `list(sessionId)` | `List<LoopTask>` | 管理 | 本会话全部任务（含已暂停） |
+| `listAll()` | `Map<String, List<LoopTask>>` | 管理 | 全部会话，按 sessionId 排序 |
+| `hasActiveTasks()` | `boolean` | 运维 | 是否存在启用且未删除的任务 |
+| `setEnabled(Boolean)` | `void` | 运维 | 只开关模型工具 |
+| `STATUS_TASKS` | `SessionStatus.Key<Integer>` | — | 会话任务数状态键 |
+| `DEFAULT_MAX_TASKS` / `DEFAULT_MAX_ERRORS` | `int` | — | 200 / 3 |
+| `LoopSpec.DEFAULT_INTERVAL_MINUTES` | `int` | — | 5 |
 
 ---
 
-## 7. 注意事项
+## 9. 注意事项
 
 1. **用 `addExtensionIfAbsent` 装配**：按类型幂等；重复 `addExtension` 会二次 `onAttach`。
 2. **会话忙时本轮直接放弃**：不计错误、不重试、也不消耗一次性配额，等下一次到点。执行器无需自行判断会话忙。
@@ -477,147 +794,3 @@ LoopExtension loop = LoopExtension.builder().jobManager(null).defaultExecutor(fa
 10. **无 JobManager**：未显式关闭却取不到时只告警，任务只存不跑；测试中请显式 `jobManager(null)`。
 11. **`setEnabled(false)` 不停任务**：只关闭 `loop_*` 工具，`/loop` 与已有任务继续运行；要停任务请 `pause` / `remove`。
 12. **缺省执行器**：以程序输入（`HarnessInput.ofProgram`，来源 `loop`）进入引擎，提示词不解析命令与 @提及；执行失败抛给调度器计错误。
-
----
-
-## 8. 命令路径：/loop 与宿主协作
-
-### 8.1 命令的边界
-
-| 项 | 说明 |
-|---|---|
-| 注册 | `LoopExtension#onAttach` 自动注册，宿主不用注册 |
-| 会话 | 命令作用于 `ctx.getSession().getSessionId()`，即本次输入所在会话 |
-| 结局 | 恒为 `Kind.REPLY`：命令只改任务表并回执，不在本次 `handle` 里开流 |
-| 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用；不需要 `.terminal(true)` |
-| 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.admit` 给出 `DEFER`（排队，空闲后执行）；没装 queue 时给出 `REJECT("busy")` |
-| 开关 | `loop.setEnabled(false)` 只关模型工具，`/loop` 照常可用 |
-| 回执格式 | 缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
-| 任务 ID | `/loop ls` 与创建回执里打印完整 ID；`stop` / `pause` / `resume` 需要传完整 ID |
-
-回执示例（实际文案以命令输出为准）：
-
-```text
-/loop 30m 检查 CI 是否通过 --now      # 每 30 分钟，并立即跑首轮
-/loop cron:"0 0 9 * * ?" 汇总昨日告警  # 每天 9 点
-/loop ls                               # 列出本会话任务
-/loop pause <id>  /  /loop resume <id>
-/loop stop <id>   /  /loop stop-all
-```
-
-### 8.2 宿主接入：完整示例
-
-`/loop` 只负责"建任务"；任务到点后由**执行器**跑一轮，执行器的输出要由宿主送回渠道。所以宿主要接两处：输入入口（让命令能执行）与执行器（让到点的那一轮有去处）。
-
-```java
-import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.extension.loop.LoopExtension;
-import org.noear.solon.ai.harness.extension.loop.LoopOutcome;
-import org.noear.solon.ai.harness.extension.queue.QueueExtension;
-import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.turn.AdmitDecision;
-import org.noear.solon.ai.harness.turn.InputGate;
-
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-public class ImLoopHost {
-    private final HarnessEngine engine;
-    private final QueueExtension queue;
-    private final LoopExtension loop;
-    /** 会话最近一次的回复路由（定时轮次没有入站消息，只能回到这里） */
-    private final Map<String, InputOrigin> routes = new ConcurrentHashMap<>();
-
-    public ImLoopHost(HarnessEngine engine) {
-        this.engine = engine;
-        this.queue = engine.addExtensionIfAbsent(new QueueExtension());
-        this.loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-                .store(engine.getStateSource(), "tasks.json")       // 任务随引擎状态来源持久化
-                .sessionAlive(this::sessionExists)                   // 按会话存储判断（勿用内存会话表，重启后会误删）
-                .build());
-
-        // 执行器：认领 IM 会话（谓词应互斥），把到点的一轮跑完并送回渠道
-        loop.addExecutor("im", id -> id.startsWith("im-"), (sid, prompt) -> {
-            AgentSession session = engine.getSessionOrNil(sid);
-            InputOrigin route = routes.get(sid);
-            if (session == null || route == null) {
-                return LoopOutcome.skip("no session or reply route");  // 不计错误
-            }
-            try {
-                // 程序输入：不识别命令与 @提及，来源标记为 loop
-                String text = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"))
-                        .call().getContent();
-                reply(route, text);
-                return LoopOutcome.done(text);
-            } finally {
-                drain(session);   // 这一轮占用期间用户发来的消息被延后了：轮次结束立即续发
-            }
-        });
-    }
-
-    /** 输入入口：/loop 命令与普通消息共用 */
-    public void onMessage(AgentSession session, String text, InputOrigin origin) {
-        AdmitDecision admit = engine.admit(session, text, false, engine::isBusyBypassCommand);
-        switch (admit.getKind()) {
-            case REJECT:
-                reply(origin, admit.getRejectDetail());
-                return;
-            case DEFER:   // 任务（含 loop 的一轮）运行中发来的 /loop：排队，空闲后按命令执行
-                int pos = queue.enqueue(session, text, origin);
-                reply(origin, pos < 0 ? "排队失败，请稍后再试" : "当前任务结束后执行（第 " + pos + " 位）");
-                return;
-            default:
-                break;
-        }
-
-        routes.put(session.getSessionId(), origin);   // 记下回复路由，供定时轮次使用
-
-        boolean acquired = admit.getTicket().isAcquired();
-        try (InputGate.Ticket ticket = admit.getTicket()) {
-            InputOutcome outcome = engine.handle(HarnessInput.of(session, text).origin(origin));
-            if (outcome.getKind() == InputOutcome.Kind.REPLY) {
-                reply(origin, outcome.getCommandOutput());          // /loop 的回执
-            } else if (outcome.getKind() == InputOutcome.Kind.TASK) {
-                reply(origin, outcome.getRequest().call().getContent());
-            }
-        } catch (Throwable e) {
-            reply(origin, "处理失败：" + e.getMessage());
-        } finally {
-            if (acquired) {
-                drain(session);
-            }
-        }
-    }
-
-    private void drain(AgentSession session) {
-        queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-            onMessage(session, claim.getItem().getText(), claim.getItem().getOrigin());
-            return true;
-        });
-    }
-
-    /** 宿主永久删除会话：先通知引擎（loop 会删掉该会话全部任务），再删存储 */
-    public void deleteSession(String sessionId) {
-        engine.removeSession(sessionId);
-        routes.remove(sessionId);
-        // ... 移出内存、删除存储
-    }
-
-    private boolean sessionExists(String sessionId) { /* 查会话存储 */ return true; }
-    private void reply(InputOrigin origin, String text) { /* 按 origin 回投渠道 */ }
-}
-```
-
-### 8.3 协作要点
-
-1. **命令建任务，执行器跑任务**：`/loop` 与 `loop_add`、`loop.schedule(...)` 建出的是同一种任务；到点后统一经执行器执行，命令本身从不开流。
-2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
-3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。
-4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息被 `DEFER` 进队列；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
-5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop stop <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务、不会中断。要立刻停掉正在跑的一轮，用宿主的停止入口 `engine.interrupt(session)`，再 `loop.remove(sid, taskId)`。不经 `admit`、直接在忙时执行命令的宿主（如命令行终端）才会走到命令里"顺带中断"的分支。
-6. **中断不删任务**：`engine.interrupt` 只停当前一轮，定时任务照常保留，下次到点继续。
-7. **删除会话要先调 `engine.removeSession`**：它回调 `onSessionRemove`，删除该会话的全部任务并注销 job；顺序颠倒时，定时任务可能在删除过程中触发并把会话重新建出来。
-8. **一次性任务不能用命令建**：`/loop` 只支持间隔与 cron；一次性提醒用 `loop.schedule(sid, LoopSpec.of(...).at(...))` 或模型工具 `loop_add` 的 `at` 参数。

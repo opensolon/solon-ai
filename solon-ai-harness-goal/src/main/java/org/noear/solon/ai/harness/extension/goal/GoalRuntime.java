@@ -248,9 +248,9 @@ class GoalRuntime {
      *
      * <p>与 {@link #sessionOf} 不同，解析异常会向外抛出——调用方要能区分「确实不存在」与「暂时取不到」。</p>
      */
-    AgentSession sessionOrNil(String sessionId) {
+    AgentSession sessionOrNull(String sessionId) {
         if (engine == null || sessionId == null) return null;
-        return engine.getSessionOrNil(sessionId);
+        return engine.getSessionOrNull(sessionId);
     }
 
     /**
@@ -371,7 +371,7 @@ class GoalRuntime {
     boolean shouldSkipSession(String sessionId) {
         if (engine == null) return false;
         try {
-            AgentSession session = engine.getSessionOrNil(sessionId);
+            AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) return true;
             return engine.isIdle(session) == false;
         } catch (Throwable e) {
