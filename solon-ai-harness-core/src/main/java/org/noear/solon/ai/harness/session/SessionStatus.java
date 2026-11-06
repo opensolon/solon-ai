@@ -48,7 +48,7 @@ import java.util.function.BinaryOperator;
  * 内核没有 queue。插件事实一律由插件自己定义 {@link Key} 常量（如 queue 的
  * {@code QueueExtension.STATUS_PENDING}、steer 的 {@code SteerExtension.STATUS_PENDING}），
  * 宿主按键读取。内核自己的判定若依赖插件（如受理的先进先出），走核心定义的能力接口
- * （{@link org.noear.solon.ai.harness.turn.InputBacklog#hasPending}），不走本快照。</p>
+ * （{@link org.noear.solon.ai.harness.spi.InputBacklog#hasPending}），不走本快照。</p>
  *
  * <p><b>注意 busy 的口径</b>：{@link #isBusy()} 只表示「有活跃运行流」。
  * 「不能接新输入」通常是 {@link #isOccupied()}（忙碌或待审批），两者刻意分开——
@@ -155,7 +155,7 @@ public final class SessionStatus {
      * 是否正处在「输入已受理、运行流尚未登记」的窗口内。
      *
      * @see org.noear.solon.ai.harness.turn.InputGate
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public boolean isAdmitting() {
         return admitting;

@@ -7,7 +7,7 @@ package org.noear.solon.ai.harness.extension.steer;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.lang.Nullable;
 
 import org.slf4j.Logger;
@@ -41,10 +41,10 @@ import java.util.function.BooleanSupplier;
  * 转排队失败的暂存为 orphans（永不注入），下次开轮/收轮重试。</p>
  *
  * @author noear
- * @since 2026
+ * @since 4.2.0
  */
-final class SteerHelper {
-    private static final Logger LOG = LoggerFactory.getLogger(SteerHelper.class);
+final class SteerMailbox {
+    private static final Logger LOG = LoggerFactory.getLogger(SteerMailbox.class);
 
     /** 缺省邮箱容量上限（Codex 建议：频繁 steer 加速上下文膨胀，高频场景应改用排队）。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_BOX_SIZE = 5;
@@ -53,7 +53,7 @@ final class SteerHelper {
     /** 缺省插话 ID 长度上限。可经 {@link SteerLimits} 覆盖 */
     public static final int MAX_ID_LENGTH = 128;
 
-    private SteerHelper() { }
+    private SteerMailbox() { }
 
     /**
      * 插话入队的唯一实现（Web / IM / 命令共用）。
@@ -66,27 +66,27 @@ final class SteerHelper {
      * @param origin       来源身份（可空，空同 {@link InputOrigin#NONE}）
      * @param busyRecheck  入邮箱后复查会话是否仍繁忙的回调，可为 null（为 null 时仅依据轮次判定）
      * @param limits       容量 / 长度约束
-     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerStatus#TURN_CHANGED}，且不生成 steerId
+     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerResult.Code#TURN_CHANGED}，且不生成 steerId
      * @return 入队结果（status 与 /web/chat/steer 的应答码同名）
      */
     static SteerResult steer(AgentSession session, String runId, String steerId, String text,
                              InputOrigin origin, BooleanSupplier busyRecheck,
                              SteerLimits limits, boolean requireRunId) {
         if (session == null) {
-            return new SteerResult(SteerStatus.NOT_RUNNING, null, 0);
+            return new SteerResult(SteerResult.Code.NOT_RUNNING, null, 0);
         }
         if (text == null || text.trim().isEmpty()) {
-            return new SteerResult(SteerStatus.EMPTY_TEXT, null, 0);
+            return new SteerResult(SteerResult.Code.EMPTY_TEXT, null, 0);
         }
 
         text = text.trim();
         if (text.length() > limits.getMaxTextLength()) {
-            return new SteerResult(SteerStatus.TEXT_TOO_LONG, null, 0);
+            return new SteerResult(SteerResult.Code.TEXT_TOO_LONG, null, 0);
         }
 
         if (requireRunId && (runId == null || runId.trim().isEmpty())) {
             // 严格轮次绑定：先于 id 生成拒绝，避免调用方拿到一个无意义的 steerId
-            return new SteerResult(SteerStatus.TURN_CHANGED, null, 0);
+            return new SteerResult(SteerResult.Code.TURN_CHANGED, null, 0);
         }
 
         if (steerId == null || steerId.trim().isEmpty()) {
@@ -94,7 +94,7 @@ final class SteerHelper {
         } else {
             steerId = steerId.trim();
             if (steerId.length() > limits.getMaxIdLength()) {
-                return new SteerResult(SteerStatus.INVALID_STEER_ID, null, 0);
+                return new SteerResult(SteerResult.Code.INVALID_STEER_ID, null, 0);
             }
         }
 
@@ -105,18 +105,18 @@ final class SteerHelper {
             if (state.runId == null) {
                 // 任务尚未开轮或已结束：Web 端有明确 runId 时按 TURN_CHANGED 由前端决策；
                 // IM 端（runId==null）按 NOT_RUNNING 由调用方如实告知用户，不代为降级。
-                return new SteerResult(runId != null ? SteerStatus.TURN_CHANGED : SteerStatus.NOT_RUNNING, steerId, 0);
+                return new SteerResult(runId != null ? SteerResult.Code.TURN_CHANGED : SteerResult.Code.NOT_RUNNING, steerId, 0);
             }
             if (runId != null && runId.equals(state.runId) == false) {
-                return new SteerResult(SteerStatus.TURN_CHANGED, steerId, 0);
+                return new SteerResult(SteerResult.Code.TURN_CHANGED, steerId, 0);
             }
             // 先判重再判容量：满邮箱中的同 ID 重试仍应返回准确的重复结果，
             // 不能误报 BOX_FULL 后被前端降级为普通任务而造成重复执行。
             if (state.containsId(steerId)) {
-                return new SteerResult(SteerStatus.DUPLICATE_STEER_ID, steerId, state.inbox.size());
+                return new SteerResult(SteerResult.Code.DUPLICATE_STEER_ID, steerId, state.inbox.size());
             }
             if (state.inbox.size() >= limits.getMaxBoxSize()) {
-                return new SteerResult(SteerStatus.BOX_FULL, steerId, state.inbox.size());
+                return new SteerResult(SteerResult.Code.BOX_FULL, steerId, state.inbox.size());
             }
             state.inbox.addLast(steer);
             epoch = state.epoch;
@@ -127,15 +127,15 @@ final class SteerHelper {
         synchronized (state) {
             boolean sameRun = state.epoch == epoch;
             if (busyAfterOffer && sameRun) {
-                return new SteerResult(SteerStatus.STEERED, steerId, state.inbox.size());
+                return new SteerResult(SteerResult.Code.STEERED, steerId, state.inbox.size());
             }
             if (state.inbox.remove(steer)) {
-                return new SteerResult(sameRun ? SteerStatus.NOT_RUNNING : SteerStatus.TURN_CHANGED, steerId, 0);
+                return new SteerResult(sameRun ? SteerResult.Code.NOT_RUNNING : SteerResult.Code.TURN_CHANGED, steerId, 0);
             }
         }
 
         // 已被注入或已随收轮转排队，无法回滚：必须报成功，否则调用方降级排队会把同一文本执行第二次
-        return new SteerResult(SteerStatus.STEERED, steerId, 0);
+        return new SteerResult(SteerResult.Code.STEERED, steerId, 0);
     }
 
     /**
@@ -150,13 +150,13 @@ final class SteerHelper {
                 return SteerCancelResult.canceled(steerId, 1, state.inbox.size() + state.orphans.size());
             }
             if (runId == null || runId.equals(state.runId) == false) {
-                return SteerCancelResult.of(SteerCancelStatus.TURN_CHANGED, steerId,
+                return SteerCancelResult.of(SteerCancelResult.Code.TURN_CHANGED, steerId,
                         state.inbox.size() + state.orphans.size());
             }
             if (SteerState.removeById(state.inbox, steerId)) {
                 return SteerCancelResult.canceled(steerId, 1, state.inbox.size() + state.orphans.size());
             }
-            return SteerCancelResult.of(SteerCancelStatus.NOT_PENDING, steerId,
+            return SteerCancelResult.of(SteerCancelResult.Code.NOT_PENDING, steerId,
                     state.inbox.size() + state.orphans.size());
         }
     }
@@ -212,7 +212,7 @@ final class SteerHelper {
             try {
                 ok = backlog != null && backlog.offer(session, message.getText(), message.getOrigin()) >= 0;
             } catch (RuntimeException e) {
-                LOG.warn("[SteerHelper] enqueue steer failed for session {}: {}",
+                LOG.warn("[SteerMailbox] enqueue steer failed for session {}: {}",
                         session.getSessionId(), e.getMessage());
                 ok = false;
             }
@@ -222,7 +222,7 @@ final class SteerHelper {
         }
 
         if (failed.isEmpty() == false) {
-            LOG.warn("[SteerHelper] {} unconsumed steers could not be queued for session {}",
+            LOG.warn("[SteerMailbox] {} unconsumed steers could not be queued for session {}",
                     failed.size(), session.getSessionId());
         }
 

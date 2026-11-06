@@ -2,74 +2,70 @@ package org.noear.solon.ai.harness.extension.goal;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 执行器注册的通道化契约（4.2.1）：
+ * 执行器注册的通道化契约：
  *
- * <p>多入口宿主（CLI/Web/桌面）各注册一个执行器，认领边界互斥靠约定——
- * 写宽了就按注册顺序静默抢跑，此前只有一条无上下文的 debug 行。通道化注册
- * （{@code addExecutor(channel, claim, handler)}）把认领条件显式交给引擎，
- * 引擎可在不执行 handler 的前提下静态评估互斥性并告警。</p>
+ * <p>多入口宿主（CLI/Web/桌面）各注册一个执行器，认领边界由谓词显式给出——
+ * 引擎可在不执行 handler 的前提下评估互斥性并告警；归属只由谓词决定，结论不穿透。</p>
  *
  * <p>观测口用包内方法而非日志捕抓：测试 classpath 无 SLF4J 后端（NOP），
  * ListAppender 方案会静默断言失败。</p>
  */
 class GoalChannelExecutorRegistrationTest {
 
-    private static GoalEngine engine() {
-        return new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
+    private static GoalRuntime engine() {
+        return new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 3, false);
     }
 
     // ========== 注册校验 ==========
 
     @Test
-    void channelRegistrationRejectsBlankChannelAndNullPredicate() {
-        GoalEngine ge = engine();
+    void channelRegistrationRejectsBlankChannel() {
+        GoalRuntime ge = engine();
 
         assertThrows(IllegalArgumentException.class,
                 () -> ge.addExecutor("  ", id -> true, (id, p) -> null),
                 "空白通道名应拒绝");
-
-        assertThrows(IllegalArgumentException.class,
-                () -> ge.addExecutor("web", null, (id, p) -> null),
-                "无谓词应拒绝（那是旧形态的职责，混用会退化回不可评估）");
 
         ge.addExecutor("cli", id -> true, (id, p) -> null);
         assertEquals(1, ge.channelsClaiming("any").size(), "合法注册应生效");
     }
 
     @Test
-    void legacyRegistrationIsNotEvaluatedForOverlap() {
-        GoalEngine ge = engine();
-        ge.addExecutor((id, p) -> null);  // 旧形态：无谓词可评
-        ge.addExecutor("web", id -> true, (id, p) -> null);
+    void nullPredicateClaimsAllButIsNotEvaluatedForOverlap() throws Exception {
+        GoalRuntime ge = engine();
+        ge.addExecutor("all", null, (id, p) -> TestOutcomes.ofText("from-all"));
+        ge.addExecutor("web", id -> true, (id, p) -> TestOutcomes.ofText("from-web"));
 
-        assertEquals(java.util.Collections.singletonList("web"), ge.channelsClaiming("any"),
-                "channelsClaiming 只评估通道化注册，旧形态不得被重复计入");
+        assertEquals(Collections.singletonList("web"), ge.channelsClaiming("any"),
+                "channelsClaiming 只评估带谓词的注册");
+        assertEquals("from-all", ge.execute("any", "p").getText(), "无谓词 = 认领全部，按注册顺序优先");
     }
 
     // ========== 互斥告警 ==========
 
     @Test
-    void overlappingClaimsWarnExactlyOncePerCombination() {
-        GoalEngine ge = engine();
-        ge.addExecutor("cli", id -> id.startsWith("cli"), (id, p) ->
-                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"));
-        ge.addExecutor("web", id -> id.contains("cli"), (id, p) ->
-                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
+    void overlappingClaimsWarnExactlyOncePerCombination() throws Exception {
+        GoalRuntime ge = engine();
+        ge.addExecutor("cli", id -> id.startsWith("cli"), (id, p) -> TestOutcomes.ofText("from-cli"));
+        ge.addExecutor("web", id -> id.contains("cli"), (id, p) -> TestOutcomes.ofText("from-web"));
         // 两个谓词都命中 "cli-1"：边界重叠
 
-        org.noear.solon.ai.harness.extension.goal.GoalRoundResult r1 = ge.execute("cli-1", "p");
-        org.noear.solon.ai.harness.extension.goal.GoalRoundResult r2 = ge.execute("cli-1", "p");
+        GoalOutcome r1 = ge.execute("cli-1", "p");
+        GoalOutcome r2 = ge.execute("cli-1", "p");
 
-        assertEquals("from-cli", r1.getFinalResult(), "仍按注册顺序取首个认领者（语义不变）");
-        assertEquals("from-cli", r2.getFinalResult());
-        assertEquals(1, ge.overlapWarnCount(),
-                "同一组合的重叠只告警一次（防批量路径刷屏）");
+        assertEquals("from-cli", r1.getText(), "按注册顺序取首个认领者");
+        assertEquals("from-cli", r2.getText());
+        assertEquals(1, ge.overlapWarnCount(), "同一组合的重叠只告警一次（防批量路径刷屏）");
 
         // 换组合（仅 web 命中）不告警
         ge.execute("web-only", "p");
@@ -77,139 +73,86 @@ class GoalChannelExecutorRegistrationTest {
     }
 
     @Test
-    void predicateMatchDoesNotBypassHandlerNull() {
-        // 谓词是预过滤不是权威判定：命中谓词后 handler 仍可返回 null（本次不认领），
-        // 由下一个注册者接管——运行时端口暂不可用等场景依赖此回退。
-        GoalEngine ge = engine();
+    void claimedExecutorResultIsFinalEvenIfNull() throws Exception {
+        // 谓词即归属：命中后 handler 返回 null 是编程错误，按失败处理，不再穿透到下一注册者
+        GoalRuntime ge = engine();
         ge.addExecutor("cli", id -> true, (id, p) -> null);
-        ge.addExecutor("web", id -> true, (id, p) ->
-                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
+        ge.addExecutor("web", id -> true, (id, p) -> TestOutcomes.ofText("from-web"));
 
-        assertEquals("from-web", ge.execute("s", "p").getFinalResult(),
-                "谓词命中但 handler 返 null 时应穿透到下一注册者");
+        assertTrue(ge.execute("s", "p").isFailed(), "首个认领者的结论即最终结论");
     }
 
     @Test
-    void throwingPredicateIsSkippedNotFatal() {
-        GoalEngine ge = engine();
-        ge.addExecutor("bad", id -> { throw new IllegalStateException("boom"); },
-                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("bad"));
-        ge.addExecutor("web", id -> true, (id, p) ->
-                org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-web"));
+    void throwingPredicateIsSkippedNotFatal() throws Exception {
+        GoalRuntime ge = engine();
+        ge.addExecutor("bad", id -> {
+            throw new IllegalStateException("boom");
+        }, (id, p) -> TestOutcomes.ofText("bad"));
+        ge.addExecutor("web", id -> true, (id, p) -> TestOutcomes.ofText("from-web"));
 
-        assertEquals("from-web", ge.execute("s", "p").getFinalResult(),
-                "谓词异常按不命中处理，不得击穿轮次");
-        assertEquals(java.util.Collections.singletonList("web"), ge.channelsClaiming("s"),
-                "评估口径与执行口径一致：坏谓词不进评估结果，web 恒真仍命中");
+        assertEquals("from-web", ge.execute("s", "p").getText(), "谓词异常按不命中处理，不得击穿轮次");
+        assertEquals(Collections.singletonList("web"), ge.channelsClaiming("s"),
+                "评估口径与执行口径一致：坏谓词不进评估结果");
     }
 
     @Test
-    void predicateEvaluatedOncePerRound() {
-        // 谓词只评估一次：互斥检测与认领路由复用同一份结果（宿主谓词常是正则，两次遍历=双倍开销）
+    void predicateEvaluatedOncePerRound() throws Exception {
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
-        GoalEngine ge = engine();
-        ge.addExecutor("cli", id -> { calls.incrementAndGet(); return true; },
-                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"));
+        GoalRuntime ge = engine();
+        ge.addExecutor("cli", id -> {
+            calls.incrementAndGet();
+            return true;
+        }, (id, p) -> TestOutcomes.ofText("from-cli"));
 
         ge.execute("s", "p");
 
         assertEquals(1, calls.get(), "一轮只能评估一次谓词");
     }
 
+    @Test
+    void unclaimedFallsBackToDefaultExecutor() throws Exception {
+        GoalRuntime ge = engine();
+        ge.addExecutor("web", id -> id.startsWith("web-"), (id, p) -> TestOutcomes.ofText("from-web"));
+        ge.setDefaultExecutor((id, p) -> TestOutcomes.ofText("fallback"));
+
+        assertEquals("fallback", ge.execute("cli", "p").getText(), "无人认领时走兜底");
+        assertEquals("from-web", ge.execute("web-1", "p").getText(), "宿主执行器优先于兜底");
+    }
+
     // ========== 门面直通 ==========
 
     @Test
-    void facadeChannelRegistrationReachesEngine() {
-        GoalExtension ext = GoalExtension.builder("ws-channel").scheduler(null).build();
-        org.noear.solon.ai.harness.HarnessEngine engine =
-                org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                        .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
-                        .extensionAdd(ext)
-                        .build();
+    void facadeChannelRegistrationReachesRuntime() {
+        GoalExtension ext = GoalExtension.builder("ws-channel").jobManager(null).build();
+        org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
+                .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
+                .extensionAdd(ext)
+                .build();
 
         GoalExtension returned = ext.addExecutor("desktop", id -> id.matches("\\d+"),
-                (id, p) -> org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-desktop"));
+                (id, p) -> TestOutcomes.ofText("from-desktop"));
 
-        assertEquals(ext, returned, "门面保持链式");
-        assertEquals(java.util.Collections.singletonList("desktop"), ext.getGoalEngine().channelsClaiming("123456"));
+        assertSame(ext, returned, "门面保持链式");
+        assertEquals(Collections.singletonList("desktop"), ext.getGoalRuntime().channelsClaiming("123456"));
     }
 
-    // ========== 无调度器静默 no-op 的告警门闹（4.2.1）==========
-
-    /**
-     * scheduler(null) 后调度方法静默 no-op 是排障盲区：
-     * 「调了 scheduleNow 却没跑」的第一嫌疑就是这里，必须一条 warn 指路且不刷屏。
-     */
     @Test
-    void scheduleCallsWithoutSchedulerTripWarnLatchExactlyOnce() {
-        GoalExtension ext = GoalExtension.builder("ws-nosched").scheduler(null).build();
+    void facadeRegistrationBeforeAttachFailsFast() {
+        GoalExtension ext = GoalExtension.builder("ws-early").jobManager(null).build();
+        assertThrows(IllegalStateException.class,
+                () -> ext.addExecutor("cli", id -> true, (id, p) -> null),
+                "未挂接就注册属于装配顺序错误，必须当场失败而不是静默丢失");
+    }
+
+    @Test
+    void jobManagerNullDisablesScheduling() {
+        GoalExtension ext = GoalExtension.builder("ws-nosched").jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
                 .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
                 .build();
 
-        ext.scheduleNow("s1");
-        ext.resumeScheduleOnly("s1");
-        ext.scheduleNow("s2");
-
-        assertTrue(ext.noSchedulerWarned(), "首次调用即应触发门闩（后续不再重复）");
-    }
-
-    /**
-     * {@code stopAll()} 也在门闩覆盖范围内（它是关停路径，误调同样表现为「调度没停」）。
-     */
-    @Test
-    void stopAllWithoutSchedulerAlsoTripsWarnLatch() {
-        GoalExtension ext = GoalExtension.builder("ws-stopall").scheduler(null).build();
-        org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
-                .extensionAdd(ext)
-                .build();
-
-        ext.stopAll();
-
-        assertTrue(ext.noSchedulerWarned(), "stopAll 也应指路，不得静默");
-    }
-
-    /**
-     * 摘除时 scheduler 为 null 是正常形态（纯测试宿主）：onDetach 直连内部字段，
-     * 不走 stopAll() 门面，否则每次摘除都会报一条误导性的「没配调度器」。
-     */
-    @Test
-    void detachWithoutSchedulerDoesNotWarn() {
-        GoalExtension ext = GoalExtension.builder("ws-detach").scheduler(null).build();
-        org.noear.solon.ai.harness.HarnessEngine engine =
-                org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                        .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
-                        .extensionAdd(ext)
-                        .build();
-
-        ext.onDetach(engine);
-
-        org.junit.jupiter.api.Assertions.assertFalse(ext.noSchedulerWarned(),
-                "摘除时 scheduler 空属正常，不应告警");
-    }
-
-    // ========== builder 通道化（装配时形态，与运行期形态对称）==========
-
-    @Test
-    void builderChannelClaimsRegisteredInDeclarationOrder() {
-        GoalExtension ext = GoalExtension.builder("ws-builder")
-                .scheduler(null)
-                .executor("cli", id -> id.startsWith("cli"), (id, p) ->
-                        org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-cli"))
-                .executor("desktop", id -> id.matches("\\d+"), (id, p) ->
-                        org.noear.solon.ai.harness.extension.goal.GoalRoundResult.ofText("from-desktop"))
-                .build();
-        org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider(id -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
-                .extensionAdd(ext)
-                .build();
-
-        assertEquals(java.util.Collections.singletonList("cli"),
-                ext.getGoalEngine().channelsClaiming("cli-1"), "builder 声明应生效");
-        assertEquals(java.util.Collections.singletonList("desktop"),
-                ext.getGoalEngine().channelsClaiming("123456"), "桌面通道互斥正确");
-        assertEquals(0, ext.getGoalEngine().overlapWarnCount(), "合法互斥不应告警");
+        assertFalse(ext.hasScheduler());
+        assertFalse(ext.hasActiveGoals());
     }
 }

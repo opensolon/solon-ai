@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.tool.FunctionTool;
-import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.harness.agent.task.TaskTalent;
 
 import java.util.List;
 import java.util.Map;

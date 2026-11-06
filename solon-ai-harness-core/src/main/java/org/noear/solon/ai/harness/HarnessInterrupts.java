@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 本类的 {@link #claim} 只是引擎内部的核心认领步骤，只停流、不会清积压。</p>
  *
  * <p>包内可见（原 {@code session.interrupt.InterruptHelper}）：对外只有 {@link InterruptPlan} 与引擎的
- * {@code interrupt / prepareInterrupt / interruptStream / interruptStreamActive}。</p>
+ * {@code interrupt / prepareInterrupt / cancelStream / preemptStream}。</p>
  *
  * @author noear
  * @since 4.2
@@ -91,7 +91,7 @@ final class HarnessInterrupts {
      * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流（但取消代数已推进）
      * @since 4.2.0
      */
-    public static boolean interruptStreamOnly(AgentSession session) {
+    public static boolean cancelStream(AgentSession session) {
         if (session == null) {
             return false;
         }
@@ -102,7 +102,7 @@ final class HarnessInterrupts {
     /**
      * 只停当前运行流，且<b>不推进取消代数</b>。
      *
-     * <p>与 {@link #interruptStreamOnly} 的差别在于「这次停流算不算取消」：
+     * <p>与 {@link #cancelStream} 的差别在于「这次停流算不算取消」：
      * 推进代数后，被顶掉的旧流能据此判定「自己是被取消的」，从而不再发终态帧（适合 Stop）；
      * 不推进代数则用于「新轮次顶掉旧轮次」——旧流本身就该自然结束，只是不再被需要，
      * 若把它当成被取消，会把新轮次的收尾也牵连进去。</p>
@@ -110,7 +110,7 @@ final class HarnessInterrupts {
      * @return true = 确有活跃流被停掉
      * @since 4.2.0
      */
-    public static boolean interruptStreamActive(AgentSession session) {
+    public static boolean preemptStream(AgentSession session) {
         if (session == null) {
             return false;
         }

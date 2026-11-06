@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  * 命令注册表（通用，CLI 和 Web 共用）
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class CommandRegistry {
     private static final Logger LOG = LoggerFactory.getLogger(CommandRegistry.class);

@@ -36,7 +36,7 @@ import java.util.List;
  * 静默丢弃——本事件无持久化副作用，可以丢。</p>
  *
  * @author noear
- * @since 2026
+ * @since 4.2.0
  */
 public class SteerAppliedEvent extends AbsReActEvent {
     private final List<SteerMessage> items;

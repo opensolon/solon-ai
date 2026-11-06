@@ -7,21 +7,21 @@ package org.noear.solon.ai.harness.extension.steer;
 /**
  * 插话邮箱的容量与长度约束（不可变值对象）。
  *
- * <p>此前三个上限是 {@link SteerHelper} 上的 {@code public static final} 常量，
+ * <p>此前三个上限是 {@link SteerMailbox} 上的 {@code public static final} 常量，
  * 宿主想给长会话 / IM 场景放宽只能改库。改为值对象后由
  * {@link SteerExtension#builder()} 注入，内核逻辑只读实例字段。</p>
  *
  * <p>宿主的入参校验<b>不需要</b>再读这些值：投递内核会以同一份约束返回
- * {@link SteerStatus#TEXT_TOO_LONG} / {@link SteerStatus#INVALID_STEER_ID} /
- * {@link SteerStatus#BOX_FULL}，宿主只需映射应答码（见 {@link SteerResult}）。</p>
+ * {@link SteerResult.Code#TEXT_TOO_LONG} / {@link SteerResult.Code#INVALID_STEER_ID} /
+ * {@link SteerResult.Code#BOX_FULL}，宿主只需映射应答码（见 {@link SteerResult}）。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class SteerLimits {
     /** 缺省约束：邮箱 5 条、单条 4096 字符、ID 128 字符。 */
     public static final SteerLimits DEFAULT = new SteerLimits(
-            SteerHelper.MAX_BOX_SIZE, SteerHelper.MAX_TEXT_LENGTH, SteerHelper.MAX_ID_LENGTH);
+            SteerMailbox.MAX_BOX_SIZE, SteerMailbox.MAX_TEXT_LENGTH, SteerMailbox.MAX_ID_LENGTH);
 
     private final int maxBoxSize;
     private final int maxTextLength;

@@ -33,7 +33,7 @@ import java.util.Map;
  * （新版本不会与在途那一轮并发，本轮结果记到新版本上）。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class LoopPatch {
     private String prompt;

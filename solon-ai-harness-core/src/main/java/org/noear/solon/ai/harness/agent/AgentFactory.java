@@ -35,14 +35,6 @@ import org.slf4j.LoggerFactory;
 public class AgentFactory {
     private static final Logger LOG = LoggerFactory.getLogger(AgentFactory.class);
 
-    //**
-    private static String[] TOOL_ALL_FULL = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "task", "generate", "mcp", "openapi", "hitl", "lsp", "memory"};
-    //*
-    private static String[] TOOL_ALL_PUBLIC = {"read", "write", "edit", "glob", "grep", "ls", "bash", "skill", "todo", "code", "codesearch", "websearch", "webfetch", "lsp"};
-    //pi
-    private static String[] TOOL_PI = {"read", "write", "edit", "bash"};
-
-
     /**
      * 根据定义生成代理
      */
@@ -89,20 +81,8 @@ public class AgentFactory {
             TerminalTalentProxy terminalTalentProxy = new TerminalTalentProxy(engine.getTerminalTalent());
 
             for (String toolName : metadata.getTools()) {
-                if ("**".equals(toolName)) {
-                    for (String t1 : TOOL_ALL_FULL) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
-                    }
-                } else if ("*".equals(toolName)) {
-                    for (String t1 : TOOL_ALL_PUBLIC) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
-                    }
-                } else if ("pi".equals(toolName)) {
-                    for (String t1 : TOOL_PI) {
-                        toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
-                    }
-                } else {
-                    toolAddDo(engine, builder, terminalTalentProxy, metadata, toolName, isMain);
+                for (String t1 : ToolName.expand(toolName)) {
+                    toolAddDo(engine, builder, terminalTalentProxy, metadata, t1, isMain);
                 }
             }
 

@@ -56,11 +56,11 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         SteerExtension ext = new SteerExtension();
-        for (int i = 0; i < SteerHelper.MAX_BOX_SIZE; i++) {
-            assertEquals(SteerStatus.STEERED, ext.steer(session, "seed-" + i).getStatus());
+        for (int i = 0; i < SteerMailbox.MAX_BOX_SIZE; i++) {
+            assertEquals(SteerResult.Code.STEERED, ext.steer(session, "seed-" + i).getCode());
         }
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerHelper.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
+        assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerMailbox.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
         assertEquals(0, queuePending(session));
     }
 
@@ -76,10 +76,10 @@ class SteerCommandTest {
     @Test
     void textTooLongPrintsLimit() {
         StringBuilder longText = new StringBuilder();
-        for (int i = 0; i < SteerHelper.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
+        for (int i = 0; i < SteerMailbox.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertTrue(ctx.output().contains("上限 " + SteerHelper.MAX_TEXT_LENGTH + " 字符"));
+        assertTrue(ctx.output().contains("上限 " + SteerMailbox.MAX_TEXT_LENGTH + " 字符"));
     }
 
     @Test

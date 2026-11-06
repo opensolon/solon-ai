@@ -19,18 +19,18 @@ import static org.junit.jupiter.api.Assertions.*;
  * 4 条并分别携带 wsA / wsB 路径；goal 完成判定按 AND 语义遍历全部匹配项，
  * 于是<b>在 A 工作区跑 goal 会连 B 工作区的 mvn test 一起跑</b>，B 失败则 A 无法完成。</p>
  *
- * <p>本测试锁定：注册表随 {@link GoalEngine} 实例隔离，验证器只绑定本引擎的工作区。</p>
+ * <p>本测试锁定：注册表随 {@link GoalRuntime} 实例隔离，验证器只绑定本引擎的工作区。</p>
  */
 class GoalValidatorIsolationTest {
 
-    private GoalEngine newEngine(String workspace) {
-        return new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true, workspace);
+    private GoalRuntime newEngine(String workspace) {
+        return new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true, workspace);
     }
 
     @Test
     void eachEngineRegistersItsOwnDefaults() {
-        GoalEngine engineA = newEngine("/ws/a");
-        GoalEngine engineB = newEngine("/ws/b");
+        GoalRuntime engineA = newEngine("/ws/a");
+        GoalRuntime engineB = newEngine("/ws/b");
 
         assertEquals(2, engineA.validatorCount(), "每个引擎应只注册本工作区的 2 个默认验证器");
         assertEquals(2, engineB.validatorCount(), "第二个工作区不得叠加到第一个的注册项上");
@@ -38,7 +38,7 @@ class GoalValidatorIsolationTest {
 
     @Test
     void resolvedValidatorIsBoundToOwningWorkspace() throws Exception {
-        GoalEngine engineA = newEngine("/ws/a");
+        GoalRuntime engineA = newEngine("/ws/a");
         newEngine("/ws/b"); // 模拟第二个工作区建立（历史上会污染全局注册表）
 
         GoalValidator resolved = engineA.resolveValidator("run tests to verify");
@@ -48,7 +48,7 @@ class GoalValidatorIsolationTest {
 
     @Test
     void engineWithoutWorkspaceRegistersNothing() {
-        GoalEngine engine = newEngine(null);
+        GoalRuntime engine = newEngine(null);
 
         assertEquals(0, engine.validatorCount(), "无工作区时不应注册默认验证器（验证恒通过）");
         assertTrue(engine.resolveValidator("run tests") instanceof NoopValidator);
@@ -56,7 +56,7 @@ class GoalValidatorIsolationTest {
 
     @Test
     void noMatchedValidatorFallsBackToNoop() {
-        GoalEngine engine = newEngine("/ws/a");
+        GoalRuntime engine = newEngine("/ws/a");
 
         assertTrue(engine.resolveValidator("随便写点东西") instanceof NoopValidator);
 

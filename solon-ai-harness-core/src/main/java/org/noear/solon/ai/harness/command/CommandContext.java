@@ -26,7 +26,7 @@ import java.util.List;
  * 不同端（CLI、Web）提供各自的实现，使命令逻辑与具体环境解耦。
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public interface CommandContext {
     /**

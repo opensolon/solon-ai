@@ -40,6 +40,8 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
+import org.noear.solon.ai.harness.agent.task.GenerateTalent;
+import org.noear.solon.ai.harness.agent.task.TaskTalent;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
@@ -55,8 +57,8 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.turn.InputGate;
-import org.noear.solon.ai.harness.turn.InputBacklog;
-import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.spi.InputBacklog;
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
@@ -64,7 +66,6 @@ import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.talents.mount.*;
 import org.noear.solon.ai.talents.mount.source.ClasspathMountSource;
@@ -77,6 +78,8 @@ import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.lsp.LspTalent;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
+
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSource;
 import org.noear.solon.ai.talents.gateway.openapi.ApiSourceClient;
@@ -155,6 +158,10 @@ public class HarnessEngine {
     private final SkillTalent skillTalent;
 
     private final CommandRegistry commandRegistry = new CommandRegistry();
+    /** 输入受理流水线（handle 的实现）。 */
+    private final InputPipeline inputPipeline;
+    /** 会话控制面（admit/status/isIdle/中断第一段的实现）。 */
+    private final SessionControl sessionControl;
 
     private final AgentManager agentManager;
 
@@ -375,7 +382,7 @@ public class HarnessEngine {
      * {@code attrs().getOrDefault(ATTR_CWD, ".")}：既把引擎内部键当私有状态用，
      * 又硬编码了与工作区默认值不一致的 {@code "."}。宿主一律改用本方法。</p>
      *
-     * @since 4.2.2
+     * @since 4.2.0
      */
     public String getSessionCwd(AgentSession session) {
         if (session == null) return getWorkspace();
@@ -386,7 +393,7 @@ public class HarnessEngine {
     /**
      * 设置会话工作目录（null/空 表示清除，回退到工作区默认值）。
      *
-     * @since 4.2.2
+     * @since 4.2.0
      */
     public void setSessionCwd(AgentSession session, String cwd) {
         if (session == null) return;
@@ -397,7 +404,7 @@ public class HarnessEngine {
         }
     }
 
-    /** 会话工作目录仅在未设置时补写（首次进入时定位，不覆盖用户后续选择）。@since 4.2.2 */
+    /** 会话工作目录仅在未设置时补写（首次进入时定位，不覆盖用户后续选择）。@since 4.2.0 */
     public void setSessionCwdIfAbsent(AgentSession session, String cwd) {
         if (session == null || cwd == null || cwd.trim().isEmpty()) return;
         session.attrs().putIfAbsent(ATTR_CWD, cwd);
@@ -415,7 +422,7 @@ public class HarnessEngine {
      *
      * <p>口径：命令声明 → 会话选择 → 默认模型。本方法只读第二层。</p>
      *
-     * @since 4.2.3
+     * @since 4.2.0
      */
     @Nullable
     public String getSessionModel(@Nullable AgentSession session) {
@@ -425,7 +432,7 @@ public class HarnessEngine {
     /**
      * 设置会话级模型选择；{@code null}/空 表示清除（回退默认模型）。
      *
-     * @since 4.2.3
+     * @since 4.2.0
      */
     public void setSessionModel(@Nullable AgentSession session, @Nullable String name) {
         SessionSelections.setModel(session, name);
@@ -434,7 +441,7 @@ public class HarnessEngine {
     /**
      * 会话级子代理选择（未设置返回 {@code null}，表示主代理）。
      *
-     * @since 4.2.3
+     * @since 4.2.0
      */
     @Nullable
     public String getSessionAgent(@Nullable AgentSession session) {
@@ -448,7 +455,7 @@ public class HarnessEngine {
      * {@code remove(...)}、{@code put(null)}）。本方法把三者统一为「清除」，
      * 读取侧 {@link #getSessionAgent} 也把空串视为未设置，故行为等价。</p>
      *
-     * @since 4.2.3
+     * @since 4.2.0
      */
     public void setSessionAgent(@Nullable AgentSession session, @Nullable String name) {
         SessionSelections.setAgent(session, name);
@@ -480,14 +487,6 @@ public class HarnessEngine {
 
     public long getCompressionDefaultContextLength() {
         return options.getCompressionDefaultContextLength();
-    }
-
-    /**
-     * @deprecated 4.0.4
-     */
-    @Deprecated
-    public String getCompressionModel() {
-        return options.getCompressionModel();
     }
 
     public boolean isMemoryEnabled() {
@@ -1298,6 +1297,8 @@ public class HarnessEngine {
 
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
+        this.inputPipeline = new InputPipeline(this, options);
+        this.sessionControl = new SessionControl(this, options, commandRegistry);
 
         //上下文压缩拦截器默认处理
         if (options.getCompressionInterceptor() == null) {
@@ -1431,23 +1432,6 @@ public class HarnessEngine {
         return options.getSessionProvider().getSession(instanceId);
     }
 
-    /**
-     * @deprecated 4.2
-     * @since {@link #getAgentBuilder(AgentDefinition)}
-     */
-    @Deprecated
-    public ReActAgent.Builder createSubagent(AgentDefinition definition) {
-        return getAgentBuilder(definition);
-    }
-
-    /**
-     * @deprecated 4.2
-     * @since {@link #getAgentBuilder(AgentDefinition)}
-     */
-    @Deprecated
-    public ReActAgent.Builder createSubagent(AgentDefinition definition, String sessionModel) {
-        return getAgentBuilder(definition, sessionModel);
-    }
 
 
 
@@ -1482,14 +1466,6 @@ public class HarnessEngine {
         } finally {
             agentLock.unlock();
         }
-    }
-
-    /**
-     * @deprecated 4.0.4 {@link #getModelOrDefInstance(String)}
-     */
-    @Deprecated
-    public ChatModel getModelOrMain(String modelName) {
-        return getModelOrDefInstance(modelName);
     }
 
     public ReActAgent getAgentOrMain(String agentName) {
@@ -1540,22 +1516,6 @@ public class HarnessEngine {
 
 
     /**
-     * @deprecated 4.2.0 {@link #resume()}
-     */
-    @Deprecated
-    public ReActRequest prompt() {
-        return promptDo(null, null);
-    }
-
-    /**
-     * @deprecated 4.2.0 {@link #resume(ReActAgent)}
-     */
-    @Deprecated
-    public ReActRequest prompt(ReActAgent targetAgent) {
-        return promptDo(null, targetAgent);
-    }
-
-    /**
      * 恢复执行（最近一个工作记忆）
      *
      * @since 4.2.0
@@ -1575,7 +1535,7 @@ public class HarnessEngine {
 
 
 
-    private ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
+    ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
         if (targetAgent == null) {
             targetAgent = getMainAgent();
         }
@@ -1597,55 +1557,6 @@ public class HarnessEngine {
     }
 
 
-    /**
-     * @param selectedModel 选中的模型名
-     * @param selectedAgent 选中的智能体名
-     * @param selectedSkills 选中的技能名
-     * @param selectedMcps  选中的连接名
-     * @since 4.2.0
-     */
-    private ReActRequest promptDo(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                  @Nullable String selectedModel,
-                                  @Nullable String selectedAgent,
-                                  @Nullable List<String> selectedSkills,
-                                  @Nullable List<String> selectedMcps) {
-        ReActRequest request = promptDo(prompt, getAgentOrMain(selectedAgent));
-
-        if (session != null) {
-            request.session(session);
-        }
-
-
-        if (Assert.isNotEmpty(selectedSkills)) {
-            request.options(o -> o.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, selectedSkills));
-        }
-
-        if (Assert.isNotEmpty(selectedMcps)) {
-            request.options(o -> o.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, selectedMcps));
-        }
-
-
-        // request 级 cwd：会话工作目录是引擎已知的事实，装配时统一注入，宿主不必各写一遍。
-        // 四个入口曾各自 o.toolContextPut(ATTR_CWD, ...)（ACP 传的是协议请求级 cwd，
-        // 需按请求覆盖，属于真实差异，故它保留自己的那次写入）。
-        // options() 是 andThen 叠加语义，宿主后写的值覆盖这里的缺省值。
-        if (session != null) {
-            final String sessionCwdForTurn = getSessionCwd(session);
-            if (Assert.isNotEmpty(sessionCwdForTurn)) {
-                request.options(o -> o.toolContextPut(ATTR_CWD, sessionCwdForTurn));
-            }
-        }
-
-        final String realModelName = resolveSessionModelName(session, selectedModel);
-        if (realModelName != null) {
-            final ChatModel chatModel = getModelOrDefInstance(realModelName);
-            if (chatModel != null) {
-                request.options(o -> o.chatModel(chatModel));
-            }
-        }
-
-        return request;
-    }
 
     /**
      * 处理一次输入（文本版）
@@ -1701,269 +1612,9 @@ public class HarnessEngine {
      * @param input 输入上下文（含命令上下文工厂，为空时使用缓冲式默认实现）
      */
     public InputOutcome handle(HarnessInput input) {
-        for(HarnessExtension extension: options.getExtensions()) {
-            if (extension.isEnabled()) {
-                extension.onInput(this, input);
-            }
-        }
-
-        final AgentSession session = input.getSession();
-        final InputAttachments attachments = input.getAttachments();
-
-        // ========== 1. HITL 决策（优先于空输入判空：审批请求通常不带文本）==========
-        if (input.isHitlDecision()) {
-            //审批请求通常不带 selectedAgent：回退到会话级选择，避免宿主续流时误回主代理
-            //（trace 按代理名分 key，取错代理会取不到挂起的 tool_calls）。
-            String agentName = resolveHitlAgent(session, input.getSelectedAgent());
-            boolean hitlApplied = applyHitlDecision(session, input.getHitlAction(), input.getHitlCallId(), input.getHitlOutput());
-            int pendingHitl = HitlCard.pendingCount(session);
-
-            if (input.isResume() && hitlApplied && pendingHitl == 0) {
-                //决策写入后同一次调用完成续流装配，宿主无须再发一次 handle。
-                //三个前置条件缺一不可：
-                //1) hitlApplied —— 无匹配挂起任务时续流会把上一轮问题重跑一遍（空提示词回落 originalPrompt）；
-                //2) pendingHitl == 0 —— 批内仍有未决卡时续流会把它们一并带走；
-                //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
-                rememberEffectiveAgent(session, agentName);
-                return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()), true);
-            }
-
-            //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
-            return InputOutcome.hitl(agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    hitlApplied, pendingHitl, HitlCard.list(session));
-        }
-
-        // ========== 2. 续流（无新输入，按挂起的 tool_calls 继续执行）==========
-        if (input.isResume()) {
-            //生效代理的会话级记忆：续流未显式指定时回填上一轮生效值（无状态宿主跨请求续流的关键）
-            String agentName = Assert.isNotEmpty(input.getSelectedAgent())
-                    ? input.getSelectedAgent() : Assert.isNotEmpty(input.getExplicitAgent())
-                    ? input.getExplicitAgent() : effectiveAgentOf(session);
-            rememberEffectiveAgent(session, agentName);
-            return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    promptDo(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
-        }
-
-        if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
-            return InputOutcome.ignored();
-        }
-
-        // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
-        if (input.isCommandAware() && !attachments.hasAny()) {
-            InputOutcome commandOutcome = dispatchCommand(session, input);
-            if (commandOutcome != null) {
-                return commandOutcome;
-            }
-        }
-
-        // ========== 4. 子代理解析 + 附件前缀 ==========
-        //附件由宿主落盘并装配（各端校验规则不同：桌面端有符号链接与总量上限，Web 端只需路径穿越校验），
-        //引擎不再触碰文件系统，只负责提示词装配。
-        String text = input.getText();
-
-        AgentMentions.Mention mention = input.parseMention(this);
-        String agentName = mention.getAgentName();
-        text = attachments.withFilePrefix(mention.getText());
-
-        if (Assert.isEmpty(text) && !attachments.hasMedia()) {
-            return InputOutcome.ignored();
-        }
-
-        if (Assert.isEmpty(text)) {
-            if (attachments.isAllImages()) {
-                text = attachments.getMediaBlocks().size() > 1 ? "请描述这些图片" : "请描述这张图片";
-            } else {
-                text = "请分析这些媒体文件";
-            }
-        }
-
-        // ========== 5. Prompt 构建 ==========
-        Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName, input);
-
-        // ========== 6. 请求装配 ==========
-        String modelName = resolveSessionModelName(session, input.getSelectedModel());
-        rememberEffectiveAgent(session, agentName);
-        return InputOutcome.task(prompt, agentName, modelName,
-                promptDo(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
+        return inputPipeline.handle(input);
     }
 
-    /**
-     * 记录本轮生效代理到会话属性（主代理归一为 "main"）。
-     *
-     * <p>写入时机与流启动同步：发生在 handle 返回 TASK 后、宿主订阅前，与 Web 端原先
-     * 「StreamBuilder 每轮写入」等价。HITL 挂起期间不覆盖（决策分支仅在真正续流时写入）。</p>
-     */
-    private static void rememberEffectiveAgent(@Nullable AgentSession session, @Nullable String agentName) {
-        if (session == null) {
-            return;
-        }
-        session.attrs().put(ATTR_AGENT_EFFECTIVE,
-                Assert.isNotEmpty(agentName) ? agentName : AgentDefinition.AGENT_MAIN);
-    }
-
-    /**
-     * 读取生效代理的会话级记忆（未记忆过时为 null）。
-     */
-    @Nullable
-    private static String effectiveAgentOf(@Nullable AgentSession session) {
-        if (session == null) {
-            return null;
-        }
-        return session.attrs().get(ATTR_AGENT_EFFECTIVE) instanceof String
-                ? (String) session.attrs().get(ATTR_AGENT_EFFECTIVE) : null;
-    }
-
-    /**
-     * 构建输入提示词（有多媒体时组装多模态内容，并写入来源 / 附件 / 子代理 / 视野元数据）
-     */
-    private Prompt buildInputPrompt(String text, InputAttachments attachments, @Nullable String channel,
-                                    @Nullable String agentName, @Nullable HarnessInput input) {
-        UserMessage userMsg;
-
-        if (attachments.hasMedia()) {
-            Contents contents = new Contents();
-            contents.addBlock(TextBlock.of(text));
-            for (MediaBlock block : attachments.getMediaBlocks()) {
-                contents.addBlock(block);
-            }
-            userMsg = new UserMessage(contents);
-
-            String attachMeta = attachments.buildAttachmentMeta();
-            if (attachMeta != null) {
-                userMsg.addMetadata("attachments", attachMeta);
-            }
-        } else {
-            userMsg = ChatMessage.ofUser(text);
-        }
-
-        if (channel != null) {
-            userMsg.addMetadata("source", channel);
-        }
-        if (Assert.isNotEmpty(agentName)) {
-            userMsg.addMetadata("agent", agentName);
-        }
-
-        Prompt prompt = Prompt.of(userMsg);
-
-        if (input != null) {
-            // 双写：attrs 是「本次输入选了什么」的事实（供回执 / 日志 / 宿主回读），
-            // toolContext 是「本次执行生效什么」（promptDo 写入）。两者冲突时 toolContext 优先。
-            if (input.hasSkillSelection()) {
-                SkillTalent.putSelected(prompt, input.getSelectedSkills());
-            }
-
-            if (input.hasMcpSelection()) {
-                McpGatewayTalent.putSelected(prompt, input.getSelectedMcps());
-            }
-        }
-
-        return prompt;
-    }
-
-    /**
-     * 应用 HITL 审批决策
-     *
-     * @param output 工具返回值改写文本（可空），非空时作为决策备注写入，由 HITLInterceptor 覆写工具返回
-     * @return 决策是否真的写入；无匹配的挂起任务（过期审批卡）时返回 false
-     */
-    private boolean applyHitlDecision(@Nullable AgentSession session, HITLAction action, @Nullable String callId,
-                                     @Nullable String output) {
-        if (session == null) {
-            return false;
-        }
-
-        HITLTask task = Assert.isNotEmpty(callId)
-                ? HITL.getPendingTaskByCallUuid(session, callId)
-                : HITL.getPendingTask(session);
-
-        if (task == null) {
-            return false;
-        }
-
-        // 与三端既有的「批准/拒绝并改写工具返回」口径一致（桌面端 HITL 三段重载）
-        if (Assert.isNotEmpty(output)) {
-            switch (action) {
-                case APPROVE:
-                    HITL.approve(session, task, output);
-                    break;
-                case REJECT:
-                    HITL.reject(session, task, output);
-                    break;
-                case SKIP:
-                    HITL.skip(session, task, output);
-                    break;
-            }
-        } else {
-            switch (action) {
-                case APPROVE:
-                    HITL.approve(session, task);
-                    break;
-                case REJECT:
-                    HITL.reject(session, task);
-                    break;
-                case SKIP:
-                    HITL.skip(session, task);
-                    break;
-            }
-        }
-
-        return true;
-    }
-
-
-    /**
-     * 命令识别与执行（非命令时返回 null）
-     * <p>
-     * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
-     * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
-     */
-    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input) {
-        if (input.getText() == null || input.hasAttachments()) {
-            return null;
-        }
-
-        ParsedCommand command = ParsedCommand.parse(input.getText(), options.getCommandPrefix());
-        if (command == null) {
-            return null;
-        }
-
-        CommandContextFactory factory = input.getCommandContextFactory();
-        CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory();
-        try {
-            return CommandDispatcher.dispatch(this, session, command, realFactory, input.getOrigin(), input.isTerminal(), input);
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalStateException("Command execute failed: " + command.getName(), e);
-        }
-    }
-
-    /**
-     * 解析生效的模型名：显式入参优先，其次会话级选择
-     */
-    private String resolveSessionModelName(@Nullable AgentSession session, @Nullable String modelName) {
-        if (modelName != null) {
-            return modelName;
-        }
-
-        return SessionSelections.modelOf(session);
-    }
-
-    /**
-     * 解析 HITL 请求的生效子代理名：审批入参优先，其次会话级选择
-     * <p>
-     * Web 端审批请求通常不携带 selectedAgent，而首轮生效代理（含 {@code @子代理} 解析结果）
-     * 已由宿主写入会话级子代理选择（{@link #setSessionAgent}）。HITL 续流必须沿用它：trace 按代理名分 key，
-     * 取错代理会取不到挂起的 tool_calls，表现为续跑空转。
-     */
-    private String resolveHitlAgent(@Nullable AgentSession session, @Nullable String selectedAgent) {
-        if (Assert.isNotEmpty(selectedAgent)) {
-            return selectedAgent;
-        }
-
-        return SessionSelections.agentOf(session);
-    }
 
 
     /**
@@ -2015,52 +1666,41 @@ public class HarnessEngine {
      */
     @Nullable
     public InterruptPlan prepareInterrupt(@Nullable AgentSession session) {
-        if (session == null) {
-            return null;
-        }
-
-        // ① 扩展中断参与（先于停流）：逐个隔离异常，任何扩展都不能阻止中断生效
-        for (HarnessExtension extension : options.getExtensions()) {
-            try {
-                extension.onInterrupt(this, session);
-            } catch (Throwable e) {
-                LOG.warn("Extension onInterrupt failed: {}", extension.getClass().getName(), e);
-            }
-        }
-
-        // ② 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
-        return HarnessInterrupts.claim(session);
+        return sessionControl.prepareInterrupt(session);
     }
 
     /**
-     * 只停当前运行流，不补取消消息、不清队列（程序化「停流」）。
+     * 程序级取消：只停当前运行流并推进取消代数，不补取消消息、不清积压。
+     *
+     * <p>三个停流入口：{@link #interrupt(AgentSession)}（用户停止：扩展参与 + 写取消消息 + 停流）、
+     * 本方法（程序取消：停流 + 推进代数）、{@link #preemptStream(AgentSession)}（腾位：只停流，不推进代数）。</p>
      *
      * <p>与 {@link #interrupt(AgentSession)} 的差别仅在于<b>不写历史</b>：适合轮次由程序接管、
      * 后续会重新发起新一轮的场景（如自动循环的上一轮被新目标顶掉）。这类场景若补写取消消息，
      * 会在会话历史里留下「用户已取消」的假象，与真实的用户取消混淆。</p>
      *
      * <p>返回 {@code false} 同样不代表什么都没发生：取消代数依然推进（见
-     * {@link HarnessInterrupts#interruptStreamOnly(AgentSession)}）。</p>
+     * {@link HarnessInterrupts#cancelStream(AgentSession)}）。</p>
      *
      * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流
      * @since 4.2.0
      */
-    public boolean interruptStream(@Nullable AgentSession session) {
-        return HarnessInterrupts.interruptStreamOnly(session);
+    public boolean cancelStream(@Nullable AgentSession session) {
+        return HarnessInterrupts.cancelStream(session);
     }
 
     /**
-     * 只停当前运行流，且不推进取消代数（新轮次顶掉旧轮次用）。
+     * 为新一轮腾位：只停当前运行流，不推进取消代数（新轮次顶掉旧轮次用）。
      *
-     * <p>与 {@link #interruptStream(AgentSession)} 的差别在于「这次停流算不算取消」：
+     * <p>与 {@link #cancelStream(AgentSession)} 的差别在于「这次停流算不算取消」：
      * 推进代数后，被顶掉的旧流能据此判定自己是被取消的、不再发终态帧（适合 Stop）；
      * 不推进代数则适合「新一轮腾位」——旧流本该自然结束，若当成被取消会把新一轮收尾牵连进去。</p>
      *
      * @return true = 确有活跃流被停掉
      * @since 4.2.0
      */
-    public boolean interruptStreamActive(@Nullable AgentSession session) {
-        return HarnessInterrupts.interruptStreamActive(session);
+    public boolean preemptStream(@Nullable AgentSession session) {
+        return HarnessInterrupts.preemptStream(session);
     }
 
     /**
@@ -2075,17 +1715,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public SessionStatus status(@Nullable AgentSession session) {
-        SessionStatus.Builder builder = SessionStatus.builder(session);
-        if (session != null) {
-            for (HarnessExtension extension : options.getExtensions()) {
-                try {
-                    extension.onStatus(this, session, builder);
-                } catch (Throwable e) {
-                    LOG.warn("Extension onStatus failed: {}", extension.getClass().getName(), e);
-                }
-            }
-        }
-        return builder.build();
+        return sessionControl.status(session);
     }
 
     /**
@@ -2101,34 +1731,9 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public boolean isIdle(@Nullable AgentSession session) {
-        if (session == null) {
-            return false;
-        }
-        synchronized (session.attrs()) {
-            return SessionStatus.of(session).isOccupied() == false && hasPendingBacklog(session) == false;
-        }
+        return sessionControl.isIdle(session);
     }
 
-    /** 引擎上是否装有积压能力（决定忙态受理给 DEFER 还是 REJECT）。 */
-    private boolean hasBacklog() {
-        return getExtension(InputBacklog.class).isPresent();
-    }
-
-    /** 是否有任一积压能力报告待执行输入（先进先出与空闲判定共用；逐个隔离异常）。 */
-    private boolean hasPendingBacklog(AgentSession session) {
-        for (HarnessExtension extension : options.getExtensions()) {
-            if (extension instanceof InputBacklog) {
-                try {
-                    if (((InputBacklog) extension).hasPending(session)) {
-                        return true;
-                    }
-                } catch (Throwable e) {
-                    LOG.warn("InputBacklog hasPending failed: {}", extension.getClass().getName(), e);
-                }
-            }
-        }
-        return false;
-    }
 
     /**
      * 输入是否为「忙碌可穿透」的斜杠命令。
@@ -2145,11 +1750,10 @@ public class HarnessEngine {
      * 后者（如 {@code /steer}）仍由宿主按自己的占位闩语义处理。</p>
      *
      * @see Command#runnableWhenBusy()
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public boolean isBusyBypassCommand(@Nullable String input) {
-        Command command = resolveCommand(input);
-        return command != null && !command.terminalOnly() && command.runnableWhenBusy();
+        return sessionControl.isBusyBypassCommand(input);
     }
 
     /**
@@ -2189,57 +1793,12 @@ public class HarnessEngine {
      * @param hitlDecision 本输入是否携带 HITL 决策（决策输入总是豁免挂起拦截）
      * @param hitlExempt   额外豁免谓词（可为 null）。用于「续流 / 特定命令」等宿主域豁免；
      *                     宿主不传时只按 {@code hitlDecision} 与「队列派发」判豁免
-     * @since 4.2.3
+     * @since 4.2.0
      */
     public AdmitDecision admit(@Nullable AgentSession session, @Nullable String input,
                                boolean hitlDecision,
-                               java.util.function.Predicate<String> hitlExempt) {
-        if (session == null) {
-            return AdmitDecision.admit(InputGate.Ticket.NONE);
-        }
-
-        synchronized (session.attrs()) {
-            TurnDispatch dispatch = TurnDispatch.current(session);
-            boolean onDispatchThread = dispatch != null && dispatch.isOnDispatchThread();
-            boolean busyCommand = isBusyBypassCommand(input);
-
-            // 1) HITL 挂起：审批未决策前开新回合会与挂起 trace 并存，
-            //    用户点「同意」时续流被运行态认领拒绝，或两条流交叉写快照。
-            SessionStatus status = status(session);
-            if (status.hasPendingHitl()) {
-                boolean exempt = hitlDecision || onDispatchThread
-                        || (hitlExempt != null && hitlExempt.test(input));
-                if (exempt == false) {
-                    HitlCard next = HitlCard.next(session);
-                    String toolName = next == null ? null : next.getToolName();
-                    return AdmitDecision.reject("hitl_pending",
-                            toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName);
-                }
-            }
-
-            // 2) 忙态（有活跃流 / 已在受理窗口）或积压里还有待执行输入：应延后（保证先进先出）。
-            //    程序派发本身与忙态旁路命令除外（后者的语义是在运行中的任务旁插一脚）。
-            //    没装积压能力时无处可延：拒绝（busy）。
-            if (onDispatchThread == false && busyCommand == false
-                    && (status.isBusy() || status.isAdmitting() || hasPendingBacklog(session))) {
-                return hasBacklog() ? AdmitDecision.defer()
-                        : AdmitDecision.reject("busy", "当前任务正在执行，请稍后再试");
-            }
-
-            // 3) 程序派发的一轮：天然空闲、不占位（再占位会让同步完成的命令误判成忙态）
-            if (onDispatchThread) {
-                return AdmitDecision.bypassDispatch(dispatch);
-            }
-
-            // 4) 已在真实任务上运行的旁路命令：不占启动闩、不改写回复路由
-            boolean sideCommand = busyCommand && status.isBusy();
-            if (sideCommand) {
-                return AdmitDecision.bypassSideCommand();
-            }
-
-            // 5) 正常受理：判定与占位同临界区
-            return AdmitDecision.admit(InputGate.tryAcquire(session));
-        }
+                               Predicate<String> hitlExempt) {
+        return sessionControl.admit(session, input, hitlDecision, hitlExempt);
     }
 
     /**
@@ -2248,23 +1807,11 @@ public class HarnessEngine {
      * <p>宿主在忙态/空闲态之间分流前常需先知道「这是不是一条命令」，
      * 但不应自行解析前缀与参数。命名/前缀口径的唯一实现留在引擎侧。</p>
      *
-     * @since 4.2.1
+     * @since 4.2.0
      */
     @Nullable
     public Command resolveCommand(@Nullable String input) {
-        if (input == null || commandRegistry == null) {
-            return null;
-        }
-        String trimmed = input.trim();
-        ParsedCommand parsed = ParsedCommand.parse(trimmed, options.getCommandPrefix());
-        if (parsed == null) {
-            return null;
-        }
-        Command command = commandRegistry.find(parsed.getName());
-        if (command == null || command.isEnabled() == false) {
-            return null;
-        }
-        return command;
+        return sessionControl.resolveCommand(input);
     }
 
     public static Builder of(String workspace, String harnessHome) {
@@ -2374,15 +1921,6 @@ public class HarnessEngine {
             return this;
         }
 
-        /**
-         * @deprecated 4.0.4
-         */
-        @Deprecated
-        public Builder compressionModel(String compressionModel) {
-            options.setCompressionModel(compressionModel);
-            return this;
-        }
-
         public Builder compressionInterceptor(ContextCompressionInterceptor compressionInterceptor) {
             options.setCompressionInterceptor(compressionInterceptor);
             return this;
@@ -2473,15 +2011,6 @@ public class HarnessEngine {
             return this;
         }
 
-        /**
-         * @deprecated 旧名，请改用 {@link #subagentDefaultConcurrency(Integer)}
-         */
-        @Deprecated
-        public Builder multitaskMaxTasks(Integer multitaskMaxTasks) {
-            options.setSubagentDefaultConcurrency(multitaskMaxTasks);
-            return this;
-        }
-
         public Builder bashAsyncEnabled(Boolean bashAsyncEnabled) {
             options.setBashAsyncEnabled(bashAsyncEnabled);
             return this;
@@ -2504,15 +2033,6 @@ public class HarnessEngine {
 
         // ========== 集合类配置（代理到 options） ==========
 
-        /**
-         * @deprecated 4.0.4
-         */
-        @Deprecated
-        public Builder toolsAdd(ToolPermission... tools) {
-            options.addTools(tools);
-            return this;
-        }
-
         public Builder toolsAdd(ToolName... tools) {
             options.addTools(tools);
             return this;
@@ -2520,15 +2040,6 @@ public class HarnessEngine {
 
         public Builder toolsAdd(Collection<String> tools) {
             options.getTools().addAll(tools);
-            return this;
-        }
-
-        /**
-         * @deprecated 4.0.4
-         */
-        @Deprecated
-        public Builder disallowedToolsAdd(ToolPermission... tools) {
-            options.addDisallowedTools(tools);
             return this;
         }
 

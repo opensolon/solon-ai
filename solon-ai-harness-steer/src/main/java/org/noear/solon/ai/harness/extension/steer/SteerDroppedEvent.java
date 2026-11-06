@@ -29,7 +29,7 @@ import java.util.List;
  * 上一任务被 interrupt / 异常终止、新任务开始时交接（{@link Reason#RUN_SUPERSEDED}）。
  * 宿主不再需要在开流前手动交接并自行映射结果。</p>
  *
- * <p><b>本事件只是「结果展示」，不是「兜底动作」</b>：转排队（QueueHelper）的持久化
+ * <p><b>本事件只是「结果展示」，不是「兜底动作」</b>：转积压（核心能力接口 {@code InputBacklog#offer}）的持久化
  * 已在推出本事件之前完成。因此即使本事件因无 sink 被丢弃，"已接受但永不生效"也不会发生——
  * 这是与「用事件承载业务动作」的关键分界。</p>
  *
@@ -38,7 +38,7 @@ import java.util.List;
  * （客户端应保留，并提示用户尚未排队）。</p>
  *
  * @author noear
- * @since 2026
+ * @since 4.2.0
  */
 public class SteerDroppedEvent extends AbsReActEvent {
     /** 交接原因 */

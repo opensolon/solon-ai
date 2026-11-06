@@ -38,7 +38,8 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code goal_update} — 标记 complete 或 blocked（模型驱动）</li>
  * </ul>
  *
- * <p>只依赖 {@link GoalEngine} 与 {@link AgentSession}。</p>
+ * <p>public 仅为 {@code @ToolMapping} 反射；实例只由 {@link GoalExtension} 装配，宿主不直接持有。
+ * {@link #isGoalTool} 供宿主在统计「行动证据」时排除 goal 自身的工具。</p>
  *
  * @author noear
  * @since 3.9.3
@@ -47,11 +48,11 @@ public class GoalTalent extends AbsTalent {
 
     private static final Logger log = LoggerFactory.getLogger(GoalTalent.class);
 
-    private final GoalEngine goalEngine;
+    private final GoalRuntime goalRuntime;
     private final HarnessEngine engine;
 
-    public GoalTalent(GoalEngine goalEngine, HarnessEngine engine) {
-        this.goalEngine = goalEngine;
+    GoalTalent(GoalRuntime goalRuntime, HarnessEngine engine) {
+        this.goalRuntime = goalRuntime;
         this.engine = engine;
     }
 
@@ -62,7 +63,7 @@ public class GoalTalent extends AbsTalent {
             return false;
         }
         AgentSession session = engine.getSession(sessionId);
-        return goalEngine.hasGoal(session);
+        return goalRuntime.hasGoal(session);
     }
 
     /**
@@ -73,7 +74,7 @@ public class GoalTalent extends AbsTalent {
     public String goal_get(String __sessionId,
                           String __cwd) {
         AgentSession session = sessionOf(__sessionId);
-        GoalState gs = goalEngine.state(session);
+        GoalState gs = goalRuntime.state(session);
 
         if (gs == null) {
             return errJson("NO_GOAL", "未找到目标");
@@ -81,7 +82,7 @@ public class GoalTalent extends AbsTalent {
 
         ONode goalNode = new ONode(Options.of(Feature.Write_PrettyFormat));
         goalNode.set("taskId", gs.getId());
-        goalNode.set("objective", gs.getCondition());
+        goalNode.set("objective", gs.getObjective());
         goalNode.set("status", gs.getStatus().name().toLowerCase());
         goalNode.set("iteration", gs.getCurrentIteration());
         if (gs.getMaxIterations() > 0) {
@@ -140,7 +141,7 @@ public class GoalTalent extends AbsTalent {
         }
 
         AgentSession session = sessionOf(__sessionId);
-        GoalState gs = goalEngine.state(session);
+        GoalState gs = goalRuntime.state(session);
         if (gs == null) {
             return errJson("NO_GOAL", "未找到活跃目标");
         }
@@ -157,9 +158,9 @@ public class GoalTalent extends AbsTalent {
             // 提示性优化，不是权威校验：本方法在工具执行阶段运行，此时本轮结果尚未回流，
             // 证据恒为 null（executeRound 已在调用 execute 前置空），故这里一般放行。
             // 仅当引擎已为「上一轮」写入 FALSE 时提前拦截，省掉模型白跑一轮；
-            // 真正的完成判定是 GoalEngine.executeRound 对返回结果的复核（rejectAchievement）。
-            Boolean hasActionEvidence = goalEngine.currentRoundHasActionEvidence(session);
-            if (GoalEngine.requiresActionEvidence(gs.getCondition())
+            // 真正的完成判定是 GoalRuntime.executeRound 对返回结果的复核（rejectAchievement）。
+            Boolean hasActionEvidence = goalRuntime.currentRoundHasActionEvidence(session);
+            if (GoalRuntime.requiresActionEvidence(gs.getObjective())
                     && Boolean.FALSE.equals(hasActionEvidence)) {
                 return errJson("ACTION_EVIDENCE_REQUIRED",
                         "目标尚未完成：本轮没有成功的实际工具操作。"
@@ -167,7 +168,7 @@ public class GoalTalent extends AbsTalent {
             }
 
             // Todo/Goal 完成判定联动：TODO 清单尚有未完成项时拒绝完成
-            int unfinishedTodos = goalEngine.countUnfinishedTodos(
+            int unfinishedTodos = goalRuntime.countUnfinishedTodos(
                     engine.getTodoTalent(), engine.getWorkspace(), __sessionId);
             if (unfinishedTodos > 0) {
                 return errJson("TODO_UNFINISHED",
@@ -175,9 +176,9 @@ public class GoalTalent extends AbsTalent {
                                 + "请先完成或用 todowrite 更新清单状态后再调用 goal_update(complete)。");
             }
 
-            if (goalEngine.isValidatorEnabled()) {
-                GoalValidator validator = goalEngine.resolveValidator(gs.getCondition());
-                GoalValidator.ValidationResult vr = validator.validate(gs.getCondition());
+            if (goalRuntime.isValidatorEnabled()) {
+                GoalValidator validator = goalRuntime.resolveValidator(gs.getObjective());
+                GoalValidator.ValidationResult vr = validator.validate(gs.getObjective());
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.detail());
                     return errJson("VALIDATION_FAILED",
@@ -187,11 +188,11 @@ public class GoalTalent extends AbsTalent {
             }
 
             gs.achieve();
-            goalEngine.commit(session, gs);
+            goalRuntime.commit(session, gs);
 
             ONode goalNode = new ONode();
             goalNode.set("taskId", gs.getId());
-            goalNode.set("objective", gs.getCondition());
+            goalNode.set("objective", gs.getObjective());
             goalNode.set("status", "achieved");
             goalNode.set("consumedTokens", gs.getConsumedTokens());
             if (gs.getMaxTokens() > 0) {
@@ -209,12 +210,12 @@ public class GoalTalent extends AbsTalent {
         // ---- blocked ----
         if ("blocked".equals(status)) {
             gs.markBlocked();
-            goalEngine.commit(session, gs);
+            goalRuntime.commit(session, gs);
             log.info("updateGoal: goal '{}' marked as BLOCKED by model", gs.getId());
 
             ONode goalNode = new ONode();
             goalNode.set("taskId", gs.getId());
-            goalNode.set("objective", gs.getCondition());
+            goalNode.set("objective", gs.getObjective());
             goalNode.set("status", "blocked");
             goalNode.set("consumedTokens", gs.getConsumedTokens());
             if (gs.getMaxTokens() > 0) {

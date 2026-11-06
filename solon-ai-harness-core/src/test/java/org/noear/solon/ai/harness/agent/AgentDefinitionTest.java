@@ -143,10 +143,7 @@ class AgentDefinitionTest {
         assertTrue(m.getTools().contains("glob"));
         assertTrue(m.getTools().contains("ls"));
 
-        @SuppressWarnings("deprecation")
-        org.noear.solon.ai.harness.permission.ToolPermission[] olds =
-                {org.noear.solon.ai.harness.permission.ToolPermission.TOOL_BASH};
-        m.addTools(olds);
+        m.addTools(ToolName.TOOL_BASH);
         assertTrue(m.getTools().contains("bash"));
     }
 
@@ -184,7 +181,8 @@ class AgentDefinitionTest {
                 + "---\n"
                 + "You are parsed-agent.\n";
 
-        AgentDefinition d = AgentDefinition.fromMarkdown(src);
+        AgentDefinition d = AgentDefinition.fromParsedMarkdown(
+                org.noear.solon.ai.util.MarkdownUtil.resolve(java.util.Arrays.asList(src.split("\\n"))));
         assertEquals("parsed-agent", d.getName());
         assertTrue(d.getSystemPrompt().contains("parsed-agent"));
     }

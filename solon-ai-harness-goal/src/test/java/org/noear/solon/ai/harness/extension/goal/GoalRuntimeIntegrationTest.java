@@ -16,20 +16,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * /goal 命令经引擎全链路（随 goal 插件独立，原在核心 BuiltinCommandsSystemTest）。
  *
- * <p>goal 传（真 GoalEngine, null Scheduler）：GoalScheduler 依赖 solon 容器的 JobManager 单例，
+ * <p>goal 传（真 GoalRuntime, null Scheduler）：GoalScheduler 依赖 solon 容器的 JobManager 单例，
  * 纯 JUnit 环境无容器会初始化失败；无目标会话的状态/子命令路径不触达 scheduler。</p>
  */
-class GoalEngineIntegrationTest {
+class GoalRuntimeIntegrationTest {
     @TempDir
     Path workspace;
 
     private HarnessEngine engine() {
-        GoalEngine goalEngine = new GoalEngine((HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, false);
-        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
+        return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
                 .sessionProvider(InMemoryAgentSession::of)
+                .extensionAdd(GoalExtension.builder("ws-it").jobManager(null).build())
                 .build();
-        engine.getCommandRegistry().register(new GoalCommand(GoalExtension.of(goalEngine, engine)));
-        return engine;
     }
 
     @Test

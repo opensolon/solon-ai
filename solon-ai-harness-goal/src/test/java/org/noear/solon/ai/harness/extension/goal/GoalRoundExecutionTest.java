@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * GoalEngine 轮次执行与验证器链。
+ * GoalRuntime 轮次执行与验证器链。
  *
- * <p>用真实执行通道（{@link GoalEngine#addExecutor}）+ 内存会话驱动 runRound，覆盖守卫、预算收尾、
+ * <p>用真实执行通道（{@link GoalRuntime#addExecutor}）+ 内存会话驱动 runRound，覆盖守卫、预算收尾、
  * 完成复核、异常分级熔断与验证器链，不依赖 JobManager。</p>
  */
 class GoalRoundExecutionTest {
@@ -30,7 +30,7 @@ class GoalRoundExecutionTest {
     /** 记录每轮 prompt 并返回可编排结果的执行者。 */
     private static class FakeBridge {
         final List<String> prompts = new ArrayList<>();
-        GoalRoundResult next = GoalRoundResult.ofText("ok");
+        GoalOutcome next = TestOutcomes.ofText("ok");
         Exception failure;
         /** 轮次内回调：模拟 goal_update(complete) 在工具执行中把状态置为 ACHIEVED。 */
         Runnable duringRound;
@@ -48,11 +48,11 @@ class GoalRoundExecutionTest {
         };
     }
 
-    private static GoalEngine engine(GoalExecutor handler, int maxErrors) {
-        GoalEngine e = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
+    private static GoalRuntime engine(GoalExecutor handler, int maxErrors) {
+        GoalRuntime e = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, maxErrors, false);
         if (handler != null) {
-            e.addExecutor(handler);
+            e.addExecutor("test", null, handler);
         }
         return e;
     }
@@ -72,7 +72,7 @@ class GoalRoundExecutionTest {
 
     @Test
     void runRoundSkipsWhenNoHandlerRegistered() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         AgentSession s = session();
         e.attach(s, "目标", 0, 0, 0);
         assertFalse(e.runRound(s));
@@ -84,7 +84,7 @@ class GoalRoundExecutionTest {
         // 引擎未注入时无法读取快照，因此不跳过——这是「委派」而非「缺省放行」：
         // 真实宿主（GoalExtension）总是带着 engine，故生产路径恒走快照判定。
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "目标", 0, 0, 0);
 
@@ -95,7 +95,7 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundRejectsReentrantCall() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "目标", 0, 0, 0);
         // 模拟「上一轮仍在跑」的运行态标记
@@ -110,14 +110,14 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundExecutesAndIncrementsIteration() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.ofText("完成了第一步");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText("完成了第一步");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
         assertTrue(e.runRound(s));
         assertEquals(1, gs.getCurrentIteration());
-        // 执行者返回真实 GoalRoundResult，token 直接来自结果（不再靠文本长度估算）
+        // 执行者返回真实 GoalOutcome，token 直接来自结果（不再靠文本长度估算）
         assertTrue(gs.getConsumedTokens() > 0);
         assertEquals("完成了第一步", gs.getLastResult());
         assertEquals(1, fb.prompts.size());
@@ -128,13 +128,13 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundAccumulatesTokensAcrossRounds() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
         e.runRound(s);
         long afterFirst = gs.getConsumedTokens();
-        fb.next = GoalRoundResult.ofText("第二轮的文本明显更长一些用于累计验证");
+        fb.next = TestOutcomes.ofText("第二轮的文本明显更长一些用于累计验证");
         e.runRound(s);
 
         assertTrue(afterFirst > 0);
@@ -152,8 +152,8 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundRecordsStagnationOnRepeatedFingerprint() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.ofText(text(60));
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText(text(60));
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
@@ -166,14 +166,14 @@ class GoalRoundExecutionTest {
     @Test
     void runRoundResetsStagnationWhenFingerprintChanges() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
 
         // 指纹按长度分桶（每 200 字符一档），两轮必须落在不同桶才判定"有进展"
-        fb.next = GoalRoundResult.ofText(text(30));
+        fb.next = TestOutcomes.ofText(text(30));
         e.runRound(s);
-        fb.next = GoalRoundResult.ofText(text(120));
+        fb.next = TestOutcomes.ofText(text(120));
         e.runRound(s);
 
         assertEquals(0, gs.getStagnationCount());
@@ -184,7 +184,7 @@ class GoalRoundExecutionTest {
     @Test
     void achievedGoalStopsRounds() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
         gs.achieve();
@@ -196,8 +196,8 @@ class GoalRoundExecutionTest {
     void completionRejectedWithoutToolEvidenceForActionGoal() {
         FakeBridge fb = new FakeBridge();
         // 执行型目标 + 本轮无工具调用 → 完成声明被拒
-        fb.next = GoalRoundResult.ofText("我做完了");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText("我做完了");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "创建一份文件", 0, 0, 0);
         // 模拟模型在工具执行中调用 goal_update(complete)
@@ -211,27 +211,27 @@ class GoalRoundExecutionTest {
     @Test
     void completionAcceptedWithToolEvidenceForActionGoal() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.of(true, 10, "已创建文件");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.of(true, 10, "已创建文件");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "创建一份文件", 0, 0, 0);
         gs.achieve();
 
         assertFalse(e.runRound(s));
-        assertEquals(GoalState.Status.ACHIEVED, gs.getStatus());
+        assertEquals(GoalTask.Status.ACHIEVED, gs.getStatus());
     }
 
     @Test
     void nonActionGoalNeedsNoEvidence() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.ofText("分析完毕");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText("分析完毕");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
         fb.duringRound = gs::achieve;
 
         assertFalse(e.runRound(s));
-        assertEquals(GoalState.Status.ACHIEVED, gs.getStatus());
+        assertEquals(GoalTask.Status.ACHIEVED, gs.getStatus());
     }
 
     /**
@@ -245,8 +245,8 @@ class GoalRoundExecutionTest {
     @Test
     void actionEvidenceComesFromHandlerResultNotSessionAttrs() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.of(true, 7, "已写入");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.of(true, 7, "已写入");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
 
@@ -267,8 +267,8 @@ class GoalRoundExecutionTest {
     @Test
     void previousRoundEvidenceMustNotLeakIntoCurrentRound() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.of(true, 5, "第一轮确实执行了工具");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.of(true, 5, "第一轮确实执行了工具");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
 
@@ -277,7 +277,7 @@ class GoalRoundExecutionTest {
 
         // 第二轮：无工具调用；在 handler 执行期间读取，模拟 goal_update 在工具阶段取值
         Boolean[] duringRound = new Boolean[1];
-        fb.next = GoalRoundResult.of(false, 5, "本轮只说了说，没有实际动手");
+        fb.next = TestOutcomes.of(false, 5, "本轮只说了说，没有实际动手");
         fb.duringRound = () -> duringRound[0] = e.currentRoundHasActionEvidence(s);
         e.runRound(s);
 
@@ -291,8 +291,8 @@ class GoalRoundExecutionTest {
     @Test
     void absentToolEvidenceYieldsFalseNotNull() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.ofText("我只说了说");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText("我只说了说");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "创建一份文件", 0, 0, 0);
 
@@ -307,8 +307,8 @@ class GoalRoundExecutionTest {
     @Test
     void tokenBudgetExceededTriggersWrapUpAndStops() {
         FakeBridge fb = new FakeBridge();
-        fb.next = GoalRoundResult.ofText("最终总结");
-        GoalEngine e = engine(fb.handler, 3);
+        fb.next = TestOutcomes.ofText("最终总结");
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 100, 0, 0);
         gs.addTokens(200); // 已超预算
@@ -317,13 +317,13 @@ class GoalRoundExecutionTest {
         assertFalse(e.runRound(s));
         // 一轮收尾（wrap-up），然后标记预算受限
         assertEquals(1, fb.prompts.size());
-        assertEquals(GoalState.Status.BUDGET_LIMITED, gs.getStatus());
+        assertEquals(GoalTask.Status.BUDGET_LIMITED, gs.getStatus());
     }
 
     @Test
     void iterationLimitStopsRounds() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 1);
         gs.setCurrentIteration(1);
@@ -331,13 +331,13 @@ class GoalRoundExecutionTest {
 
         assertFalse(e.runRound(s));
         assertTrue(fb.prompts.isEmpty(), "轮次超限应在执行前就停下");
-        assertEquals(GoalState.Status.ITERATION_LIMITED, gs.getStatus());
+        assertEquals(GoalTask.Status.ITERATION_LIMITED, gs.getStatus());
     }
 
     @Test
     void durationBudgetExceededTriggersWrapUp() throws Exception {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         // maxDurationMs=1：attach 后已必然超时，无需改内部时间戳
         GoalState gs = e.attach(s, "分析现状", 0, 1, 0);
@@ -346,7 +346,7 @@ class GoalRoundExecutionTest {
 
         assertFalse(e.runRound(s));
         assertEquals(1, fb.prompts.size());
-        assertEquals(GoalState.Status.BUDGET_LIMITED, gs.getStatus());
+        assertEquals(GoalTask.Status.BUDGET_LIMITED, gs.getStatus());
     }
 
     // ========== 异常分级熔断 ==========
@@ -363,17 +363,17 @@ class GoalRoundExecutionTest {
         // 先让一次真实失败把连续错误计数抬起来
         FakeBridge fb = new FakeBridge();
         fb.failure = new IllegalStateException("boom");
-        GoalEngine e = engine(fb.handler, 99);
+        GoalRuntime e = engine(fb.handler, 99);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
         e.runRound(s);
         int errorsAfterFailure = gs.getConsecutiveErrors();
         assertTrue(errorsAfterFailure > 0, "前置失败应抬升连续错误计数");
 
-        // 换成「不认领」的执行器：返回 null 表示本入口不管这个会话
-        GoalEngine noClaim = new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null,
+        // 换成「不认领」的执行器：谓词不命中本会话，且没有内置兜底
+        GoalRuntime noClaim = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 99, false);
-        noClaim.addExecutor((sessionId, prompt) -> null);
+        noClaim.addExecutor("web", id -> false, (sessionId, prompt) -> TestOutcomes.ofText("不应执行"));
         AgentSession s2 = session();
         GoalState gs2 = noClaim.attach(s2, "分析现状", 0, 0, 0);
 
@@ -390,10 +390,60 @@ class GoalRoundExecutionTest {
         assertEquals(0, gs2.getCurrentIteration(), "无认领的一轮不得计入迭代");
     }
 
+    /** skip：本通道认领但此刻不宜执行——不计错误、不推进、不改结果文本，目标保持活跃。 */
+    @Test
+    void skippedRoundKeepsStateUntouched() {
+        GoalRuntime e = engine((sessionId, prompt) -> GoalOutcome.skip("terminal busy"), 3);
+        AgentSession s = session();
+        GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
+
+        assertTrue(e.runRound(s), "skip 后仍可继续下一轮");
+        assertNull(gs.getLastResult(), "skip 不写结果文本");
+        assertEquals(0, gs.getCurrentIteration(), "skip 不计入迭代");
+        assertEquals(0, gs.getConsecutiveErrors(), "skip 不计错误");
+        assertEquals(GoalTask.Status.PURSUING, gs.getStatus());
+    }
+
+    /** failed 与执行器返回 null 都按失败计（参与错误熔断），不再有「null = 穿透」。 */
+    @Test
+    void failedOrNullOutcomeCountsAsError() {
+        GoalRuntime e = engine((sessionId, prompt) -> GoalOutcome.failed("upstream 500"), 99);
+        AgentSession s = session();
+        GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
+        e.runRound(s);
+        assertEquals(1, gs.getConsecutiveErrors());
+        assertTrue(gs.getLastResult().contains("upstream 500"), gs.getLastResult());
+
+        GoalRuntime n = engine((sessionId, prompt) -> null, 99);
+        AgentSession s2 = session();
+        GoalState gs2 = n.attach(s2, "分析现状", 0, 0, 0);
+        n.runRound(s2);
+        assertEquals(1, gs2.getConsecutiveErrors(), "返回 null 是编程错误，按失败处理");
+    }
+
+    /** 命中的首个执行器即本轮执行者：其 skip 不会被转交给后注册的执行器。 */
+    @Test
+    void firstClaimingExecutorIsFinalNoPassThrough() {
+        GoalRuntime e = engine(null, 3);
+        List<String> calls = new ArrayList<>();
+        e.addExecutor("a", id -> true, (sid, p) -> {
+            calls.add("a");
+            return GoalOutcome.skip("busy");
+        });
+        e.addExecutor("b", id -> true, (sid, p) -> {
+            calls.add("b");
+            return TestOutcomes.ofText("from-b");
+        });
+        AgentSession s = session();
+        e.attach(s, "分析现状", 0, 0, 0);
+        e.runRound(s);
+        assertEquals(java.util.Collections.singletonList("a"), calls);
+    }
+
     @Test
     void sameErrorTypeThreeTimesBlocks() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 99);
+        GoalRuntime e = engine(fb.handler, 99);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
 
@@ -402,13 +452,13 @@ class GoalRoundExecutionTest {
         e.runRound(s);
         e.runRound(s);
 
-        assertEquals(GoalState.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
     void nonRecoverableErrorBlocksAfterTwo() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 99);
+        GoalRuntime e = engine(fb.handler, 99);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
 
@@ -417,13 +467,13 @@ class GoalRoundExecutionTest {
         e.runRound(s);
         e.runRound(s);
 
-        assertEquals(GoalState.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
     void consecutiveErrorsThresholdBlocks() {
         FakeBridge fb = new FakeBridge();
-        GoalEngine e = engine(fb.handler, 2);
+        GoalRuntime e = engine(fb.handler, 2);
         AgentSession s = session();
         GoalState gs = e.attach(s, "分析现状", 0, 0, 0);
 
@@ -433,14 +483,14 @@ class GoalRoundExecutionTest {
         fb.failure = new IllegalArgumentException("b");
         e.runRound(s);
 
-        assertEquals(GoalState.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
     void failedRoundClearsRunningFlag() {
         FakeBridge fb = new FakeBridge();
         fb.failure = new IllegalStateException("boom");
-        GoalEngine e = engine(fb.handler, 3);
+        GoalRuntime e = engine(fb.handler, 3);
         AgentSession s = session();
         e.attach(s, "分析现状", 0, 0, 0);
 
@@ -451,50 +501,50 @@ class GoalRoundExecutionTest {
 
     @Test
     void errorSummaryIsTruncatedAndClassified() {
-        assertEquals("IllegalStateException", GoalEngine.extractErrorSummary(new IllegalStateException()));
+        assertEquals("IllegalStateException", GoalRuntime.extractErrorSummary(new IllegalStateException()));
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 300; i++) {
             sb.append('x');
         }
-        String summary = GoalEngine.extractErrorSummary(new RuntimeException(sb.toString()));
+        String summary = GoalRuntime.extractErrorSummary(new RuntimeException(sb.toString()));
         assertEquals(203, summary.length());
         assertTrue(summary.endsWith("..."));
     }
 
     @Test
     void nonRecoverableClassification() {
-        assertTrue(GoalEngine.isNonRecoverable("SSL"));
-        assertTrue(GoalEngine.isNonRecoverable("HTTP_4XX"));
-        assertFalse(GoalEngine.isNonRecoverable("HTTP_5XX"));
-        assertFalse(GoalEngine.isNonRecoverable(null));
+        assertTrue(GoalRuntime.isNonRecoverable("SSL"));
+        assertTrue(GoalRuntime.isNonRecoverable("HTTP_4XX"));
+        assertFalse(GoalRuntime.isNonRecoverable("HTTP_5XX"));
+        assertFalse(GoalRuntime.isNonRecoverable(null));
     }
 
     // ========== 单槽读写与更新 ==========
 
     @Test
     void updateThrowsWhenNoGoal() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         assertThrows(IllegalStateException.class,
                 () -> e.update(session(), "新目标", 0, 0));
     }
 
     @Test
     void updateReplacesObjectiveAndBudgets() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         AgentSession s = session();
         e.attach(s, "旧目标", 0, 0, 0);
 
         e.update(s, "新目标", 999, 7);
 
         GoalState gs = e.state(s);
-        assertEquals("新目标", gs.getCondition());
+        assertEquals("新目标", gs.getObjective());
         assertEquals(999, gs.getMaxTokens());
         assertEquals(7, gs.getMaxIterations());
     }
 
     @Test
     void hasGoalFalseForTerminal() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         AgentSession s = session();
         GoalState gs = e.attach(s, "目标", 0, 0, 0);
         assertTrue(e.hasGoal(s));
@@ -506,11 +556,11 @@ class GoalRoundExecutionTest {
 
     @Test
     void listenerReceivesChanges() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         AgentSession s = session();
         List<String> events = new ArrayList<>();
         e.addListener((sessionId, state, removed) ->
-                events.add(state.getCondition() + ":" + removed));
+                events.add(state.getObjective() + ":" + removed));
         e.addListener(null); // null 监听器应被忽略
 
         GoalState gs = e.attach(s, "目标A", 0, 0, 0);
@@ -522,12 +572,12 @@ class GoalRoundExecutionTest {
     }
 
     @Test
-    void toTaskMapCarriesContractKeys() {
-        GoalEngine e = engine(null, 3);
+    void snapshotViewCarriesContractKeys() {
+        GoalRuntime e = engine(null, 3);
         AgentSession s = session();
-        GoalState gs = e.attach(s, "目标", 500, 0, 3);
+        e.attach(s, "目标", 500, 0, 3);
 
-        Map<String, Object> item = e.toTaskMap(s, gs);
+        Map<String, Object> item = e.snapshot(s).toMap();
 
         assertEquals("GOAL", item.get("type"));
         assertEquals("目标", item.get("prompt"));
@@ -541,7 +591,7 @@ class GoalRoundExecutionTest {
 
     @Test
     void countUnfinishedTodosHandlesMissingInputs() {
-        GoalEngine e = engine(null, 3);
+        GoalRuntime e = engine(null, 3);
         assertEquals(0, e.countUnfinishedTodos(null, "ws", "s1"));
         assertEquals(0, e.countUnfinishedTodos(null, "ws", null));
     }
@@ -549,22 +599,22 @@ class GoalRoundExecutionTest {
     @Test
     void countUnfinishedCheckboxesCountsOnlyPending() {
         String todo = "- [ ] 未开始\n- [/] 进行中\n- [x] 已完成\n- 普通行\n";
-        assertEquals(2, GoalEngine.countUnfinishedCheckboxes(todo));
-        assertEquals(0, GoalEngine.countUnfinishedCheckboxes(null));
+        assertEquals(2, GoalRuntime.countUnfinishedCheckboxes(todo));
+        assertEquals(0, GoalRuntime.countUnfinishedCheckboxes(null));
     }
 
     @Test
     void isTerminalStatusHandlesUnknown() {
-        assertTrue(GoalEngine.isTerminalStatus("ACHIEVED"));
-        assertFalse(GoalEngine.isTerminalStatus("PURSUING"));
-        assertFalse(GoalEngine.isTerminalStatus("NOT_A_STATUS"));
-        assertFalse(GoalEngine.isTerminalStatus(null));
+        assertTrue(GoalRuntime.isTerminalStatus("ACHIEVED"));
+        assertFalse(GoalRuntime.isTerminalStatus("PURSUING"));
+        assertFalse(GoalRuntime.isTerminalStatus("NOT_A_STATUS"));
+        assertFalse(GoalRuntime.isTerminalStatus(null));
     }
 
     @Test
     void isValidatorEnabledReflectsConstruction() {
         assertFalse(engine(null, 3).isValidatorEnabled());
-        assertTrue(new GoalEngine((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true)
+        assertTrue(new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true)
                 .isValidatorEnabled());
     }
 

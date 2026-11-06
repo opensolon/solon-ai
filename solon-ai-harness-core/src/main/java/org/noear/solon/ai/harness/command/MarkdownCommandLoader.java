@@ -34,7 +34,7 @@ import java.util.stream.Stream;
  * 从 .soloncode/commands/ 目录加载 Markdown 自定义命令
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class MarkdownCommandLoader {
     private static final Logger LOG = LoggerFactory.getLogger(MarkdownCommandLoader.class);

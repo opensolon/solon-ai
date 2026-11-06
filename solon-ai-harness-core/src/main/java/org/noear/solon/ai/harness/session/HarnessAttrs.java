@@ -47,11 +47,11 @@ public final class HarnessAttrs {
      */
 
     /**
-     * 程序派发的一轮（值为 {@link org.noear.solon.ai.harness.turn.TurnDispatch}，transient，未持久化）。
+     * 程序派发的一轮（值为 {@link org.noear.solon.ai.harness.spi.TurnDispatch}，transient，未持久化）。
      *
      * <p>随异步任务一直保留到流终态收口，是「本轮是否程序派发」「该用哪个事务收口」的唯一来源。
-     * 宿主与插件不要直接读写本键：读用 {@link org.noear.solon.ai.harness.turn.TurnDispatch#current}，登记/注销用
-     * {@link org.noear.solon.ai.harness.turn.TurnDispatch#bind} / {@link org.noear.solon.ai.harness.turn.TurnDispatch#unbind}。</p>
+     * 宿主与插件不要直接读写本键：读用 {@link org.noear.solon.ai.harness.spi.TurnDispatch#current}，登记/注销用
+     * {@link org.noear.solon.ai.harness.spi.TurnDispatch#bind} / {@link org.noear.solon.ai.harness.spi.TurnDispatch#unbind}。</p>
      *
      * @since 4.2.0
      */
@@ -71,7 +71,7 @@ public final class HarnessAttrs {
      * <p>表示「已受理一条输入、它的运行流尚未登记」。{@link SessionStatus} 会把它计入
      * 占用态，否则并发请求会各自开流。宿主不应直接读写本键，用 {@code InputGate}。</p>
      *
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public static final String INPUT_ADMITTING = "session.input.admitting";
 
@@ -100,4 +100,21 @@ public final class HarnessAttrs {
      * @since 4.2.0
      */
     public static final String LEGACY_AGENT_SELECTED = "_agent_selected";
+
+    /**
+     * 代理轨迹键前缀（{@code session.getContext()} 内；值为 {@code ReActTrace}）。
+     *
+     * <p>键值由 solon-ai-agent 决定：代理缺省 {@code traceKey = "__" + 代理名}。
+     * 读写走 {@code TraceUtil}，不要手拼。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final String LEGACY_TRACE_PREFIX = "__";
+
+    /**
+     * 主代理轨迹键（{@code LEGACY_TRACE_PREFIX + "main"}）。读写走 {@code TraceUtil}。
+     *
+     * @since 4.2.0
+     */
+    public static final String LEGACY_TRACE_MAIN = LEGACY_TRACE_PREFIX + "main";
 }

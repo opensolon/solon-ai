@@ -29,7 +29,7 @@ import org.noear.solon.lang.Nullable;
  * （写在会话上下文里随快照持久化，<b>键值不可变</b>），宿主无从也无须触达。</p>
  *
  * @author noear
- * @since 4.2.3
+ * @since 4.2.0
  */
 public final class SessionSelections {
     /** 会话级模型选择的存储键（会话上下文，随快照持久化；键值不可变） */

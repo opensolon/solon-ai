@@ -12,7 +12,7 @@ package org.noear.solon.ai.harness.extension.queue;
  * 写一个 startFailed 标记实现。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public enum QueueClaimStatus {
     /** 已领取并交给 handler 启动成功 */

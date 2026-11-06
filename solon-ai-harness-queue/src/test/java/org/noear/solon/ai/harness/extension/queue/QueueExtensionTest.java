@@ -48,10 +48,10 @@ class QueueExtensionTest {
         assertEquals(1, queue.enqueue(session, "第一条", null));
         assertEquals(2, queue.enqueue(session, "第二条", null));
         assertEquals(2, queue.pendingSize(session));
-        assertEquals(2, queue.viewRows(session).size());
+        assertEquals(2, queue.list(session).size());
         assertTrue(queue.hasItems(session));
 
-        List<QueueItemView> view = queue.viewRows(session);
+        List<QueueItem> view = queue.list(session);
         assertEquals(2, view.size());
         assertEquals("第一条", view.get(0).getText());
 
@@ -72,8 +72,8 @@ class QueueExtensionTest {
 
         // 程序宿主不必为一个必填参数编造渠道标识
         assertEquals(1, queue.enqueue(session, "最简入队"));
-        assertEquals("最简入队", queue.viewRows(session).get(0).getText());
-        assertEquals("queue", queue.viewRows(session).get(0).getSource(), "缺省来源不得为 null（与静态实现契约一致）");
+        assertEquals("最简入队", queue.list(session).get(0).getText());
+        assertEquals("queue", queue.list(session).get(0).getSource(), "缺省来源不得为 null（与静态实现契约一致）");
     }
 
     @Test
@@ -98,11 +98,11 @@ class QueueExtensionTest {
             return false;
         }));
         assertEquals(0, queue.pendingSize(session), "in-flight 不计待执行");
-        assertEquals(1, queue.viewRows(session).size(), "viewRows 含 in-flight");
+        assertEquals(1, queue.list(session).size(), "list 含 in-flight");
 
         // 终态由 claim 收口（宿主不再需要 ack(itemId)）
         assertTrue(ref.get().acknowledge());
-        assertEquals(0, queue.viewRows(session).size());
+        assertEquals(0, queue.list(session).size());
     }
 
     @Test

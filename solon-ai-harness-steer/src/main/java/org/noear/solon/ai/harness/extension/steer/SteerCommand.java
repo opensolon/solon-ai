@@ -38,7 +38,7 @@ import org.noear.solon.core.util.Assert;
  * 因此开关（DISABLED）与忙判定复查口径一致——任务异常退出后不会再把插话投进一个不会再运行的邮箱。</p>
  *
  * @author noear
- * @since 2026.11
+ * @since 4.2.0
  */
 class SteerCommand extends AbsCommand {
     /** 所属门面（由 {@link SteerExtension} 创建时注入）；独立 new 时为 null，执行期从引擎解析 */
@@ -113,9 +113,9 @@ class SteerCommand extends AbsCommand {
         SteerLimits limits = steer.getLimits();
         SteerResult result = steer.steer(session, text, resolved);
 
-        switch (result.getStatus()) {
+        switch (result.getCode()) {
             case STEERED:
-                ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getQueued() + " 条）");
+                ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getPendingCount() + " 条）");
                 break;
             case BOX_FULL:
                 ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
@@ -131,7 +131,7 @@ class SteerCommand extends AbsCommand {
                 ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
                 break;
             default:
-                ctx.println("插话未生效：" + result.getStatusCode());
+                ctx.println("插话未生效：" + result.getCodeName());
         }
     }
 }

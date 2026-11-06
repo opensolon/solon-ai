@@ -1,6 +1,7 @@
 package org.noear.solon.ai.harness.util;
 
 
+import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -14,11 +15,14 @@ import org.noear.solon.core.util.Assert;
  * @author noear 2026/8/28 created
  *
  */
-public class TraceUtil {
+public final class TraceUtil {
     /**
-     * 主代理轨迹在会话上下文中的键
+     * 主代理轨迹在会话上下文中的键（同 {@link HarnessAttrs#LEGACY_TRACE_MAIN}）
      */
-    public static final String TRACE_KEY_MAIN = "__main";
+    public static final String TRACE_KEY_MAIN = HarnessAttrs.LEGACY_TRACE_MAIN;
+
+    private TraceUtil() {
+    }
 
     public static ReActTrace getCurrentTrace(AgentSession session) {
         return getCurrentTrace(session, null);
@@ -34,7 +38,7 @@ public class TraceUtil {
         //当前选中的代理
         String agentVal = SessionSelections.agentOf(session);
         if (Assert.isNotEmpty(agentVal)) {
-            trace = session.getContext().get("__" + agentVal);
+            trace = session.getContext().get(HarnessAttrs.LEGACY_TRACE_PREFIX + agentVal);
         }
 
         if (trace == null) {
@@ -63,7 +67,7 @@ public class TraceUtil {
         //当前选中的代理
         String agentVal = SessionSelections.agentOf(session);
         if (Assert.isNotEmpty(agentVal)) {
-            session.getContext().remove("__" + agentVal);
+            session.getContext().remove(HarnessAttrs.LEGACY_TRACE_PREFIX + agentVal);
         }
 
         if (traceKey != null) {

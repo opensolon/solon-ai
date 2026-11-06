@@ -16,7 +16,7 @@ import java.util.List;
  * /model 命令（多子命令）
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class ModelCommand extends AbsCommand {
     private static final String BOLD = "\033[1m";

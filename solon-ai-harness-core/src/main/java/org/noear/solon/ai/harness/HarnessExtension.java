@@ -51,10 +51,10 @@ import org.noear.solon.lang.Preview;
  *         一对多汇集，如 {@link #onStatus}）。</li>
  *     <li><b>一个扩展向引擎或另一个扩展提供服务 → 用核心定义的能力接口</b>，实现类同时实现它，
  *         消费方用 {@code engine.getExtension(能力接口.class)} 查找（如
- *         {@link org.noear.solon.ai.harness.turn.InputBacklog}）。不要把领域能力做成本接口的
+ *         {@link org.noear.solon.ai.harness.spi.InputBacklog}）。不要把领域能力做成本接口的
  *         default 方法——那会让每个扩展都继承与自己无关的语义。</li>
  *     <li><b>需要在会话锁内或无引擎场景读取的会话事实 → 用核心持有的 attrs 槽位</b>
- *         （如 {@link org.noear.solon.ai.harness.turn.TurnDispatch}）。</li>
+ *         （如 {@link org.noear.solon.ai.harness.spi.TurnDispatch}）。</li>
  *     <li><b>核心的静态 API 只读核心事实</b>；扩展贡献的事实一律经引擎读取
  *         （插件事实只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
  *     <li><b>内核不定义插件事实键</b>：事实键由拥有它的插件定义。内核自己的判定若要依赖插件，
@@ -256,7 +256,7 @@ public interface HarnessExtension extends AiSwitchable {
      *
      * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session)} / {@code prepareInterrupt(session)}
      * （{@code /interrupt} 命令也经此）。仅用户级完整中断会回调；只停流的程序行为
-     * （{@code interruptStream} / {@code interruptStreamActive}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
+     * （{@code cancelStream} / {@code preemptStream}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
      *
      * <p><b>时序保证</b>：引擎在认领并停止运行流<b>之前</b>回调。停流后宿主常在终态回调里续发积压，
      * 若等到那时才清理，会把刚被停掉的任务重新推起来（「先清积压再停流」）。</p>

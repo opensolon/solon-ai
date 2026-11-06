@@ -116,9 +116,9 @@ class QueueItemTest {
     }
 
     @Test
-    void toMapExposesStableKeys() {
+    void persistMapExposesStableKeys() {
         QueueItem item = new QueueItem("i", "text", InputOrigin.NONE, 1234L, "PENDING");
-        Map<String, Object> map = item.toMap();
+        Map<String, Object> map = item.toPersistMap();
         assertNotNull(map);
         assertEquals("i", map.get("id"));
         assertEquals("text", map.get("text"));
@@ -127,16 +127,18 @@ class QueueItemTest {
     }
 
     @Test
-    void toViewIsTheDisplayContract() {
+    void toMapIsTheDisplayContract() {
         QueueItem item = new QueueItem("i", "hello world", InputOrigin.channel("WEB"), 1, "PENDING");
 
-        QueueItemView view = item.toView();
+        QueueItem view = item;
 
         assertEquals("i", view.getId());
         assertEquals("hello world", view.getText());
         assertEquals("PENDING", view.getStatus());
         assertFalse(view.isRunning());
         assertEquals("WEB", view.getSource());
-        assertNotNull(view.toMap());
+        assertEquals("hello world", view.toMap().get("displayText"));
+        assertEquals("WEB", view.toMap().get("source"));
+        assertFalse(view.toMap().containsKey("sourceUserId"), "展示视图不得泄露持久化键");
     }
 }

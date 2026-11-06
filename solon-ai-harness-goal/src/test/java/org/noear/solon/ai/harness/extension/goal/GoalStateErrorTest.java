@@ -91,7 +91,7 @@ class GoalStateErrorTest {
             int errors = gs.incrementConsecutiveErrors();
             if (errors < 3) {
                 // 未达阈值，不标记 BLOCKED
-                assertEquals(GoalState.Status.PURSUING, gs.getStatus());
+                assertEquals(GoalTask.Status.PURSUING, gs.getStatus());
             }
         }
 
@@ -104,7 +104,7 @@ class GoalStateErrorTest {
             gs.markBlocked();
         }
 
-        assertEquals(GoalState.Status.BLOCKED, gs.getStatus(),
+        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus(),
                 "goal should be BLOCKED after 3 consecutive errors");
         assertTrue(gs.getStatus().isResumable(),
                 "BLOCKED should be resumable");
@@ -119,7 +119,7 @@ class GoalStateErrorTest {
         gs.incrementConsecutiveErrors(); // 1
         gs.incrementConsecutiveErrors(); // 2
 
-        assertEquals(GoalState.Status.PURSUING, gs.getStatus(),
+        assertEquals(GoalTask.Status.PURSUING, gs.getStatus(),
                 "goal should still be PURSUING before threshold");
         assertFalse(gs.getStatus().isTerminal(),
                 "goal should not be terminal before threshold");
@@ -143,7 +143,7 @@ class GoalStateErrorTest {
             gs.markBlocked();
         }
 
-        assertEquals(GoalState.Status.BLOCKED, gs.getStatus(),
+        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus(),
                 "goal should be BLOCKED after " + threshold + " errors");
     }
 
@@ -167,7 +167,7 @@ class GoalStateErrorTest {
         // 再错误计数应为 1（重新从 0 开始）
         assertEquals(1, gs.incrementConsecutiveErrors(),
                 "should start from 1 after reset then error");
-        assertEquals(GoalState.Status.PURSUING, gs.getStatus(),
+        assertEquals(GoalTask.Status.PURSUING, gs.getStatus(),
                 "goal should remain PURSUING after reset");
     }
 

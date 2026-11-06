@@ -42,7 +42,7 @@ import java.util.List;
  * <p>停止任务只在该任务<b>正在执行</b>时才中断会话：否则会无端打断用户当前这一轮并清空队列。</p>
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 final class LoopCommand extends AbsCommand {
     private static final String BOLD = "\033[1m";
@@ -113,7 +113,7 @@ final class LoopCommand extends AbsCommand {
             for (LoopTask t : tasks.list(sessionId)) {
                 anyRunning |= t.isRunning();
             }
-            tasks.stopAll(sessionId);
+            tasks.removeAll(sessionId);
             if (anyRunning) {
                 engine.interrupt(ctx.getSession());
             }

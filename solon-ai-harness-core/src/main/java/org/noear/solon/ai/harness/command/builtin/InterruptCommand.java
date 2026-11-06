@@ -32,7 +32,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 插件参与（如清队列）也由引擎统一回调。</p>
  *
  * @author noear
- * @since 2026.5.15
+ * @since 4.2.0
  */
 public class InterruptCommand extends AbsCommand {
     @Override

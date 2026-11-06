@@ -51,7 +51,7 @@ import org.noear.solon.lang.Nullable;
  * （{@code tryAcquire} 不会被调用即可）。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class InputGate {
     private InputGate() {

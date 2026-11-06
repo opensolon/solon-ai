@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 package org.noear.solon.ai.harness.turn;
+
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.lang.Nullable;
 
 /**
@@ -33,7 +35,7 @@ import org.noear.solon.lang.Nullable;
  * 延到哪里、怎么排由积压插件决定。</p>
  *
  * @author noear
- * @since 4.2.3
+ * @since 4.2.0
  */
 public final class AdmitDecision {
 

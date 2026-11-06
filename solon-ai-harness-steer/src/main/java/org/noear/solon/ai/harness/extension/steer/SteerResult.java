@@ -8,32 +8,64 @@ package org.noear.solon.ai.harness.extension.steer;
  * 一次插话投递的结果（{@link SteerExtension#steer} 系列方法的返回值）
  *
  * <ul>
- *   <li>{@link #getStatus()}：投递结论，见 {@link SteerStatus}；</li>
+ *   <li>{@link #getCode()}：投递结论，见 {@link Code}；</li>
  *   <li>{@link #getSteerId()}：本条插话的标识（用于后续撤销，未受理时可能为 null）；</li>
- *   <li>{@link #getQueued()}：投递后本轮邮箱里待注入的条数。</li>
+ *   <li>{@link #getPendingCount()}：投递后本轮邮箱里待注入的条数。</li>
  * </ul>
  *
  * @author noear
  * @since 4.2.0
  */
 public final class SteerResult {
-    private final SteerStatus status;
-    private final String steerId;
-    private final int queued;
-
-    public SteerResult(SteerStatus status, String steerId, int queued) {
-        this.status = status;
-        this.steerId = steerId;
-        this.queued = queued;
+    /**
+     * 投递结论（取值与 /web/chat/steer 应答码同名）。
+     */
+    public enum Code {
+        /** 已进入本轮邮箱，将在下一个推理步注入 */
+        STEERED,
+        /** 当前没有运行中的轮次 */
+        NOT_RUNNING,
+        /** 请求所带 runId 已不是当前轮次 */
+        TURN_CHANGED,
+        /** 本轮邮箱已满 */
+        BOX_FULL,
+        /** steerId 重复（重试幂等） */
+        DUPLICATE_STEER_ID,
+        /** 正文为空 */
+        EMPTY_TEXT,
+        /** 正文超长 */
+        TEXT_TOO_LONG,
+        /** steerId 超过长度上限 */
+        INVALID_STEER_ID,
+        /** 插话能力已被关闭（扩展/拦截器 setEnabled(false)），本次未入队 */
+        DISABLED
     }
 
-    public SteerStatus getStatus() { return status; }
-    public String getStatusCode() { return status.code(); }
+    private final Code code;
+    private final String steerId;
+    private final int pendingCount;
+
+    SteerResult(Code code, String steerId, int pendingCount) {
+        this.code = code;
+        this.steerId = steerId;
+        this.pendingCount = pendingCount;
+    }
+
+    public Code getCode() { return code; }
+    /** 应答码字符串（= {@code getCode().name()}） */
+    public String getCodeName() { return code.name(); }
     public String getSteerId() { return steerId; }
-    public int getQueued() { return queued; }
-    public boolean isSteered() { return status == SteerStatus.STEERED; }
-    public boolean isBoxFull() { return status == SteerStatus.BOX_FULL; }
-    public boolean isNotRunning() {
-        return status == SteerStatus.NOT_RUNNING || status == SteerStatus.TURN_CHANGED;
+    /** 投递后本轮邮箱里待注入的条数 */
+    public int getPendingCount() { return pendingCount; }
+    public boolean isSteered() { return code == Code.STEERED; }
+    public boolean isBoxFull() { return code == Code.BOX_FULL; }
+    /** 当前没有运行中的轮次 */
+    public boolean isNotRunning() { return code == Code.NOT_RUNNING; }
+    /** 轮次已切换（请求所带 runId 过期） */
+    public boolean isTurnChanged() { return code == Code.TURN_CHANGED; }
+
+    @Override
+    public String toString() {
+        return "SteerResult{code=" + code + ", steerId=" + steerId + ", pendingCount=" + pendingCount + "}";
     }
 }

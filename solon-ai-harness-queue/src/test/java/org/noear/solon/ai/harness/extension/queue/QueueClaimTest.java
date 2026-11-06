@@ -34,10 +34,10 @@ class QueueClaimTest {
     @Test
     void claimCarriesItemAndGenerationSnapshot() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueStore.claimNext(session, claim -> {
             ref.set(claim);
             return false; // 异步启动：不收口，终态由宿主收
         });
@@ -53,9 +53,9 @@ class QueueClaimTest {
     @Test
     void acknowledgeIsIdempotent() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> {
+        QueueStore.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         });
@@ -64,24 +64,24 @@ class QueueClaimTest {
         assertTrue(claim.acknowledge());
         assertFalse(claim.acknowledge(), "重复收口必须返回 false");
         assertTrue(claim.isSettled());
-        assertEquals(0, QueueHelper.size(session));
+        assertEquals(0, QueueStore.size(session));
     }
 
     @Test
     void rollbackRestoresItemToHead() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
-        QueueHelper.enqueue(session, "next", null);
+        QueueStore.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "next", null);
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> {
+        QueueStore.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         });
 
         assertTrue(ref.get().rollback());
         assertTrue(ref.get().isSettled());
-        assertEquals("task", QueueHelper.snapshot(session).get(0).getText());
-        assertEquals(2, QueueHelper.pendingSize(session));
+        assertEquals("task", QueueStore.snapshot(session).get(0).getText());
+        assertEquals(2, QueueStore.pendingSize(session));
     }
 
     /**
@@ -94,36 +94,36 @@ class QueueClaimTest {
     @Test
     void rolledBackClaimCannotResurrectTaskAfterCancelPending() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> {
+        QueueStore.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         });
         QueueClaim claim = ref.get();
 
-        assertTrue(QueueHelper.cancelPending(session));
+        assertTrue(QueueStore.cancelPending(session));
 
         assertFalse(claim.rollback(), "Stop 之后回滚必须被拒绝");
         assertFalse(claim.isValid(), "领取代际已失效");
-        assertEquals(0, QueueHelper.size(session), "被取消的任务不得复活");
+        assertEquals(0, QueueStore.size(session), "被取消的任务不得复活");
         assertNull(session.getContext().data().get("session.queue.items"));
     }
 
     @Test
     void acknowledgeAfterCancelPendingDoesNotLeakInFlight() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        QueueHelper.claimNext(session, claim -> {
+        QueueStore.claimNext(session, claim -> {
             ref.set(claim);
             return false;
         });
 
-        QueueHelper.cancelPending(session);
+        QueueStore.cancelPending(session);
 
         ref.get().acknowledge();
-        assertEquals(0, QueueHelper.size(session));
+        assertEquals(0, QueueStore.size(session));
     }
 
     /**
@@ -133,25 +133,25 @@ class QueueClaimTest {
     @Test
     void syncDoneDuringStopReturnsStartFailedWithoutResurrect() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
-        QueueHelper.enqueue(session, "next", null);
+        QueueStore.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "next", null);
 
-        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueStore.claimNext(session, claim -> {
             // 同步命令已跑完；恰好此时用户 Stop（模拟同步完成前被 cancelPending）
-            QueueHelper.cancelPending(session);
+            QueueStore.cancelPending(session);
             return true;
         });
 
         assertEquals(QueueClaimStatus.START_FAILED, status, "Stop 后 ack 必被拒，不得报 STARTED 让循环继续");
-        assertEquals(0, QueueHelper.size(session), "被取消的任务不得复活（含已入队的 next，Stop 清空一切）");
+        assertEquals(0, QueueStore.size(session), "被取消的任务不得复活（含已入队的 next，Stop 清空一切）");
         assertNull(session.getContext().data().get("session.queue.items"), "落盘投影也应为空");
         // 派发登记不得残留（否则续发被自己的残留挡死）
-        assertNull(QueueHelper.currentDispatch(session));
+        assertNull(QueueClaim.current(session));
         // 领取权必须已释放：Stop 后新入队的任务能立即被领取，队列不因这次失败而卡死
         // （tryClaim 对空队列本就返回 false，故必须先补一条再验）
-        QueueHelper.enqueue(session, "post-stop", null);
-        assertTrue(QueueHelper.tryClaim(session));
-        QueueHelper.releaseClaim(session);
+        QueueStore.enqueue(session, "post-stop", null);
+        assertTrue(QueueStore.tryClaim(session));
+        QueueStore.releaseClaim(session);
     }
 
     /**
@@ -160,24 +160,24 @@ class QueueClaimTest {
     @Test
     void syncDoneSettlesInKernelAndClearsQueue() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
 
         java.util.concurrent.atomic.AtomicBoolean seen = new java.util.concurrent.atomic.AtomicBoolean(false);
-        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueStore.claimNext(session, claim -> {
             seen.set(claim.getItem() != null);
             return true;
         });
 
         assertEquals(QueueClaimStatus.STARTED, status);
         assertTrue(seen.get());
-        assertEquals(0, QueueHelper.size(session), "同步完成后任务即从队列消失（内核已收口）");
-        assertNull(QueueHelper.currentDispatch(session), "派发登记不得残留");
+        assertEquals(0, QueueStore.size(session), "同步完成后任务即从队列消失（内核已收口）");
+        assertNull(QueueClaim.current(session), "派发登记不得残留");
     }
 
     @Test
     void concurrentClaimOnlyOneSucceeds() throws Exception {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
 
         ExecutorService pool = Executors.newFixedThreadPool(8);
         CountDownLatch start = new CountDownLatch(1);
@@ -189,7 +189,7 @@ class QueueClaimTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    QueueClaimStatus s = QueueHelper.claimNext(session, claim -> {
+                    QueueClaimStatus s = QueueStore.claimNext(session, claim -> {
                         winner.set(claim);
                         started.incrementAndGet();
                         // 慢一点，制造真实的并发窗口
@@ -216,21 +216,21 @@ class QueueClaimTest {
     @Test
     void handlerFailureReturnsStartFailedAndRollsBack() {
         AgentSession session = session();
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
 
-        QueueClaimStatus status = QueueHelper.claimNext(session, claim -> {
+        QueueClaimStatus status = QueueStore.claimNext(session, claim -> {
             throw new IllegalStateException("boom");
         });
 
         assertEquals(QueueClaimStatus.START_FAILED, status);
-        assertEquals("task", QueueHelper.snapshot(session).get(0).getText(), "启动失败的任务回到队首");
-        assertEquals("PENDING", QueueHelper.snapshot(session).get(0).getStatus());
+        assertEquals("task", QueueStore.snapshot(session).get(0).getText(), "启动失败的任务回到队首");
+        assertEquals("PENDING", QueueStore.snapshot(session).get(0).getStatus());
     }
 
     @Test
     void emptyQueueReturnsNoTask() {
         AgentSession session = session();
-        assertEquals(QueueClaimStatus.NO_TASK, QueueHelper.claimNext(session, claim -> false));
+        assertEquals(QueueClaimStatus.NO_TASK, QueueStore.claimNext(session, claim -> false));
     }
 
     @Test
@@ -246,7 +246,7 @@ class QueueClaimTest {
             return false;
         }));
         assertTrue(ref.get().acknowledge());
-        assertEquals(0, queue.viewRows(session).size());
+        assertEquals(0, queue.list(session).size());
     }
 
     @Test
@@ -254,9 +254,9 @@ class QueueClaimTest {
         AgentSession session = session();
         QueueExtension queue = new QueueExtension();
         queue.setEnabled(false);
-        QueueHelper.enqueue(session, "task", null);
+        QueueStore.enqueue(session, "task", null);
 
         assertEquals(QueueClaimStatus.NO_TASK, queue.claimNext(session, claim -> false));
-        assertEquals(1, QueueHelper.pendingSize(session), "停用后不接单，队列原样保留");
+        assertEquals(1, QueueStore.pendingSize(session), "停用后不接单，队列原样保留");
     }
 }

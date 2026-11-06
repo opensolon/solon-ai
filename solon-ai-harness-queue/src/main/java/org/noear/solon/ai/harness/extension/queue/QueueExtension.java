@@ -9,7 +9,7 @@ import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 
 import java.util.List;
@@ -19,7 +19,7 @@ import java.util.Map;
  * Queue 一键装配扩展 —— queue 能力从头到尾只接触这一个类。
  *
  * <p>{@code engine.addExtension(new QueueExtension())} 一步完成：注册 /queue 命令
- * （幂等）+ 提供队列操作门面。宿主不再分别接触 {@link QueueHelper} 静态工具类——本类内部中转，静态实现与
+ * （幂等）+ 提供队列操作门面。宿主不再分别接触 {@link QueueStore} 静态工具类——本类内部中转，静态实现与
  * {@code session.queue.*} attrs 契约零改动。</p>
  *
  * <p>装配后宿主只需掌握一个时机：任务终态续发。首选 {@link #drainLoop}（自动套领取循环 +
@@ -33,7 +33,7 @@ import java.util.Map;
  * 而 {@code cancelPending} 会递代，现取必然拿到新代际 → 代际防线恒真 →
  * 被用户 Stop 的任务会重新入队继续执行。这些方法已随 {@link QueueClaim} 落地全部移除，
  * 最后一条布尔型同步变体 {@code drainOne(runner)} 也已删除：同步语义由宿主在
- * {@code claimNext} 的 handler 内自行 {@code claim.acknowledge()} 表达，
+ * {@code claimNext} 的 handler 返回 true 表达，
  * 队列执行从此只剩一条领取路径。</p>
  *
  * <p><b>与核心的协作</b>（核心不认识队列，只认契约）：实现能力接口 {@link InputBacklog}
@@ -74,7 +74,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     @Override
     public void onInterrupt(HarnessEngine engine, AgentSession session) {
-        QueueHelper.cancelPending(session);
+        QueueStore.cancelPending(session);
     }
 
     // ==================== InputBacklog（核心能力契约） ====================
@@ -92,7 +92,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     @Override
     public boolean hasPending(AgentSession session) {
-        return QueueHelper.pendingSize(session) > 0;
+        return QueueStore.pendingSize(session) > 0;
     }
 
     /**
@@ -100,7 +100,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     @Override
     public void onStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder status) {
-        status.put(STATUS_PENDING, QueueHelper.pendingSize(session));
+        status.put(STATUS_PENDING, QueueStore.pendingSize(session));
     }
 
     /**
@@ -120,7 +120,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (isEnabled() == false) {
             return -1;
         }
-        return QueueHelper.enqueue(session, text, origin);
+        return QueueStore.enqueue(session, text, origin);
     }
 
     /**
@@ -142,65 +142,55 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (isEnabled() == false) {
             return -1;
         }
-        return QueueHelper.enqueue(session, text, origin, id, model, reasoningEffort,
+        return QueueStore.enqueue(session, text, origin, id, model, reasoningEffort,
                 thinkingMode, selectedAgent, hasFiles);
     }
 
     /** 待执行数量（不含 in-flight，运行中的那条不占容量）。 */
     public int pendingSize(AgentSession session) {
-        return QueueHelper.pendingSize(session);
+        return QueueStore.pendingSize(session);
     }
 
     /** 是否有任务（含待执行与运行中）。 */
     public boolean hasItems(AgentSession session) {
-        return QueueHelper.hasItems(session);
+        return QueueStore.hasItems(session);
     }
 
     /**
      * 快照投影中是否存在队列（静态探测，供宿主在会话尚未实例化时使用）。
      *
-     * <p>替代宿主直接依赖内核 {@code QueueHelper} 静态方法；不需要扩展实例。</p>
+     * <p>替代宿主直接依赖内核 {@code QueueStore} 静态方法；不需要扩展实例。</p>
      *
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public static boolean isPersisted(FlowContext context) {
-        return QueueHelper.hasPersistedItems(context);
+        return QueueStore.hasPersistedItems(context);
     }
 
     /**
-     * 统一展示视图（对外 API / UI 契约）。
+     * 队列列表：运行中任务（若有）在首位，其余为待执行（只读实体；对外展示用 {@link QueueItem#toMap()}）。
      *
-     * <p>返回视图对象而非领域对象：宿主不得拿 {@code QueueItem.toMap()}
-     * （持久化投影）当 HTTP 响应体，否则存储格式的演进会被 HTTP 契约锁死。</p>
-     *
-     * <p>本方法是队列展示的<b>唯一</b>入口（原 {@code view()} 返回领域对象，
-     * 会诱导宿主直接读 {@code QueueItem}，已移除）。</p>
-     *
-     * @since 4.2.1
+     * @since 4.2.0
      */
-    public List<QueueItemView> viewRows(AgentSession session) {
-        List<QueueItemView> rows = new java.util.ArrayList<>();
-        for (QueueItem item : QueueHelper.view(session)) {
-            rows.add(item.toView());
-        }
-        return rows;
+    public List<QueueItem> list(AgentSession session) {
+        return QueueStore.view(session);
     }
 
     /**
      * 领取并执行队首一条（一次领取 = 一个 {@link QueueClaim}）。
      *
-     * <p><b>宿主首选入口</b>：handler 拿到 claim 后，既可以直接取 {@code claim.getItem()}
-     * 拿任务本体，也可以在任意线程、任意时刻用 {@code claim.acknowledge()} /
-     * {@code claim.rollback()} 收口——不需要往会话 attrs 里塞 QueueItem，也不需要在终态现取代际。</p>
+     * <p>handler 拿到 claim 后直接取 {@code claim.getItem()} 拿任务本体；收口由 handler 返回值
+     * （同步完成）或流终态的 {@code SessionTurn#settle}（异步启动）完成——不需要往会话 attrs 里塞
+     * QueueItem，也不需要在终态现取代际。</p>
      *
-     * @see QueueHelper#claimNext(AgentSession, QueueClaimHandler)
-     * @since 4.2.1
+     * @see QueueStore#claimNext(AgentSession, QueueClaimHandler)
+     * @since 4.2.0
      */
     public QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
         if (isEnabled() == false) {
             return QueueClaimStatus.NO_TASK;
         }
-        return QueueHelper.claimNext(session, handler);
+        return QueueStore.claimNext(session, handler);
     }
 
     /**
@@ -211,27 +201,14 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * 宿主不需要再写 {@code synchronized (session.attrs())} 与代际复核。</p>
      *
      * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
-     * @since 4.2.2
+     * @since 4.2.0
      */
     public QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
                                 QueueClaimHandler handler) {
         if (isEnabled() == false) {
             return QueueClaimStatus.NO_TASK;
         }
-        return QueueHelper.claimNext(session, canAccept, handler);
-    }
-
-    /**
-     * 收口当前派发事务：成功确认 / 失败回滚到队首，并注销登记。
-     *
-     * <p>无未收口派发时为空操作（幂等），故调用方无需先判空。</p>
-     *
-     * @param started true = 已正常跑起来；false = 启动失败（回滚到队首）
-     * @since 4.2.2
-     */
-    public boolean settleDispatch(AgentSession session, boolean started) {
-        QueueDispatch dispatch = QueueHelper.currentDispatch(session);
-        return dispatch != null && dispatch.settle(started);
+        return QueueStore.claimNext(session, canAccept, handler);
     }
 
     /**
@@ -259,7 +236,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * @param handler  单次领取的启动者；返回 true = 同步完成（内核当场收口），
      *                 false = 异步启动（终态由流终态的 {@code dispatch.settle} 收口）
      * @return 最后一次领取的结果（未发生领取时为 {@link QueueClaimStatus#NO_TASK}）
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public QueueClaimStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
                                 QueueClaimHandler handler) {
@@ -270,20 +247,20 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         QueueClaimStatus last = QueueClaimStatus.NO_TASK;
         // 单次调用最多续发一轮队列容量：正常情况下每条领取都会消耗一个待执行项，
         // 这里的上限只是防御「宿主 handler 把同一项反复塞回」的失控情形，不应被触达。
-        for (int guard = 0; guard <= QueueHelper.MAX_QUEUE_SIZE; guard++) {
+        for (int guard = 0; guard <= QueueStore.MAX_QUEUE_SIZE; guard++) {
             // 本处只是快速出口（省一次入锁构造），权威判定在 claimNext 内部与领取权同一把锁完成。
             // 两处都判不是冗余防御，而是「能看见就早退」，不要把这里当成唯一关卡。
             if (canDrain != null && !canDrain.test(session)) {
                 return last;
             }
 
-            QueueClaimStatus status = QueueHelper.claimNext(session, canDrain, handler);
+            QueueClaimStatus status = QueueStore.claimNext(session, canDrain, handler);
             if (status != QueueClaimStatus.STARTED) {
                 return status;
             }
 
             last = status;
-            if (QueueHelper.pendingSize(session) <= 0) {
+            if (QueueStore.pendingSize(session) <= 0) {
                 return last;
             }
         }
@@ -292,22 +269,22 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     /** 取消单条待执行任务。 */
     public boolean cancelItem(AgentSession session, String itemId) {
-        return QueueHelper.cancelItem(session, itemId);
+        return QueueStore.cancelItem(session, itemId);
     }
 
     /** 置顶单条待执行任务。 */
     public boolean promote(AgentSession session, String itemId) {
-        return QueueHelper.promote(session, itemId);
+        return QueueStore.promote(session, itemId);
     }
 
     /** 清空待执行并递增代际（in-flight 不受影响；旧代际 requeue 被拒）。 */
     public boolean cancelPending(AgentSession session) {
-        return QueueHelper.cancelPending(session);
+        return QueueStore.cancelPending(session);
     }
 
     /** 旧版 queue-tasks.json 的一次性迁移入口。@return 实际导入条数 */
     public int importItems(AgentSession session, List<Map<String, Object>> rows) {
-        return QueueHelper.importItems(session, rows);
+        return QueueStore.importItems(session, rows);
     }
 
     /**
@@ -316,14 +293,14 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * <p>宿主<b>不需要</b>用它做受理判定：{@link #enqueue} 超限会返回 {@code -1}，
      * 宿主只映射应答即可。本方法保留给「前端先提示队列已满」这类展示用途。</p>
      *
-     * @since 4.2.3
+     * @since 4.2.0
      */
     public static int maxQueueSize() {
-        return QueueHelper.MAX_QUEUE_SIZE;
+        return QueueStore.MAX_QUEUE_SIZE;
     }
 
-    /** 单条队列文本的最大字符数（与内核同源，仅供宿主展示/预校验）。@since 4.2.3 */
+    /** 单条队列文本的最大字符数（与内核同源，仅供宿主展示/预校验）。@since 4.2.0 */
     public static int maxTextLength() {
-        return QueueHelper.MAX_TEXT_LENGTH;
+        return QueueStore.MAX_TEXT_LENGTH;
     }
 }

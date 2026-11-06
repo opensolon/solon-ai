@@ -28,13 +28,13 @@ import java.util.Map;
  * 字段名齐全的 Map 写回去——等于把 harness 的持久化格式复制到了宿主代码里。键名一旦调整
  * 宿主就静默失效，字段语义变更（如 {@code condition}/{@code objective} 双写）宿主也无从得知。</p>
  *
- * <p>本类是该投影<b>字段名的唯一出处</b>：{@link GoalState#toMap()} 与 {@link GoalState#fromMap}
+ * <p>本类是该投影<b>字段名的唯一出处</b>：运行态的读写（{@code GoalState.toMap/fromMap}）
  * 同样委托这里，宿主只面对类型化 getter 与 {@link #writeTo}，不再出现任何字段名字符串。</p>
  *
  * <p>只读值对象，不可变；由 {@link #from(FlowContext)} / {@link #builder()} 创建。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class GoalProjection {
     // ===== 投影键名（唯一出处，宿主不应硬编码） =====
@@ -54,8 +54,8 @@ public final class GoalProjection {
     static final String K_CONSECUTIVE_ERRORS = "consecutiveErrors";
 
     private final String goalId;
-    private final String condition;
-    private final GoalState.Status status;
+    private final String objective;
+    private final GoalTask.Status status;
     private final long consumedTokens;
     private final long maxTokens;
     private final int maxIterations;
@@ -69,7 +69,7 @@ public final class GoalProjection {
 
     private GoalProjection(Builder b) {
         this.goalId = b.goalId;
-        this.condition = b.condition;
+        this.objective = b.objective;
         this.status = b.status;
         this.consumedTokens = b.consumedTokens;
         this.maxTokens = b.maxTokens;
@@ -87,10 +87,11 @@ public final class GoalProjection {
 
     public String getGoalId() { return goalId; }
 
-    public String getCondition() { return condition; }
+    /** 目标正文（持久化键 {@code objective}/{@code condition} 双写，读取时 condition 优先）。 */
+    public String getObjective() { return objective; }
 
     /** 投影状态枚举（而非状态名字符串）。 */
-    public GoalState.Status getStatus() { return status; }
+    public GoalTask.Status getStatus() { return status; }
 
     /** 是否活跃（PURSUING）。 */
     public boolean isActive() { return status != null && status.isActive(); }
@@ -134,16 +135,16 @@ public final class GoalProjection {
         if (statusValue == null) {
             return null;
         }
-        GoalState.Status status;
+        GoalTask.Status status;
         try {
-            status = GoalState.Status.valueOf(String.valueOf(statusValue));
+            status = GoalTask.Status.valueOf(String.valueOf(statusValue));
         } catch (Throwable e) {
             // 未知状态名：按「无有效投影」处理，避免宿主拿到半残对象
             return null;
         }
         return new Builder()
                 .goalId(str(map.get(K_GOAL_ID)))
-                .condition(map.get(K_CONDITION) != null ? str(map.get(K_CONDITION)) : str(map.get(K_OBJECTIVE)))
+                .objective(map.get(K_CONDITION) != null ? str(map.get(K_CONDITION)) : str(map.get(K_OBJECTIVE)))
                 .status(status)
                 .consumedTokens(lng(map.get(K_CONSUMED_TOKENS)))
                 .maxTokens(lng(map.get(K_MAX_TOKENS)))
@@ -159,7 +160,7 @@ public final class GoalProjection {
     }
 
     /** 轻读投影状态（宿主做启动恢复判定时的最常用操作）。 */
-    public static GoalState.Status statusOf(FlowContext context) {
+    public static GoalTask.Status statusOf(FlowContext context) {
         GoalProjection projection = from(context);
         return projection == null ? null : projection.getStatus();
     }
@@ -176,9 +177,9 @@ public final class GoalProjection {
     public Map<String, Object> toMap() {
         Map<String, Object> map = new LinkedHashMap<>();
         if (goalId != null) map.put(K_GOAL_ID, goalId);
-        if (condition != null) {
-            map.put(K_OBJECTIVE, condition);
-            map.put(K_CONDITION, condition);
+        if (objective != null) {
+            map.put(K_OBJECTIVE, objective);
+            map.put(K_CONDITION, objective);
         }
         if (status != null) map.put(K_STATUS, status.name());
         map.put(K_CONSUMED_TOKENS, consumedTokens);
@@ -199,7 +200,7 @@ public final class GoalProjection {
     static GoalProjection ofState(GoalState gs) {
         return new Builder()
                 .goalId(gs.getId())
-                .condition(gs.getCondition())
+                .objective(gs.getObjective())
                 .status(gs.getStatus())
                 .consumedTokens(gs.getConsumedTokens())
                 .maxTokens(gs.getMaxTokens())
@@ -229,14 +230,14 @@ public final class GoalProjection {
     @Override
     public String toString() {
         return "GoalProjection{goalId=" + goalId + ", status=" + status
-                + ", condition=" + condition + "}";
+                + ", objective=" + objective + "}";
     }
 
     /** 投影构造器（历史数据迁移场景：宿主逐字段填充，字段集合由 harness 定义）。 */
     public static final class Builder {
         private String goalId;
-        private String condition;
-        private GoalState.Status status;
+        private String objective;
+        private GoalTask.Status status;
         private long consumedTokens;
         private long maxTokens;
         private int maxIterations;
@@ -249,13 +250,13 @@ public final class GoalProjection {
         private int consecutiveErrors;
 
         public Builder goalId(String goalId) { this.goalId = goalId; return this; }
-        public Builder condition(String condition) { this.condition = condition; return this; }
-        public Builder status(GoalState.Status status) { this.status = status; return this; }
+        public Builder objective(String objective) { this.objective = objective; return this; }
+        public Builder status(GoalTask.Status status) { this.status = status; return this; }
         /** 按状态名设置；非法名返回 null（调用方据此判定迁移数据不可用）。 */
         public Builder statusName(String statusName) {
             if (statusName == null) return this;
             try {
-                this.status = GoalState.Status.valueOf(statusName);
+                this.status = GoalTask.Status.valueOf(statusName);
             } catch (Throwable e) {
                 this.status = null;
             }

@@ -7,7 +7,7 @@ package org.noear.solon.ai.harness.extension.goal.validate;
  * 如运行测试套件、检查文件是否存在等。</p>
  *
  * <p><b>实例级</b>：验证器绑定具体工作区（构造期传入 workspace 路径），
- * 注册表由 {@code GoalEngine} 实例持有，不存在全局静态状态。</p>
+ * 注册表由 {@code GoalRuntime} 实例持有，不存在全局静态状态。</p>
  *
  * @author noear
  * @since 3.9.4

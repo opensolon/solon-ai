@@ -29,8 +29,8 @@ class GoalStateTest {
     void initialStateIsPursuingAndEmpty() {
         GoalState s = state(1000);
         assertNotNull(s.getId());
-        assertEquals("完成登录功能", s.getCondition());
-        assertEquals(GoalState.Status.PURSUING, s.getStatus());
+        assertEquals("完成登录功能", s.getObjective());
+        assertEquals(GoalTask.Status.PURSUING, s.getStatus());
         assertEquals(0, s.getConsumedTokens());
         assertEquals(1000, s.getMaxTokens());
         assertEquals(0, s.getCurrentIteration());
@@ -50,12 +50,12 @@ class GoalStateTest {
         GoalState s = state(1000);
 
         assertTrue(s.pause());
-        assertEquals(GoalState.Status.PAUSED, s.getStatus());
+        assertEquals(GoalTask.Status.PAUSED, s.getStatus());
         // 重复 pause 在非 PURSUING 时无效
         assertFalse(s.pause());
 
         assertTrue(s.resume());
-        assertEquals(GoalState.Status.PURSUING, s.getStatus());
+        assertEquals(GoalTask.Status.PURSUING, s.getStatus());
         // 已是 PURSUING，不可再 resume
         assertFalse(s.resume());
     }
@@ -64,22 +64,22 @@ class GoalStateTest {
     void blockedStateIsResumable() {
         GoalState s = state(1000);
         s.markBlocked();
-        assertEquals(GoalState.Status.BLOCKED, s.getStatus());
+        assertEquals(GoalTask.Status.BLOCKED, s.getStatus());
         assertTrue(s.getStatus().isResumable());
         assertTrue(s.resume());
-        assertEquals(GoalState.Status.PURSUING, s.getStatus());
+        assertEquals(GoalTask.Status.PURSUING, s.getStatus());
     }
 
     @Test
     void achieveOnlyFromPursuing() {
         GoalState s = state(1000);
         s.achieve();
-        assertEquals(GoalState.Status.ACHIEVED, s.getStatus());
+        assertEquals(GoalTask.Status.ACHIEVED, s.getStatus());
         assertTrue(s.getStatus().isTerminal());
 
         // 已终态后再 achieve 不变
         s.achieve();
-        assertEquals(GoalState.Status.ACHIEVED, s.getStatus());
+        assertEquals(GoalTask.Status.ACHIEVED, s.getStatus());
     }
 
     @Test
@@ -91,36 +91,36 @@ class GoalStateTest {
 
         s.achieve();
         assertTrue(s.rejectAchievement());
-        assertEquals(GoalState.Status.PURSUING, s.getStatus());
+        assertEquals(GoalTask.Status.PURSUING, s.getStatus());
     }
 
     @Test
     void terminalMarkersOnlyApplyFromPursuing() {
         GoalState s = state(1000);
         s.markBudgetLimited();
-        assertEquals(GoalState.Status.BUDGET_LIMITED, s.getStatus());
+        assertEquals(GoalTask.Status.BUDGET_LIMITED, s.getStatus());
         assertTrue(s.getStatus().isTerminal());
 
         GoalState s2 = state(1000);
         s2.markIterationLimited();
-        assertEquals(GoalState.Status.ITERATION_LIMITED, s2.getStatus());
+        assertEquals(GoalTask.Status.ITERATION_LIMITED, s2.getStatus());
 
         // 已 terminel 时再标记不覆盖
         s.markIterationLimited();
-        assertEquals(GoalState.Status.BUDGET_LIMITED, s.getStatus());
+        assertEquals(GoalTask.Status.BUDGET_LIMITED, s.getStatus());
     }
 
     @Test
     void statusEnumPredicates() {
-        assertTrue(GoalState.Status.PURSUING.isActive());
-        assertFalse(GoalState.Status.PAUSED.isActive());
-        assertTrue(GoalState.Status.PAUSED.isResumable());
-        assertTrue(GoalState.Status.BLOCKED.isResumable());
-        assertFalse(GoalState.Status.PURSUING.isResumable());
-        assertTrue(GoalState.Status.ACHIEVED.isTerminal());
-        assertTrue(GoalState.Status.BUDGET_LIMITED.isTerminal());
-        assertTrue(GoalState.Status.ITERATION_LIMITED.isTerminal());
-        assertFalse(GoalState.Status.BLOCKED.isTerminal());
+        assertTrue(GoalTask.Status.PURSUING.isActive());
+        assertFalse(GoalTask.Status.PAUSED.isActive());
+        assertTrue(GoalTask.Status.PAUSED.isResumable());
+        assertTrue(GoalTask.Status.BLOCKED.isResumable());
+        assertFalse(GoalTask.Status.PURSUING.isResumable());
+        assertTrue(GoalTask.Status.ACHIEVED.isTerminal());
+        assertTrue(GoalTask.Status.BUDGET_LIMITED.isTerminal());
+        assertTrue(GoalTask.Status.ITERATION_LIMITED.isTerminal());
+        assertFalse(GoalTask.Status.BLOCKED.isTerminal());
     }
 
     // ---------- 预算 ----------
@@ -179,11 +179,11 @@ class GoalStateTest {
         GoalState s = state(100);
         s.addTokens(100);
         s.markBudgetLimited();
-        assertEquals(GoalState.Status.BUDGET_LIMITED, s.getStatus());
+        assertEquals(GoalTask.Status.BUDGET_LIMITED, s.getStatus());
 
         s.extendBudget(50);
         assertEquals(150, s.getMaxTokens());
-        assertEquals(GoalState.Status.PURSUING, s.getStatus());
+        assertEquals(GoalTask.Status.PURSUING, s.getStatus());
         assertFalse(s.isBudgetExceeded());
     }
 
@@ -292,7 +292,7 @@ class GoalStateTest {
     @Test
     void onodeRoundTripKeepsCoreFields() {
         GoalState s = state(500);
-        s.setCondition("条件A");
+        s.setObjective("条件A");
         s.addTokens(120);
         s.incrementIteration();
         s.setLastFingerprint("fp");
@@ -304,7 +304,7 @@ class GoalStateTest {
 
         GoalState back = GoalState.fromONode(node);
         assertEquals(s.getId(), back.getId());
-        assertEquals("条件A", back.getCondition());
+        assertEquals("条件A", back.getObjective());
         assertEquals(120, back.getConsumedTokens());
         assertEquals(500, back.getMaxTokens());
         assertEquals(1, back.getCurrentIteration());
@@ -325,7 +325,7 @@ class GoalStateTest {
     @Test
     void mapRoundTripKeepsCoreFields() {
         GoalState s = state(300);
-        s.setCondition("条件B");
+        s.setObjective("条件B");
         s.addTokens(42);
         s.achieve();
 
@@ -334,16 +334,16 @@ class GoalStateTest {
 
         GoalState back = GoalState.fromMap(map);
         assertEquals(s.getId(), back.getId());
-        assertEquals("条件B", back.getCondition());
+        assertEquals("条件B", back.getObjective());
         assertEquals(42, back.getConsumedTokens());
-        assertEquals(GoalState.Status.ACHIEVED, back.getStatus());
+        assertEquals(GoalTask.Status.ACHIEVED, back.getStatus());
     }
 
     @Test
     void setConditionReplacesGoalText() {
         GoalState s = state(100);
-        s.setCondition("新条件");
-        assertEquals("新条件", s.getCondition());
+        s.setObjective("新条件");
+        assertEquals("新条件", s.getObjective());
     }
 
     @Test
@@ -371,6 +371,6 @@ class GoalStateTest {
         map.put("objective", "来自 objective 键");
         GoalState back = GoalState.fromMap(map);
         assertNotNull(back);
-        assertEquals("来自 objective 键", back.getCondition());
+        assertEquals("来自 objective 键", back.getObjective());
     }
 }

@@ -48,19 +48,21 @@ class GoalSpecTest {
 
     private GoalExtension newExtension() {
         GoalExtension ext = GoalExtension.builder("ws-spec")
-                .executor((sid, p) -> GoalRoundResult.ofText("x"))
-                .scheduler(null)   // 纯 JUnit 无 Solon 容器：JobManager.getInstance() 会 NPE
+                .jobManager(null)   // 纯 JUnit 无 Solon 容器：显式关闭调度
                 .build();
 
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider(id -> sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of()))
+                .sessionProvider(id -> sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)))
                 .extensionAdd(ext)
                 .build();
         return ext;
     }
 
-    private AgentSession newSession() {
-        return InMemoryAgentSession.of();
+    private int seq;
+
+    /** 新会话 id（经 sessionProvider 登记，门面按 id 可解析）。 */
+    private String newSession() {
+        return "s-" + (++seq);
     }
 
     @Test
@@ -104,7 +106,7 @@ class GoalSpecTest {
     void extensionAppliesSpecBudgets() {
         GoalExtension ext = newExtension();
 
-        GoalState gs = ext.attach(newSession(), GoalSpec.of("目标")
+        GoalTask gs = ext.create(newSession(), GoalSpec.of("目标")
                 .maxTokens(2000)
                 .maxDuration(Duration.ofMinutes(30))
                 .maxIterations(5));
@@ -119,10 +121,10 @@ class GoalSpecTest {
     void simplestTwoArgFormMeansUnlimited() {
         GoalExtension ext = newExtension();
 
-        GoalState gs = ext.attach(newSession(), "让测试全绿");
+        GoalTask gs = ext.create(newSession(), GoalSpec.of("让测试全绿"));
 
         assertNotNull(gs);
-        assertEquals("让测试全绿", gs.getCondition());
+        assertEquals("让测试全绿", gs.getObjective());
         assertEquals(0L, gs.getMaxTokens());
         assertEquals(0L, gs.getMaxDurationMs());
         assertEquals(0, gs.getMaxIterations());
@@ -132,10 +134,10 @@ class GoalSpecTest {
     void specFormAndRawFormAreInterchangeable() {
         GoalExtension ext = newExtension();
 
-        GoalState viaSpec = ext.attach(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2));
-        GoalState viaRaw = ext.getGoalEngine().attach(newSession(), "目标", 7, 0, 2);
+        GoalTask viaSpec = ext.create(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2));
+        GoalState viaRaw = ext.getGoalRuntime().attach(sessions.computeIfAbsent(newSession(), InMemoryAgentSession::of), "目标", 7, 0, 2);
 
-        assertEquals(viaRaw.getCondition(), viaSpec.getCondition());
+        assertEquals(viaRaw.getObjective(), viaSpec.getObjective());
         assertEquals(viaRaw.getMaxTokens(), viaSpec.getMaxTokens());
         assertEquals(viaRaw.getMaxDurationMs(), viaSpec.getMaxDurationMs());
         assertEquals(viaRaw.getMaxIterations(), viaSpec.getMaxIterations());
@@ -144,24 +146,24 @@ class GoalSpecTest {
     @Test
     void singleSlotRuleStillAppliesThroughSpecForm() {
         GoalExtension ext = newExtension();
-        AgentSession session = newSession();
+        String session = newSession();
 
-        ext.attach(session, GoalSpec.of("第一个目标"));
+        ext.create(session, GoalSpec.of("第一个目标"));
 
         // 每会话最多一个 goal：参数对象入口不得放宽既有约束
         assertThrows(IllegalStateException.class,
-                () -> ext.attach(session, GoalSpec.of("第二个目标")));
+                () -> ext.create(session, GoalSpec.of("第二个目标")));
     }
 
     @Test
-    void attachAndScheduleTwoArgFormWorksWithoutScheduler() {
+    void createWorksWithoutScheduler() {
         GoalExtension ext = newExtension();
-        AgentSession session = newSession();
+        String session = newSession();
 
-        // 无调度器时 scheduleNow 为 no-op，但创建语义必须完整
-        GoalState gs = ext.attachAndSchedule(session, "让测试全绿");
+        // 无调度器时调度为 no-op，但创建语义必须完整
+        GoalTask gs = ext.create(session, GoalSpec.of("让测试全绿").runNow(false));
 
         assertNotNull(gs);
-        assertEquals(gs, ext.state(session));
+        assertEquals(gs.getId(), ext.get(session).getId());
     }
 }

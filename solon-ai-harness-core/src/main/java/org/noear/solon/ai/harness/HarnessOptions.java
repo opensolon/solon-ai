@@ -22,9 +22,8 @@ import org.noear.solon.ai.agent.react.intercept.StopLoopInterceptor;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.harness.agent.task.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
-import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
@@ -78,7 +77,6 @@ class HarnessOptions implements NonSerializable {
     private volatile int compressionMaxMessages = 100;
     private volatile double compressionMaxContextRatio = 0.75D;
     private volatile long compressionDefaultContextLength = 128_000L; //128k
-    private volatile String compressionModel; //压缩大模型
 
     // ========== 记忆 ==========
     private volatile boolean memoryEnabled = true;
@@ -294,14 +292,6 @@ class HarnessOptions implements NonSerializable {
         if (compressionDefaultContextLength != null) {
             this.compressionDefaultContextLength = compressionDefaultContextLength;
         }
-    }
-
-    String getCompressionModel() {
-        return compressionModel;
-    }
-
-    void setCompressionModel(String compressionModel) {
-        this.compressionModel = compressionModel;
     }
 
     boolean isMemoryEnabled() {
@@ -527,29 +517,9 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 集合操作方法 ==========
 
-    /**
-     * @deprecated 4.0.4
-     */
-    @Deprecated
-    void addTools(ToolPermission... toolNames) {
-        for (ToolPermission p1 : toolNames) {
-            tools.add(p1.getName());
-        }
-    }
-
     void addTools(ToolName... toolNames) {
         for (ToolName p1 : toolNames) {
             tools.add(p1.getName());
-        }
-    }
-
-    /**
-     * @deprecated 4.0.4
-     */
-    @Deprecated
-    void addDisallowedTools(ToolPermission... toolNames) {
-        for (ToolPermission p1 : toolNames) {
-            disallowedTools.add(p1.getName());
         }
     }
 

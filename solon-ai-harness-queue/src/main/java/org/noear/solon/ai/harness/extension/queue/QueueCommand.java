@@ -34,7 +34,7 @@ import org.noear.solon.core.util.Assert;
  * 会话空闲时入队后由命令收尾的 drain 立即发起，效果等同于普通发送。</p>
  *
  * @author noear
- * @since 2026.11
+ * @since 4.2.0
  */
 class QueueCommand extends AbsCommand {
 
@@ -69,8 +69,8 @@ class QueueCommand extends AbsCommand {
             return;
         }
 
-        if (text.length() > QueueHelper.MAX_TEXT_LENGTH) {
-            ctx.println("排队内容过长（上限 " + QueueHelper.MAX_TEXT_LENGTH + " 字符）");
+        if (text.length() > QueueStore.MAX_TEXT_LENGTH) {
+            ctx.println("排队内容过长（上限 " + QueueStore.MAX_TEXT_LENGTH + " 字符）");
             return;
         }
 
@@ -79,9 +79,9 @@ class QueueCommand extends AbsCommand {
         // 此处不再兜底硬编码渠道名——本地无渠道来源（NONE）是合法值，展示层用 channelOr 自行降级。
         InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
 
-        int n = QueueHelper.enqueue(session, text, resolved);
+        int n = QueueStore.enqueue(session, text, resolved);
         if (n < 0) {
-            ctx.println("排队失败（队列已满，上限 " + QueueHelper.MAX_QUEUE_SIZE + " 条），请稍后再试");
+            ctx.println("排队失败（队列已满，上限 " + QueueStore.MAX_QUEUE_SIZE + " 条），请稍后再试");
         } else {
             ctx.println("已加入队列（第 " + n + " 位），将按顺序在任务空闲后自动发送");
         }

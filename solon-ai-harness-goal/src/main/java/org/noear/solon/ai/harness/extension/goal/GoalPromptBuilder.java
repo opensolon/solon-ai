@@ -51,7 +51,7 @@ class GoalPromptBuilder {
      * </ul>
      */
     public String buildEffectivePrompt(GoalState gs) {
-        String prompt = gs.getCondition();
+        String prompt = gs.getObjective();
         int iter = gs.getCurrentIteration();
         boolean isFirstIter = iter == 0;
 
@@ -70,7 +70,7 @@ class GoalPromptBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
         sb.append("--- 目标延续 (Goal Continuation) ---\n");
-        sb.append("你正在朝向以下目标工作: ").append(gs.getCondition()).append("\n");
+        sb.append("你正在朝向以下目标工作: ").append(gs.getObjective()).append("\n");
         sb.append("你的目标是完成此任务。这是持续性的工作 — 每一轮执行都是同一个目标的延续。\n");
         sb.append("\n");
 
@@ -169,7 +169,7 @@ class GoalPromptBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n--- 预算耗尽 (Budget Limit) ---\n");
         sb.append("你的目标 Token 预算已耗尽。\n\n");
-        sb.append("目标: ").append(gs.getCondition()).append("\n\n");
+        sb.append("目标: ").append(gs.getObjective()).append("\n\n");
 
         sb.append("预算:\n");
         long elapsed = (System.currentTimeMillis() - gs.getStartEpochMs()) / 1000;
@@ -202,7 +202,7 @@ class GoalPromptBuilder {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
         sb.append("--- 目标延续 (Goal Continuation) ---\n");
-        sb.append("目标: ").append(gs.getCondition()).append("\n");
+        sb.append("目标: ").append(gs.getObjective()).append("\n");
         sb.append("持续工作直至完成。完成后调用 goal_update(complete) 标记完成。\n");
         sb.append("\n");
 
@@ -227,7 +227,7 @@ class GoalPromptBuilder {
                                       String budgetInfo) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
-        sb.append("目标: ").append(gs.getCondition()).append(" | ");
+        sb.append("目标: ").append(gs.getObjective()).append(" | ");
         sb.append(budgetInfo.trim()).append("\n");
         sb.append("持续工作直至完成。执行型目标必须先产生实际工具证据，goal_get/goal_update 不算。完成后调用 goal_update(complete)；连续 3 轮无进展则调用 goal_update(blocked)。\n");
         return prompt + sb.toString();

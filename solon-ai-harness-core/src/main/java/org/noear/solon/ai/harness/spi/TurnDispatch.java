@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.turn;
+package org.noear.solon.ai.harness.spi;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
@@ -26,10 +26,10 @@ import org.noear.solon.lang.Preview;
  *
  * <p>这是核心持有的<b>会话事实槽位</b>（attrs 键 {@link HarnessAttrs#TURN_DISPATCH}）：
  * 由插件在「程序代替用户发起一轮」时登记（当前实现是 queue 插件的 {@code QueueDispatch}），
- * 引擎的 {@code admit(...)} 与 {@link SessionTurn} 只经本接口读取，不认识具体实现。</p>
+ * 引擎的 {@code admit(...)} 与 {@link org.noear.solon.ai.harness.turn.SessionTurn} 只经本接口读取，不认识具体实现。</p>
  *
  * <p><b>为什么是槽位而不是扩展钩子</b>：读取方要在 {@code synchronized (session.attrs())} 内、
- * 甚至没有引擎引用的地方（{@link SessionTurn#begin}）判定，读一次 attrs 最便宜，
+ * 甚至没有引擎引用的地方（{@link org.noear.solon.ai.harness.turn.SessionTurn#begin}）判定，读一次 attrs 最便宜，
  * 也不必在锁内遍历扩展。</p>
  *
  * <p><b>单占约定</b>：同一会话同一时刻最多一个未收口的程序派发。{@link #bind} 遇到已有登记时

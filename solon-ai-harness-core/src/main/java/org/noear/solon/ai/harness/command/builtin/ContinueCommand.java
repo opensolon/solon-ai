@@ -42,7 +42,7 @@ import java.util.List;
  * </pre>
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class ContinueCommand extends AbsCommand {
     @Override

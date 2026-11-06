@@ -20,7 +20,7 @@ import org.noear.solon.lang.Nullable;
  * 以及用户亲手敲了一句以 {@link #PREFIX} 开头的提问。这是文档化的协议，宿主依赖它不算封装泄漏。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class SteerProtocol {
     /** metadata {@code source} 的取值 */

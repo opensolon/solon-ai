@@ -28,9 +28,9 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 需先用 {@code /goal clear} 清除。状态落在会话快照中，随对话一起持久化。</p>
  *
  * <p><b>只持 {@link GoalExtension} 一个引用。</b>命令与编程 API 走同一条路径：
- * 创建时把 flag 解析成 {@link GoalSpec} 后调 {@code extension.attachAndSchedule(session, spec)}，
+ * 创建时把 flag 解析成 {@link GoalSpec} 后调 {@code extension.create(session, spec)}，
  * pause/resume/clear 直接转调扩展的方法（含调度注销/重挂）。
- * 此前命令自行持有 {@code GoalEngine + GoalScheduler} 并逐行复刻扩展的三个子命令，
+ * 此前命令自行持有 {@code GoalRuntime + GoalScheduler} 并逐行复刻扩展的三个子命令，
  * 导致「命令可用但编程门面行为不同」的双实现漂移风险。</p>
  *
  * @author noear
@@ -50,7 +50,7 @@ class GoalCommand extends AbsCommand {
     /**
      * @param goal goal 扩展（由 {@link GoalExtension#onAttach} 以自身实例注入）
      */
-    public GoalCommand(GoalExtension goal) {
+    GoalCommand(GoalExtension goal) {
         this.goal = goal;
     }
 
@@ -121,13 +121,13 @@ class GoalCommand extends AbsCommand {
         }
 
         try {
-            GoalState gs = goal.attachAndSchedule(session, spec);
-            printCreated(ctx, gs);
+            GoalTask task = goal.create(session, spec);
+            printCreated(ctx, task);
         } catch (IllegalStateException e) {
-            GoalState existing = goal.state(session);
+            GoalTask existing = goal.snapshot(session);
             ctx.println(ctx.color(YELLOW + "WARN: " + e.getMessage() + RESET));
             if (existing != null) {
-                ctx.println(ctx.color(DIM + "  Active: " + existing.getCondition() + RESET));
+                ctx.println(ctx.color(DIM + "  Active: " + existing.getObjective() + RESET));
                 ctx.println(ctx.color(DIM + "  Use /goal clear first to replace the goal." + RESET));
             }
         }
@@ -191,12 +191,12 @@ class GoalCommand extends AbsCommand {
     }
 
     private void pauseSub(CommandContext ctx, AgentSession session) {
-        GoalState gs = goal.state(session);
+        GoalTask gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             return;
         }
-        if (goal.pause(session, gs) == false) {
+        if (goal.pause(session) == false) {
             ctx.println(ctx.color(YELLOW + "Cannot pause goal in state: " + gs.getStatus() + RESET));
             return;
         }
@@ -204,12 +204,12 @@ class GoalCommand extends AbsCommand {
     }
 
     private void resumeSub(CommandContext ctx, AgentSession session) {
-        GoalState gs = goal.state(session);
+        GoalTask gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             return;
         }
-        if (goal.resume(session, gs) == false) {
+        if (goal.resume(session) == false) {
             ctx.println(ctx.color(YELLOW + "Cannot resume goal in state: " + gs.getStatus() + RESET));
             return;
         }
@@ -217,18 +217,16 @@ class GoalCommand extends AbsCommand {
     }
 
     private void clearSub(CommandContext ctx, AgentSession session) {
-        GoalState gs = goal.state(session);
-        if (gs == null) {
+        if (goal.remove(session) == false) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             return;
         }
-        goal.clear(session);
         ctx.println(ctx.color(GREEN + "Goal cleared." + RESET));
     }
 
-    private void printCreated(CommandContext ctx, GoalState gs) {
+    private void printCreated(CommandContext ctx, GoalTask gs) {
         ctx.println(ctx.color(GREEN + "Goal registered:" + RESET));
-        ctx.println(ctx.color("  " + BOLD + "Objective:" + RESET + " " + gs.getCondition()));
+        ctx.println(ctx.color("  " + BOLD + "Objective:" + RESET + " " + gs.getObjective()));
         if (gs.getMaxTokens() > 0) {
             ctx.println(ctx.color("  " + MAGENTA + "Max Tokens:" + RESET + " " + gs.getMaxTokens()));
         }
@@ -242,7 +240,7 @@ class GoalCommand extends AbsCommand {
     }
 
     private void printStatus(CommandContext ctx, AgentSession session) {
-        GoalState gs = goal.state(session);
+        GoalTask gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             ctx.println(ctx.color(DIM + "Usage: /goal <objective>" + RESET));
@@ -250,7 +248,7 @@ class GoalCommand extends AbsCommand {
         }
 
         long elapsedSec = (System.currentTimeMillis() - gs.getStartEpochMs()) / 1000;
-        ctx.println(ctx.color(BOLD + "Goal:" + RESET + " " + gs.getCondition()));
+        ctx.println(ctx.color(BOLD + "Goal:" + RESET + " " + gs.getObjective()));
         ctx.println(ctx.color("  Status: " + statusColor(gs.getStatus()) + gs.getStatus() + RESET));
         ctx.println(ctx.color("  Iteration: " + gs.getCurrentIteration()
                 + (gs.getMaxIterations() > 0 ? " / " + gs.getMaxIterations() : "")));
@@ -262,7 +260,7 @@ class GoalCommand extends AbsCommand {
         }
     }
 
-    private static String statusColor(GoalState.Status status) {
+    private static String statusColor(GoalTask.Status status) {
         switch (status) {
             case ACHIEVED:
                 return GREEN;

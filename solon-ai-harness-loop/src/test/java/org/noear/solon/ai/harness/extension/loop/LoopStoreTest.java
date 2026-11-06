@@ -83,7 +83,7 @@ class LoopStoreTest {
         assertTrue(after.stream().anyMatch(n -> "nos".equals(n.get("id").getString())), "缺 sessionId 的条目必须原样写回");
 
         // 再删一次，外来条目仍在
-        ext.stopAll("s1");
+        ext.removeAll("s1");
         List<ONode> afterStop = entries(readFile());
         assertEquals(3, afterStop.size(), "删光本插件任务后只剩外来条目");
     }

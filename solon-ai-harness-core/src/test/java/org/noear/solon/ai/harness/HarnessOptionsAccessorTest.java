@@ -2,7 +2,7 @@ package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.CacheControl;
-import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.harness.agent.task.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
@@ -217,8 +217,6 @@ class HarnessOptionsAccessorTest {
         assertEquals("sys", o.getSystemPrompt());
         o.setUserAgent("ua");
         assertEquals("ua", o.getUserAgent());
-        o.setCompressionModel("m1");
-        assertEquals("m1", o.getCompressionModel());
         o.setDefaultModel("d1");
         assertEquals("d1", o.getDefaultModel());
 
@@ -264,12 +262,7 @@ class HarnessOptionsAccessorTest {
         o.addTools(ToolName.TOOL_BASH);
         assertEquals(2, o.getTools().size());
 
-        @SuppressWarnings("deprecation")
-        org.noear.solon.ai.harness.permission.ToolPermission old =
-                org.noear.solon.ai.harness.permission.ToolPermission.TOOL_GREP;
-        @SuppressWarnings("deprecation")
-        org.noear.solon.ai.harness.permission.ToolPermission[] olds = {old};
-        o.addTools(olds);
+        o.addTools(ToolName.TOOL_GREP);
         assertTrue(o.getTools().contains("grep"));
     }
 
@@ -280,10 +273,7 @@ class HarnessOptionsAccessorTest {
         o.addDisallowedTools(ToolName.TOOL_WRITE);
         assertTrue(o.getDisallowedTools().contains("write"));
 
-        @SuppressWarnings("deprecation")
-        org.noear.solon.ai.harness.permission.ToolPermission[] olds =
-                {org.noear.solon.ai.harness.permission.ToolPermission.TOOL_EDIT};
-        o.addDisallowedTools(olds);
+        o.addDisallowedTools(ToolName.TOOL_EDIT);
         assertTrue(o.getDisallowedTools().contains("edit"));
     }
 
@@ -383,7 +373,7 @@ class HarnessOptionsAccessorTest {
                 "setSystemPrompt", "setUserAgent", "setHttpProxy", "setHttpCustomize",
                 "setMaxTurns", "setAutoRethink", "setSessionWindowSize",
                 "setCompressionMaxMessages", "setCompressionMaxContextRatio",
-                "setCompressionDefaultContextLength", "setCompressionModel",
+                "setCompressionDefaultContextLength",
                 "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount",
                 "setMemorySummaryLength", "setSandboxEnabled", "setSandboxAllowUserHome",
                 "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",

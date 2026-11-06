@@ -133,6 +133,24 @@ public final class HarnessInput {
         return new HarnessInput(session, text);
     }
 
+    /**
+     * 创建「程序代替用户发起一轮」的输入（goal / loop 等调度插件与宿主自动化使用）。
+     *
+     * <p>等价于 {@code of(session, text).commandAware(false).agentAware(false).origin(InputOrigin.channel(channel))}：
+     * 正文不按命令或 {@code @子代理} 解析（程序生成的 prompt 不应被意外解释），并以 {@code channel} 标注来源。</p>
+     *
+     * @param session 会话
+     * @param text    正文（原样作为 prompt）
+     * @param channel 来源通道（如 {@code "goal"}、{@code "loop"}；可为 null）
+     * @since 4.2.0
+     */
+    public static HarnessInput ofProgram(@Nullable AgentSession session, @Nullable String text, @Nullable String channel) {
+        return new HarnessInput(session, text)
+                .commandAware(false)
+                .agentAware(false)
+                .origin(InputOrigin.channel(channel));
+    }
+
     // ========== 读取 ==========
 
     public AgentSession getSession() {

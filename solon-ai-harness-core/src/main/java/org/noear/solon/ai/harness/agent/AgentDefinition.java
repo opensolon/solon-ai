@@ -18,13 +18,9 @@ package org.noear.solon.ai.harness.agent;
 import lombok.Getter;
 import lombok.Setter;
 import org.noear.snack4.ONode;
-import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionRule;
-import org.noear.solon.ai.harness.permission.ToolPermission;
 import org.noear.solon.ai.util.Markdown;
-import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.yaml.snakeyaml.Yaml;
@@ -159,23 +155,6 @@ public class AgentDefinition {
         return definition;
     }
 
-    /** @deprecated 使用 {@link #fromParsedMarkdown(Markdown)}，Markdown 来源解析应由来源描述完成。 */
-    @Deprecated
-    public static AgentDefinition fromMarkdown(String markdownStr) {
-        return markdownStr == null || markdownStr.isEmpty()
-                ? new AgentDefinition()
-                : fromParsedMarkdown(MarkdownUtil.resolve(Arrays.asList(markdownStr.split("\\n"))));
-    }
-
-    /** @deprecated 使用 {@link #fromParsedMarkdown(Markdown)}，Markdown 来源解析应由来源描述完成。 */
-    @Deprecated
-    public static AgentDefinition fromMarkdown(List<String> lines) {
-        return lines == null || lines.isEmpty()
-                ? new AgentDefinition()
-                : fromParsedMarkdown(MarkdownUtil.resolve(lines));
-    }
-
-
     public String toMarkdown() {
         StringBuilder buf = new StringBuilder();
         metadata.injectYamlFrontmatter(buf);
@@ -222,33 +201,16 @@ public class AgentDefinition {
         @Preview("4.0.4")
         private List<PermissionRule> permissionRules = new ArrayList<>();
 
-        // Skills 配置
-        @Deprecated
+        // ---- 以下为兼容 Claude Code 代理格式的保留字段：只做解析与回写，引擎暂不据此改变行为 ----
+        // （skills 由 GenerateTalent 回填；其余字段原样保留，避免读改写时丢失用户配置）
+
         private List<String> skills;
-
-        // MCP Servers 配置
-        @Deprecated
         private List<String> mcpServers;
-
-        // Hooks 配置（暂不解析，保留字段）
-        @Deprecated
-        private Object hooks;
-
-        // 记忆配置
-        @Deprecated
-        private String memory;  // user, project, local
-
-        // 后台任务
-        @Deprecated
+        private Object hooks;          // 暂不解析
+        private String memory;         // user, project, local
         private Boolean background;
-
-        // 隔离配置
-        @Deprecated
-        private String isolation;  // worktree
-
-        // 团队配置
-        @Deprecated
-        private String teamName;  // 所属团队名称（用于团队成员）
+        private String isolation;      // worktree
+        private String teamName;       // 所属团队名称（用于团队成员）
 
         protected void injectYamlFrontmatter(StringBuilder buf) {
             // 暂存 permissionRules，避免 Snack4 序列化不识别的类型
@@ -301,17 +263,6 @@ public class AgentDefinition {
 
         public void addTools(ToolName... toolNames) {
             for (ToolName p1 : toolNames) {
-                tools.add(p1.getName());
-            }
-        }
-
-        /**
-         * @deprecated 4.0.4
-         *
-         */
-        @Deprecated
-        public void addTools(ToolPermission... toolNames) {
-            for (ToolPermission p1 : toolNames) {
                 tools.add(p1.getName());
             }
         }

@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <ol>
  *   <li>goal 不得反向依赖宿主（CLI）的任何类型 —— 下沉后这道约束比原先更强，
  *       因为 harness 是库，被多端复用。</li>
- *   <li>{@code GoalEngine} 只依赖 {@link org.noear.solon.ai.agent.AgentSession} 抽象，
+ *   <li>{@code GoalRuntime} 只依赖 {@link org.noear.solon.ai.agent.AgentSession} 抽象，
  *       不绑定文件/内存等具体存储实现（存储介质是会话实现的细节）。</li>
  *   <li>预算阈值必须是实例级，不得存在全局静态配置（历史上多工作区互相覆盖）。</li>
  *   <li>验证器注册表必须是实例级，不得持有共享静态表（历史上跨工作区污染）。</li>
@@ -68,16 +68,16 @@ class GoalBoundaryTest {
 
     @Test
     void goalEngineMustNotCoupleToConcreteSessionStorage() throws IOException {
-        Path engine = GOAL_DIR.resolve("GoalEngine.java");
-        assertTrue(Files.exists(engine), "GoalEngine 源码必须存在");
+        Path engine = GOAL_DIR.resolve("GoalRuntime.java");
+        assertTrue(Files.exists(engine), "GoalRuntime 源码必须存在");
 
         String content = new String(Files.readAllBytes(engine), StandardCharsets.UTF_8);
         assertTrue(!content.contains("FileAgentSession"),
-                "GoalEngine 不得依赖 FileAgentSession（应只依赖 AgentSession 接口）");
+                "GoalRuntime 不得依赖 FileAgentSession（应只依赖 AgentSession 接口）");
         assertTrue(!content.contains("InMemoryAgentSession"),
-                "GoalEngine 不得依赖 InMemoryAgentSession（应只依赖 AgentSession 接口）");
+                "GoalRuntime 不得依赖 InMemoryAgentSession（应只依赖 AgentSession 接口）");
         assertTrue(!content.contains("Files.write"),
-                "GoalEngine 不得自行写盘（落盘由会话实现负责）");
+                "GoalRuntime 不得自行写盘（落盘由会话实现负责）");
     }
 
     @Test

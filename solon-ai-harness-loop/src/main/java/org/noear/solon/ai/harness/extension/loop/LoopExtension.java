@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
@@ -65,7 +64,7 @@ import java.util.function.UnaryOperator;
  * <p><b>开关语义</b>：{@link #setEnabled} 只关模型工具（引擎对停用扩展不回调 {@code onRequestAssemble}）；
  * /loop 命令与已有定时任务照常运行。</p>
  *
- * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中且结论不是 {@link LoopOutcome#pass()}）；全部不认领时走缺省执行器
+ * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器
  * （{@code engine.handle(...).call()}，来源 {@code channel("loop")}；可 {@link Builder#defaultExecutor(boolean)} 关闭）；
  * 仍无认领则只记日志跳过本轮。结论语义见 {@link LoopOutcome}：done 记成功、skip 不计错误、
  * failed/抛异常记失败（退避重试，连续达到阈值自动停用）。会话忙由插件在调用执行器之前统一判定
@@ -158,10 +157,7 @@ public class LoopExtension extends AbsHarnessExtension {
     private static LoopExecutor defaultExecutor(HarnessEngine engine) {
         return (sessionId, prompt) -> {
             try {
-                return LoopOutcome.done(engine.handle(HarnessInput.of(engine.getSession(sessionId), prompt)
-                                .commandAware(false)
-                                .agentAware(false)
-                                .origin(InputOrigin.channel("loop")))
+                return LoopOutcome.done(engine.handle(HarnessInput.ofProgram(engine.getSession(sessionId), prompt, "loop"))
                         .call()
                         .getContent());
             } catch (RuntimeException | Error e) {
@@ -237,8 +233,8 @@ public class LoopExtension extends AbsHarnessExtension {
     }
 
     /** 停止会话全部任务并删除记录（用于删除会话）。 */
-    public void stopAll(String sessionId) {
-        scheduler.stopAll(sessionId);
+    public void removeAll(String sessionId) {
+        scheduler.removeAll(sessionId);
     }
 
     /**

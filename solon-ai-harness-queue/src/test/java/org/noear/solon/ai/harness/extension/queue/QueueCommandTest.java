@@ -25,8 +25,8 @@ class QueueCommandTest {
     void enqueuesWithImMetadata() {
         Fakes.StubContext ctx = Fakes.StubContext.im("接着跑测试");
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertEquals(1, QueueHelper.pendingSize(ctx.getSession()));
-        QueueItem item = QueueHelper.snapshot(ctx.getSession()).get(0);
+        assertEquals(1, QueueStore.pendingSize(ctx.getSession()));
+        QueueItem item = QueueStore.snapshot(ctx.getSession()).get(0);
         assertEquals("接着跑测试", item.getText());
         assertEquals("Feishu", item.getOrigin().getChannel());
         assertEquals("user-1", item.getOrigin().getSenderId());
@@ -41,7 +41,7 @@ class QueueCommandTest {
         // 展示层用 channelOr 自行降级。origin 携带什么就存什么。
         Fakes.StubContext ctx = Fakes.StubContext.local("接着跑测试");
         command.execute(null, ctx, Fakes.StubContext.localOrigin());
-        QueueItem item = QueueHelper.snapshot(ctx.getSession()).get(0);
+        QueueItem item = QueueStore.snapshot(ctx.getSession()).get(0);
         assertNull(item.getOrigin().getChannel(), "本地入队不得被伪造渠道标识");
         assertEquals("CLI", item.getOrigin().channelOr("CLI"), "展示层降级由消费方决定");
     }
@@ -54,7 +54,7 @@ class QueueCommandTest {
         }
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
-        assertEquals(0, QueueHelper.pendingSize(ctx.getSession()));
+        assertEquals(0, QueueStore.pendingSize(ctx.getSession()));
         assertTrue(ctx.output().contains("排队内容过长（上限 4096 字符）"));
     }
 
@@ -62,12 +62,12 @@ class QueueCommandTest {
     void enqueueFailurePrintsLimit() {
         Fakes.StubContext ctx = Fakes.StubContext.im("接着跑测试");
         AgentSession session = ctx.getSession();
-        for (int i = 0; i < QueueHelper.MAX_QUEUE_SIZE; i++) {
-            QueueHelper.enqueue(session, "fill-" + i, null);
+        for (int i = 0; i < QueueStore.MAX_QUEUE_SIZE; i++) {
+            QueueStore.enqueue(session, "fill-" + i, null);
         }
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertEquals(0, ctx.tasks.size());
-        assertEquals(QueueHelper.MAX_QUEUE_SIZE, QueueHelper.pendingSize(session));
+        assertEquals(QueueStore.MAX_QUEUE_SIZE, QueueStore.pendingSize(session));
         assertTrue(ctx.output().contains("排队失败（队列已满，上限 20 条）"));
     }
 }

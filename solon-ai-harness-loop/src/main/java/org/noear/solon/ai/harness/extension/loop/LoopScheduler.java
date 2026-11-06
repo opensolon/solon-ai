@@ -310,7 +310,7 @@ final class LoopScheduler {
     // ==================== 批量停止 ====================
 
     /** 停止会话全部任务并从 tasks.json 删除该会话的记录（删除会话 / /loop stop-all）。 */
-    void stopAll(String sessionId) {
+    void removeAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.remove(sessionId);
         if (tasks != null) {
             synchronized (tasks) {
@@ -326,7 +326,7 @@ final class LoopScheduler {
     /**
      * 卸载全部 job 但保留 tasks.json 记录（扩展摘除 / 工作区关闭）。
      *
-     * <p>先置摘除标志再清内存表：之后任何写盘（在途一轮结束、关闭时的报错、宿主的 stopAll）都跳过，
+     * <p>先置摘除标志再清内存表：之后任何写盘（在途一轮结束、关闭时的报错、宿主的 removeAll）都跳过，
      * 否则会用空快照覆盖文件、丢掉全部任务。</p>
      */
     void unloadAll() {
@@ -582,7 +582,7 @@ final class LoopScheduler {
     // ==================== 执行 ====================
 
     /**
-     * 执行一轮：按注册顺序取首个认领者（谓词命中且结论不是 pass）；全部不认领时走缺省执行器。
+     * 执行一轮：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器。
      *
      * @return 本轮结论（不为 null）；无人认领时为 skip
      * @throws Exception 执行器失败
@@ -601,19 +601,14 @@ final class LoopScheduler {
                 }
             }
             LoopOutcome outcome = invoke(entry.channel, entry.handler, sessionId, prompt);
-            if (!outcome.isPassed()) {
-                if (entry.channel != null) {
-                    LOG.debug("[Loop] session '{}' claimed by channel '{}': {}", sessionId, entry.channel, outcome);
-                }
-                return outcome;
+            if (entry.channel != null) {
+                LOG.debug("[Loop] session '{}' claimed by channel '{}': {}", sessionId, entry.channel, outcome);
             }
+            return outcome;
         }
         LoopExecutor fallback = defaultExecutor;
         if (fallback != null) {
-            LoopOutcome outcome = invoke("default", fallback, sessionId, prompt);
-            if (!outcome.isPassed()) {
-                return outcome;
-            }
+            return invoke("default", fallback, sessionId, prompt);
         }
         LOG.warn("[Loop] no executor claimed session '{}', round skipped", sessionId);
         return LoopOutcome.skip("no executor claimed");

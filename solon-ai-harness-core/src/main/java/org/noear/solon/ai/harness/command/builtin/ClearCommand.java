@@ -28,7 +28,7 @@ import org.noear.solon.core.util.Assert;
  * /clear 命令
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class ClearCommand extends AbsCommand {
     @Override

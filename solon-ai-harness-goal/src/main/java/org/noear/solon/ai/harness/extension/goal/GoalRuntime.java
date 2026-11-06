@@ -49,19 +49,19 @@ import java.util.function.Predicate;
  * {@link AgentSession#getContext()} 的 {@code data()}（key：{@value GoalAttrs#GOAL}），
  * 任何变更后调用 {@link AgentSession#updateSnapshot()} 随会话快照一并落盘。
  * 运行态实例存放于 {@code attrs()}（瞬态，不落盘），首次访问时从投影 hydrate。
- * 这与排队（QueueHelper）的既有分层完全一致：<b>存储介质是会话实现的细节</b>
+ * 这与排队（QueueStore）的既有分层完全一致：<b>存储介质是会话实现的细节</b>
  * （文件 / 内存 / Redis / JDBC），本类只依赖 {@link AgentSession} 接口。</p>
  *
  * <p><b>执行通道自持</b>：本类不依赖任何调度体系的具体类型，也不与 loop 共享任何执行通道。
- * 「一轮怎么执行」由宿主通过 {@link #addExecutor(GoalExecutor)} 注册（可覆盖），
+ * 「一轮怎么执行」由宿主通过 {@link #addExecutor(String, Predicate, GoalExecutor)} 按通道注册，
  * 缺省走引擎自身的同步回合。「能不能执行」由引擎空闲判定单向派生（{@code HarnessEngine#isIdle}），
  * 宿主不得提供忙判定谓词——那会让引擎职责外推且必然与真实状态漂移。</p>
  *
  * @author noear
  * @since 3.9.4
  */
-class GoalEngine {
-    private static final Logger LOG = LoggerFactory.getLogger(GoalEngine.class);
+class GoalRuntime {
+    private static final Logger LOG = LoggerFactory.getLogger(GoalRuntime.class);
 
     /** 持久化投影 key（见 {@link GoalAttrs#GOAL}）。 */
     private static final String KEY_GOAL = GoalAttrs.GOAL;
@@ -72,15 +72,15 @@ class GoalEngine {
 
     private final HarnessEngine engine;
     /** 宿主注册的执行者（按注册顺序取首个认领者；通道化注册携带通道名与认领谓词）。 */
-    private final List<TaskClaim> taskHandlers = new CopyOnWriteArrayList<>();
+    private final List<TaskClaim> executors = new CopyOnWriteArrayList<>();
     /**
      * 内置兜底执行者（程序生成的 prompt 同步回合）。
      *
-     * <p>单独存放而不入 {@link #taskHandlers} 列表，是因为列表是「按顺序取首个认领者」——
+     * <p>单独存放而不入 {@link #executors} 列表，是因为列表是「按顺序取首个认领者」——
      * 兜底恒认领，若排在首位则宿主注册的执行者永远轮不到（装配顺序上扩展先于入口构造，
      * 靠「宿主后注册」是不成立的外部不变量）。现在兜底只能是最后一个被考虑的。</p>
      */
-    private volatile GoalExecutor defaultTaskHandler;
+    private volatile GoalExecutor defaultExecutor;
     private final List<GoalListener> listeners = new CopyOnWriteArrayList<>();
     private final BudgetThresholds budgetThresholds;
     private final GoalPromptBuilder promptBuilder;
@@ -96,7 +96,7 @@ class GoalEngine {
      */
     private final List<ValidatorRegistration> validators = new CopyOnWriteArrayList<>();
 
-    public GoalEngine(HarnessEngine engine, BudgetThresholds budgetThresholds,
+    public GoalRuntime(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled) {
         this(engine, budgetThresholds, stagnationThreshold, maxConsecutiveErrors, validatorEnabled, null);
     }
@@ -105,7 +105,7 @@ class GoalEngine {
      * @param engine    引擎（解析会话、读取会话占用状态；测试可为 null）
      * @param workspace 验证器执行目录（null 时不注册默认验证器，验证恒通过）
      */
-    public GoalEngine(HarnessEngine engine, BudgetThresholds budgetThresholds,
+    public GoalRuntime(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled,
                       String workspace) {
         this.engine = engine;
@@ -125,11 +125,13 @@ class GoalEngine {
         }
     }
 
-    private void notifyChanged(String sessionId, GoalState gs, boolean removed) {
+    private void notifyChanged(AgentSession session, GoalState gs, boolean removed) {
         if (gs == null || listeners.isEmpty()) return;
+        String sessionId = session.getSessionId();
+        GoalTask snapshot = GoalTask.of(gs, removed == false && isRunning(session));
         for (GoalListener listener : listeners) {
             try {
-                listener.onChanged(sessionId, gs, removed);
+                listener.onChanged(sessionId, snapshot, removed);
             } catch (Throwable e) {
                 LOG.debug("Goal listener failed for session '{}': {}", sessionId, e.getMessage());
             }
@@ -177,25 +179,14 @@ class GoalEngine {
         return true;
     }
 
-    /** 注册/追加执行者（宿主覆盖；按注册顺序取首个认领者）。 */
-    public void addExecutor(GoalExecutor handler) {
-        if (handler != null) {
-            taskHandlers.add(new TaskClaim(null, null, handler));
-        }
-    }
-
     /**
-     * 注册带通道名与认领谓词的执行器（多入口宿主推荐形态）。
+     * 注册通道化执行器（按注册顺序取首个认领者，先于内置兜底）。
      *
-     * <p>与 {@link #addExecutor(GoalExecutor)} 的差别：认领条件从 handler 的 null 返回值
-     * 升级为显式谓词，引擎因此能在<b>不执行 handler</b> 的前提下静态评估多个入口的认领边界
-     * 是否互斥——重叠时按注册顺序静默抢跑的配置错误，以前只能靠无上下文的 debug 行发现。</p>
+     * <p>归属只由认领谓词决定：命中的首个执行器即本轮执行者，其结论就是最终结论（不穿透）。
+     * 引擎可在不执行 handler 的前提下评估各通道认领边界是否互斥，重叠时告警（每个组合一次）。</p>
      *
-     * <p>谓词是「预过滤」不是「权威判定」：命中谓词后仍会调用 handler，其返回 null 依旧表示
-     * 本入口（本次）不认领（如宿主运行时端口暂不可用），语义与旧形态完全兼容。</p>
-     *
-     * @param channel 通道名（CLI/Web/桌面等；仅用于日志与互斥告警，不参与路由）
-     * @param claim   认领谓词（sessionId → 是否本通道的会话）
+     * @param channel 通道名（CLI/Web/桌面等；用于日志与互斥告警，不参与路由）
+     * @param claim   认领谓词（sessionId → 是否本通道的会话）；null = 认领全部（不参与互斥评估）。谓词抛异常按不命中计
      * @param handler 执行者
      */
     public void addExecutor(String channel, Predicate<String> claim, GoalExecutor handler) {
@@ -205,14 +196,10 @@ class GoalEngine {
         if (channel == null || channel.trim().isEmpty()) {
             throw new IllegalArgumentException("channel must not be empty");
         }
-        if (claim == null) {
-            throw new IllegalArgumentException("claim predicate must not be null "
-                    + "(legacy form: addExecutor(handler))");
-        }
-        taskHandlers.add(new TaskClaim(channel.trim(), claim, handler));
+        executors.add(new TaskClaim(channel.trim(), claim, handler));
     }
 
-    /** 执行者注册项：通道名与谓词均可空（空 = 旧形态注册）。 */
+    /** 执行者注册项（谓词可空 = 认领全部）。 */
     private static final class TaskClaim {
         final String channel;
         final Predicate<String> claim;
@@ -235,12 +222,12 @@ class GoalEngine {
      * <p>与 {@link #addExecutor} 分开，才能保证「宿主注册的总是优先」不依赖装配顺序。</p>
      */
     public void setDefaultExecutor(GoalExecutor handler) {
-        this.defaultTaskHandler = handler;
+        this.defaultExecutor = handler;
     }
 
     /** 是否已有可用执行者（宿主注册或内置兜底任一）。 */
     public boolean hasExecutor() {
-        return !taskHandlers.isEmpty() || defaultTaskHandler != null;
+        return !executors.isEmpty() || defaultExecutor != null;
     }
 
     /** 按 sessionId 解析会话（引擎未就绪或解析失败时返回 null）。 */
@@ -255,21 +242,22 @@ class GoalEngine {
     }
 
     /**
-     * 执行一轮：按注册顺序取首个认领者；全部不认领时返回 null。
+     * 执行一轮：按注册顺序取首个认领者（无人认领时用内置兜底）；仍无执行者时返回 null。
      *
-     * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回事实」。</p>
+     * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回结论」。
+     * 执行者返回 null 视为编程错误，按失败处理；异常原样抛给调用方（参与错误分级熔断）。</p>
      */
-    GoalRoundResult execute(String sessionId, String prompt) {
+    GoalOutcome execute(String sessionId, String prompt) throws Exception {
         // 谓词只评估一次，结果供「互斥检测」与「认领路由」复用：宿主谓词常是正则匹配
         // （如 isDesktop = matches("\\d{1,18}")），两次遍历等于双倍编译开销。
-        TaskClaim[] claims = taskHandlers.toArray(new TaskClaim[0]);
+        TaskClaim[] claims = executors.toArray(new TaskClaim[0]);
         boolean[] claimed = new boolean[claims.length];
         java.util.List<String> matchedChannels = new java.util.ArrayList<>(2);
 
         for (int i = 0; i < claims.length; i++) {
             TaskClaim taskClaim = claims[i];
             if (taskClaim.claim == null) {
-                claimed[i] = true;          // 旧形态注册：无谓词，恒参与
+                claimed[i] = true;          // 无谓词：认领全部
                 continue;
             }
             try {
@@ -288,22 +276,20 @@ class GoalEngine {
         // 认领边界重叠，先注册者会静默抢跑——此前只有一条无上下文的 debug 行。
         warnIfClaimsOverlap(sessionId, matchedChannels);
 
+        GoalExecutor chosen = null;
         for (int i = 0; i < claims.length; i++) {
-            if (claimed[i] == false) {
-                continue;
-            }
-            TaskClaim taskClaim = claims[i];
-            if (taskClaim.claim != null) {
-                LOG.debug("Goal round for session '{}' claimed by channel '{}'", sessionId, taskClaim.channel);
-            }
-            GoalRoundResult result = taskClaim.handler.handle(sessionId, prompt);
-            if (result != null) {
-                return result;
+            if (claimed[i]) {
+                LOG.debug("Goal round for session '{}' claimed by channel '{}'", sessionId, claims[i].channel);
+                chosen = claims[i].handler;
+                break;
             }
         }
-        GoalExecutor fallback = defaultTaskHandler;
-        if (fallback != null) {
-            return fallback.handle(sessionId, prompt);
+        if (chosen == null) {
+            chosen = defaultExecutor;
+        }
+        if (chosen != null) {
+            GoalOutcome outcome = chosen.handle(sessionId, prompt);
+            return outcome != null ? outcome : GoalOutcome.failed("goal executor returned null");
         }
 
         // 落到这里意味着配置错误：既无任何宿主执行器认领，也无内置兜底。
@@ -344,7 +330,7 @@ class GoalEngine {
      */
     java.util.List<String> channelsClaiming(String sessionId) {
         java.util.List<String> matched = new java.util.ArrayList<>(2);
-        for (TaskClaim taskClaim : taskHandlers) {
+        for (TaskClaim taskClaim : executors) {
             if (taskClaim.claim == null || taskClaim.channel == null) {
                 continue;
             }
@@ -504,12 +490,18 @@ class GoalEngine {
         return attach(session, objective, null, maxTokens, maxDurationMs, maxIterations);
     }
 
+    /** 按规格创建（含展示正文）。 */
+    GoalState attach(AgentSession session, GoalSpec spec) {
+        return attach(session, spec.getObjective(), spec.getDisplayObjective(),
+                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+    }
+
     /**
      * 创建 goal，并允许「执行正文」与「展示正文」不同。
      *
      * <p>典型场景：宿主把附件正文拼进执行正文（沙箱内可读的完整上下文），
      * 但 UI 列表与徽章应只展示用户输入的原句。此前宿主先 {@code attach(执行正文)}
-     * 再 {@code setCondition(展示正文) + commit}，两次落盘之间会广播一次中间态
+     * 再 {@code setObjective(展示正文) + commit}，两次落盘之间会广播一次中间态
      * （列表短暂出现附件全文）。本方法在同一个临界区内完成两步并只广播一次。</p>
      *
      * @param displayObjective 展示正文；null 或与 objective 相同时不覆写
@@ -533,12 +525,12 @@ class GoalEngine {
 
             String displayed = resolveDisplayObjective(objective, displayObjective);
             if (displayed != null) {
-                gs.setCondition(displayed);
+                gs.setObjective(displayed);
             }
 
             session.attrs().put(ATTR_GOAL, gs);
             saveLocked(session, gs);
-            notifyChanged(session.getSessionId(), gs, false);
+            notifyChanged(session, gs, false);
             return gs;
         }
     }
@@ -573,7 +565,7 @@ class GoalEngine {
             session.attrs().put(ATTR_GOAL, gs);
             saveLocked(session, gs);
         }
-        notifyChanged(session.getSessionId(), gs, false);
+        notifyChanged(session, gs, false);
     }
 
     /**
@@ -585,48 +577,31 @@ class GoalEngine {
             throw new IllegalStateException("Goal not found");
         }
         synchronized (session.attrs()) {
-            gs.setCondition(objective);
+            gs.setObjective(objective);
             gs.setMaxTokens(maxTokens);
             gs.setMaxIterations(maxIterations);
             session.attrs().put(ATTR_GOAL, gs);
             saveLocked(session, gs);
         }
-        notifyChanged(session.getSessionId(), gs, false);
+        notifyChanged(session, gs, false);
     }
 
-    /**
-     * 构建与 loop 任务同构的展示 Map（供 Web/Desktop 列表消费）。
-     *
-     * <p>字段名与前端 {@code goal.*} 约定严格对齐：变更键名会直接导致
-     * 状态徽章、轮次进度与预算条失效。</p>
-     */
-    public Map<String, Object> toTaskMap(AgentSession session, GoalState gs) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("id", gs.getId());
-        item.put("type", "GOAL");
-        item.put("prompt", gs.getCondition());
-        item.put("enabled", true);
-        item.put("running", isRunning(session));
-        item.put("currentIteration", gs.getCurrentIteration());
-        if (gs.getMaxTokens() > 0) item.put("maxTokens", gs.getMaxTokens());
-        if (gs.getMaxDurationMs() > 0) item.put("maxDurationMs", gs.getMaxDurationMs());
-        if (gs.getLastResult() != null) item.put("lastResult", gs.getLastResult());
-        if (gs.getLastExecutedAt() > 0) {
-            item.put("lastExecutedAt", Instant.ofEpochMilli(gs.getLastExecutedAt()).toString());
+    /** 按补丁改写（null 字段保持原值）；一次落盘、一次广播。调用方应先停稳在跑轮次。 */
+    void apply(AgentSession session, GoalState gs, GoalPatch patch) {
+        synchronized (session.attrs()) {
+            if (patch.getObjective() != null) gs.setObjective(patch.getObjective());
+            if (patch.getMaxTokens() != null) gs.setMaxTokens(patch.getMaxTokens());
+            if (patch.getMaxDurationMs() != null) gs.setMaxDurationMs(patch.getMaxDurationMs());
+            if (patch.getMaxIterations() != null) gs.setMaxIterations(patch.getMaxIterations());
+            session.attrs().put(ATTR_GOAL, gs);
+            saveLocked(session, gs);
         }
+        notifyChanged(session, gs, false);
+    }
 
-        Map<String, Object> goal = new LinkedHashMap<>();
-        goal.put("condition", gs.getCondition());
-        goal.put("status", gs.getStatus().name());
-        goal.put("iteration", gs.getCurrentIteration());
-        goal.put("maxIterations", gs.getMaxIterations());
-        goal.put("consumedTokens", gs.getConsumedTokens());
-        goal.put("maxTokens", gs.getMaxTokens());
-        if (gs.getStartEpochMs() > 0) {
-            goal.put("startedAt", Instant.ofEpochMilli(gs.getStartEpochMs()).toString());
-        }
-        item.put("goal", goal);
-        return item;
+    /** 只读快照（无 goal 时为 null）。 */
+    GoalTask snapshot(AgentSession session) {
+        return GoalTask.of(state(session), isRunning(session));
     }
 
     /** 清除本会话 goal（移除投影并落盘）。 */
@@ -639,7 +614,7 @@ class GoalEngine {
                 session.getContext().data().remove(KEY_GOAL);
             }
             session.updateSnapshot();
-            notifyChanged(session.getSessionId(), removed, true);
+            notifyChanged(session, removed, true);
         }
     }
 
@@ -765,7 +740,7 @@ class GoalEngine {
             if (elapsed >= gs.getMaxDurationMs()) {
                 LOG.info("Goal '{}' duration exceeded ({}ms), wrap-up turn", gs.getId(), elapsed);
                 executeBudgetWrapUp(session, gs);
-                if (gs.getStatus() != GoalState.Status.ACHIEVED) {
+                if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
                     gs.markBudgetLimited();
                 }
                 commit(session, gs);
@@ -777,7 +752,7 @@ class GoalEngine {
         if (gs.isBudgetExceeded()) {
             LOG.info("Goal '{}' token budget exceeded, wrap-up turn", gs.getId());
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalState.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -797,7 +772,7 @@ class GoalEngine {
     }
 
     /** 执行一轮主体：构建 prompt → 执行 → 状态评估 → 持久化。 */
-    private boolean executeRound(AgentSession session, GoalState gs) {
+    private boolean executeRound(AgentSession session, GoalState gs) throws Exception {
         String sessionId = session.getSessionId();
         String effectivePrompt = promptBuilder.buildEffectivePrompt(gs);
 
@@ -807,7 +782,16 @@ class GoalEngine {
         // 置空后本轮读取恒为 null（提示性校验放行），权威判定交给下方结果复核。
         gs.setLastHasToolCalls(null);
 
-        GoalRoundResult result = execute(sessionId, effectivePrompt);
+        GoalOutcome result = execute(sessionId, effectivePrompt);
+
+        if (result != null && result.isSkipped()) {
+            // 通道认领但此刻不宜执行：不计错误、不推进、不改状态，等下一次调度
+            LOG.debug("Goal '{}' round skipped by executor (session '{}'): {}", gs.getId(), sessionId, result.getText());
+            return gs.getStatus().isActive();
+        }
+        if (result != null && result.isFailed()) {
+            throw new IllegalStateException(result.getText() != null ? result.getText() : "goal round failed");
+        }
 
         if (result == null) {
             // 无执行器认领 = 装配/环境问题，不是「本轮成功但无产出」。
@@ -823,14 +807,11 @@ class GoalEngine {
             return gs.getStatus().isActive();
         }
 
-        String finalResult = result.getFinalResult();
-        gs.updateLastExecution(finalResult != null ? finalResult : "ok");
-        gs.setLastHasToolCalls(result.isHasToolCalls());
+        String finalResult = result.getText();
+        gs.updateLastExecution(finalResult != null && finalResult.isEmpty() == false ? finalResult : "ok");
+        gs.setLastHasToolCalls(result.hasToolCalls());
         gs.resetConsecutiveErrors();
-
-        if (result.isCompleted()) {
-            gs.incrementIteration();
-        }
+        gs.incrementIteration();
 
         // Token 累计
         if (result.getTokensUsed() > 0) {
@@ -849,9 +830,9 @@ class GoalEngine {
         }
 
         // 完成判定（由 goal_update(complete) 驱动，此处只做证据复核）
-        boolean achieved = gs.getStatus() == GoalState.Status.ACHIEVED;
-        if (achieved && requiresActionEvidence(gs.getCondition())
-                && !result.isHasToolCalls()) {
+        boolean achieved = gs.getStatus() == GoalTask.Status.ACHIEVED;
+        if (achieved && requiresActionEvidence(gs.getObjective())
+                && !result.hasToolCalls()) {
             gs.rejectAchievement();
             gs.updateLastExecution("完成声明被拒绝：本轮没有实际工具执行证据，请继续完成并验证目标。");
             achieved = false;
@@ -867,7 +848,7 @@ class GoalEngine {
         // 轮后 Token 预算
         if (gs.isBudgetExceeded()) {
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalState.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -959,11 +940,11 @@ class GoalEngine {
     // ==================== 判定辅助 ====================
 
     /** 计算执行指纹（用于无进展检测）。 */
-    static String computeFingerprint(GoalRoundResult result) {
+    static String computeFingerprint(GoalOutcome result) {
         if (result == null) return "null";
-        String text = result.getFinalResult();
+        String text = result.getText();
         if (text == null || text.isEmpty()) return "empty";
-        String toolDim = result.isHasToolCalls() ? "1" : "0";
+        String toolDim = result.hasToolCalls() ? "1" : "0";
         int lenBucket = text.length() / 200;
         int lineBucket = countLines(text) / 10;
         return toolDim + ":" + lenBucket + ":" + lineBucket;
@@ -1056,7 +1037,7 @@ class GoalEngine {
     /** 投影状态名是否终态（损坏/未知值按非终态处理，交由 hydrate 与守卫兜底）。 */
     public static boolean isTerminalStatus(String statusName) {
         try {
-            return GoalState.Status.valueOf(statusName).isTerminal();
+            return GoalTask.Status.valueOf(statusName).isTerminal();
         } catch (Throwable e) {
             return false;
         }
@@ -1065,7 +1046,7 @@ class GoalEngine {
     /** 投影状态名是否活跃（PURSUING；损坏/未知值按非活跃处理，恢复时不动）。 */
     public static boolean isActiveStatus(String statusName) {
         try {
-            return GoalState.Status.valueOf(statusName).isActive();
+            return GoalTask.Status.valueOf(statusName).isActive();
         } catch (Throwable e) {
             return false;
         }
@@ -1078,7 +1059,7 @@ class GoalEngine {
      * {@link GoalProjection#isActive()}，不再让宿主自己比较字符串。</p>
      *
      * @return null = 无 goal 投影或投影不可用
-     * @since 4.2.1
+     * @since 4.2.0
      */
     public static GoalProjection projectionOf(FlowContext context) {
         return GoalProjection.from(context);

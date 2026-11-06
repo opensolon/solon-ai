@@ -16,8 +16,8 @@ package org.noear.solon.ai.harness.extension.goal;
 public interface GoalListener {
     /**
      * @param sessionId 会话
-     * @param state     变更后的状态（removed=true 时仍为清除前的快照）
+     * @param task      变更后的快照（removed=true 时为清除前的快照）
      * @param removed   是否因清除而移除
      */
-    void onChanged(String sessionId, GoalState state, boolean removed);
+    void onChanged(String sessionId, GoalTask task, boolean removed);
 }

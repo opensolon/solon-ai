@@ -26,7 +26,7 @@ import org.noear.solon.core.util.Assert;
  * /rewind 命令，用于回退最近 N 条对话记录
  *
  * @author noear
- * @since 2026.5.8
+ * @since 4.2.0
  */
 public class RewindCommand extends AbsCommand {
     private static final String DIM = "\033[2m";

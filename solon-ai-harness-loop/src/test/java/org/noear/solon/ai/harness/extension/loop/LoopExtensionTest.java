@@ -185,7 +185,7 @@ class LoopExtensionTest {
         engine.shutdown();           // onDetach：清空内存表
         release.countDown();         // 在途一轮此刻结束（成功路径会写盘）
         round.join(3000);
-        loop.stopAll("s2");          // 宿主删会话等调用，同样不得写盘
+        loop.removeAll("s2");          // 宿主删会话等调用，同样不得写盘
 
         String json = new String(Files.readAllBytes(store), "UTF-8");
         assertTrue(json.contains("keep-me") && json.contains("keep-me-too"),
@@ -332,7 +332,7 @@ class LoopExtensionTest {
     }
 
     @Test
-    void stopAllInterruptsOnlyWhenAnyRunning() throws Exception {
+    void removeAllInterruptsOnlyWhenAnyRunning() throws Exception {
         InterruptProbe probe = new InterruptProbe();
         LoopExtension loop = builder(null).build();
         HarnessEngine engine = engine(loop, probe);

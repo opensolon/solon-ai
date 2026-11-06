@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.turn;
+package org.noear.solon.ai.harness.spi;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.session.SessionStatus;

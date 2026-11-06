@@ -27,7 +27,7 @@ import java.util.Map;
  * cron 无法解析或已无未来触发时刻、扩展字段与核心字段同名。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 public final class LoopSpec {
     /** 缺省间隔（分钟）。 */

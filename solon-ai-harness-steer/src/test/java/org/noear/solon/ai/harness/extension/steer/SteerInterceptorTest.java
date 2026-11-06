@@ -82,7 +82,7 @@ public class SteerInterceptorTest {
     }
 
     private SteerResult steerNow(String steerId, String text) {
-        return SteerHelper.steer(session, null, steerId, text, InputOrigin.channel("Feishu"), () -> true,
+        return SteerMailbox.steer(session, null, steerId, text, InputOrigin.channel("Feishu"), () -> true,
                 SteerLimits.DEFAULT, false);
     }
 
@@ -111,7 +111,7 @@ public class SteerInterceptorTest {
     @Test
     @DisplayName("onAgentStart 开轮：建立轮次标识，投递从此可被接受")
     public void agentStart_opensTurn() {
-        assertEquals(SteerStatus.NOT_RUNNING, steerNow(null, "太早").getStatus(), "未开轮时不接受投递");
+        assertEquals(SteerResult.Code.NOT_RUNNING, steerNow(null, "太早").getCode(), "未开轮时不接受投递");
 
         interceptor.onAgentStart(trace);
 
@@ -290,10 +290,10 @@ public class SteerInterceptorTest {
     public void cancelById_removesOnlyTarget() {
         SteerState state = startWithInbox(trace, "相同文本", "相同文本");
 
-        assertTrue(SteerHelper.cancel(state, trace.getRunId(), "s0").isCanceled());
+        assertTrue(SteerMailbox.cancel(state, trace.getRunId(), "s0").isCanceled());
         assertEquals(1, state.size());
         assertEquals("s1", state.snapshot().get(0).getId());
-        assertEquals(SteerCancelStatus.NOT_PENDING, SteerHelper.cancel(state, trace.getRunId(), "s0").getStatus(),
+        assertEquals(SteerCancelResult.Code.NOT_PENDING, SteerMailbox.cancel(state, trace.getRunId(), "s0").getCode(),
                 "重复取消不得误删另一条同文本插话");
     }
 
@@ -302,8 +302,8 @@ public class SteerInterceptorTest {
     public void concurrentOffer_neverExceedsCapacity() throws Exception {
         interceptor.onAgentStart(trace);
         int accepted = concurrentSteer(24, i -> "s" + i);
-        assertEquals(SteerHelper.MAX_BOX_SIZE, accepted);
-        assertEquals(SteerHelper.MAX_BOX_SIZE, SteerState.of(session).size());
+        assertEquals(SteerMailbox.MAX_BOX_SIZE, accepted);
+        assertEquals(SteerMailbox.MAX_BOX_SIZE, SteerState.of(session).size());
     }
 
     @Test
@@ -343,13 +343,13 @@ public class SteerInterceptorTest {
     @DisplayName("满邮箱中的重复 ID：优先返回重复，不能误报容量已满")
     public void fullBox_duplicateIdStillReportedAsDuplicate() {
         interceptor.onAgentStart(trace);
-        for (int i = 0; i < SteerHelper.MAX_BOX_SIZE; i++) {
+        for (int i = 0; i < SteerMailbox.MAX_BOX_SIZE; i++) {
             assertTrue(steerNow("s" + i, "text").isSteered());
         }
 
-        assertEquals(SteerStatus.DUPLICATE_STEER_ID, steerNow("s0", "retry").getStatus());
-        assertEquals(SteerStatus.BOX_FULL, steerNow("new", "retry").getStatus());
-        assertEquals(SteerHelper.MAX_BOX_SIZE, SteerState.of(session).size());
+        assertEquals(SteerResult.Code.DUPLICATE_STEER_ID, steerNow("s0", "retry").getCode());
+        assertEquals(SteerResult.Code.BOX_FULL, steerNow("new", "retry").getCode());
+        assertEquals(SteerMailbox.MAX_BOX_SIZE, SteerState.of(session).size());
     }
 
     @Test
@@ -359,13 +359,13 @@ public class SteerInterceptorTest {
         trace.nextTurn();
         trace.nextTurn();
 
-        SteerResult result = SteerHelper.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerMailbox.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onReasonStart(trace, new StringBuilder()); // 模拟复查前推理线程取走消息
                     return false;
                 }, SteerLimits.DEFAULT, false);
 
-        assertEquals(SteerStatus.STEERED, result.getStatus());
+        assertEquals(SteerResult.Code.STEERED, result.getCode());
         assertEquals(1, trace.getWorkingMemory().getMessages().size());
         assertTrue(trace.getWorkingMemory().getMessages().get(0).getContent().contains("补充要求"));
     }
@@ -375,13 +375,13 @@ public class SteerInterceptorTest {
     public void endedBeforeRecheck_staysSteered() {
         interceptor.onAgentStart(trace);
 
-        SteerResult result = SteerHelper.steer(session, null, "once", "补充要求",
+        SteerResult result = SteerMailbox.steer(session, null, "once", "补充要求",
                 InputOrigin.channel("Feishu"), () -> {
                     interceptor.onAgentEnd(trace);
                     return false;
                 }, SteerLimits.DEFAULT, false);
 
-        assertEquals(SteerStatus.STEERED, result.getStatus());
+        assertEquals(SteerResult.Code.STEERED, result.getCode());
         assertEquals(1, new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session), "已由收轮转排队，调用方不得再降级");
         assertNull(SteerState.of(session).runId());
     }
@@ -391,10 +391,10 @@ public class SteerInterceptorTest {
     public void unconsumedBeforeBusyRecheck_rollsBack() {
         interceptor.onAgentStart(trace);
 
-        SteerResult result = SteerHelper.steer(session, null, "pending", "补充要求",
+        SteerResult result = SteerMailbox.steer(session, null, "pending", "补充要求",
                 InputOrigin.channel("Feishu"), () -> false, SteerLimits.DEFAULT, false);
 
-        assertEquals(SteerStatus.NOT_RUNNING, result.getStatus());
+        assertEquals(SteerResult.Code.NOT_RUNNING, result.getCode());
         assertEquals(0, SteerState.of(session).size());
     }
 
@@ -404,13 +404,13 @@ public class SteerInterceptorTest {
         interceptor.onAgentStart(trace);
         ReActTrace next = newTrace();
 
-        SteerResult result = SteerHelper.steer(session, null, "x", "补充",
+        SteerResult result = SteerMailbox.steer(session, null, "x", "补充",
                 InputOrigin.NONE, () -> {
                     interceptor.onAgentStart(next);
                     return true;
                 }, SteerLimits.DEFAULT, false);
 
-        assertEquals(SteerStatus.STEERED, result.getStatus());
+        assertEquals(SteerResult.Code.STEERED, result.getCode());
         assertEquals(1, new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session), "随新任务开轮转入排队，恰好一次");
         assertEquals(0, SteerState.of(session).size());
     }
@@ -541,7 +541,7 @@ public class SteerInterceptorTest {
         SteerState state = startWithInbox(trace, hugeText());
         interceptor.onAgentEnd(trace);
 
-        assertTrue(SteerHelper.cancel(state, null, "s0").isCanceled());
+        assertTrue(SteerMailbox.cancel(state, null, "s0").isCanceled());
         assertEquals(0, state.size());
     }
 
@@ -549,9 +549,9 @@ public class SteerInterceptorTest {
     @DisplayName("transferToBacklog: 空列表 / null 会话零行为，不抛异常")
     public void transferToBacklog_noop() {
         QueueExtension backlog = new QueueExtension();
-        assertTrue(SteerHelper.transferToBacklog(backlog, null, new ArrayList<>()).isEmpty());
-        assertTrue(SteerHelper.transferToBacklog(backlog, session, null).isEmpty());
-        assertTrue(SteerHelper.transferToBacklog(backlog, session, new ArrayList<>()).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, null, new ArrayList<>()).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, null).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, new ArrayList<>()).isEmpty());
         assertEquals(0, new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session));
     }
 

@@ -10,8 +10,8 @@ import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.turn.InputBacklog;
-import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.spi.InputBacklog;
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
 import reactor.core.Disposable;
 
@@ -64,12 +64,12 @@ class QueueEngineIntegrationTest {
     void interruptCancelsPendingQueueItemsSoTheyAreNotRedispatched() {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
-        QueueHelper.enqueue(session, "排队二", InputOrigin.channel("test"));
+        QueueStore.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueStore.enqueue(session, "排队二", InputOrigin.channel("test"));
         AtomicInteger disposed = busy(session);
 
         assertTrue(engine.interrupt(session));
-        assertFalse(QueueHelper.hasItems(session), "中断必须连带取消排队项，否则停流后又被续发");
+        assertFalse(QueueStore.hasItems(session), "中断必须连带取消排队项，否则停流后又被续发");
         assertEquals(1, disposed.get());
     }
 
@@ -77,22 +77,22 @@ class QueueEngineIntegrationTest {
     void interruptCancelsQueueEvenWhenNoStreamIsRunning() {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueStore.enqueue(session, "排队一", InputOrigin.channel("test"));
 
         assertFalse(engine.interrupt(session), "无运行流时返回 false");
-        assertEquals(0, QueueHelper.pendingSize(session), "排队项仍必须被取消");
+        assertEquals(0, QueueStore.pendingSize(session), "排队项仍必须被取消");
     }
 
     @Test
     void prepareInterruptClearsQueueInFirstPhase() {
         HarnessEngine engine = engine();
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueStore.enqueue(session, "排队一", InputOrigin.channel("test"));
         AtomicInteger disposed = busy(session);
 
         try (InterruptPlan plan = engine.prepareInterrupt(session)) {
             assertTrue(plan.hasActiveRun());
-            assertEquals(0, QueueHelper.pendingSize(session), "第一段就必须清掉排队项");
+            assertEquals(0, QueueStore.pendingSize(session), "第一段就必须清掉排队项");
             assertEquals(0, disposed.get(), "第一段不得停流");
         }
         assertEquals(1, disposed.get());
@@ -103,10 +103,10 @@ class QueueEngineIntegrationTest {
         HarnessEngine engine = engine();
         engine.getCommandRegistry().register(new org.noear.solon.ai.harness.command.builtin.InterruptCommand());
         AgentSession session = InMemoryAgentSession.of();
-        QueueHelper.enqueue(session, "排队一", InputOrigin.channel("test"));
+        QueueStore.enqueue(session, "排队一", InputOrigin.channel("test"));
 
         engine.handle(HarnessInput.of(session, "/interrupt"));
-        assertEquals(0, QueueHelper.pendingSize(session), "/interrupt 必须经引擎回调插件清队列");
+        assertEquals(0, QueueStore.pendingSize(session), "/interrupt 必须经引擎回调插件清队列");
     }
 
     // ---------- InputBacklog ----------
@@ -154,7 +154,7 @@ class QueueEngineIntegrationTest {
         AtomicInteger checked = new AtomicInteger();
         queue.claimNext(session, claim -> {
             TurnDispatch current = TurnDispatch.current(session);
-            assertTrue(current instanceof QueueDispatch);
+            assertTrue(current instanceof QueueClaim);
             AdmitDecision admit = engine.admit(session, "a", false, null);
             assertEquals(AdmitDecision.Kind.ADMIT_BYPASS, admit.getKind());
             assertSame(current, admit.getDispatch());
@@ -177,7 +177,7 @@ class QueueEngineIntegrationTest {
 
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
         assertTrue(outcome.getCommandOutput().contains("已加入队列（第 1 位）"));
-        assertEquals(1, QueueHelper.pendingSize(session));
+        assertEquals(1, QueueStore.pendingSize(session));
     }
 
     @Test

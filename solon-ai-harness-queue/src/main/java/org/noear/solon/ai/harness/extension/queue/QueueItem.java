@@ -29,11 +29,11 @@ public final class QueueItem {
     private String selectedAgent;
     private boolean hasFiles;
 
-    public QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
+    QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
         this(id, text, origin, createdAt, status, null, null, null, null, false);
     }
 
-    public QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
+    QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
                      String model, String reasoningEffort, String thinkingMode,
                      String selectedAgent, boolean hasFiles) {
         this.id = id == null || id.trim().isEmpty() ? "q_" + UUID.randomUUID() : id;
@@ -64,17 +64,11 @@ public final class QueueItem {
     /** 领取时间：仅 harness 队列内核可写。 */
     void setClaimedAt(Long claimedAt) { this.claimedAt = claimedAt; }
 
-    /**
-     * 对外展示视图（宿主 HTTP / UI 的唯一合法来源）。
-     *
-     * <p>与 {@code toMap()} 的差别是契约责任不同：这里字段集合可以随产品需求演进，
-     * 与存储格式解耦。包含前端渲染所需字段（含 {@code displayText} 与运行状态）。</p>
-     *
-     * <p>包内可见：宿主经 {@code QueueExtension#viewRows} 获取，不直接构造视图。</p>
-     */
-    QueueItemView toView() {
-        return new QueueItemView(this);
-    }
+    /** 是否正在执行（in-flight）。 */
+    public boolean isRunning() { return "RUNNING".equals(status); }
+
+    /** 来源渠道标识（前端据此显示 IM 徽标；无来源时为 null）。 */
+    public String getSource() { return origin.getChannel(); }
 
     /**
      * 来源身份（永不为 null）
@@ -83,13 +77,35 @@ public final class QueueItem {
 
 
     /**
-     * 持久化投影（落盘格式，仅供 harness 内部与快照使用）。
+     * 对外展示视图（宿主 HTTP / UI 的唯一合法来源；键名是对外契约）。
      *
-     * <p><b>包内可见，非对外 API</b>：键名是存储契约的一部分，为保证旧数据可读而冻结。
-     * 宿主对外展示一律走 {@code QueueExtension#viewRows}（返回 {@link QueueItemView}），
-     * 否则存储格式的演进会被 HTTP 契约锁死。</p>
+     * <p>与持久化投影 {@link #toPersistMap()} 分离：展示字段可以随产品需求演进（如 {@code displayText}），
+     * 不会牵动落盘格式；反之亦然。</p>
      */
-    Map<String, Object> toMap() {
+    public Map<String, Object> toMap() {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", id);
+        map.put("text", text);
+        // 展示文本与原文分开：将来做截断/脱敏不必动持久化字段
+        map.put("displayText", text);
+        map.put("status", status);
+        map.put("createdAt", createdAt);
+        if (claimedAt != null) map.put("claimedAt", claimedAt);
+        if (model != null && !model.isEmpty()) map.put("model", model);
+        if (reasoningEffort != null && !reasoningEffort.isEmpty()) map.put("reasoningEffort", reasoningEffort);
+        if (thinkingMode != null && !thinkingMode.isEmpty()) map.put("thinkingMode", thinkingMode);
+        if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
+        if (hasFiles) map.put("hasFiles", true);
+        if (origin.getChannel() != null) map.put("source", origin.getChannel());
+        return map;
+    }
+
+    /**
+     * 持久化投影（落盘格式；包内可见，非对外 API）。
+     *
+     * <p>键名是存储契约的一部分，为保证旧数据可读而冻结。</p>
+     */
+    Map<String, Object> toPersistMap() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", id);
         map.put("text", text);
@@ -109,7 +125,7 @@ public final class QueueItem {
     static QueueItem fromMap(Map<String, Object> map) {
         if (map == null) return null;
         String text = value(map.get("text"));
-        if (text == null || text.trim().isEmpty() || text.trim().length() > QueueHelper.MAX_TEXT_LENGTH) return null;
+        if (text == null || text.trim().isEmpty() || text.trim().length() > QueueStore.MAX_TEXT_LENGTH) return null;
         String id = value(map.get("id"));
         InputOrigin origin = InputOrigin.fromMap(map);
         QueueItem item = new QueueItem(id, text.trim(), origin,

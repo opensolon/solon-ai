@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.turn;
 
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.lang.Nullable;
@@ -62,7 +63,7 @@ import org.noear.solon.lang.Nullable;
  * 替它决定「谁是终态」。</p>
  *
  * @author noear
- * @since 4.2.3
+ * @since 4.2.0
  */
 public final class SessionTurn {
     private final AgentSession session;

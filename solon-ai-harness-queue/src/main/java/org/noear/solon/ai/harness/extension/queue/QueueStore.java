@@ -6,7 +6,7 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +39,8 @@ import java.util.Map;
  * 门面（经 {@code engine.getExtension(QueueExtension.class)} 获取），本类的静态方法
  * 属于内核实现，仅供门面与测试使用，新宿主代码不应直接依赖。</p>
  */
-final class QueueHelper {
-    private static final Logger LOG = LoggerFactory.getLogger(QueueHelper.class);
+final class QueueStore {
+    private static final Logger LOG = LoggerFactory.getLogger(QueueStore.class);
     public static final int MAX_QUEUE_SIZE = 20;
     public static final int MAX_TEXT_LENGTH = 4096;
     private static final String ATTR_QUEUE = QueueAttrs.QUEUE;
@@ -49,7 +49,7 @@ final class QueueHelper {
     private static final String ATTR_IN_FLIGHT = QueueAttrs.QUEUE_IN_FLIGHT;
     /** 会话上下文 data() 中的持久化投影 key（List&lt;Map&gt;，运行中任务在首位）。 */
     private static final String KEY_ITEMS = QueueAttrs.QUEUE_ITEMS;
-    private QueueHelper() { }
+    private QueueStore() { }
 
     /** 运行态队列：attrs 优先，缺失时从快照投影 hydrate（投影有内容即重建，与 create 无关）。
      *  调用方必须持有 attrs 锁。 */
@@ -98,8 +98,8 @@ final class QueueHelper {
         if (session == null || session.getContext() == null) return;
         List<Map<String, Object>> rows = new ArrayList<>();
         Object inFlight = session.attrs().get(ATTR_IN_FLIGHT);
-        if (inFlight instanceof QueueItem) rows.add(((QueueItem) inFlight).toMap());
-        for (QueueItem item : queue) if (item != null) rows.add(item.toMap());
+        if (inFlight instanceof QueueItem) rows.add(((QueueItem) inFlight).toPersistMap());
+        for (QueueItem item : queue) if (item != null) rows.add(item.toPersistMap());
         if (rows.isEmpty()) session.getContext().data().remove(KEY_ITEMS);
         else session.getContext().data().put(KEY_ITEMS, rows);
         session.updateSnapshot();
@@ -256,7 +256,7 @@ final class QueueHelper {
             // 无需再看某个具体 claim。
             // 只清自己登记的派发：槽位已上提为核心事实，别的插件的派发不归队列作废。
             TurnDispatch current = TurnDispatch.current(session);
-            if (current instanceof QueueDispatch) {
+            if (current instanceof QueueClaim) {
                 TurnDispatch.unbind(session, current);
             }
             // 无队列变更（本就空）时不写快照：interrupt 空队列会话不应触发落盘。
@@ -364,7 +364,7 @@ final class QueueHelper {
      *
      * <p>收口契约由 handler 返回值表达（见 {@link QueueClaimHandler}）：返回 true = 同步完成，
      * 内核当场 acknowledge；ack 被拒（期间被 cancelPending）则回滚丢弃并返回 START_FAILED。
-     * 返回 false = 异步启动，claim 由宿主经捕获的 {@code QueueDispatch} 在流终态收口。
+     * 返回 false = 异步启动，claim 由流终态的 {@code SessionTurn#settle} 收口。
      * handler 抛异常等价启动失败，由内核用领取时快照的代际回滚。</p>
      *
      * @return STARTED / NO_TASK / START_FAILED
@@ -380,8 +380,8 @@ final class QueueHelper {
      * {@link #tryClaim(AgentSession, java.util.function.Predicate)}），因此宿主无须再在
      * 领取前后自建 synchronized 块与忙态复核。</p>
      *
-     * <p>领取成功后登记一个跨线程存活的 {@link QueueDispatch}：handler 返回 false（异步启动）
-     * 时<b>不</b>注销——任务还在跑，终态由宿主经 {@code dispatch.settle(..)} 收口；
+     * <p>领取成功后把 claim 登记为跨线程存活的派发事务：handler 返回 false（异步启动）
+     * 时<b>不</b>注销——任务还在跑，终态由流终态的 {@code SessionTurn#settle} 收口；
      * handler 返回 true（同步完成）时内核当场 acknowledge 收口；handler 抛异常视为启动失败，
      * 注销登记并用领取瞬间的代际快照回滚到队首。</p>
      *
@@ -396,11 +396,11 @@ final class QueueHelper {
             return QueueClaimStatus.NO_TASK;
         }
         QueueClaim claim = new QueueClaim(session, item, generation(session));
-        QueueDispatch dispatch = registerDispatch(session, claim);
+        registerDispatch(session, claim);
         try {
             boolean done = handler.run(claim);
             if (!done) {
-                // 异步启动：claim 留给流终态（宿主捕获的 dispatch.settle）收口
+                // 异步启动：claim 留给流终态（SessionTurn.settle）收口
                 return QueueClaimStatus.STARTED;
             }
             // 同步完成：内核当场收口。ack 被拒（期间被 Stop）必须转为回滚丢弃 + START_FAILED——
@@ -411,7 +411,7 @@ final class QueueHelper {
             }
             return QueueClaimStatus.STARTED;
         } catch (Throwable e) {
-            unregisterDispatch(session, dispatch);
+            TurnDispatch.unbind(session, claim);
             claim.rollback();
             return QueueClaimStatus.START_FAILED;
         } finally {
@@ -420,40 +420,12 @@ final class QueueHelper {
     }
 
     /** 登记派发事务（覆盖式：同一会话同一时刻只允许一个未收口派发）。 */
-    private static QueueDispatch registerDispatch(AgentSession session, QueueClaim claim) {
-        QueueDispatch dispatch = new QueueDispatch(session, claim);
-        TurnDispatch previous = TurnDispatch.bind(session, dispatch);
+    private static void registerDispatch(AgentSession session, QueueClaim claim) {
+        TurnDispatch previous = TurnDispatch.bind(session, claim);
         if (previous != null) {
             // 「上一轮未收口就派发下一轮」按设计不可能发生（任一派发期间会话必为占用），
             // 但真的发生时旧事务会永久 OPEN 且无任何痕迹——留一条告警以便发现。
-            LOG.warn("[Queue] dispatch overwritten without settle: {} -> {}", previous, dispatch);
+            LOG.warn("[Queue] dispatch overwritten without settle: {} -> {}", previous, claim);
         }
-        return dispatch;
-    }
-
-    /** 注销派发事务（仅当仍是它自己，避免把新派发抹掉）。 */
-    private static void unregisterDispatch(AgentSession session, QueueDispatch dispatch) {
-        TurnDispatch.unbind(session, dispatch);
-    }
-
-    /**
-     * 按 claim 注销它自己的派发登记（claim 收口时调用）。
-     *
-     * <p><b>为什么不只在 settle 里注销</b>：宿主可以绕过 {@code Dispatch.settle} 直接
-     * {@code claim.acknowledge()}（README 的终态示例即如此）。若注销只挂在 settle 上，那条路径
-     * 就会留下永久登记——会话此后恒被视为「有未收口派发」，队列续发被自己的残留挡死。
-     * 收口是 claim 的状态迁移，注销必须跟着状态迁移走，而不是跟着某个调用入口走。</p>
-     */
-    static void unregisterDispatchOf(AgentSession session, QueueClaim claim) {
-        if (session == null || claim == null) return;
-        QueueDispatch dispatch = QueueDispatch.current(session);
-        if (dispatch != null && dispatch.claim() == claim) {
-            unregisterDispatch(session, dispatch);
-        }
-    }
-
-    /** 当前未收口的派发事务（无则 null）。 */
-    public static QueueDispatch currentDispatch(AgentSession session) {
-        return QueueDispatch.current(session);
     }
 }

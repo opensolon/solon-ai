@@ -20,31 +20,19 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Goal 状态模型 — Codex CLI 对齐。
+ * Goal 运行态（包内可变实体；对外只暴露只读快照 {@link GoalTask}）。
  *
- * <p>6 态状态机：
- * <pre>
- *   PURSUING ⇄ PAUSED → ACHIEVED | BUDGET_LIMITED | ITERATION_LIMITED
- *       ↓
- *     BLOCKED → (resume) → PURSUING
- * </pre>
- * BLOCKED 是模型主动声明的阻塞（通过 update_goal("blocked")），可与 PAUSED 区分。
+ * <p>状态机见 {@link GoalTask}；BLOCKED 是模型主动声明的阻塞（{@code goal_update("blocked")}）
+ * 或错误熔断，可与 PAUSED 区分。所有修改都在 {@link GoalRuntime} 的会话锁内完成并落盘。</p>
+ *
+ * @author noear
+ * @since 3.9.2
  */
-public class GoalState {
-
-    public enum Status {
-        PURSUING, PAUSED, BLOCKED, ACHIEVED, BUDGET_LIMITED, ITERATION_LIMITED;
-
-        public boolean isActive() { return this == PURSUING; }
-        public boolean isTerminal() {
-            return this == ACHIEVED || this == BUDGET_LIMITED || this == ITERATION_LIMITED;
-        }
-        public boolean isResumable() { return this == PAUSED || this == BLOCKED; }
-    }
+class GoalState {
 
     private String id;
-    private volatile String condition;
-    private volatile Status status;
+    private volatile String objective;
+    private volatile GoalTask.Status status;
     private volatile long consumedTokens;
     private volatile long maxTokens;
     private volatile int maxIterations;
@@ -60,7 +48,7 @@ public class GoalState {
     /**
      * 最近一轮是否有工具调用证据（瞬态，不参与快照投影）。
      *
-     * <p>由 {@code GoalEngine.executeRound} 从上一轮返回结果直接赋值，不经会话 attrs 旁路。
+     * <p>由 {@code GoalRuntime.executeRound} 从上一轮返回结果直接赋值，不经会话 attrs 旁路。
      * null = 无信息（重启 hydrate 后或该轮未产生结果）。</p>
      */
     private volatile Boolean lastHasToolCalls;
@@ -82,14 +70,14 @@ public class GoalState {
     /** 预算提示阈值（实例级，避免多工作区互相覆盖）。 */
     private BudgetThresholds thresholds = BudgetThresholds.defaults();
 
-    public GoalState(String condition, long maxTokens) {
-        this(condition, maxTokens, BudgetThresholds.defaults());
+    GoalState(String objective, long maxTokens) {
+        this(objective, maxTokens, BudgetThresholds.defaults());
     }
 
-    public GoalState(String condition, long maxTokens, BudgetThresholds thresholds) {
+    GoalState(String objective, long maxTokens, BudgetThresholds thresholds) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
-        this.condition = condition;
-        this.status = Status.PURSUING;
+        this.objective = objective;
+        this.status = GoalTask.Status.PURSUING;
         this.consumedTokens = 0;
         this.maxTokens = maxTokens;
         this.startEpochMs = System.currentTimeMillis();
@@ -100,7 +88,7 @@ public class GoalState {
 
     private GoalState() {} // for deserialization
 
-    /** 注入预算阈值（由 GoalEngine 从本工作区配置注入）。 */
+    /** 注入预算阈值（由 GoalRuntime 从本工作区配置注入）。 */
     public void setThresholds(BudgetThresholds thresholds) {
         if (thresholds != null) {
             this.thresholds = thresholds;
@@ -112,40 +100,40 @@ public class GoalState {
     }
 
     public boolean pause() {
-        if (status != Status.PURSUING) return false;
-        this.status = Status.PAUSED;
+        if (status != GoalTask.Status.PURSUING) return false;
+        this.status = GoalTask.Status.PAUSED;
         return true;
     }
 
     public boolean resume() {
         if (!status.isResumable()) return false;
-        this.status = Status.PURSUING;
+        this.status = GoalTask.Status.PURSUING;
         return true;
     }
 
     public void achieve() {
-        if (status == Status.PURSUING) this.status = Status.ACHIEVED;
+        if (status == GoalTask.Status.PURSUING) this.status = GoalTask.Status.ACHIEVED;
     }
 
     /** 完成声明未通过运行时证据校验时，退回继续执行。 */
     public boolean rejectAchievement() {
-        if (status != Status.ACHIEVED) return false;
-        this.status = Status.PURSUING;
+        if (status != GoalTask.Status.ACHIEVED) return false;
+        this.status = GoalTask.Status.PURSUING;
         return true;
     }
 
     public void markBudgetLimited() {
-        if (status == Status.PURSUING) this.status = Status.BUDGET_LIMITED;
+        if (status == GoalTask.Status.PURSUING) this.status = GoalTask.Status.BUDGET_LIMITED;
     }
 
     public void markIterationLimited() {
-        if (status == Status.PURSUING) this.status = Status.ITERATION_LIMITED;
+        if (status == GoalTask.Status.PURSUING) this.status = GoalTask.Status.ITERATION_LIMITED;
     }
 
     /** 模型主动声明阻塞（PURSUING → BLOCKED） */
     public void markBlocked() {
-        if (status == Status.PURSUING) {
-            this.status = Status.BLOCKED;
+        if (status == GoalTask.Status.PURSUING) {
+            this.status = GoalTask.Status.BLOCKED;
         }
     }
 
@@ -179,18 +167,18 @@ public class GoalState {
     public void extendBudget(long additionalTokens) {
         if (additionalTokens <= 0) return;
         this.maxTokens += additionalTokens;
-        if (status == Status.BUDGET_LIMITED) {
-            this.status = Status.PURSUING;
+        if (status == GoalTask.Status.BUDGET_LIMITED) {
+            this.status = GoalTask.Status.PURSUING;
         }
     }
 
     // ===== Getters =====
 
     public String getId() { return id; }
-    public String getCondition() { return condition; }
-    public void setCondition(String condition) { this.condition = condition; }
-    public Status getStatus() { return status; }
-    public void setStatus(Status status) { this.status = status; }
+    public String getObjective() { return objective; }
+    public void setObjective(String objective) { this.objective = objective; }
+    public GoalTask.Status getStatus() { return status; }
+    public void setStatus(GoalTask.Status status) { this.status = status; }
     public long getConsumedTokens() { return consumedTokens; }
     public long getMaxTokens() { return maxTokens; }
     public void setMaxTokens(long maxTokens) { this.maxTokens = maxTokens; }
@@ -271,7 +259,7 @@ public class GoalState {
     public ONode toONode() {
         ONode node = new ONode();
         node.set("id", id);
-        node.set("condition", condition);
+        node.set("condition", objective);
         node.set("status", status.name());
         node.set("consumedTokens", consumedTokens);
         node.set("maxTokens", maxTokens);
@@ -301,8 +289,8 @@ public class GoalState {
 
         GoalState gs = new GoalState();
         gs.id = node.get("id").getString();
-        gs.condition = node.get("condition").getString();
-        gs.status = Status.valueOf(node.get("status").getString());
+        gs.objective = node.get("condition").getString();
+        gs.status = GoalTask.Status.valueOf(node.get("status").getString());
         gs.consumedTokens = node.get("consumedTokens").getLong();
         gs.maxTokens = node.get("maxTokens").getLong();
         gs.maxIterations = node.getOrNull("maxIterations") != null
@@ -338,7 +326,7 @@ public class GoalState {
 
         GoalState gs = new GoalState();
         gs.id = projection.getGoalId();
-        gs.condition = projection.getCondition();
+        gs.objective = projection.getObjective();
         gs.status = projection.getStatus();
         gs.consumedTokens = projection.getConsumedTokens();
         gs.maxTokens = projection.getMaxTokens();

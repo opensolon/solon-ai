@@ -5,7 +5,7 @@ import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 /**
  * 运行中插话拦截器（Steering）：轮次的开/收边界 + 邮箱的消费边界。
  *
- * <p>插话的投递、校验、取消由静态内核 {@link SteerHelper} 提供，宿主接入走 {@link SteerExtension} 门面。
+ * <p>插话的投递、校验、取消由静态内核 {@link SteerMailbox} 提供，宿主接入走 {@link SteerExtension} 门面。
  * 本类在 ReAct 生命周期边界上：</p>
  * <ul>
  *   <li>{@code onAgentStart}：开轮。若上一轮未收尾（interrupt / 异常时 {@code onAgentEnd} 不触发），
@@ -43,7 +43,7 @@ import java.util.function.Supplier;
  * 取不到（未装 queue 插件）时残留按转排队失败处理：暂存为 orphans 并经事件告知。</p>
  *
  * @author noear
- * @since 2026
+ * @since 4.2.0
  */
 public class SteerInterceptor extends AbsReActInterceptor {
 
@@ -140,7 +140,7 @@ public class SteerInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        List<SteerMessage> failed = SteerHelper.transferToBacklog(backlog(), session, leftovers);
+        List<SteerMessage> failed = SteerMailbox.transferToBacklog(backlog(), session, leftovers);
         if (failed.isEmpty() == false) {
             state.park(failed);
         }

@@ -40,12 +40,12 @@ class LoopExecutorTest {
     }
 
     @Test
-    void passFallsThroughToNext() throws Exception {
+    void claimPredicateDecidesOwnership() throws Exception {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor(null, null, (sessionId, prompt) ->
-                sessionId.startsWith("web-") ? LoopOutcome.done("web:" + prompt) : LoopOutcome.pass());
-        scheduler.addExecutor(null, null, (sessionId, prompt) -> LoopOutcome.done("cli:" + prompt));
-        assertEquals("cli:prompt", scheduler.execute("cli", "prompt").getText(), "pass 时须继续尝试下一个执行器");
+        scheduler.addExecutor("web", id -> id.startsWith("web-"), (sessionId, prompt) -> LoopOutcome.done("web:" + prompt));
+        scheduler.addExecutor("cli", null, (sessionId, prompt) -> LoopOutcome.done("cli:" + prompt));
+        assertEquals("cli:prompt", scheduler.execute("cli", "prompt").getText(), "谓词不命中时由下一个认领者执行");
+        assertEquals("web:prompt", scheduler.execute("web-1", "prompt").getText());
     }
 
     @Test

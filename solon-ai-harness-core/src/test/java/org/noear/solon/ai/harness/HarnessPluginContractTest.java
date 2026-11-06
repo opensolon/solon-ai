@@ -23,10 +23,10 @@ import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.turn.AdmitDecision;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
-import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.turn.SessionTurn;
-import org.noear.solon.ai.harness.turn.TurnDispatch;
+import org.noear.solon.ai.harness.spi.TurnDispatch;
 import reactor.core.Disposable;
 
 import java.nio.charset.StandardCharsets;
@@ -217,9 +217,9 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
 
         busy(session);
-        engine.interruptStream(session);
+        engine.cancelStream(session);
         busy(session);
-        engine.interruptStreamActive(session);
+        engine.preemptStream(session);
 
         assertEquals(0, backlog.interrupts, "只停流是程序行为，不通知插件");
         assertTrue(session.getMessages().isEmpty());

@@ -31,7 +31,7 @@ import java.util.List;
  * <p>所有字段只在持有 {@code this} 锁时读写。</p>
  *
  * @author noear
- * @since 4.2.1
+ * @since 4.2.0
  */
 final class SteerState {
     /** attrs key（transient，不落 snapshot.json）。宿主不得读写。 */

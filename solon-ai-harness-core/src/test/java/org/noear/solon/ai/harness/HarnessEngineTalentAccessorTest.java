@@ -95,8 +95,8 @@ class HarnessEngineTalentAccessorTest {
 
         assertNotNull(e.prompt("hi"));
         assertNotNull(e.prompt("hi", e.getMainAgent()));
-        assertNotNull(e.prompt());
-        assertNotNull(e.prompt(e.getMainAgent()));
+        assertNotNull(e.resume());
+        assertNotNull(e.resume(e.getMainAgent()));
         assertNotNull(e.prompt(org.noear.solon.ai.chat.prompt.Prompt.of("hi")));
         assertNotNull(e.prompt(org.noear.solon.ai.chat.prompt.Prompt.of("hi"), e.getMainAgent()));
 
@@ -118,7 +118,7 @@ class HarnessEngineTalentAccessorTest {
     void mainModelAndSubagentBuilders() {
         HarnessEngine e = engine();
         assertNotNull(e.getMainModel());
-        assertNotNull(e.getModelOrMain(e.getDefaultModel()));
+        assertNotNull(e.getModelOrDefInstance(e.getDefaultModel()));
         assertNotNull(e.getAgentBuilder(AgentDefinition.builder().name("sub").build()));
     }
 

@@ -170,8 +170,6 @@ class HarnessEngineBuilderTest {
         assertTrue(e.getDisallowedTools().contains("bash"));
         assertTrue(e.getDisallowedTools().contains("edit"));
 
-        // 已废弃的 ToolPermission 重载同样生效
-        @SuppressWarnings("deprecation")
         HarnessEngine e2 = builder()
                 .toolsAdd(ToolName.TOOL_GLOB)
                 .disallowedToolsAdd(ToolName.TOOL_LS)
@@ -285,12 +283,5 @@ class HarnessEngineBuilderTest {
     void commandPrefixRejectsEmptyAtBuildTime() {
         assertThrows(IllegalArgumentException.class, () -> builder().commandPrefix(""));
         assertThrows(IllegalArgumentException.class, () -> builder().agentPrefix(""));
-    }
-
-    @Test
-    void deprecatedCompressionModelStillAccepted() {
-        @SuppressWarnings("deprecation")
-        HarnessEngine e = builder().compressionModel("cm").build();
-        assertEquals("cm", e.getCompressionModel());
     }
 }

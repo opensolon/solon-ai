@@ -31,7 +31,7 @@ import java.util.List;
  * /rerun 命令
  *
  * @author noear
- * @since 2026.4.28
+ * @since 4.2.0
  */
 public class RerunCommand extends AbsCommand {
     @Override

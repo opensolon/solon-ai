@@ -20,10 +20,8 @@ import java.time.Duration;
 /**
  * Goal 参数对象 —— 命令行 flag 与编程调用的共同载荷。
  *
- * <p>解决的问题：此前 {@code /goal --max-tokens:2000 --max-duration:30 <objective>} 由
- * {@code GoalCommand} 手工切字符串，编程侧则是
- * {@code attachAndSchedule(session, objective, maxTokens, maxDurationMs, maxIterations)}
- * 五个裸参数（靠 javadoc 才知道第四个是毫秒），两条路径各自拼装、互不同源。</p>
+ * <p>{@code /goal} 命令解析出的 flag 与宿主的编程调用都收敛为本对象，再经
+ * {@link GoalExtension#create(String, GoalSpec)} 走同一条路径。</p>
  *
  * <p>口径与既有实现一致：
  * <ul>
@@ -35,23 +33,28 @@ import java.time.Duration;
  * <p><b>用法</b>：</p>
  * <pre>{@code
  * // 最简形态（不设任何预算 = 不限制）
- * goal.attachAndSchedule(session, GoalSpec.of("让测试全绿"));
+ * goal.create(sessionId, GoalSpec.of("让测试全绿"));
  *
  * // 带预算（单位自描述，可选参数自然缺省）
- * goal.attachAndSchedule(session, GoalSpec.of("修复登录模块的鉴权缺陷")
+ * goal.create(sessionId, GoalSpec.of("修复登录模块的鉴权缺陷")
  *         .maxTokens(2000)
  *         .maxDuration(Duration.ofMinutes(30))
  *         .maxIterations(5));
+ *
+ * // 首轮由宿主自己的流驱动（只挂调度、等下一轮），执行正文含附件、展示正文为用户原句
+ * goal.create(sessionId, GoalSpec.of(promptWithAttachments).displayObjective(userText).runNow(false));
  * }</pre>
  *
  * @author noear
- * @since 4.2
+ * @since 4.2.0
  */
 public final class GoalSpec {
     private final String objective;
     private long maxTokens;      // 0 = 不限制
     private long maxDurationMs;  // 0 = 不限制
     private int maxIterations;   // 0 = 不限制
+    private String displayObjective; // null = 与执行正文相同
+    private boolean runNow = true;
 
     private GoalSpec(String objective) {
         this.objective = objective;
@@ -91,6 +94,33 @@ public final class GoalSpec {
     public GoalSpec maxIterations(int maxIterations) {
         this.maxIterations = Math.max(0, maxIterations);
         return this;
+    }
+
+    /**
+     * 展示正文（UI 列表/徽章）；null、空白或与执行正文相同时不区分。
+     *
+     * <p>执行正文可能拼入附件等上下文，展示正文只保留用户原句；两者在创建时一次成型、只广播一次。</p>
+     */
+    public GoalSpec displayObjective(String displayObjective) {
+        this.displayObjective = displayObjective;
+        return this;
+    }
+
+    /**
+     * 是否立即跑首轮（缺省 true）。false = 只挂调度、等下一个调度周期
+     * （适用于首轮由宿主自己的流驱动的场景，如桌面端）。
+     */
+    public GoalSpec runNow(boolean runNow) {
+        this.runNow = runNow;
+        return this;
+    }
+
+    public String getDisplayObjective() {
+        return displayObjective;
+    }
+
+    public boolean isRunNow() {
+        return runNow;
     }
 
     public String getObjective() {

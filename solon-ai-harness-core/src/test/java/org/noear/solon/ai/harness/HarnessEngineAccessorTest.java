@@ -183,7 +183,6 @@ class HarnessEngineAccessorTest {
         assertEquals(5, e.getSubagentDefaultConcurrency());
         assertNull(e.getSystemPrompt());
         assertNull(e.getUserAgent());
-        assertNull(e.getCompressionModel());
         assertNull(e.getDefaultModel());
         assertNull(e.getCacheControl());
         assertNull(e.getHttpProxy());

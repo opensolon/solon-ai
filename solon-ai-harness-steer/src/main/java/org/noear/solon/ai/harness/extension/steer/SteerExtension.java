@@ -9,7 +9,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.turn.InputBacklog;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.lang.Nullable;
 
@@ -25,7 +25,7 @@ import java.util.function.BooleanSupplier;
  * <ol>
  *   <li>装配：{@code engine.addExtensionIfAbsent(new SteerExtension())}；</li>
  *   <li>投递：{@link #steer(AgentSession, String, InputOrigin)}（IM / 命令 / CLI）或
- *       {@link #steerOnRun(AgentSession, String, String, String)}（Web 严格轮次绑定），按 {@link SteerStatus} 映射协议。</li>
+ *       {@link #steerOnRun(AgentSession, String, String, String)}（Web 严格轮次绑定），按 {@link SteerResult.Code} 映射协议。</li>
  * </ol>
  * <p>没有开流前义务：上一任务被 interrupt / 异常终止后的残留，由拦截器在新任务 {@code onAgentStart}
  * 自动转排队并推出 {@link SteerDroppedEvent}。需要「可撤销」UI 时再用
@@ -45,7 +45,7 @@ import java.util.function.BooleanSupplier;
  * {@link InputBacklog}（按接口从引擎现取，当前由 queue 插件实现）：steer 插件不依赖 queue 插件，
  * 未装 queue 时残留按转排队失败处理（暂存并经 {@link SteerDroppedEvent} 告知）。</p>
  *
- * <p>开关语义：停用时投递返回 {@link SteerStatus#DISABLED}；撤销 / 查询类接口与状态贡献不受控（不得阻止撤销）。</p>
+ * <p>开关语义：停用时投递返回 {@link SteerResult.Code#DISABLED}；撤销 / 查询类接口与状态贡献不受控（不得阻止撤销）。</p>
  *
  * <p>会话属性键见 {@link SteerAttrs}；计数事实见 {@link #STATUS_PENDING}。</p>
  *
@@ -150,7 +150,7 @@ public class SteerExtension extends AbsHarnessExtension {
     }
 
     /**
-     * 严格轮次绑定投递（Web 首选）：{@code runId} 必填，空或与当前轮次不符即 {@link SteerStatus#TURN_CHANGED}。
+     * 严格轮次绑定投递（Web 首选）：{@code runId} 必填，空或与当前轮次不符即 {@link SteerResult.Code#TURN_CHANGED}。
      *
      * <p>任务的首个事件到达前无法确认归属，此时放行会让插话落入「任务结束 / 轮次切换」的窄窗。</p>
      *
@@ -172,7 +172,7 @@ public class SteerExtension extends AbsHarnessExtension {
      * 撤销一条待生效插话（与 {@link #steerOnRun} 对称）。
      *
      * <p>steerId 校验（空 / 超长，按实例 {@link #getLimits()}）、轮次比对都在内核完成，
-     * 宿主只需把 {@link SteerCancelStatus} 映射成自身协议。转排队失败而暂存的插话与轮次无关，
+     * 宿主只需把 {@link SteerCancelResult.Code} 映射成自身协议。转排队失败而暂存的插话与轮次无关，
      * 任务结束后仍可撤销。</p>
      *
      * @param runId 调用方所见的当前运行 ID（本轮邮箱中的项必须匹配当前轮次）
@@ -181,28 +181,28 @@ public class SteerExtension extends AbsHarnessExtension {
                                          @Nullable String steerId) {
         String id = steerId == null ? null : steerId.trim();
         if (id == null || id.isEmpty() || id.length() > limits.getMaxIdLength()) {
-            return SteerCancelResult.of(SteerCancelStatus.INVALID_STEER_ID, steerId, 0);
+            return SteerCancelResult.of(SteerCancelResult.Code.INVALID_STEER_ID, steerId, 0);
         }
 
         SteerState state = SteerState.peek(session);
         if (state == null) {
-            return SteerCancelResult.of(SteerCancelStatus.NOT_PENDING, id, 0);
+            return SteerCancelResult.of(SteerCancelResult.Code.NOT_PENDING, id, 0);
         }
-        return SteerHelper.cancel(state, runId, id);
+        return SteerMailbox.cancel(state, runId, id);
     }
 
     /**
      * 批量撤销待生效插话（「清空待生效插话」）。
      *
      * <p>{@code steerIds} 为 null 或空表示清空全部；只有真正移除的计入
-     * {@link SteerCancelResult#getCanceled()}，已被消费的不算。状态恒为 {@link SteerCancelStatus#CANCELED}。</p>
+     * {@link SteerCancelResult#getCanceled()}，已被消费的不算。状态恒为 {@link SteerCancelResult.Code#CANCELED}。</p>
      */
     public SteerCancelResult cancelPending(@Nullable AgentSession session, @Nullable Collection<String> steerIds) {
         SteerState state = SteerState.peek(session);
         if (state == null) {
             return SteerCancelResult.canceled(null, 0, 0);
         }
-        return SteerHelper.cancelAll(state, steerIds);
+        return SteerMailbox.cancelAll(state, steerIds);
     }
 
     // ==================== 查询 ====================
@@ -234,16 +234,16 @@ public class SteerExtension extends AbsHarnessExtension {
                                 InputOrigin origin, BooleanSupplier busyRecheck, boolean requireRunId) {
         if (isEnabled() == false) {
             // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
-            return new SteerResult(SteerStatus.DISABLED, steerId, 0);
+            return new SteerResult(SteerResult.Code.DISABLED, steerId, 0);
         }
 
         BooleanSupplier busy = busyRecheck == null ? () -> isBusy(session) : busyRecheck;
-        return SteerHelper.steer(session, runId, steerId, text,
+        return SteerMailbox.steer(session, runId, steerId, text,
                 origin == null ? InputOrigin.NONE : origin, busy, limits, requireRunId);
     }
 
     /**
-     * 缺省忙判定：与 {@code SessionActivity.isBusy} 同口径（活跃流 或 输入受理窗口）。
+     * 缺省忙判定：{@code SessionStatus.isBusy() || isAdmitting()}（活跃流 或 输入受理窗口）。
      *
      * <p>未 attach（无 engine）时视为「忙」，即放行、只依据轮次判定——纯单测 / 手工 new 的门面
      * 没有引擎可查，若视为「不忙」会把所有投递回滚成 NOT_RUNNING。</p>
@@ -270,9 +270,9 @@ public class SteerExtension extends AbsHarnessExtension {
 
     /** 构建器：只覆盖容量 / 长度约束，其余全有缺省（等价于 {@code new SteerExtension()}）。 */
     public static final class Builder {
-        private int maxBoxSize = SteerHelper.MAX_BOX_SIZE;
-        private int maxTextLength = SteerHelper.MAX_TEXT_LENGTH;
-        private int maxIdLength = SteerHelper.MAX_ID_LENGTH;
+        private int maxBoxSize = SteerMailbox.MAX_BOX_SIZE;
+        private int maxTextLength = SteerMailbox.MAX_TEXT_LENGTH;
+        private int maxIdLength = SteerMailbox.MAX_ID_LENGTH;
 
         private Builder() {
         }

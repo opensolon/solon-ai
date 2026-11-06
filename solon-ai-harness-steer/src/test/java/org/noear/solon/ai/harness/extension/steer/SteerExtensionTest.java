@@ -104,9 +104,9 @@ class SteerExtensionTest {
 
         ext.setEnabled(false);
         SteerResult r = ext.steer(session, "补充", null);
-        assertEquals(SteerStatus.DISABLED, r.getStatus());
-        assertEquals(0, r.getQueued());
-        assertEquals(SteerStatus.DISABLED, ext.steerOnRun(session, "run-1", null, "补充").getStatus());
+        assertEquals(SteerResult.Code.DISABLED, r.getCode());
+        assertEquals(0, r.getPendingCount());
+        assertEquals(SteerResult.Code.DISABLED, ext.steerOnRun(session, "run-1", null, "补充").getCode());
     }
 
     @Test
@@ -114,13 +114,13 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = InMemoryAgentSession.of();
 
-        assertEquals(SteerStatus.NOT_RUNNING, ext.steer(session, "补充").getStatus());
-        assertEquals(SteerStatus.NOT_RUNNING, ext.steer(null, "补充").getStatus());
+        assertEquals(SteerResult.Code.NOT_RUNNING, ext.steer(session, "补充").getCode());
+        assertEquals(SteerResult.Code.NOT_RUNNING, ext.steer(null, "补充").getCode());
 
         SteerState.of(session).open("run-1");
         SteerResult ok = ext.steer(session, "补充内容");
         assertTrue(ok.isSteered());
-        assertEquals(1, ok.getQueued());
+        assertEquals(1, ok.getPendingCount());
         assertNotNull(ok.getSteerId(), "steerId 应由框架生成");
     }
 
@@ -129,7 +129,7 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        assertEquals(SteerStatus.EMPTY_TEXT, ext.steer(session, "   ").getStatus());
+        assertEquals(SteerResult.Code.EMPTY_TEXT, ext.steer(session, "   ").getCode());
         assertTrue(ext.steer(session, "补充", null).isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
     }
 
@@ -143,7 +143,7 @@ class SteerExtensionTest {
         AgentSession session = runningSession("run-1");
 
         SteerResult r = ext.steer(session, "补充", null);
-        assertEquals(SteerStatus.NOT_RUNNING, r.getStatus(), "无活跃流时应被回滚");
+        assertEquals(SteerResult.Code.NOT_RUNNING, r.getCode(), "无活跃流时应被回滚");
         assertTrue(ext.pending(session).isEmpty(), "回滚后邮箱不得残留");
     }
 
@@ -161,11 +161,11 @@ class SteerExtensionTest {
         AgentSession session = runningSession("run-1");
 
         SteerResult blank = ext.steerOnRun(session, "  ", null, "补充");
-        assertEquals(SteerStatus.TURN_CHANGED, blank.getStatus());
+        assertEquals(SteerResult.Code.TURN_CHANGED, blank.getCode());
         assertNull(blank.getSteerId(), "被拒绝的投递不得生成 steerId");
         assertTrue(ext.pending(session).isEmpty());
 
-        assertEquals(SteerStatus.TURN_CHANGED, ext.steerOnRun(session, null, null, "补充").getStatus());
+        assertEquals(SteerResult.Code.TURN_CHANGED, ext.steerOnRun(session, null, null, "补充").getCode());
         assertTrue(ext.steer(session, "补充").isSteered(), "非严格形态允许省略 runId");
     }
 
@@ -174,7 +174,7 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        assertEquals(SteerStatus.TURN_CHANGED, ext.steerOnRun(session, "run-2", null, "补充").getStatus());
+        assertEquals(SteerResult.Code.TURN_CHANGED, ext.steerOnRun(session, "run-2", null, "补充").getCode());
         SteerResult ok = ext.steerOnRun(session, "run-1", "web-1", "补充");
         assertTrue(ok.isSteered());
         assertEquals("web-1", ok.getSteerId(), "前端生成的 steerId 原样使用");
@@ -189,11 +189,11 @@ class SteerExtensionTest {
         SteerResult a = ext.steerOnRun(session, "run-1", "a", "第一条");
         ext.steerOnRun(session, "run-1", "b", "第二条");
 
-        assertEquals(SteerCancelStatus.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", " ").getStatus());
-        assertEquals(SteerCancelStatus.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", "12345").getStatus(),
+        assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", " ").getCode());
+        assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", "12345").getCode(),
                 "超长按实例上限判定");
-        assertEquals(SteerCancelStatus.TURN_CHANGED, ext.cancelOnRun(session, "run-2", "a").getStatus());
-        assertEquals(SteerCancelStatus.TURN_CHANGED, ext.cancelOnRun(session, null, "a").getStatus());
+        assertEquals(SteerCancelResult.Code.TURN_CHANGED, ext.cancelOnRun(session, "run-2", "a").getCode());
+        assertEquals(SteerCancelResult.Code.TURN_CHANGED, ext.cancelOnRun(session, null, "a").getCode());
 
         SteerCancelResult ok = ext.cancelOnRun(session, "run-1", " " + a.getSteerId() + " ");
         assertTrue(ok.isCanceled());
@@ -201,11 +201,11 @@ class SteerExtensionTest {
         assertEquals(1, ok.getCanceled());
         assertEquals(1, ok.getRemaining(), "带出剩余条数，宿主无需再查 pending");
 
-        assertEquals(SteerCancelStatus.NOT_PENDING, ext.cancelOnRun(session, "run-1", "a").getStatus(),
+        assertEquals(SteerCancelResult.Code.NOT_PENDING, ext.cancelOnRun(session, "run-1", "a").getCode(),
                 "已不在待生效列表不得宣称撤销成功");
-        assertEquals(SteerCancelStatus.NOT_PENDING,
-                ext.cancelOnRun(InMemoryAgentSession.of(), "run-1", "a").getStatus(), "无状态的会话");
-        assertEquals(SteerCancelStatus.NOT_PENDING, ext.cancelOnRun(null, "run-1", "a").getStatus());
+        assertEquals(SteerCancelResult.Code.NOT_PENDING,
+                ext.cancelOnRun(InMemoryAgentSession.of(), "run-1", "a").getCode(), "无状态的会话");
+        assertEquals(SteerCancelResult.Code.NOT_PENDING, ext.cancelOnRun(null, "run-1", "a").getCode());
     }
 
     @Test
@@ -221,7 +221,7 @@ class SteerExtensionTest {
         ext.steer(session, "第四条");
 
         SteerCancelResult r = ext.cancelPending(session, Arrays.asList(a.getSteerId(), b.getSteerId(), " "));
-        assertEquals(SteerCancelStatus.CANCELED, r.getStatus());
+        assertEquals(SteerCancelResult.Code.CANCELED, r.getCode());
         assertEquals(0, r.getCanceled(), "已被消费的不应计入");
         assertEquals(1, r.getRemaining());
 
@@ -283,16 +283,16 @@ class SteerExtensionTest {
         assertTrue(ext.steer(session, "b").isSteered());
         assertTrue(ext.steer(session, "c").isBoxFull(), "超过 builder 上限应 BOX_FULL");
 
-        assertEquals(SteerStatus.TEXT_TOO_LONG, ext.steer(session, "123456789").getStatus(),
+        assertEquals(SteerResult.Code.TEXT_TOO_LONG, ext.steer(session, "123456789").getCode(),
                 "超过 builder 文本上限应 TEXT_TOO_LONG");
     }
 
     @Test
     void defaultConstructorUsesDefaultLimits() {
         SteerExtension ext = new SteerExtension();
-        assertEquals(SteerHelper.MAX_BOX_SIZE, ext.getLimits().getMaxBoxSize());
-        assertEquals(SteerHelper.MAX_TEXT_LENGTH, ext.getLimits().getMaxTextLength());
-        assertEquals(SteerHelper.MAX_ID_LENGTH, ext.getLimits().getMaxIdLength());
+        assertEquals(SteerMailbox.MAX_BOX_SIZE, ext.getLimits().getMaxBoxSize());
+        assertEquals(SteerMailbox.MAX_TEXT_LENGTH, ext.getLimits().getMaxTextLength());
+        assertEquals(SteerMailbox.MAX_ID_LENGTH, ext.getLimits().getMaxIdLength());
     }
 
     // ==================== 消息协议 ====================
@@ -352,7 +352,7 @@ class SteerExtensionTest {
 
     @Test
     void kernelIsPackagePrivate() {
-        assertFalse(java.lang.reflect.Modifier.isPublic(SteerHelper.class.getModifiers()),
+        assertFalse(java.lang.reflect.Modifier.isPublic(SteerMailbox.class.getModifiers()),
                 "宿主只能经 SteerExtension 门面");
     }
 }
