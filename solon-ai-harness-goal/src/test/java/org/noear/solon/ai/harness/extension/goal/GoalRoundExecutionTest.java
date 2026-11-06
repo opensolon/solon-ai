@@ -622,34 +622,34 @@ class GoalRoundExecutionTest {
 
     @Test
     void noopValidatorAlwaysPasses() {
-        assertTrue(new NoopValidator().validate("任意条件").isPassed());
+        assertTrue(new NoopValidator().validate("任意条件", null).isPassed());
     }
 
     @Test
     void buildValidatorPassesWithoutWorkspace() {
         // 无工作区信息时不阻塞完成
-        assertTrue(new BuildPassValidator(null).validate("build").isPassed());
-        assertTrue(new BuildPassValidator("").validate("build").isPassed());
+        assertTrue(new BuildPassValidator().validate("build", null).isPassed());
+        assertTrue(new BuildPassValidator().validate("build", "").isPassed());
     }
 
     @Test
     void buildValidatorPassesWhenNoBuildToolDetected() {
         // 临时目录既无 pom.xml 也无 build.gradle → 跳过，不阻塞
-        assertTrue(new BuildPassValidator(System.getProperty("java.io.tmpdir")).validate("build").isPassed());
+        assertTrue(new BuildPassValidator().validate("build", System.getProperty("java.io.tmpdir")).isPassed());
     }
 
     @Test
     void testsValidatorFailsWithoutWorkspace() {
         // 与 BuildPassValidator 不同：无工作区时测试无法验证，按"未通过"处理（更保守）。
-        // 引擎侧 registerDefaultValidators 在 workspace 为空时不注册本验证器，故无活路径受害者。
-        assertFalse(new TestsPassValidator(null).validate("test").isPassed());
-        assertFalse(new TestsPassValidator("").validate("test").isPassed());
+        // goal_update 总会传入会话工作目录（缺省为引擎工作区），活路径上不会是空。
+        assertFalse(new TestsPassValidator().validate("test", null).isPassed());
+        assertFalse(new TestsPassValidator().validate("test", "").isPassed());
     }
 
     @Test
     void testsValidatorFailsWhenNoBuildToolDetected() {
         // 未检测到项目类型时同样保守失败
-        assertFalse(new TestsPassValidator(System.getProperty("java.io.tmpdir")).validate("test").isPassed());
+        assertFalse(new TestsPassValidator().validate("test", System.getProperty("java.io.tmpdir")).isPassed());
     }
 
     @Test

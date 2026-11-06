@@ -88,26 +88,26 @@ class GoalRuntime {
     private final int maxConsecutiveErrors;
     private final boolean validatorEnabled;
     /**
-     * 验证器注册表（实例级，绑定本引擎所属工作区）。
+     * 验证器注册表（实例级；执行目录不在注册时绑定，由 goal_update 按本轮会话工作目录传入）。
      *
      * <p>曾为全局静态（ValidatorFactory），而每个工作区都会注册一次默认验证器，
      * 导致注册项跨工作区累加：在 A 工作区跑 goal 会连 B 工作区的 mvn test 一起跑
-     * 并按 AND 语义阻断完成。改为实例持有后，注册项与工作区一一对应。</p>
+     * 并按 AND 语义阻断完成。改为实例持有后，注册项不再跨引擎累加。</p>
      */
     private final List<ValidatorRegistration> validators = new CopyOnWriteArrayList<>();
 
     public GoalRuntime(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled) {
-        this(engine, budgetThresholds, stagnationThreshold, maxConsecutiveErrors, validatorEnabled, null);
+        this(engine, budgetThresholds, stagnationThreshold, maxConsecutiveErrors, validatorEnabled, false);
     }
 
     /**
-     * @param engine    引擎（解析会话、读取会话占用状态；测试可为 null）
-     * @param workspace 验证器执行目录（null 时不注册默认验证器，验证恒通过）
+     * @param engine            引擎（解析会话、读取会话占用状态；测试可为 null）
+     * @param defaultValidators 是否注册内置验证器（测试/构建）；false 时无自定义注册则验证恒通过
      */
     public GoalRuntime(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled,
-                      String workspace) {
+                      boolean defaultValidators) {
         this.engine = engine;
         this.budgetThresholds = budgetThresholds != null ? budgetThresholds : BudgetThresholds.defaults();
         this.stagnationThreshold = stagnationThreshold;
@@ -115,7 +115,9 @@ class GoalRuntime {
         this.validatorEnabled = validatorEnabled;
         this.promptBuilder = new GoalPromptBuilder(stagnationThreshold);
 
-        registerDefaultValidators(workspace);
+        if (defaultValidators) {
+            registerDefaultValidators();
+        }
     }
 
     /** 注册生命周期观察者（桌面端流式回推用）。 */
@@ -390,19 +392,15 @@ class GoalRuntime {
         }
     }
 
-    /** 注册默认验证器（按本引擎绑定的工作区执行）。 */
-    private void registerDefaultValidators(String workspace) {
-        if (workspace == null || workspace.isEmpty()) {
-            return;
-        }
-
+    /** 注册默认验证器（执行目录在验证时传入）。 */
+    private void registerDefaultValidators() {
         registerValidator(
                 condition -> condition.contains("test")
                         || condition.contains("pass")
                         || condition.contains("check")
                         || condition.contains("ensure")
                         || condition.contains("verify"),
-                new TestsPassValidator(workspace));
+                new TestsPassValidator());
 
         registerValidator(
                 condition -> condition.contains("build")
@@ -413,7 +411,7 @@ class GoalRuntime {
                         || condition.contains("create")
                         || condition.contains("add")
                         || condition.contains("write"),
-                new BuildPassValidator(workspace));
+                new BuildPassValidator());
     }
 
     /** 注册一个带条件匹配的验证器（多次注册按 AND 语义链式生效）。 */
@@ -466,9 +464,9 @@ class GoalRuntime {
         }
 
         @Override
-        public ValidationResult validate(String condition) {
+        public ValidationResult validate(String condition, String workDir) {
             for (GoalValidator v : validators) {
-                ValidationResult vr = v.validate(condition);
+                ValidationResult vr = v.validate(condition, workDir);
                 if (!vr.isPassed()) {
                     return vr;
                 }
@@ -991,14 +989,18 @@ class GoalRuntime {
         return false;
     }
 
-    /** 统计会话 TODO 清单中未完成项（供完成判定联动）。 */
-    public int countUnfinishedTodos(TodoTalent todoTalent, String workspace, String sessionId) {
+    /**
+     * 统计会话 TODO 清单中未完成项（供完成判定联动）。
+     *
+     * @param cwd 本轮会话工作目录（与 todowrite 收到的 {@code __cwd} 同口径）
+     */
+    public int countUnfinishedTodos(TodoTalent todoTalent, String cwd, String sessionId) {
         if (todoTalent == null || sessionId == null) {
             return 0;
         }
         try {
             // 经 TodoTalent 的存储口径读取（数据来源可能是 db / http，不能假设本地路径）
-            String content = todoTalent.readTodo(workspace, sessionId);
+            String content = todoTalent.readTodo(cwd, sessionId);
             return content == null ? 0 : countUnfinishedCheckboxes(content);
         } catch (Throwable e) {
             LOG.debug("countUnfinishedTodos failed for session '{}': {}", sessionId, e.toString());

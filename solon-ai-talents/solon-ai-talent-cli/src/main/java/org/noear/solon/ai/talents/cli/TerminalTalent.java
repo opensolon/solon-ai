@@ -302,10 +302,12 @@ public class TerminalTalent extends AbsTalent {
      *
      * <p>文件系统路径每次从 mountManager 实时获取，确保挂载点增删变化后沙箱边界实时生效。
      * 返回值可作为 SandboxManager.wrapWithSandbox() 的 customConfig 参数传入。
+     *
+     * @param workPath 本轮命令的工作根（由 __cwd 解析）；可为 null
      */
-    private SandboxRuntimeConfig buildDynamicCustomConfig() {
+    private SandboxRuntimeConfig buildDynamicCustomConfig(@Nullable Path workPath) {
         // 1) 从 mountManager 构建当前最新的文件系统白名单
-        FilesystemConfig dynamicFs = buildDynamicFilesystemConfig();
+        FilesystemConfig dynamicFs = buildDynamicFilesystemConfig(workPath);
 
         // 2) 文件系统可访问范围只由挂载生成（唯一正向来源）：用户配置的 filesystem 字段
         //    一律忽略，filesystem 始终使用动态挂载点白名单。用户其他配置（网络、seccomp 等）
@@ -339,8 +341,10 @@ public class TerminalTalent extends AbsTalent {
     /**
      * 基于当前挂载点构建动态文件系统配置。
      * 每次调用都会从 mountManager 实时读取最新挂载状态。
+     *
+     * @param workPath 本轮命令的工作根（由 __cwd 解析）；可为 null
      */
-    private FilesystemConfig buildDynamicFilesystemConfig() {
+    private FilesystemConfig buildDynamicFilesystemConfig(@Nullable Path workPath) {
         List<String> allowWrite = new ArrayList<>();
         List<String> allowRead = new ArrayList<>();
 
@@ -349,6 +353,15 @@ public class TerminalTalent extends AbsTalent {
         if (workDir != null) {
             allowWrite.add(workDir);
             allowRead.add(workDir);
+        }
+
+        // 1.1) 本轮工作根（__cwd）：会话工作目录可以不在工作区下（如桌面端 goal 把会话目录设为目标项目）。
+        //      文件工具与命令工作目录都以它为根放行，OS 白名单必须同口径，否则同一路径文件工具能写、bash 被内核拒。
+        if (workPath != null && (workDir == null
+                || !workPath.startsWith(Paths.get(workDir).toAbsolutePath().normalize()))) {
+            String cwdStr = workPath.toString();
+            allowWrite.add(cwdStr);
+            allowRead.add(cwdStr);
         }
 
         // 2) 用户级物化缓存：bash 需要读取/执行其中的脚本；启用 OS 级沙盒时禁止命令写入。
@@ -407,7 +420,7 @@ public class TerminalTalent extends AbsTalent {
     private SandboxRuntimeConfig buildDefaultSandboxConfig() {
         // 复用 buildDynamicFilesystemConfig() 获取当前挂载点的实时路径白名单
         // 避免两份相同逻辑的维护成本
-        FilesystemConfig fsConfig = buildDynamicFilesystemConfig();
+        FilesystemConfig fsConfig = buildDynamicFilesystemConfig(null);
 
         // NetworkConfig：保持网络不受限（allowedDomains=null），
         // 但允许 Unix domain socket（Gradle daemon 等构建工具需要 IPC）
@@ -962,7 +975,7 @@ public class TerminalTalent extends AbsTalent {
                     return "错误：OS 沙盒未启用，拒绝执行命令";
                 }
                 finalCommand = SandboxManager.wrapWithSandbox(
-                        finalCommand, null, buildDynamicCustomConfig());
+                        finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
             return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();
@@ -1003,7 +1016,6 @@ public class TerminalTalent extends AbsTalent {
         }
 
         Path workPath = getWorkPath(__cwd);
-        SandboxRuntimeConfig dynamicCfg = buildDynamicCustomConfig();
         Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome);
         Map<String, String> envs = new HashMap<>();
 
@@ -1035,7 +1047,7 @@ public class TerminalTalent extends AbsTalent {
                     return "错误：OS 沙盒未启用，拒绝执行命令";
                 }
                 finalCommand = SandboxManager.wrapWithSandbox(
-                        finalCommand, null, buildDynamicCustomConfig());
+                        finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
             return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();

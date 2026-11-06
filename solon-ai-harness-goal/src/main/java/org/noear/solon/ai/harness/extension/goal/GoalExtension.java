@@ -38,7 +38,7 @@ import java.util.function.Predicate;
  *
  * <pre>{@code
  * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder()
- *         .budget(70, 85)             // 预算提示阈值（验证器在 engine.getWorkspace() 下执行）
+ *         .budget(70, 85)             // 预算提示阈值（验证器在本轮会话工作目录下执行）
  *         .build());                  // onAttach 内注册 /goal 命令
  * goal.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> runRound(sid, prompt));
  *
@@ -133,9 +133,9 @@ public class GoalExtension extends AbsHarnessExtension {
             return;
         }
         this.engine = engine;
-        // 验证器在引擎工作目录下执行（为空则不注册默认验证器）
+        // 验证器在本轮会话工作目录下执行（由 goal_update 传入，不再固定为引擎工作区）
         goalRuntime = new GoalRuntime(engine, budgetThresholds, stagnationThreshold,
-                maxConsecutiveErrors, validatorEnabled, engine.getWorkspace());
+                maxConsecutiveErrors, validatorEnabled, true);
         goalRuntime.setDefaultExecutor(defaultExecutor(engine));
         if (listener != null) {
             goalRuntime.addListener(listener);

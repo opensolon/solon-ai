@@ -35,6 +35,8 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
+import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.cli.SkillTalent;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.annotation.Body;
@@ -44,6 +46,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -634,7 +638,8 @@ public class TaskTalent extends AbsTalent {
                         plan.op.description);
             }
 
-            return formatTaskResp(plan.op, true, agentEnd.getText(), isMultitask);
+            // 超长结果落盘到本轮会话工作目录：模型的文件工具按 __cwd 解析相对路径
+            return formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd);
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", plan.op.index, ctx.total, plan.op.agent_name,
                     e.getMessage(), e);
@@ -690,6 +695,14 @@ public class TaskTalent extends AbsTalent {
     }
 
     String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask) {
+        return formatTaskResp(task, taskId, successful, result, isMultitask, null);
+    }
+
+    /**
+     * @param cwd 父会话本轮工作目录（超长结果落盘位置；空表示工作区根）
+     */
+    String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask,
+                          String cwd) {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_result>");
@@ -699,7 +712,7 @@ public class TaskTalent extends AbsTalent {
         buf.append("<description>").append(escapeXml(task.description)).append("</description>");
         buf.append("<agent_name>").append(escapeXml(task.agent_name)).append("</agent_name>");
         buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
-        buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result)).append("]]></result_content>");
+        buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result, cwd)).append("]]></result_content>");
         buf.append("</task_result>");
 
         return buf.toString();
@@ -720,11 +733,11 @@ public class TaskTalent extends AbsTalent {
      * <p>顺序不能反——先转义再截断可能把 {@code ]]>} 的转义产物切成半个，反而提前闭合。</p>
      *
      * <p>超限内容会先尝试落盘（见 {@link #trySpill}），落盘成功后头部保留截断说明并给出
-     * workspace 相对路径，供宿主的文件读取工具分页读回（工具无关——harness 不假设宿主
+     * 相对本轮工作目录的路径，供宿主的文件读取工具分页读回（工具无关——harness 不假设宿主
      * 一定有 read 工具，也无专属召回工具）；落盘不可用（无 engine / 写入失败）时保持纯截断，
      * 行为与历史版本一致。</p>
      */
-    private String toCdata(MultiTaskOp op, String taskId, String text) {
+    private String toCdata(MultiTaskOp op, String taskId, String text, String cwd) {
         if (text == null) {
             return "";
         }
@@ -742,7 +755,7 @@ public class TaskTalent extends AbsTalent {
         String head = text.substring(0, cut);
         String body;
 
-        String spillRef = trySpill(op, taskId, text);
+        String spillRef = trySpill(op, taskId, text, cwd);
         if (spillRef != null) {
             body = head + "\n...[内容过长已截断：原始长度 " + text.length() + " 字符，此处保留前 " + cut
                     + " 字符；完整结果已落盘到 " + spillRef + "，可按需读取文件]";
@@ -757,26 +770,40 @@ public class TaskTalent extends AbsTalent {
     }
 
     /**
-     * 超长结果落盘。返回 workspace 相对展示路径（如 {@code .files/task/<taskId>/result.txt}），
+     * 超长结果落盘。返回相对本轮工作目录的展示路径（如 {@code .files/task/<taskId>/result.txt}），
      * 不可用时返回 null（降级为纯截断）。
      *
-     * <p>经<b>工作区来源</b>写入（不在 harnessHome / 数据来源内）——结果要给模型用文件工具分页读取，
-     * 只能落在模型可见的工作区；{@code .files} 是与宿主共享的约定根（宿主附件在 {@code .files/uploads}）。
-     * 工作区来源可以是本地目录，也可以是远程来源。</p>
+     * <p>结果要给模型用文件工具分页读取，而文件工具按 {@code __cwd} 解析相对路径，所以必须落在本轮工作目录：
+     * cwd 为空或等于工作区根时经<b>工作区来源</b>写入（可以是远程来源）；cwd 是别的目录时写入该本地目录
+     * （曾固定写工作区根，会话目录不同时模型按给出的路径读不到）。不写 harnessHome / 状态来源——模型不可见。
+     * {@code .files} 是与宿主共享的约定根（宿主附件在 {@code .files/uploads}）。</p>
      */
-    private String trySpill(MultiTaskOp op, String taskId, String text) {
+    private String trySpill(MultiTaskOp op, String taskId, String text, String cwd) {
         try {
             if (engine == null || Assert.isEmpty(taskId)) {
                 return null;
             }
 
             String path = SPILL_DIR + "/" + safeSegment(taskId) + "/result.txt";
-            engine.getWorkspaceSource().writeString(path, text);
+            spillSourceOf(cwd).writeString(path, text);
             return path;
         } catch (Throwable e) {
             LOG.warn("子任务结果落盘失败，降级为纯截断: task_id={}, 原因: {}", taskId, e.getMessage());
             return null;
         }
+    }
+
+    /** 落盘来源：cwd 为空或就是工作区根 → 工作区来源；否则 → 以 cwd 为根的本地来源。 */
+    private MountSource spillSourceOf(String cwd) {
+        if (Assert.isEmpty(cwd)) {
+            return engine.getWorkspaceSource();
+        }
+        Path cwdPath = Paths.get(cwd).toAbsolutePath().normalize();
+        String workspace = engine.getWorkspace();
+        if (Assert.isNotEmpty(workspace) && cwdPath.equals(Paths.get(workspace).toAbsolutePath().normalize())) {
+            return engine.getWorkspaceSource();
+        }
+        return FileMountSource.of(cwdPath);
     }
 
     /** taskId 可能含路径分隔符或上跳（..）：只保留文件名安全字符，避免路径穿越 */

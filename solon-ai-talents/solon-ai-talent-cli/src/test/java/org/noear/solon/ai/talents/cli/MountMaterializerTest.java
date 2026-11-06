@@ -149,15 +149,40 @@ class MountMaterializerTest {
         TerminalTalent talent = newTalent(manager, work);
         talent.setSandboxAllowUserHome(false);
 
-        java.lang.reflect.Method method = TerminalTalent.class.getDeclaredMethod("buildDynamicFilesystemConfig");
-        method.setAccessible(true);
-        FilesystemConfig fs = (FilesystemConfig) method.invoke(talent);
+        FilesystemConfig fs = dynamicFs(talent, null);
 
         String root = cacheRoot(work).toString();
         assertTrue(fs.getAllowRead().contains(root), "缓存根应加入 OS 沙盒读白名单");
         assertTrue(fs.getDenyWrite().contains(root), "缓存根应加入 OS 沙盒写拒绝名单");
         assertTrue(fs.getAllowWrite() == null || !fs.getAllowWrite().contains(root),
                 "缓存根不应加入写白名单");
+    }
+
+    /**
+     * OS 沙盒白名单必须包含本轮工作根（__cwd）。历史缺陷：只放行引擎工作区，会话目录在工作区外时
+     * 文件工具能写、bash 被内核拒绝。
+     */
+    @Test
+    void dynamicSandboxConfigAllowsRoundCwd(@TempDir Path work) throws Exception {
+        Path ws = Files.createDirectories(work.resolve("ws"));
+        Path outside = Files.createDirectories(work.resolve("other-project")).toAbsolutePath().normalize();
+        TerminalTalent talent = newTalent(new MountManager(ws.toString()), work);
+        talent.setSandboxAllowUserHome(false);
+
+        FilesystemConfig fs = dynamicFs(talent, outside);
+        assertTrue(fs.getAllowWrite().contains(outside.toString()), "工作区外的 cwd 应加入写白名单");
+        assertTrue(fs.getAllowRead().contains(outside.toString()), "工作区外的 cwd 应加入读白名单");
+
+        // cwd 在工作区内：工作区已覆盖，不重复追加
+        Path inside = Files.createDirectories(ws.resolve("sub")).toAbsolutePath().normalize();
+        FilesystemConfig fs2 = dynamicFs(talent, inside);
+        assertFalse(fs2.getAllowWrite().contains(inside.toString()));
+    }
+
+    private static FilesystemConfig dynamicFs(TerminalTalent talent, Path workPath) throws Exception {
+        java.lang.reflect.Method method = TerminalTalent.class.getDeclaredMethod("buildDynamicFilesystemConfig", Path.class);
+        method.setAccessible(true);
+        return (FilesystemConfig) method.invoke(talent, workPath);
     }
 
     @Test

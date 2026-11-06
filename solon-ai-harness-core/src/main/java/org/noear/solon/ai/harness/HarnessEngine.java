@@ -1546,20 +1546,44 @@ public class HarnessEngine {
         return getAgentBuilder(definition, sessionModel);
     }
 
+    /**
+     * 弃用但不能删掉（向下兼容需要）
+     *
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
+     */
+    @Deprecated
     public ReActRequest prompt(Prompt prompt) {
         return promptDo(prompt, null);
     }
 
+    /**
+     * 弃用但不能删掉（向下兼容需要）
+     *
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
+     */
+    @Deprecated
     public ReActRequest prompt(Prompt prompt, ReActAgent targetAgent) {
         return promptDo(prompt, targetAgent);
     }
 
 
+    /**
+     * 弃用但不能删掉（向下兼容需要）
+     *
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
+     */
+    @Deprecated
     public ReActRequest prompt(String prompt) {
         return promptDo(Prompt.of(prompt), null);
     }
 
 
+    /**
+     * 弃用但不能删掉（向下兼容需要）
+     *
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
+     */
+    @Deprecated
     public ReActRequest prompt(String prompt, ReActAgent targetAgent) {
         return promptDo(Prompt.of(prompt), targetAgent);
     }
@@ -1568,8 +1592,12 @@ public class HarnessEngine {
     /**
      * 恢复执行（最近一个工作记忆）
      *
+     * <p>弃用但不能删掉（向下兼容需要）</p>
+     *
      * @since 4.2.0
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest resume() {
         return promptDo(null, null);
     }
@@ -1577,15 +1605,18 @@ public class HarnessEngine {
     /**
      * 恢复执行（最近一个工作记忆）
      *
+     * <p>弃用但不能删掉（向下兼容需要）</p>
+     *
      * @since 4.2.0
+     * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest resume(ReActAgent targetAgent) {
         return promptDo(null, targetAgent);
     }
 
 
-
-    ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
+    protected ReActRequest promptDo(Prompt prompt, ReActAgent targetAgent) {
         if (targetAgent == null) {
             targetAgent = getMainAgent();
         }

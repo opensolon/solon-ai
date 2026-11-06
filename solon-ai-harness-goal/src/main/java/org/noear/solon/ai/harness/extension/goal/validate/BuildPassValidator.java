@@ -18,7 +18,8 @@ import java.nio.file.Paths;
  *   <li>Gradle (build.gradle / build.gradle.kts → {@code gradle compileJava -q})</li>
  * </ul>
  *
- * <p>无构建工具或构建工具不可用时不阻塞完成（返回 passed）。</p>
+ * <p>无构建工具或构建工具不可用时不阻塞完成（返回 passed）。在调用方传入的执行目录
+ * （本轮会话工作目录）下检测与运行；目录为空时不阻塞。</p>
  *
  * <p>匹配含 build/compile/implement/refactor/fix/create/add/write 等关键字的目标。</p>
  *
@@ -28,19 +29,13 @@ import java.nio.file.Paths;
 public class BuildPassValidator implements GoalValidator {
     private static final Logger log = LoggerFactory.getLogger(BuildPassValidator.class);
 
-    private final String workspace;
-
-    public BuildPassValidator(String workspace) {
-        this.workspace = workspace;
-    }
-
     @Override
-    public ValidationResult validate(String condition) {
-        if (workspace == null || workspace.isEmpty()) {
-            return ValidationResult.passed(); // 无工作区信息时不阻塞
+    public ValidationResult validate(String condition, String workDir) {
+        if (workDir == null || workDir.isEmpty()) {
+            return ValidationResult.passed(); // 无工作目录信息时不阻塞
         }
 
-        Path workspacePath = Paths.get(workspace);
+        Path workspacePath = Paths.get(workDir);
 
         try {
             // 检测 Maven 项目

@@ -84,8 +84,8 @@ stateDiagram-v2
 |---|---|---|
 | 1 | goal 处于 `PURSUING` | `GOAL_NOT_ACTIVE` |
 | 2 | 执行证据（提示性）：目标含执行型关键词且「上一轮已写入的证据」为 false 时提前拦截。由于每轮执行前证据会被置空，轮内通常放行 | `ACTION_EVIDENCE_REQUIRED` |
-| 3 | TODO 联动：经 `engine.getTodoTalent().readTodo(workspace, sessionId)` 读取清单，存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
-| 4 | 验证器（`validatorEnabled = true` 时）：按目标文本匹配验证器链并执行 | `VALIDATION_FAILED` |
+| 3 | TODO 联动：经 `engine.getTodoTalent().readTodo(cwd, sessionId)` 读取清单（cwd 为本轮会话工作目录），存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
+| 4 | 验证器（`validatorEnabled = true` 时）：按目标文本匹配验证器链，在本轮会话工作目录下执行 | `VALIDATION_FAILED` |
 
 全部通过后状态转 `ACHIEVED`。**权威复核在轮末**：目标为执行型且本轮 `GoalOutcome.hasToolCalls() == false` 时，`ACHIEVED` 被退回 `PURSUING`，`lastResult` 记为「完成声明被拒绝：本轮没有实际工具执行证据……」。
 
@@ -157,7 +157,7 @@ GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder()
         .budget(70, 85)            // 预算提示阈值：警告% / 紧急%
         .stagnation(3)             // 连续无进展多少轮注入进展质疑
         .maxErrors(3)              // 连续错误多少次熔断
-        .validatorEnabled(true)    // 完成前验证（验证器在 engine.getWorkspace() 下执行）
+        .validatorEnabled(true)    // 完成前验证（验证器在本轮会话工作目录下执行）
         .jobManager(JobManager.getInstance()) // 缺省即取此单例；显式 null = 关闭调度
         .listener((sid, t, removed) -> log.info("goal {} -> {}", sid, t.getStatus()))
         .build());
@@ -296,10 +296,12 @@ session.updateSnapshot();           // 由调用方决定是否落盘
 ```java
 goal.registerValidator(
         cond -> cond.contains("lint"),                  // 入参为已转小写的目标文本
-        condition -> runLint()                          // 入参为目标原文
+        (condition, workDir) -> runLint(workDir)        // 目标原文 + 本轮会话工作目录（可能为 null）
                 ? GoalValidator.ValidationResult.passed()
                 : GoalValidator.ValidationResult.failed("lint 未通过"));
 ```
+
+`workDir` 取自本轮工具上下文的 `__cwd`，取不到时用 `engine.getSessionCwd(session)`。它可以不是引擎工作区（例如桌面端 goal 把会话目录设为目标项目），验证器应以它为准，不要自行读取 `engine.getWorkspace()`。
 
 同一目标命中多个验证器时按注册顺序 AND 执行，首个失败即返回；无命中时用 `NoopValidator`（恒通过并打 warn）。`registerValidator` 同样须在挂接后调用；matcher 或 validator 为 null 时忽略。
 
@@ -474,8 +476,8 @@ assert ext.hasActiveGoals() == false; // 无调度器时恒为 false
 
 | 验证器 | 匹配关键词（目标小写包含） | 行为 |
 |---|---|---|
-| `TestsPassValidator` | `test` `pass` `check` `ensure` `verify` | 按工作区文件选择命令：`pom.xml` → `mvn test`；`build.gradle(.kts)` → `gradle test`；`package.json` → `npm test`；`setup.py` / `pyproject.toml` → `python3 -m pytest`；退出码 0 通过。未识别项目类型、工作区为空或执行异常时**失败** |
-| `BuildPassValidator` | `build` `compile` `implement` `refactor` `fix` `create` `add` `write` | `pom.xml` → `mvn compile -q -o`；`build.gradle(.kts)` → `gradle compileJava -q`；退出码非 0 失败。无构建工具、工作区为空或执行异常时**通过** |
+| `TestsPassValidator` | `test` `pass` `check` `ensure` `verify` | 按会话工作目录下的文件选择命令：`pom.xml` → `mvn test`；`build.gradle(.kts)` → `gradle test`；`package.json` → `npm test`；`setup.py` / `pyproject.toml` → `python3 -m pytest`；退出码 0 通过。未识别项目类型、工作目录为空或执行异常时**失败** |
+| `BuildPassValidator` | `build` `compile` `implement` `refactor` `fix` `create` `add` `write` | `pom.xml` → `mvn compile -q -o`；`build.gradle(.kts)` → `gradle compileJava -q`；退出码非 0 失败。无构建工具、工作目录为空或执行异常时**通过** |
 | `NoopValidator` | 无命中时使用 | 恒通过，打 warn |
 
 失败 detail 附带输出末尾 500 字符。
@@ -553,7 +555,7 @@ assert ext.hasActiveGoals() == false; // 无调度器时恒为 false
 7. **预算耗尽的收尾轮**：Token / 时长耗尽时会额外执行一轮收尾总结提示词，该轮的 token 不计入 `consumedTokens`，收尾轮失败只记 warn。轮次耗尽没有收尾轮。终态 goal 不能 `update`，无法通过补丁扩容预算，只能清除后重建。
 8. **时长预算只在轮前检查**：单轮执行时间可能超出 `maxDurationMs`，下一轮开始前才转 `BUDGET_LIMITED`。
 9. **displayObjective 的实际效果**：按当前源码，设置了不同的展示正文后，运行态只保存展示正文；后续每轮提示词、执行型关键词判定与验证器匹配均基于展示正文，执行正文（如拼入的附件全文）不会被保存。
-10. **默认验证器会执行真实构建命令**：`mvn test` 等命令在引擎工作区同步执行，可能耗时较长；不需要时用 `validatorEnabled(false)`，或注册更精确的自定义验证器（注意内置验证器按 AND 与自定义验证器一起生效）。
+10. **默认验证器会执行真实构建命令**：`mvn test` 等命令在本轮会话工作目录同步执行，可能耗时较长；不需要时用 `validatorEnabled(false)`，或注册更精确的自定义验证器（注意内置验证器按 AND 与自定义验证器一起生效）。
 11. **装配用 `addExtensionIfAbsent`**：`addExtension` 不查重，重复挂载会二次 `onAttach`。`/goal` 命令注册幂等，引擎上已有同名命令时保持原实例。
 12. **`BudgetThresholds` 为包内类型**：宿主只能通过 `Builder.budget(...)` 配置阈值。
 

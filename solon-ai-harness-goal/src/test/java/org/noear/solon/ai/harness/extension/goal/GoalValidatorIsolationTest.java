@@ -3,10 +3,8 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
-import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
 
-
-import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -14,76 +12,64 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Goal 验证器实例化回归。
  *
- * <p>历史缺陷：验证器注册表曾是全局静态（{@code ValidatorFactory}），而每个工作区
+ * <p>历史缺陷一：验证器注册表曾是全局静态（{@code ValidatorFactory}），而每个工作区
  * 创建时都会注册一次默认验证器，且注册只 append 不去重。两个工作区后，注册项累积为
- * 4 条并分别携带 wsA / wsB 路径；goal 完成判定按 AND 语义遍历全部匹配项，
- * 于是<b>在 A 工作区跑 goal 会连 B 工作区的 mvn test 一起跑</b>，B 失败则 A 无法完成。</p>
+ * 4 条，goal 完成判定按 AND 语义遍历全部匹配项，于是<b>在 A 工作区跑 goal 会连
+ * B 工作区的 mvn test 一起跑</b>，B 失败则 A 无法完成。</p>
  *
- * <p>本测试锁定：注册表随 {@link GoalRuntime} 实例隔离，验证器只绑定本引擎的工作区。</p>
+ * <p>历史缺陷二：默认验证器曾在构造期绑定引擎工作区，而会话工作目录可以是别的项目
+ * （桌面端 goal 会把会话目录设为目标项目），结果验证跑在错误的目录。现在执行目录
+ * 随每次 validate 调用传入。</p>
  */
 class GoalValidatorIsolationTest {
 
-    private GoalRuntime newEngine(String workspace) {
-        return new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true, workspace);
+    private GoalRuntime newRuntime(boolean defaultValidators) {
+        return new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, true, defaultValidators);
     }
 
     @Test
-    void eachEngineRegistersItsOwnDefaults() {
-        GoalRuntime engineA = newEngine("/ws/a");
-        GoalRuntime engineB = newEngine("/ws/b");
+    void eachRuntimeRegistersItsOwnDefaults() {
+        GoalRuntime a = newRuntime(true);
+        GoalRuntime b = newRuntime(true);
 
-        assertEquals(2, engineA.validatorCount(), "每个引擎应只注册本工作区的 2 个默认验证器");
-        assertEquals(2, engineB.validatorCount(), "第二个工作区不得叠加到第一个的注册项上");
+        assertEquals(2, a.validatorCount(), "每个实例只注册自己的 2 个默认验证器");
+        assertEquals(2, b.validatorCount(), "第二个实例不得叠加到第一个的注册项上");
     }
 
     @Test
-    void resolvedValidatorIsBoundToOwningWorkspace() throws Exception {
-        GoalRuntime engineA = newEngine("/ws/a");
-        newEngine("/ws/b"); // 模拟第二个工作区建立（历史上会污染全局注册表）
+    void runtimeWithoutDefaultsRegistersNothing() {
+        GoalRuntime runtime = newRuntime(false);
 
-        GoalValidator resolved = engineA.resolveValidator("run tests to verify");
-        assertEquals("/ws/a", workspaceOf(resolved),
-                "A 引擎解析出的验证器必须只绑定 A 工作区，不得携带其它工作区的路径");
+        assertEquals(0, runtime.validatorCount(), "关闭默认验证器时不注册（验证恒通过）");
+        assertTrue(runtime.resolveValidator("run tests") instanceof NoopValidator);
     }
 
     @Test
-    void engineWithoutWorkspaceRegistersNothing() {
-        GoalRuntime engine = newEngine(null);
+    void chainForwardsWorkDirToEveryValidator() {
+        GoalRuntime runtime = newRuntime(false);
+        List<String> seen = new ArrayList<>();
+        runtime.registerValidator(c -> c.contains("lint"), (c, dir) -> {
+            seen.add("a:" + dir);
+            return GoalValidator.ValidationResult.passed();
+        });
+        runtime.registerValidator(c -> c.contains("lint"), (c, dir) -> {
+            seen.add("b:" + dir);
+            return GoalValidator.ValidationResult.passed();
+        });
 
-        assertEquals(0, engine.validatorCount(), "无工作区时不应注册默认验证器（验证恒通过）");
-        assertTrue(engine.resolveValidator("run tests") instanceof NoopValidator);
+        assertTrue(runtime.resolveValidator("Lint ok").validate("Lint ok", "/proj/p").isPassed());
+        assertEquals(2, seen.size());
+        assertEquals("a:/proj/p", seen.get(0));
+        assertEquals("b:/proj/p", seen.get(1), "链式验证器必须把同一执行目录传给每个子验证器");
     }
 
     @Test
     void noMatchedValidatorFallsBackToNoop() {
-        GoalRuntime engine = newEngine("/ws/a");
+        GoalRuntime runtime = newRuntime(true);
 
-        assertTrue(engine.resolveValidator("随便写点东西") instanceof NoopValidator);
+        assertTrue(runtime.resolveValidator("随便写点东西") instanceof NoopValidator);
 
-        GoalValidator validator = engine.resolveValidator(null);
+        GoalValidator validator = runtime.resolveValidator(null);
         assertTrue(validator instanceof NoopValidator);
-    }
-
-    /** 取出链式验证器里第一个 TestsPassValidator 的 workspace（用于断言绑定关系）。 */
-    private static String workspaceOf(GoalValidator validator) throws Exception {
-        for (GoalValidator candidate : flatten(validator)) {
-            if (candidate instanceof TestsPassValidator) {
-                Field field = TestsPassValidator.class.getDeclaredField("workspace");
-                field.setAccessible(true);
-                return (String) field.get(candidate);
-            }
-        }
-        fail("未解析出 TestsPassValidator：" + validator.getClass().getName());
-        return null;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<GoalValidator> flatten(GoalValidator validator) throws Exception {
-        if (!validator.getClass().getName().endsWith("ChainValidator")) {
-            return java.util.Collections.singletonList(validator);
-        }
-        Field field = validator.getClass().getDeclaredField("validators");
-        field.setAccessible(true);
-        return (List<GoalValidator>) field.get(validator);
     }
 }

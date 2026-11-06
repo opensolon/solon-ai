@@ -100,6 +100,12 @@ public class CodeTalent extends AbsTalent {
     private final List<LanguageProvider> providers;
     private final Map<String, Cached<String>> initCache = new ConcurrentHashMap<>();
     private final Map<String, Cached<Boolean>> supportCache = new ConcurrentHashMap<>();
+    /**
+     * 按根目录分段的扫描锁（固定 64 段，内存有界）。
+     * <p>曾锁整个实例：一个才能实例服务多个会话目录时，一个大仓库的首次全树扫描会挡住
+     * 其它所有目录的这一轮。同一根目录仍串行（避免同时重扫并写同一份 CODE.md）。</p>
+     */
+    private final Object[] rootLocks = newLocks(64);
 
     public CodeTalent(String workDir, String codeDir) {
         this.workDir = workDir;
@@ -284,7 +290,7 @@ public class CodeTalent extends AbsTalent {
             return cached.value;
         }
 
-        synchronized (this) {
+        synchronized (lockOf(key)) {
             // 双检：避免并发场景下多个线程同时全树重扫并写同一个文件
             cached = initCache.get(key);
             if (cached != null && cached.isFresh(sign)) {
@@ -319,7 +325,31 @@ public class CodeTalent extends AbsTalent {
         }
     }
 
-    public synchronized String init(String __cwd) {
+    public String init(String __cwd) {
+        final Path lockPath;
+        try {
+            lockPath = getRootPath(__cwd);
+        } catch (RuntimeException e) {
+            return doInit(__cwd); // 根目录都解析不了：交给 doInit 报告失败
+        }
+        synchronized (lockOf(lockPath.toString())) {
+            return doInit(__cwd);
+        }
+    }
+
+    private static Object[] newLocks(int n) {
+        Object[] locks = new Object[n];
+        for (int i = 0; i < n; i++) {
+            locks[i] = new Object();
+        }
+        return locks;
+    }
+
+    private Object lockOf(String rootKey) {
+        return rootLocks[(rootKey.hashCode() & 0x7fffffff) % rootLocks.length];
+    }
+
+    private String doInit(String __cwd) {
         Path failPath = null;
         try {
             final Path rootPath = getRootPath(__cwd);

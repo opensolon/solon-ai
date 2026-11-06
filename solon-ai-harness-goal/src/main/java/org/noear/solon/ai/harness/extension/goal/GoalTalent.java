@@ -25,6 +25,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.Param;
+import org.noear.solon.core.util.Assert;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -167,9 +168,13 @@ public class GoalTalent extends AbsTalent {
                                 + "请先创建、修改、运行或验证目标产物；goal_get/goal_update 不算执行证据。");
             }
 
+            // 本轮会话工作目录：与文件工具、todowrite 同口径。会话目录可以不是引擎工作区
+            // （如桌面端 goal 把会话目录设为目标项目），验证必须在这里跑，不能回落到引擎工作区。
+            String workDir = Assert.isNotEmpty(__cwd) ? __cwd : engine.getSessionCwd(session);
+
             // Todo/Goal 完成判定联动：TODO 清单尚有未完成项时拒绝完成
             int unfinishedTodos = goalRuntime.countUnfinishedTodos(
-                    engine.getTodoTalent(), engine.getWorkspace(), __sessionId);
+                    engine.getTodoTalent(), workDir, __sessionId);
             if (unfinishedTodos > 0) {
                 return errJson("TODO_UNFINISHED",
                         "目标尚未完成：任务清单还有 " + unfinishedTodos + " 项未完成（`- [ ]` 或 `- [/]`）。"
@@ -178,7 +183,7 @@ public class GoalTalent extends AbsTalent {
 
             if (goalRuntime.isValidatorEnabled()) {
                 GoalValidator validator = goalRuntime.resolveValidator(gs.getObjective());
-                GoalValidator.ValidationResult vr = validator.validate(gs.getObjective());
+                GoalValidator.ValidationResult vr = validator.validate(gs.getObjective(), workDir);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.detail());
                     return errJson("VALIDATION_FAILED",

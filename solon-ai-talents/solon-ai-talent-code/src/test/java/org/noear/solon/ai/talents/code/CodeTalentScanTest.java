@@ -366,6 +366,54 @@ public class CodeTalentScanTest {
         assertFalse(Files.exists(root.resolve(".soloncode/CODE.md")), "不应写到 workDir");
     }
 
+    /**
+     * 不同根目录的扫描互不阻塞。历史缺陷：init 锁整个实例，一个大仓库的首次扫描会挡住
+     * 其它会话目录的这一轮。这里占住 A 的锁，B 必须照常完成。
+     */
+    @Test
+    public void initOnOtherRootIsNotBlockedByBusyRoot(@TempDir Path root) throws Exception {
+        CodeTalent talent = new CodeTalent(root.toString(), ".soloncode");
+        java.lang.reflect.Method lockOf = CodeTalent.class.getDeclaredMethod("lockOf", String.class);
+        lockOf.setAccessible(true);
+
+        Path a = Files.createDirectories(root.resolve("a")).toAbsolutePath().normalize();
+        Object lockA = lockOf.invoke(talent, a.toString());
+        Path b = null;
+        for (int i = 0; i < 1000 && b == null; i++) {
+            Path candidate = root.resolve("b" + i).toAbsolutePath().normalize();
+            if (lockOf.invoke(talent, candidate.toString()) != lockA) {
+                b = Files.createDirectories(candidate);
+            }
+        }
+        assertNotNull(b, "应能找到落在不同锁段的目录");
+        write(b, "go.mod", "module demo\n\ngo 1.22\n");
+
+        java.util.concurrent.CountDownLatch held = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        Thread holder = new Thread(() -> {
+            synchronized (lockA) {
+                held.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                }
+            }
+        });
+        holder.start();
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            assertTrue(held.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            final Path bRoot = b;
+            String msg = pool.submit(() -> talent.init(bRoot.toString()))
+                    .get(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(msg.contains("Go (Root)"), msg);
+        } finally {
+            release.countDown();
+            holder.join(5000);
+            pool.shutdownNow();
+        }
+    }
+
     @Test
     public void codeDirEmpty_writesCodeMdAtRoot(@TempDir Path root) throws Exception {
         write(root, "pom.xml", "<project></project>");

@@ -6,11 +6,9 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
-import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
 import org.noear.solon.scheduling.scheduled.JobHandler;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -128,32 +126,34 @@ class GoalSessionRemoveTest {
         assertTrue(jobs.containsKey(nameB), "一个实例注销不得波及另一个实例的 job");
     }
 
+    /**
+     * 验证器必须在本轮会话工作目录下执行。历史缺陷：验证器在构造期绑定 engine.getWorkspace()，
+     * 桌面端 goal 把会话目录设为目标项目后，mvn test 仍在启动目录里跑。
+     */
     @Test
-    void validatorsRunInEngineWorkspaceByDefault() throws Exception {
+    void goalUpdateValidatesInRoundCwdNotEngineWorkspace() throws Exception {
         GoalExtension ext = GoalExtension.builder().jobManager(null).build();
-        engine(ext);
+        HarnessEngine engine = engine(ext);
+        List<String> seen = new java.util.concurrent.CopyOnWriteArrayList<>();
+        ext.registerValidator(c -> c.contains("lint"), (c, dir) -> {
+            seen.add(dir);
+            return GoalValidator.ValidationResult.passed();
+        });
+        Path project = java.nio.file.Files.createDirectories(workspace.resolve("other-project"));
 
-        GoalValidator resolved = ext.getGoalRuntime().resolveValidator("run tests to verify");
-        assertEquals(workspace.toString(), testsValidatorWorkspace(resolved),
-                "验证器缺省在 engine.getWorkspace() 下执行");
-    }
+        // ① 本轮工具上下文带 __cwd：以它为准
+        ext.create("s1", GoalSpec.of("lint 一下").runNow(false));
+        String json = ext.getGoalTalent().goal_update("complete", "s1", project.toString());
+        assertTrue(json.contains("achieved"), json);
+        assertEquals(Collections.singletonList(project.toString()), seen);
 
-    @SuppressWarnings("unchecked")
-    private static String testsValidatorWorkspace(GoalValidator validator) throws Exception {
-        List<GoalValidator> all = Collections.singletonList(validator);
-        if (validator.getClass().getName().endsWith("ChainValidator")) {
-            Field f = validator.getClass().getDeclaredField("validators");
-            f.setAccessible(true);
-            all = (List<GoalValidator>) f.get(validator);
-        }
-        for (GoalValidator v : all) {
-            if (v instanceof TestsPassValidator) {
-                Field f = TestsPassValidator.class.getDeclaredField("workspace");
-                f.setAccessible(true);
-                return (String) f.get(v);
-            }
-        }
-        fail("未解析出 TestsPassValidator：" + validator.getClass().getName());
-        return null;
+        // ② 上下文没有 __cwd：回落到会话工作目录，而不是引擎工作区
+        seen.clear();
+        engine.setSessionCwd(engine.getSession("s2"), project.toString());
+        ext.create("s2", GoalSpec.of("lint 一下").runNow(false));
+        json = ext.getGoalTalent().goal_update("complete", "s2", null);
+        assertTrue(json.contains("achieved"), json);
+        assertEquals(Collections.singletonList(project.toString()), seen);
+        assertNotEquals(engine.getWorkspace(), seen.get(0));
     }
 }

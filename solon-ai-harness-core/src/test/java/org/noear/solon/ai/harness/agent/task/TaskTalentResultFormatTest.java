@@ -192,6 +192,30 @@ public class TaskTalentResultFormatTest {
                 "磁盘内容必须完整保留原文");
     }
 
+    /**
+     * 会话工作目录不是工作区根时，落盘到该目录。历史缺陷：固定写工作区根并返回相对路径，
+     * 而模型的文件工具按 __cwd 解析，读不到。
+     */
+    @Test
+    public void oversizedResultSpillsIntoRoundCwd(@TempDir Path workspace) throws Exception {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .build();
+        TaskTalent talent = engine.getTaskTalent();
+        Path cwd = Files.createDirectories(workspace.resolve("module-x"));
+
+        String out = talent.formatTaskResp(op(), "spill-cwd", true, repeat('z', 30000), false, cwd.toString());
+
+        assertTrue(out.contains("完整结果已落盘到 .files/task/spill-cwd/result.txt"), out);
+        assertTrue(Files.isRegularFile(cwd.resolve(".files/task/spill-cwd/result.txt")),
+                "必须落在本轮工作目录下（文件工具按 __cwd 解析相对路径）");
+        assertFalse(Files.exists(workspace.resolve(".files")), "不得再写到工作区根");
+
+        // cwd 就是工作区根时仍走工作区来源
+        talent.formatTaskResp(op(), "spill-root", true, repeat('z', 30000), false, workspace.toString());
+        assertTrue(Files.isRegularFile(workspace.resolve(".files/task/spill-root/result.txt")));
+    }
+
     /** 短结果不落盘：不能为普通任务制造文件系统副作用 */
     @Test
     public void shortResultDoesNotSpill(@TempDir Path workspace) {

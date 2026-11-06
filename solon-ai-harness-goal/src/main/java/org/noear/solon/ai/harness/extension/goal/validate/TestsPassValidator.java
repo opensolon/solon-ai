@@ -19,7 +19,8 @@ import java.nio.file.Paths;
  *   <li>Python (setup.py / pyproject.toml → {@code python -m pytest})</li>
  * </ul>
  *
- * <p>仅在目标条件包含 test/pass/check/ensure/verify 等关键字时自动触发。</p>
+ * <p>仅在目标条件包含 test/pass/check/ensure/verify 等关键字时自动触发。
+ * 在调用方传入的执行目录（本轮会话工作目录）下检测与运行；目录为空时按未通过处理。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -27,19 +28,13 @@ import java.nio.file.Paths;
 public class TestsPassValidator implements GoalValidator {
     private static final Logger log = LoggerFactory.getLogger(TestsPassValidator.class);
 
-    private final String workspace;
-
-    public TestsPassValidator(String workspace) {
-        this.workspace = workspace;
-    }
-
     @Override
-    public ValidationResult validate(String condition) {
-        if (workspace == null || workspace.isEmpty()) {
-            return ValidationResult.failed("工作区路径为空，无法运行测试");
+    public ValidationResult validate(String condition, String workDir) {
+        if (workDir == null || workDir.isEmpty()) {
+            return ValidationResult.failed("工作目录为空，无法运行测试");
         }
 
-        Path workspacePath = Paths.get(workspace);
+        Path workspacePath = Paths.get(workDir);
 
         try {
             // 检测 Maven 项目
