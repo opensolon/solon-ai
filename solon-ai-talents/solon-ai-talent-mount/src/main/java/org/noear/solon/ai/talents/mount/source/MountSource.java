@@ -24,10 +24,20 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-/** 
- * 可挂载的虚拟文件来源。 
- * 
- * @author noear 
+/**
+ * 可挂载的虚拟文件来源（本地磁盘、db、http-api 等的统一 IO 抽象）。
+ *
+ * <p><b>实现契约</b>（{@code MountSourceContract} 测试套件锁定）：</p>
+ * <ul>
+ *   <li>路径：来源内路径用 {@code /} 分隔，空串表示根；{@link #normalize} 必须拒绝越过根的路径（抛 {@link SecurityException}）。</li>
+ *   <li>不存在：{@link #stat} 返回 null；{@link #openRead} 抛 {@link IOException}。</li>
+ *   <li>写入可见性：声明 {@link MountCapabilities#isAtomicWrite()} 的来源，覆盖写在流 close 成功前对读者不可见、
+ *       写入失败不留残留；调用方自身逻辑可能半途失败时，应先在内存备好完整内容再调 {@link #writeBytes}。</li>
+ *   <li>乐观锁：声明 {@link MountCapabilities#isVersioned()} 的来源，文件条目的 {@link MountEntry#getVersion()} 非空且随内容变化；
+ *       {@link WriteOptions#getExpectedVersion()} 不匹配（含条目已不存在）时抛 {@link MountConflictException}。</li>
+ * </ul>
+ *
+ * @author noear
  * @since 4.1.1
  */
 @Preview("4.1.1")
@@ -125,6 +135,85 @@ public interface MountSource extends AutoCloseable {
      * @throws IOException 打开失败时
      */
     OutputStream openWrite(String path, WriteOptions options) throws IOException;
+
+    /**
+     * 读取全部字节。
+     *
+     * @param path 来源内路径
+     * @return 内容
+     * @throws IOException 不存在或读取失败时
+     * @since 4.2.0
+     */
+    default byte[] readBytes(String path) throws IOException {
+        try (InputStream in = openRead(path)) {
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            while ((n = in.read(chunk)) > 0) {
+                buf.write(chunk, 0, n);
+            }
+            return buf.toByteArray();
+        }
+    }
+
+    /**
+     * 按 UTF-8 读取文本；条目不存在或是目录时返回 null。
+     *
+     * @param path 来源内路径
+     * @return 文本或 null
+     * @throws IOException 读取失败时
+     * @since 4.2.0
+     */
+    default String readStringOrNull(String path) throws IOException {
+        MountEntry entry = stat(path);
+        if (entry == null || entry.isDirectory()) {
+            return null;
+        }
+        return new String(readBytes(path), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 整体写入字节（内容在内存中已完整，配合原子写来源可保证「要么全新、要么全旧」）。
+     *
+     * @param path    来源内路径
+     * @param data    内容
+     * @param options 写入选项；为 null 时覆盖写并创建父目录
+     * @throws IOException 写入失败或版本冲突（{@link MountConflictException}）时
+     * @since 4.2.0
+     */
+    default void writeBytes(String path, byte[] data, WriteOptions options) throws IOException {
+        try (OutputStream out = openWrite(path, options == null ? WriteOptions.replace() : options)) {
+            out.write(data);
+        }
+    }
+
+    /**
+     * 按 UTF-8 覆盖写入文本（创建父目录）。
+     *
+     * @param path    来源内路径
+     * @param content 文本
+     * @throws IOException 写入失败时
+     * @since 4.2.0
+     */
+    default void writeString(String path, String content) throws IOException {
+        writeBytes(path, content.getBytes(java.nio.charset.StandardCharsets.UTF_8), WriteOptions.replace());
+    }
+
+    /**
+     * 删除条目（不存在时忽略）。
+     *
+     * @param path 来源内路径
+     * @return 是否确有删除
+     * @throws IOException 删除失败时
+     * @since 4.2.0
+     */
+    default boolean deleteIfExists(String path) throws IOException {
+        if (stat(path) == null) {
+            return false;
+        }
+        delete(path);
+        return true;
+    }
 
     /**
      * 删除路径对应的条目。

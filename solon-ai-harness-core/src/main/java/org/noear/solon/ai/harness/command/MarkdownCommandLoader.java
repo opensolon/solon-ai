@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.FindOptions;
+import org.noear.solon.ai.talents.mount.source.MountEntry;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.slf4j.Logger;
@@ -24,14 +28,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.stream.Stream;
+import java.util.Arrays;
 
 /**
- * 从 .soloncode/commands/ 目录加载 Markdown 自定义命令
+ * 从命令目录（本地目录或任意挂载来源）加载 Markdown 自定义命令
  *
  * @author noear
  * @since 4.2.0
@@ -40,60 +41,57 @@ public class MarkdownCommandLoader {
     private static final Logger LOG = LoggerFactory.getLogger(MarkdownCommandLoader.class);
 
     /**
-     * 扫描目录（含子目录），注册 .md 文件为命令
+     * 扫描本地目录（含子目录），注册 .md 文件为命令（委托 {@link #loadFrom(MountSource, String, CommandRegistry)}）。
      *
      * @param baseDir  命令目录根路径
      * @param registry 注册表
      */
     public static void loadFromDirectory(Path baseDir, CommandRegistry registry) {
-        if (!Files.isDirectory(baseDir)) {
+        if (baseDir == null || !Files.isDirectory(baseDir)) {
             return;
         }
-
-        // 递归扫描子目录，支持 deploy/staging.md → deploy:staging
-        try (Stream<Path> files = Files.walk(baseDir)) {
-            files.filter(p -> p.toString().endsWith(".md"))
-                    .filter(p -> Files.isRegularFile(p))
-                    .forEach(p -> registerMarkdownCommand(p, baseDir, registry));
-        } catch (IOException e) {
-            LOG.warn("Failed to load commands from {}: {}", baseDir, e.getMessage());
-        }
-    }
-
-    private static String buildCommandName(Path mdFile, Path baseDir) {
-        Path relative = baseDir.relativize(mdFile);
-
-        // 去掉 .md 后缀
-        String relativeStr = relative.toString();
-        if (relativeStr.endsWith(".md")) {
-            relativeStr = relativeStr.substring(0, relativeStr.length() - 3);
-        }
-
-        // 将路径分隔符替换为冒号（命名空间分隔符）
-        return relativeStr.replace('/', ':').replace('\\', ':');
+        loadFrom(FileMountSource.of(baseDir), "", registry);
     }
 
     /**
-     * 注册单个 Markdown 命令
+     * 从挂载来源的目录（含子目录）加载 .md 命令：{@code deploy/staging.md → deploy:staging}。
      *
-     * @param mdFile   文件路径
+     * <p>来源可以是本地目录、db 或 http；单个文件读取失败只跳过该文件。</p>
+     *
+     * @param source   挂载来源
+     * @param dir      来源内的命令目录（空串表示来源根）
      * @param registry 注册表
      */
-    private static void registerMarkdownCommand(Path mdFile, Path baseDir, CommandRegistry registry) {
+    public static void loadFrom(MountSource source, String dir, CommandRegistry registry) {
+        if (source == null) {
+            return;
+        }
+        String base;
+        List<MountEntry> entries;
         try {
-            List<String> lines = Files.readAllLines(mdFile, StandardCharsets.UTF_8);
+            base = source.normalize(dir);
+            if (!source.isDirectory(base)) {
+                return;
+            }
+            entries = source.find(base, FindOptions.builder().glob("**.md").filesOnly(true)
+                    .maxEntries(Integer.MAX_VALUE).build());
+        } catch (IOException | RuntimeException e) {
+            LOG.warn("Failed to load commands from {}:{}: {}", source.getLocation(), dir, e.getMessage());
+            return;
+        }
 
-            Markdown md = MarkdownUtil.resolve(lines);
+        for (MountEntry entry : entries) {
+            String relative = base.isEmpty() ? entry.getPath() : entry.getPath().substring(base.length() + 1);
+            try {
+                String text = new String(source.readBytes(entry.getPath()), StandardCharsets.UTF_8);
+                Markdown md = MarkdownUtil.resolve(Arrays.asList(text.split("\r?\n", -1)));
 
-            String name = buildCommandName(mdFile, baseDir);
-            String template = md.getContent();
-            String description = md.getDescription();
-            String model = md.getMeta("model").getString();
-
-            registry.register(new MarkdownCommand(name, template, description, model));
-
-        } catch (IOException e) {
-            LOG.warn("Failed to read command file {}: {}", mdFile, e.getMessage());
+                String name = relative.substring(0, relative.length() - 3).replace('/', ':');
+                registry.register(new MarkdownCommand(name, md.getContent(), md.getDescription(),
+                        md.getMeta("model").getString()));
+            } catch (IOException | RuntimeException e) {
+                LOG.warn("Failed to read command file {}: {}", entry.getPath(), e.getMessage());
+            }
         }
     }
 }

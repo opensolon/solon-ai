@@ -219,7 +219,7 @@ public final class TerminalSessionManager {
     }
 
     private static String newSessionId() {
-        return "cmd_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        return "cmd_" + UUID.randomUUID().toString().replace("-", "");
     }
 
     static void destroyProcessTree(Process process) {

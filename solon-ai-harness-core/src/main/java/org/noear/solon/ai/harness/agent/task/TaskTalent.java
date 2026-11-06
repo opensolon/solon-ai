@@ -44,10 +44,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -764,9 +760,9 @@ public class TaskTalent extends AbsTalent {
      * 超长结果落盘。返回 workspace 相对展示路径（如 {@code .files/task/<taskId>/result.txt}），
      * 不可用时返回 null（降级为纯截断）。
      *
-     * <p>落盘目录相对 <b>workspace</b> 解析（不在 harnessHome 内）——{@code .files} 是与宿主
-     * 共享的约定根，宿主上传附件也落在其下（{@code .files/uploads}）；直接 {@code Paths.get}
-     * 相对 JVM CWD 会写错位置，与 {@code TodoTalent#getWorkPath} 的解析口径一致。</p>
+     * <p>经<b>工作区来源</b>写入（不在 harnessHome / 数据来源内）——结果要给模型用文件工具分页读取，
+     * 只能落在模型可见的工作区；{@code .files} 是与宿主共享的约定根（宿主附件在 {@code .files/uploads}）。
+     * 工作区来源可以是本地目录，也可以是远程来源。</p>
      */
     private String trySpill(MultiTaskOp op, String taskId, String text) {
         try {
@@ -774,31 +770,13 @@ public class TaskTalent extends AbsTalent {
                 return null;
             }
 
-            Path file = spillFile(taskId);
-            if (file == null) {
-                return null;
-            }
-
-            Files.createDirectories(file.getParent());
-            Files.write(file, text.getBytes(StandardCharsets.UTF_8));
-            return SPILL_DIR + "/" + safeSegment(taskId) + "/result.txt";
+            String path = SPILL_DIR + "/" + safeSegment(taskId) + "/result.txt";
+            engine.getWorkspaceSource().writeString(path, text);
+            return path;
         } catch (Throwable e) {
             LOG.warn("子任务结果落盘失败，降级为纯截断: task_id={}, 原因: {}", taskId, e.getMessage());
             return null;
         }
-    }
-
-    /** 落盘文件路径；workspace 不可用或 taskId 非法时返回 null */
-    private Path spillFile(String taskId) {
-        if (engine == null || Assert.isEmpty(engine.getWorkspace())) {
-            return null;
-        }
-
-        // 与 getWorkPath 同口径：以 workspace 为根（.files 是与宿主共享的约定根，不在 harnessHome 内）
-        return Paths.get(engine.getWorkspace(), SPILL_DIR, safeSegment(taskId))
-                .toAbsolutePath()
-                .normalize()
-                .resolve("result.txt");
     }
 
     /** taskId 可能含路径分隔符或上跳（..）：只保留文件名安全字符，避免路径穿越 */

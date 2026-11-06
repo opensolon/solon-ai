@@ -18,11 +18,11 @@ package org.noear.solon.ai.talents.cli;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.function.BiFunction;
@@ -30,6 +30,14 @@ import java.util.regex.Pattern;
 
 /**
  * 任务进度追踪才能
+ *
+ * <p><b>存储</b>：清单是会话级状态，经 {@link MountSource} 读写（本地磁盘、db、http 均可）：</p>
+ * <ul>
+ *   <li>数据源模式（推荐，{@link #TodoTalent(MountSource, String)}）：{@code <sessionsDir><sessionId>/TODO.md}，
+ *       与会话的 cwd 无关——清单属于会话，不随工作目录漂移；</li>
+ *   <li>兼容模式（无参 / {@link #TodoTalent(String)}）：以会话 cwd（或 cwd 下的 relativeDir）为根的本地目录。</li>
+ * </ul>
+ * <p>sessionId 只能是单个路径段（不含分隔符、不是 {@code .}/{@code ..}），否则拒绝，防止目录穿越。</p>
  *
  * @author noear
  * @since 3.9.5
@@ -43,19 +51,46 @@ public class TodoTalent extends AbsTalent {
     public static final String PARAM_TODOS = "todos";
 
     private final String relativeDir;
+    private final MountSource dataSource;
+    private final String sessionsDir;
 
     private BiFunction<String, String, Path> workPathHook;
 
+    /**
+     * 设置本地工作目录钩子（cwd, sessionId → 目录）。
+     *
+     * @deprecated 4.2.0 改用 {@link #TodoTalent(MountSource, String)}（经挂载来源读写，可接 db / http）
+     */
+    @Deprecated
     public void setWorkPathHook(BiFunction<String, String, Path> workPathHook) {
         this.workPathHook = workPathHook;
     }
 
     public TodoTalent() {
-        this(null);
+        this((String) null);
     }
 
     public TodoTalent(String relativeDir) {
         this.relativeDir = relativeDir;
+        this.dataSource = null;
+        this.sessionsDir = null;
+    }
+
+    /**
+     * 基于挂载来源存储清单。
+     *
+     * @param dataSource  数据来源（不可为 null）
+     * @param sessionsDir 来源内的会话目录前缀（如 {@code "sessions/"}；可空表示来源根）
+     * @since 4.2.0
+     */
+    public TodoTalent(MountSource dataSource, String sessionsDir) {
+        if (dataSource == null) {
+            throw new IllegalArgumentException("dataSource must not be null");
+        }
+        this.relativeDir = null;
+        this.dataSource = dataSource;
+        String dir = sessionsDir == null ? "" : sessionsDir.replace('\\', '/');
+        this.sessionsDir = dir.isEmpty() || dir.endsWith("/") ? dir : dir + "/";
     }
 
 
@@ -74,40 +109,104 @@ public class TodoTalent extends AbsTalent {
                 "5. **上下文恢复**: 任务打断、继续或提示词很长时，优先调用 `todoread` 读取进度，避免凭记忆推断。";
     }
 
-    protected Path getWorkPath(String __cwd, String __sessionId) {
-        if (workPathHook != null) {
-            return workPathHook.apply(__cwd, __sessionId);
-        }
+    /** 清单存储位置：来源 + 来源内路径。 */
+    private static final class Location {
+        final MountSource source;
+        final String path;
 
-        if (relativeDir == null) {
-            return Paths.get(__cwd).toAbsolutePath().normalize()
-                    .resolve(__sessionId);
-        } else {
-            return Paths.get(__cwd, relativeDir).toAbsolutePath().normalize()
-                    .resolve(__sessionId);
+        Location(MountSource source, String path) {
+            this.source = source;
+            this.path = path;
+        }
+    }
+
+    private Location locate(String cwd, String sessionId) {
+        requireSafeSessionId(sessionId);
+        if (workPathHook != null) {
+            return new Location(FileMountSource.of(workPathHook.apply(cwd, sessionId)), TODO_FILE_NAME);
+        }
+        if (dataSource != null) {
+            return new Location(dataSource, sessionsDir + sessionId + "/" + TODO_FILE_NAME);
+        }
+        Path root = relativeDir == null ? Paths.get(cwd) : Paths.get(cwd, relativeDir);
+        return new Location(FileMountSource.of(root.toAbsolutePath().normalize()), sessionId + "/" + TODO_FILE_NAME);
+    }
+
+    /** sessionId 必须是单个路径段：拼进存储路径前拒绝分隔符、上跳与控制字符。 */
+    static void requireSafeSessionId(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty() || sessionId.length() > 128
+                || ".".equals(sessionId) || "..".equals(sessionId)) {
+            throw new IllegalArgumentException("Invalid sessionId: " + sessionId);
+        }
+        for (int i = 0; i < sessionId.length(); i++) {
+            char c = sessionId.charAt(i);
+            if (c == '/' || c == '\\' || c < 0x20) {
+                throw new IllegalArgumentException("Invalid sessionId: " + sessionId);
+            }
         }
     }
 
     /**
-     * 获取 TODO.md 文件路径（供外部读取，如 Web 接口）
+     * 本地工作目录（兼容口径；数据源为非本地来源时无意义）。
      */
+    protected Path getWorkPath(String __cwd, String __sessionId) {
+        Location loc = locate(__cwd, __sessionId);
+        int slash = loc.path.lastIndexOf('/');
+        String dir = slash < 0 ? "" : loc.path.substring(0, slash);
+        return loc.source.getLocalPath(dir).orElse(null);
+    }
+
+    /**
+     * 获取 TODO.md 本地文件路径；数据源不是本地来源时返回 null。
+     *
+     * @deprecated 4.2.0 改用 {@link #readTodo(String, String)}（与存储介质无关）
+     */
+    @Deprecated
     public Path getTodoPath(String cwd, String sessionId) {
-        return getWorkPath(cwd, sessionId).resolve(TODO_FILE_NAME);
+        Location loc = locate(cwd, sessionId);
+        return loc.source.getLocalPath(loc.path).orElse(null);
+    }
+
+    /**
+     * 读取会话清单原文。
+     *
+     * @param cwd       会话工作目录（仅兼容模式使用；数据源模式下忽略，可为 null）
+     * @param sessionId 会话 ID
+     * @return 清单原文；不存在时为 null
+     * @throws IOException 读取失败
+     * @throws IllegalArgumentException sessionId 非法
+     * @since 4.2.0
+     */
+    public String readTodo(String cwd, String sessionId) throws IOException {
+        Location loc = locate(cwd, sessionId);
+        return loc.source.readStringOrNull(loc.path);
+    }
+
+    /**
+     * 覆盖写入会话清单（自动补末尾换行；空内容照常写入，表示清空）。
+     *
+     * @since 4.2.0
+     */
+    public void writeTodo(String cwd, String sessionId, String markdown) throws IOException {
+        Location loc = locate(cwd, sessionId);
+        loc.source.writeString(loc.path, normalizeContent(markdown));
+    }
+
+    private static String normalizeContent(String markdown) {
+        String content = markdown == null ? "" : markdown.trim();
+        if (!content.isEmpty() && !content.endsWith("\n")) {
+            content = content + "\n";
+        }
+        return content;
     }
 
     @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和执行进度。用于恢复被打断的任务、确认下一步工作，或在收尾前核对是否全完成。")
     public String todoRead(String __cwd,
                            String __sessionId) throws IOException {
-        Path workPath = getWorkPath(__cwd, __sessionId);
-
-        Path todoFile = workPath.resolve(TODO_FILE_NAME);
-
-        if (!Files.exists(todoFile)) {
+        String content = readTodo(__cwd, __sessionId);
+        if (content == null) {
             return "[] (当前任务清单为空。若任务复杂，请使用 `todowrite` 初始化计划。)";
         }
-
-        byte[] encoded = Files.readAllBytes(todoFile);
-        String content = new String(encoded, StandardCharsets.UTF_8);
         return content + buildProgressFooter(content);
     }
 
@@ -117,21 +216,8 @@ public class TodoTalent extends AbsTalent {
             String __cwd,
             String __sessionId
     ) throws IOException {
-        Path workPath = getWorkPath(__cwd, __sessionId);
-
-        if (Files.notExists(workPath)) {
-            Files.createDirectories(workPath);
-        }
-
-        Path todoFile = workPath.resolve(TODO_FILE_NAME);
-
-        String content = todosMarkdown.trim();
-        if (!content.isEmpty() && !content.endsWith("\n")) {
-            content = content + "\n";
-        }
-        Files.write(todoFile, content.getBytes(StandardCharsets.UTF_8));
-
-        return "TODO saved." + buildProgressFooter(content);
+        writeTodo(__cwd, __sessionId, todosMarkdown);
+        return "TODO saved." + buildProgressFooter(normalizeContent(todosMarkdown));
     }
 
     // 在 ^ 和 [*-] 之间增加 \s*，匹配可选的缩进

@@ -997,12 +997,9 @@ class GoalRuntime {
             return 0;
         }
         try {
-            Path todoPath = todoTalent.getTodoPath(workspace, sessionId);
-            if (!Files.exists(todoPath)) {
-                return 0;
-            }
-            String content = new String(Files.readAllBytes(todoPath), StandardCharsets.UTF_8);
-            return countUnfinishedCheckboxes(content);
+            // 经 TodoTalent 的存储口径读取（数据来源可能是 db / http，不能假设本地路径）
+            String content = todoTalent.readTodo(workspace, sessionId);
+            return content == null ? 0 : countUnfinishedCheckboxes(content);
         } catch (Throwable e) {
             LOG.debug("countUnfinishedTodos failed for session '{}': {}", sessionId, e.toString());
             return 0;

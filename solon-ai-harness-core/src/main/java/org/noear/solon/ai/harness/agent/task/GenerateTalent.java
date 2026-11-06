@@ -23,12 +23,6 @@ import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,21 +91,11 @@ public class GenerateTalent extends AbsTalent {
             boolean shouldSave = saveToFile != null && saveToFile;
 
             if (shouldSave) {
-                Path agentsDir = Paths.get(__cwd, ".soloncode", "agents");
-                if (!Files.exists(agentsDir)) {
-                    Files.createDirectories(agentsDir);
-                }
-                Path agentFile = agentsDir.resolve(name + ".md");
-
-                try (BufferedWriter writer = new BufferedWriter(
-                        new OutputStreamWriter(
-                                Files.newOutputStream(agentFile.toFile().toPath()),
-                                StandardCharsets.UTF_8))) {
-                    writer.write(definition.toMarkdown());
-                }
-
+                // 经工作区来源写入 <harnessAgents>/<name>.md（与工作区 agents 挂载同口径，不再硬编码 .soloncode、不随 cwd 漂移）
+                String agentPath = engine.getHarnessAgents() + name + ".md";
+                engine.getWorkspaceSource().writeString(agentPath, definition.toMarkdown());
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Agent 定义已保存到: {}", agentFile);
+                    LOG.debug("Agent 定义已保存到: {}", agentPath);
                 }
             }
 

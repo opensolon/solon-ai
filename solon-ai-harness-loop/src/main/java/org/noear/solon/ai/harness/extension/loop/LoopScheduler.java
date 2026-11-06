@@ -103,15 +103,18 @@ final class LoopScheduler {
     }
 
     /**
-     * IJobManager 注册名：{@code loop-<实例序号>:<taskId>}。
+     * IJobManager 注册名：{@code loop-<实例序号>:<sessionId>:<taskId>}。
      *
      * <p>JobManager 是 JVM 单例，且同名 job 已存在时静默沿用旧 job（新回调被丢弃），
      * 所以每个调度器实例取一个进程内唯一的序号做前缀，防止多个扩展实例（多引擎、重建引擎）撞名。
      * 前缀只保证本进程内唯一：job 只在内存、不跨重启，job 名也不落盘（tasks.json 只存 taskId），
      * 重启后序号从头计数不影响正确性。不要改成时间戳（同毫秒创建会重复）。</p>
+     *
+     * <p>名字里带上 sessionId：任务 ID 只保证会话内可寻址（历史数据里还有 8 位截断 ID），
+     * 不同会话撞号时不能互相顶掉对方的 job。</p>
      */
-    String jobName(LoopTask task) {
-        return jobPrefix + task.getId();
+    String jobName(String sessionId, LoopTask task) {
+        return jobPrefix + sessionId + ":" + task.getId();
     }
 
     /** 是否落盘（设置了存储文件）。 */
@@ -161,7 +164,7 @@ final class LoopScheduler {
 
         List<LoopTask> tasks = sessionTasks.computeIfAbsent(sessionId,
                 k -> Collections.synchronizedList(new ArrayList<>()));
-        cleanExpired(tasks);
+        cleanExpired(sessionId, tasks);
         registerJob(sessionId, task, true);
         tasks.add(task);
         persistAll();
@@ -186,7 +189,7 @@ final class LoopScheduler {
         }
         LOG.info("Removing loop task '{}' from session '{}'", task.getId(), sessionId);
         task.cancel();
-        unregisterJob(task);
+        unregisterJob(sessionId, task);
         persistAll();
         return true;
     }
@@ -211,7 +214,7 @@ final class LoopScheduler {
             t.resetErrors();
             registerJob(sessionId, t, false);
         } else {
-            unregisterJob(t);
+            unregisterJob(sessionId, t);
         }
         persistAll();
         return true;
@@ -234,7 +237,7 @@ final class LoopScheduler {
                 LoopTask t = tasks.get(i);
                 if (t.getId().equals(taskId)) {
                     LoopTask newTask = patch.applyTo(t); // 先校验、后替换：非法补丁不动旧版本
-                    unregisterJob(t);
+                    unregisterJob(sessionId, t);
                     tasks.set(i, newTask);
                     if (newTask.isEnabled() && !newTask.isCancelled()) {
                         registerJob(sessionId, newTask, false);
@@ -273,7 +276,7 @@ final class LoopScheduler {
     List<LoopTask> list(String sessionId) {
         List<LoopTask> tasks = sessionId == null ? null : sessionTasks.get(sessionId);
         if (tasks == null) return Collections.emptyList();
-        cleanExpired(tasks);
+        cleanExpired(sessionId, tasks);
         synchronized (tasks) {
             return new ArrayList<>(tasks);
         }
@@ -323,7 +326,7 @@ final class LoopScheduler {
             synchronized (tasks) {
                 for (LoopTask t : tasks) {
                     t.cancel();
-                    unregisterJob(t);
+                    unregisterJob(sessionId, t);
                 }
             }
         }
@@ -344,7 +347,7 @@ final class LoopScheduler {
                 if (tasks != null) {
                     synchronized (tasks) {
                         for (LoopTask t : tasks) {
-                            unregisterJob(t);
+                            unregisterJob(sessionId, t);
                         }
                     }
                 }
@@ -440,7 +443,7 @@ final class LoopScheduler {
         if (detached) {
             return; // 已摘除：不往 JVM 单例 JobManager 里留带着废引擎的 job
         }
-        jobManager.jobAdd(jobName(task), scheduled, ctx -> {
+        jobManager.jobAdd(jobName(sessionId, task), scheduled, ctx -> {
             if (!task.isEnabled()) {
                 return;
             }
@@ -448,19 +451,19 @@ final class LoopScheduler {
         });
     }
 
-    private void unregisterJob(LoopTask task) {
+    private void unregisterJob(String sessionId, LoopTask task) {
         if (jobManager == null) {
             return;
         }
-        String jobName = jobName(task);
+        String jobName = jobName(sessionId, task);
         if (jobManager.jobExists(jobName)) {
             jobManager.jobRemove(jobName);
         }
     }
 
     /** job 是否已注册（测试观测口）。 */
-    boolean isJobRegistered(LoopTask task) {
-        return jobManager != null && jobManager.jobExists(jobName(task));
+    boolean isJobRegistered(String sessionId, LoopTask task) {
+        return jobManager != null && jobManager.jobExists(jobName(sessionId, task));
     }
 
     // ==================== 触发 ====================
@@ -535,7 +538,7 @@ final class LoopScheduler {
             return false;
         }
         if (!task.isEnabled()) {
-            unregisterJob(task);
+            unregisterJob(sessionId, task);
             return false;
         }
         if (shouldSkipSession(sessionId)) {
@@ -566,7 +569,7 @@ final class LoopScheduler {
             LOG.warn("Loop task '{}' stopped after {} consecutive errors", task.getId(), errors);
             task.setEnabled(false);
             task.resetErrors();
-            unregisterJob(task);
+            unregisterJob(sessionId, task);
             persistAll();
             return;
         }
@@ -655,12 +658,12 @@ final class LoopScheduler {
 
     // ==================== 持久化 ====================
 
-    private void cleanExpired(List<LoopTask> tasks) {
+    private void cleanExpired(String sessionId, List<LoopTask> tasks) {
         boolean changed;
         synchronized (tasks) {
             changed = tasks.removeIf(t -> {
                 if (t.isCancelled()) {
-                    unregisterJob(t);
+                    unregisterJob(sessionId, t);
                     return true;
                 }
                 return false;

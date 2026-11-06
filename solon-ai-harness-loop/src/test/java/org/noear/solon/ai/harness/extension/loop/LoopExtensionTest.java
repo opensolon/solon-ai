@@ -73,7 +73,7 @@ class LoopExtensionTest {
 
         assertNotNull(engine.getCommandRegistry().find("loop"), "/loop 命令应已注册");
         assertEquals(1, loop.list("s1").size(), "onAttach 必须加载 tasks.json");
-        assertTrue(loop.scheduler().isJobRegistered(loop.get("s1", "aaaa0001")), "启用任务必须注册 job");
+        assertTrue(loop.scheduler().isJobRegistered("s1", loop.get("s1", "aaaa0001")), "启用任务必须注册 job");
         assertSame(loop, engine.addExtensionIfAbsent(builder(jm).build()), "按类型幂等");
     }
 
@@ -95,10 +95,10 @@ class LoopExtensionTest {
 
         LoopTask ta = a.get("s1", "aaaa0001");
         LoopTask tb = b.get("s1", "aaaa0001");
-        String nameA = a.scheduler().jobName(ta);
-        String nameB = b.scheduler().jobName(tb);
+        String nameA = a.scheduler().jobName("s1", ta);
+        String nameB = b.scheduler().jobName("s1", tb);
         assertNotEquals(nameA, nameB, "JobManager 是 JVM 单例，不同实例同 id 任务不得撞名");
-        assertTrue(nameA.startsWith("loop-") && nameA.endsWith(":aaaa0001"), nameA);
+        assertTrue(nameA.startsWith("loop-") && nameA.endsWith(":s1:aaaa0001"), nameA);
         assertEquals(2, jm.jobs.size(), "两个 job 都必须注册上");
 
         a.removeAll("s1");
@@ -194,7 +194,7 @@ class LoopExtensionTest {
         // B 再失败一次 → 达到阈值 2 → 停用并摘 job
         loop.scheduler().handleErrorForTest("s1", b, new RuntimeException("y"));
         assertFalse(b.isEnabled(), "连续失败达到阈值后停用");
-        assertFalse(loop.scheduler().isJobRegistered(b));
+        assertFalse(loop.scheduler().isJobRegistered("s1", b));
         assertTrue(a.isEnabled());
     }
 
@@ -301,7 +301,7 @@ class LoopExtensionTest {
         LoopTask kept = loop.get("s1", old.getId());
         assertNotNull(kept, "执行期间被修改过的一次性任务，不得按 id 连带删掉新定义");
         assertEquals("0 0 20 * * ?", kept.getCron());
-        assertTrue(loop.scheduler().isJobRegistered(kept), "新定义的 job 不得被旧版本摘掉");
+        assertTrue(loop.scheduler().isJobRegistered("s1", kept), "新定义的 job 不得被旧版本摘掉");
     }
 
     @Test
@@ -317,7 +317,7 @@ class LoopExtensionTest {
 
         loop.scheduler().doTrigger("s1", old, false); // 旧版本的错误重试 / 迟到回调
         assertEquals(0, executions.get(), "已被替换的旧版本不得再执行旧提示词");
-        assertTrue(loop.scheduler().isJobRegistered(loop.get("s1", old.getId())), "也不得摘掉新版本的 job");
+        assertTrue(loop.scheduler().isJobRegistered("s1", loop.get("s1", old.getId())), "也不得摘掉新版本的 job");
     }
 
     private static void await(CountDownLatch latch) {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.extension.loop;
 
+import org.noear.solon.ai.harness.util.HarnessIds;
 import org.noear.snack4.ONode;
 
 import java.time.Instant;
@@ -24,7 +25,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -85,7 +85,7 @@ public class LoopTask {
 
     /** 包内构造（宿主新建任务用 {@link LoopSpec}）；间隔静默收敛到合法区间。 */
     LoopTask(String prompt, int intervalMinutes, String cron, boolean runNow) {
-        this.id = UUID.randomUUID().toString().substring(0, 8);
+        this.id = HarnessIds.newId(); // 完整 128 bit：截断 ID 落共享存储/共享 JobManager 会撞号
         this.prompt = prompt;
         // 间隔收敛在 [MIN_INTERVAL, MAX_INTERVAL]，不存在 0 间隔（cron 模式忽略该值）
         this.intervalMinutes = clampInterval(intervalMinutes);

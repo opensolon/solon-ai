@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.extension.loop;
 
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
@@ -102,7 +103,7 @@ public class LoopExtension extends AbsHarnessExtension {
                             + "loop tasks will be stored but never fire. "
                             + "Use builder.jobManager(null) to disable scheduling explicitly.");
         }
-        this.scheduler = new LoopScheduler(new LoopStore(b.storeFile), jm,
+        this.scheduler = new LoopScheduler(b.storeSource != null ? new LoopStore(b.storeSource, b.storePath) : LoopStore.ofFile(b.storeFile), jm,
                 b.maxTasks, b.maxErrors, b.sessionAlive, b.triggerWrapper);
         this.loopTalent = new LoopTalent(scheduler);
         this.loopCommand = new LoopCommand(scheduler);
@@ -279,6 +280,8 @@ public class LoopExtension extends AbsHarnessExtension {
 
     public static class Builder {
         private Path storeFile;
+        private MountSource storeSource;
+        private String storePath;
         private Predicate<String> sessionAlive = id -> true;
         private IntSupplier maxErrors = () -> DEFAULT_MAX_ERRORS;
         private int maxTasks = DEFAULT_MAX_TASKS;
@@ -293,6 +296,21 @@ public class LoopExtension extends AbsHarnessExtension {
         /** 任务存储文件（tasks.json）；null = 只在内存，不落盘。 */
         public Builder storeFile(Path file) {
             this.storeFile = file;
+            this.storeSource = null;
+            this.storePath = null;
+            return this;
+        }
+
+        /**
+         * 任务存储到挂载来源（本地、db、http 均可）；与 {@link #storeFile} 互斥，后设置者生效。
+         *
+         * @param source 存储来源（null = 只在内存）
+         * @param path   来源内路径（如 {@code "loop/tasks.json"}）
+         */
+        public Builder store(MountSource source, String path) {
+            this.storeSource = source;
+            this.storePath = path;
+            this.storeFile = null;
             return this;
         }
 

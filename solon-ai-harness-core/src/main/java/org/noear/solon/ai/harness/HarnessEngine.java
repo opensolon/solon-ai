@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -229,6 +230,24 @@ public class HarnessEngine {
 
     public SkillTalent getSkillTalent() {
         return skillTalent;
+    }
+
+    /**
+     * harness 状态数据来源（会话级状态，如 TODO 清单；不对模型的文件工具开放）。
+     *
+     * @since 4.2.0
+     */
+    public MountSource getDataSource() {
+        return options.getDataSource();
+    }
+
+    /**
+     * 工作区来源（模型文件工具的解析目标；harness 写入工作区的产物也经它落地）。
+     *
+     * @since 4.2.0
+     */
+    public MountSource getWorkspaceSource() {
+        return options.getMountManager().getWorkspaceSource();
     }
 
     public TodoTalent getTodoTalent() {
@@ -1340,7 +1359,8 @@ public class HarnessEngine {
         this.skillCatalog = mountManager.getSkillCatalog();
         this.agentCatalog = mountManager.getAgentCatalog();
 
-        this.todoTalent = new TodoTalent(options.getHarnessSessions());
+        // 清单是会话级状态：经数据来源读写（默认 <workspace>/<harnessHome>/sessions/<sid>/TODO.md，与旧路径一致）
+        this.todoTalent = new TodoTalent(options.getDataSource(), "sessions/");
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this);
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
@@ -2108,6 +2128,18 @@ public class HarnessEngine {
             for (ChatConfig val : models) {
                 options.addModel(val);
             }
+            return this;
+        }
+
+        /**
+         * harness 状态数据来源（默认 {@code <workspace>/<harnessHome>} 本地目录）。
+         *
+         * <p>可替换为 db / http 等任意 {@link MountSource}，实现算存分离；它不注册进挂载表，模型不可见。</p>
+         *
+         * @since 4.2.0
+         */
+        public Builder dataSource(MountSource dataSource) {
+            options.setDataSource(dataSource);
             return this;
         }
 

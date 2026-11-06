@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -359,6 +360,20 @@ class HarnessOptionsAccessorTest {
      * 否则新增配置项时会静默失去测试。此处不执行逻辑，仅列出未覆盖的 setter 名，
      * 便于人工核对（断言集合为空即全部覆盖）。
      */
+    /** 数据来源：缺省为 <workspace>/<harnessHome> 本地目录；显式设置后原样返回。 */
+    @Test
+    void dataSourceDefaultsToHarnessHomeAndIsReplaceable() {
+        HarnessOptions o = new HarnessOptions("work", ".soloncode");
+        org.noear.solon.ai.talents.mount.source.MountSource def = o.getDataSource();
+        assertSame(def, o.getDataSource(), "缺省来源只创建一次");
+        assertTrue(def.getLocation().replace('\\', '/').endsWith("work/.soloncode"), def.getLocation());
+
+        org.noear.solon.ai.talents.mount.source.MemoryMountSource mem =
+                new org.noear.solon.ai.talents.mount.source.MemoryMountSource();
+        o.setDataSource(mem);
+        assertSame(mem, o.getDataSource());
+    }
+
     @Test
     void allSettersAreExercisedByThisTest() {
         List<String> expected = Arrays.stream(HarnessOptions.class.getDeclaredMethods())
@@ -381,7 +396,7 @@ class HarnessOptionsAccessorTest {
                 "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
-                "setHitlInterceptor", "setMemoryProvider",
+                "setHitlInterceptor", "setMemoryProvider", "setDataSource",
                 "addHttpCustomize", "addTools", "addDisallowedTools", "addModel");
 
         List<String> missing = expected.stream()

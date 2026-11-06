@@ -20,6 +20,7 @@ import org.noear.solon.ai.talents.mount.catalog.DefaultAgentCatalog;
 import org.noear.solon.ai.talents.mount.catalog.DefaultSkillCatalog;
 import org.noear.solon.ai.talents.mount.catalog.SkillCatalog;
 import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,7 @@ public class MountManager {
 
     private static final String USER_HOME = System.getProperty("user.home"); //对应 `～/`
     private final String workDir; //对应 `./`
-    private final FileMountSource workspaceSource;
+    private final MountSource workspaceSource;
 
     private final Map<String, Mount> sourceMountMap = new LinkedHashMap<>();
     private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
@@ -56,8 +57,23 @@ public class MountManager {
      * @param workDir 工作区目录
      */
     public MountManager(String workDir) {
+        this(workDir, null);
+    }
+
+    /**
+     * 创建挂载管理器并指定工作区来源。
+     *
+     * <p>工作区来源是文件工具（read/write/edit/ls/grep/glob）的解析目标；为 null 时按 workDir 创建本地来源。
+     * bash、LSP、构建校验始终在 workDir（计算侧本地副本）上运行：传入非本地来源时，
+     * 宿主必须自行保证 workDir 与该来源同步，否则两类工具会看到不同的内容。</p>
+     *
+     * @param workDir         工作区目录（计算侧本地路径）
+     * @param workspaceSource 工作区来源；可为 null
+     * @since 4.2.0
+     */
+    public MountManager(String workDir, MountSource workspaceSource) {
         this.workDir = workDir;
-        this.workspaceSource = FileMountSource.of(workDir);
+        this.workspaceSource = workspaceSource != null ? workspaceSource : FileMountSource.of(workDir);
 
         this.agentCatalog = new DefaultAgentCatalog(this);
         this.skillCatalog = new DefaultSkillCatalog(this);
@@ -73,8 +89,8 @@ public class MountManager {
         return skillCatalog;
     }
 
-    /** 工作区来源；工作区与普通本地挂载统一使用 FileMountSource。 */
-    public FileMountSource getWorkspaceSource() {
+    /** 工作区来源（默认是 workDir 上的 FileMountSource）。 */
+    public MountSource getWorkspaceSource() {
         return workspaceSource;
     }
 

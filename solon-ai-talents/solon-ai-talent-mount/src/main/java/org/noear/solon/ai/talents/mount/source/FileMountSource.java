@@ -73,8 +73,17 @@ public final class FileMountSource implements MountSource {
         // materializable=false：本地来源 shell 可达（getLocalRoot 恒有值），物化分支对它是死代码；
         // 且本类不实现 MountSource#materialize——若误声明 true，直接调用物化器会得到能力位与实现不一致的
         // 半吊子流程（默认实现返回空却声明可物化）。诚实声明，避免未来误触发。
-        this.capabilities = new MountCapabilities(true, true, true, true, true, true,
-                true, true, true, false);
+        // versioned：版本 = 修改时间(纳秒) + 大小，openWrite 校验 expectedVersion；
+        // atomicWrite：覆盖写先写同目录临时文件，close 时原子替换（失败不留残留）。
+        this.capabilities = MountCapabilities.builder()
+                .readWrite()
+                .watchable(true)
+                .shellAccessible(true)
+                .localPathAccessible(true)
+                .materializable(false)
+                .versioned(true)
+                .atomicWrite(true)
+                .build();
     }
 
     /**
@@ -237,7 +246,36 @@ public final class FileMountSource implements MountSource {
         String normalized = normalize(path);
         String name = normalized.isEmpty() ? rootPath.getFileName().toString() : file.getFileName().toString();
         return new MountEntry(normalized, name, attrs.isDirectory(), attrs.isRegularFile() ? attrs.size() : -1,
-                Instant.ofEpochMilli(attrs.lastModifiedTime().toMillis()), null);
+                Instant.ofEpochMilli(attrs.lastModifiedTime().toMillis()), versionOf(attrs));
+    }
+
+    /**
+     * 文件版本：修改时间（纳秒精度，取决于文件系统）+ 大小；目录无版本。
+     *
+     * <p>不用内容摘要：{@link #list} 对每个子条目都会 stat，摘要代价不可接受。
+     * 粗粒度时钟的文件系统上，同一时钟刻度内的等长改写可能检测不到（尽力而为）。</p>
+     */
+    private static String versionOf(BasicFileAttributes attrs) {
+        if (!attrs.isRegularFile()) {
+            return null;
+        }
+        long nanos = attrs.lastModifiedTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
+        return Long.toHexString(nanos) + "-" + Long.toHexString(attrs.size());
+    }
+
+    /** 当前版本；不存在或不是文件时为 null。 */
+    private static String currentVersion(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return null;
+        }
+        return versionOf(Files.readAttributes(file, BasicFileAttributes.class));
+    }
+
+    private static void checkVersion(String path, Path file, String expected) throws IOException {
+        String actual = currentVersion(file);
+        if (!expected.equals(actual)) {
+            throw new MountConflictException(path, expected, actual);
+        }
     }
 
     /**
@@ -318,7 +356,8 @@ public final class FileMountSource implements MountSource {
                         // 发现阶段是尽力而为，绝不能因一个坏条目中断整个来源的扫描。
                         if (followExternalLinks || !attrs.isSymbolicLink()) {
                             try {
-                                addIfMatches(file, false, base, matcher, actual, result);
+                                // 到达 maxDepth 的目录也经 visitFile 送达，类型以属性为准（否则 filesOnly 会混入目录）
+                                addIfMatches(file, attrs.isDirectory(), base, matcher, actual, result);
                             } catch (IOException | RuntimeException e) {
                                 // skip this entry
                             }
@@ -435,10 +474,17 @@ public final class FileMountSource implements MountSource {
     /**
      * 按选项打开追加或覆盖写入流。
      *
+     * <p>覆盖写是原子的：内容先写到同目录的隐藏临时文件，close 时原子替换目标（保留原文件的 POSIX 权限；
+     * 目标是符号链接时替换链接指向的真实文件）。写入过程中任一次 write 失败，close 只清理临时文件、不动目标。
+     * 追加写直接作用于目标文件（不是原子的）。</p>
+     *
+     * <p>设置了 {@link WriteOptions#getExpectedVersion()} 时，打开与提交前各校验一次版本，
+     * 不一致抛 {@link MountConflictException}。</p>
+     *
      * @param path 相对文件路径
      * @param options 写入选项；为 null 时覆盖写入
      * @return 文件输出流
-     * @throws IOException 文件或父目录创建失败时
+     * @throws IOException 文件或父目录创建失败、版本冲突时
      */
     @Override
     public OutputStream openWrite(String path, WriteOptions options) throws IOException {
@@ -447,11 +493,100 @@ public final class FileMountSource implements MountSource {
         if (actual.isCreateParents() && file.getParent() != null) {
             Files.createDirectories(file.getParent());
         }
+        String expected = actual.getExpectedVersion();
+        if (expected != null) {
+            checkVersion(path, file, expected);
+        }
         if (actual.isAppend()) {
             return Files.newOutputStream(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
         }
-        return Files.newOutputStream(file, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-                StandardOpenOption.TRUNCATE_EXISTING);
+
+        Path target = Files.isSymbolicLink(file) ? file.toRealPath() : file;
+        Path dir = target.getParent();
+        if (dir == null) {
+            throw new IOException("Cannot write mount root: " + path);
+        }
+        Path tmp = dir.resolve("." + target.getFileName() + "." + java.util.UUID.randomUUID().toString().replace("-", "") + ".tmp");
+        // CREATE_NEW（不用 createTempFile）：新文件按 umask 取权限，而不是临时文件的 600
+        OutputStream raw = Files.newOutputStream(tmp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        return new AtomicFileOutputStream(raw, path, tmp, target, expected);
+    }
+
+    /** 原子覆盖写：写临时文件，close 时校验版本并替换目标。 */
+    private static final class AtomicFileOutputStream extends java.io.FilterOutputStream {
+        private final String path;
+        private final Path tmp;
+        private final Path target;
+        private final String expected;
+        private boolean failed;
+        private boolean closed;
+
+        AtomicFileOutputStream(OutputStream out, String path, Path tmp, Path target, String expected) {
+            super(out);
+            this.path = path;
+            this.tmp = tmp;
+            this.target = target;
+            this.expected = expected;
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            try {
+                out.write(b);
+            } catch (IOException e) {
+                failed = true;
+                throw e;
+            }
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            try {
+                out.write(b, off, len);
+            } catch (IOException e) {
+                failed = true;
+                throw e;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            boolean committed = false;
+            try {
+                out.close();
+                if (failed) {
+                    return;
+                }
+                if (expected != null) {
+                    checkVersion(path, target, expected);
+                }
+                copyPermissions(target, tmp);
+                try {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                    Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+                committed = true;
+            } finally {
+                if (!committed) {
+                    Files.deleteIfExists(tmp);
+                }
+            }
+        }
+
+        private static void copyPermissions(Path from, Path to) {
+            try {
+                if (Files.exists(from)) {
+                    Files.setPosixFilePermissions(to, Files.getPosixFilePermissions(from));
+                }
+            } catch (UnsupportedOperationException | IOException ignore) {
+                // 非 POSIX 文件系统（Windows）：保持默认权限
+            }
+        }
     }
 
     /**

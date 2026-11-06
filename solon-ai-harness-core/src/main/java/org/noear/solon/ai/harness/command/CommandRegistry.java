@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.command;
 
+import org.noear.solon.ai.talents.mount.source.MountSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,16 @@ public class CommandRegistry {
      */
     public void load(Path baseDir) {
         MarkdownCommandLoader.loadFromDirectory(baseDir, this);
+    }
+
+    /**
+     * 从挂载来源的目录加载（本地、db、http 均可）
+     *
+     * @param source 挂载来源
+     * @param dir    来源内目录（空串表示根）
+     */
+    public void load(MountSource source, String dir) {
+        MarkdownCommandLoader.loadFrom(source, dir, this);
     }
 
     /**

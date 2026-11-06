@@ -94,7 +94,7 @@ public class VideoGenerationTalent extends AbsTalent {
 
     private String sanitizeFileName(String name) {
         if (Assert.isBlank(name)) {
-            return "v_" + UUID.randomUUID().toString().substring(0, 8) + ".mp4";
+            return "v_" + UUID.randomUUID().toString().replace("-", "") + ".mp4";
         }
         // 移除潜在的路径穿越字符
         name = name.replaceAll("[\\\\/:*?\"<>|]", "_");

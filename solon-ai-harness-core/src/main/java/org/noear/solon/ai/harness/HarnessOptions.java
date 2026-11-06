@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.talents.mount.source.FileMountSource;
+import org.noear.solon.ai.talents.mount.source.MountSource;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
@@ -135,6 +139,8 @@ class HarnessOptions implements NonSerializable {
     private StopLoopInterceptor stopLoopInterceptor;
     private HITLInterceptor hitlInterceptor;
     private MemorySolutionProvider memoryProvider;
+    /** harness 状态数据来源（TODO 清单等会话级状态）；null = 工作区下的 harnessHome 目录。 */
+    private volatile MountSource dataSource;
 
     HarnessOptions(String workspace, String harnessHome) {
         if (Assert.isEmpty(harnessHome)) {
@@ -176,6 +182,30 @@ class HarnessOptions implements NonSerializable {
 
     String getHarnessChannels() {
         return harnessHome + "channels/";
+    }
+
+    /**
+     * harness 状态数据来源：未设置时为 {@code <workspace>/<harnessHome>} 上的本地来源。
+     *
+     * <p>与工作区来源分开：工作区是模型可见的代码与产物；数据来源是 harness 自身状态，不注册进挂载表，
+     * 模型的文件工具无法访问。</p>
+     */
+    MountSource getDataSource() {
+        MountSource tmp = dataSource;
+        if (tmp == null) {
+            synchronized (this) {
+                tmp = dataSource;
+                if (tmp == null) {
+                    Path root = Paths.get(workspace == null ? "." : workspace).resolve(harnessHome);
+                    tmp = dataSource = FileMountSource.of(root.toAbsolutePath().normalize());
+                }
+            }
+        }
+        return tmp;
+    }
+
+    void setDataSource(MountSource dataSource) {
+        this.dataSource = dataSource;
     }
 
     // ========== getter / setter ==========

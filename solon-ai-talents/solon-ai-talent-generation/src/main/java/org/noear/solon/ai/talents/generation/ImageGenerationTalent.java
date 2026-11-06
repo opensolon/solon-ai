@@ -89,7 +89,7 @@ public class ImageGenerationTalent extends AbsTalent {
 
     private String sanitizeFileName(String name) {
         if (Assert.isBlank(name)) {
-            return "img_" + UUID.randomUUID().toString().substring(0, 8) + ".png";
+            return "img_" + UUID.randomUUID().toString().replace("-", "") + ".png";
         }
         // 简单处理路径字符，防止非法注入
         name = name.replaceAll("[\\\\/:*?\"<>|]", "_");

@@ -15,9 +15,9 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.ai.harness.util.HarnessIds;
 import org.noear.snack4.ONode;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Goal 运行态（包内可变实体；对外只暴露只读快照 {@link GoalTask}）。
@@ -75,7 +75,7 @@ class GoalState {
     }
 
     GoalState(String objective, long maxTokens, BudgetThresholds thresholds) {
-        this.id = UUID.randomUUID().toString().substring(0, 8);
+        this.id = HarnessIds.newId(); // 完整 128 bit：截断 ID 落共享存储会撞号
         this.objective = objective;
         this.status = GoalTask.Status.PURSUING;
         this.consumedTokens = 0;
