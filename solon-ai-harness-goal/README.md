@@ -24,7 +24,7 @@
 | 维度 | goal（本模块） | loop（`solon-ai-harness-loop`） |
 |---|---|---|
 | 数量 | 每会话最多 1 个 | 每会话可多条 |
-| 驱动方式 | 状态驱动：固定 5 秒轮询，每轮自判是否续行 | 时间表驱动：间隔 / cron 独立触发 |
+| 驱动方式 | 状态驱动：上一轮结束后间隔 5 秒再跑，每轮自判是否续行 | 时间表驱动：间隔 / cron 独立触发 |
 | 终止判据 | 模型声明完成并通过校验、预算（Token / 时长 / 轮次）、熔断 | 由任务定义决定 |
 | 存储 | 会话快照投影（`session.goal`） | 独立任务文件 |
 | 执行通道 | 自持，与 loop 不共享任何执行通道 | 自持 |
@@ -56,7 +56,7 @@ stateDiagram-v2
 
 ### 1.3 调度与每轮执行流程
 
-调度由 `GoalScheduler` 完成：每个会话一个 job，`fixedDelay = 5000ms`；`runNow = true` 时 `initialDelay = 0`，否则等一个间隔。job 名为 `goal-<实例序号>:<sessionId>`，多个扩展实例共用 JVM 单例 JobManager 也不会撞名。job 只取**已存在**的会话（`getSessionOrNull`），会话不存在或 goal 已非活跃时自行注销。
+调度由 `GoalScheduler` 完成：每个扩展实例**一个节拍 job**（`goal-<实例序号>:tick`，1 秒一拍），扫描到期会话并派发到有界线程池（`roundConcurrency`，缺省 4）；同一会话不并发，上一轮结束 5 秒后再到期；线程池满额时本拍不再派发（背压）。`runNow = true` 时首轮立即到期，否则等一个间隔。节拍 job 在第一个会话登记时注册、最后一个注销时移除。到期时只取**已存在**的会话（`getSessionOrNull`），会话不存在或 goal 已非活跃时自行注销。登记 / 注销同时维护状态来源下的活跃索引 `goal/active/`（供无参 `recover()` 使用）。
 
 每轮 `runRound` 的守卫顺序（任一条命中即退出本轮）：
 
@@ -109,7 +109,7 @@ stateDiagram-v2
 3. 不可恢复错误（`SSL`、`HTTP_4XX`）连续同类 ≥ 2 次 → `BLOCKED`；
 4. 任意类型连续同类 ≥ 3 次 → `BLOCKED`；
 5. 连续错误数 ≥ `maxErrors`（缺省 3）→ `BLOCKED`；
-6. 否则只落盘，由下一次 5 秒轮询重试（单一驱动源，不另行延迟补发）。
+6. 否则只落盘，由下一次到期重试（单一驱动源，不另行延迟补发）。
 
 一轮 `done` 会清零连续错误与同类计数。
 
@@ -187,7 +187,7 @@ flowchart LR
     end
     C --> G[("GoalExtension<br/>会话里的 goal")]
     API --> G
-    G --> S["调度器（每 5 秒）"] --> E["执行器"] --> R["engine.handle(ofProgram)"]
+    G --> S["调度器（1 秒节拍，轮间隔 5 秒）"] --> E["执行器"] --> R["engine.handle(ofProgram)"]
     G -. 监听器 .-> P["推送到界面 / 渠道"]
 ```
 
@@ -405,12 +405,9 @@ public class ImGoalHost {
         });
     }
 
-    /** 进程启动：恢复活跃 goal 的调度（只挂 job，不立即跑） */
-    public void onStartup(Iterable<String> sessionIds) {
-        goal.recover(sessionIds, sid -> {
-            AgentSession s = engine.getSessionOrNull(sid);
-            return s == null ? null : engine.status(s).get(GoalExtension.STATUS_GOAL);
-        });
+    /** 进程启动：按状态来源的活跃索引恢复调度（只挂调度，不立即跑） */
+    public void onStartup() {
+        goal.recover();
     }
 
     private void reply(InputOrigin origin, String text) { /* 按 origin 回投渠道 */ }
@@ -419,7 +416,7 @@ public class ImGoalHost {
 
 ### 4.4 使用态要点
 
-1. **命令立目标，调度器跑轮次**：`/goal <目标>` 与管理态的 `goal.create(...)` 是同一条路径；创建后首轮由调度器异步发起（命令解析出的 `GoalSpec` 保持缺省 `runNow = true`）。首轮开始时如果会话仍被占用（例如另一条输入的占位尚未随请求释放），或队列里还有积压，`engine.isIdle` 为假，这一轮会被跳过，5 秒后的下一次轮询再跑，属正常现象。
+1. **命令立目标，调度器跑轮次**：`/goal <目标>` 与管理态的 `goal.create(...)` 是同一条路径；创建后首轮由调度器异步发起（命令解析出的 `GoalSpec` 保持缺省 `runNow = true`）。首轮开始时如果会话仍被占用（例如另一条输入的占位尚未随请求释放），或队列里还有积压，`engine.isIdle` 为假，这一轮会被跳过，下一次到期再跑，属正常现象。
 2. **执行器决定输出去向**：内置缺省执行器只把结果记进 `lastResult`，不会推送给任何渠道；需要让用户看到每一轮的宿主必须按通道注册执行器，并自行保存会话到渠道的回复路由。
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
 4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
@@ -595,10 +592,15 @@ GoalTask.Status st = engine.status(session).get(GoalExtension.STATUS_GOAL); // �
 
 ### 5.5 重启恢复：recover
 
-调度 job 只在内存，重启后需宿主批量恢复。`recover` 只对活跃态挂 job、**不立即跑**，已调度的幂等跳过；无调度器或扩展停用时返回 0。
+调度只在内存，重启后需宿主恢复。`recover` 只对活跃态挂调度、**不立即跑**，已调度的幂等跳过；无调度器或扩展停用时返回 0。有两种写法：
 
 ```java
-int n = goal.recover(listSessionIds(), sid -> {
+// 推荐：按状态来源下的活跃索引 goal/active/ 恢复，无需宿主枚举会话
+// （已不存在或已非活跃的会话在首次到期时自动注销；多节点共用来源时，非持有节点的轮次被 not_owner 拒绝）
+int n = goal.recover();
+
+// 或：宿主自己枚举会话
+int m = goal.recover(listSessionIds(), sid -> {
     AgentSession s = engine.getSessionOrNull(sid);
     if (s != null) {
         return engine.status(s).get(GoalExtension.STATUS_GOAL);
@@ -669,11 +671,15 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `stagnation(threshold)` | `int` | `3` | 连续无进展轮数达到该值后注入进展质疑段 |
 | `maxErrors(count)` | `int` | `3` | 连续错误达到该值转 `BLOCKED` |
 | `validatorEnabled(enabled)` | `boolean` | `true` | 是否执行完成前验证（第 4 道闸） |
+| `defaultValidators(enabled)` | `boolean` | 按引擎模式：CODING 注册、SERVER 不注册 | 是否注册内置的构建 / 测试验证器（会执行真实命令） |
+| `validatorPolicy(policy)` | `ValidatorPolicy` | 按引擎模式：CODING `FAIL_OPEN`、SERVER `FAIL_CLOSED` | 验证「无法判定」（超时 / 执行失败）时放行还是拒绝 |
+| `validatorTimeoutMs(timeoutMs)` | `int` | `180000` | 内置验证命令超时，超时后整树终止并返回「无法判定」；必须 > 0 |
+| `roundConcurrency(n)` | `int` | `4` | 本扩展实例的 goal 轮次并发上限；必须 ≥ 1；引擎池里每个引擎各有一份 |
 | `jobManager(jobManager)` | `IJobManager` | `JobManager.getInstance()` | 显式传 null = 关闭调度；未显式设置且取不到时 warn |
 | `listener(l)` | `GoalListener` | 无 | 预注册生命周期观察者 |
 | `build()` | — | — | 构造 `GoalExtension`（构造器私有，只能经 builder） |
 
-默认验证器仅在 `engine.getWorkspace()` 非空时注册。
+内置验证器仅在 `engine.getWorkspace()` 非空、且 `defaultValidators` 生效值为 true 时注册。
 
 ### 6.2 GoalSpec（创建参数）
 

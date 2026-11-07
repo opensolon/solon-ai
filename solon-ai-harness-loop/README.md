@@ -93,9 +93,10 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 ```java
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 
-// 任务存到引擎状态来源下的 tasks.json；不注册执行器则走缺省执行器（engine.handle 同步跑一轮）
+// 任务按会话分存到引擎状态来源的 loop/ 目录（每会话一个 <encode(sid)>.json）；
+// 不注册执行器则走缺省执行器（engine.handle 同步跑一轮）
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-        .store(engine.getStateSource(), "tasks.json")
+        .store(engine.getStateSource(), "loop")
         .build());
 ```
 
@@ -108,10 +109,11 @@ import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.scheduling.simple.JobManager;
 
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-        .store(engine.getStateSource(), "tasks.json")            // 或 FileMountSource.of(dir)；不设 = 只在内存
+        .store(engine.getStateSource(), "loop", "tasks.json")    // 目录 + 可选的旧单文件（首次加载拆分迁移）；不设 = 只在内存
         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id))) // 加载时孤儿清理
         .maxErrors(() -> settings.getLoopMaxErrors())            // 连续失败阈值，每次实时读
         .maxTasks(500)                                           // 本实例任务总量上限（跨全部会话）
+        .quota(sid -> 20)                                        // 按会话（租户）配额；≤0 = 不限，缺省不限
         .triggerWrapper(r -> () -> withLogScope(r))              // 包装调度线程（如日志归属）
         .defaultExecutor(true)                                   // 是否启用缺省执行器
         .jobManager(JobManager.getInstance())                    // 自备调度器；传 null 关闭调度
@@ -124,7 +126,7 @@ LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
 import org.noear.solon.ai.mount.source.InMemoryMountSource;
 
 LoopExtension loop = LoopExtension.builder()
-        .store(new InMemoryMountSource(), "loop/tasks.json")
+        .store(new InMemoryMountSource(), "loop")
         .jobManager(null)            // 任务仅作元数据，不依赖 Solon 容器
         .defaultExecutor(false)
         .build();
@@ -144,7 +146,7 @@ flowchart LR
     subgraph 管理态
         U2["定时任务面板"] --> API["宿主管理接口"]
     end
-    C --> L[("LoopExtension<br/>任务表 tasks.json")]
+    C --> L[("LoopExtension<br/>任务表 loop/&lt;sid&gt;.json")]
     T --> L
     API --> L
     L --> J["调度器（到点）"] --> E["执行器"] --> R["engine.handle(ofProgram)"]
@@ -256,7 +258,7 @@ public class ImLoopHost {
         this.engine = engine;
         this.queue = engine.addExtensionIfAbsent(new QueueExtension());
         this.loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-                .store(engine.getStateSource(), "tasks.json")       // 任务随引擎状态来源持久化
+                .store(engine.getStateSource(), "loop")             // 任务随引擎状态来源持久化（按会话分存）
                 .sessionAlive(this::sessionExists)                   // 按会话存储判断（勿用内存会话表，重启后会误删）
                 .build());
 
@@ -592,7 +594,8 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 | 方法 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `store(source, path)` | `MountSource`, `String` | 不设置（只在内存） | 任务存储来源与来源内路径；`source` 为 null = 只在内存；`source` 非 null 时 `path` 不可为空，否则 `build()` 抛 `IllegalArgumentException` |
+| `store(source, dir[, legacyFile])` | `MountSource`, `String`, `String` | 不设置（只在内存） | 任务存储来源与来源内**目录**，按会话分存为 `<dir>/<encode(sessionId)>.json`，变更只重写该会话的文件；建议 `dir = "loop"`（在引擎缺省受保护名单内，其它名字要加进 `protectedStatePaths`）；`legacyFile`（如 `"tasks.json"`）存在时首次加载拆分迁移，旧文件改名为 `.migrated-<时间戳>`；`source` 为 null = 只在内存；`source` 非 null 时 `dir` 不可为空 |
+| `quota(sessionIdToLimit)` | `ToIntFunction<String>` | 不限 | 按会话（租户）的任务数上限，≤0 = 不限；异常按不限处理，`maxTasks` 总量仍生效 |
 | `sessionAlive(predicate)` | `Predicate<String>` | 恒 `true` | 加载时孤儿判定：返回 false 的会话其任务不再恢复并从存储删除；谓词抛异常按存在处理；传 null 忽略 |
 | `maxErrors(supplier)` | `IntSupplier` | `() -> 3`（`DEFAULT_MAX_ERRORS`） | 任务级连续失败阈值，每次实时读取，实际取值不小于 1；传 null 忽略 |
 | `maxTasks(max)` | `int` | `200`（`DEFAULT_MAX_TASKS`） | 本扩展实例任务总量上限（跨全部会话），小于 1 时取 1 |
@@ -713,7 +716,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ## 7. 持久化格式与兼容
 
-存储内容（`store` 指定路径，如 `tasks.json`）：
+存储内容（`store` 指定目录下每个会话一个文件，如 `loop/web-xxx.json`；单个文件损坏只影响该会话）：
 
 ```json
 {

@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
 import org.noear.solon.ai.harness.scope.TurnScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
@@ -155,7 +156,8 @@ class HarnessOptions implements NonSerializable {
     private volatile String agentPrefix = "@";
 
     // ========== 集合类配置 ==========
-    private final MountManager mountManager;
+    protected final MountManager mountManager;
+    protected final CommandRegistry commandRegistry;
     private volatile String defaultModel;
     private final Map<String, ChatConfig> models = new ConcurrentHashMap<>();
     private final Map<String, McpServerParameters> mcpServers = new ConcurrentHashMap<>();
@@ -182,6 +184,7 @@ class HarnessOptions implements NonSerializable {
         this.workspace = workspace;
         this.harnessHome = harnessHome;
         this.mountManager = new MountManager(workspace);
+        this.commandRegistry = new CommandRegistry();
     }
 
     // ========== 派生路径属性 ==========
@@ -684,10 +687,6 @@ class HarnessOptions implements NonSerializable {
 
     void setDefaultModel(String defaultModel) {
         this.defaultModel = defaultModel;
-    }
-
-    public MountManager getMountManager() {
-        return mountManager;
     }
 
     Map<String, McpServerParameters> getMcpServers() {

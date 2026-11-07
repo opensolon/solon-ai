@@ -94,8 +94,11 @@ sequenceDiagram
 ### 3.1 装配
 
 ```java
-// 无参构造；onAttach 注册 /queue 命令，并作为引擎的积压能力（InputBacklog）
+// 无参构造 = 缺省上限（20 条 / 4096 字符）；onAttach 注册 /queue 命令，并作为引擎的积压能力（InputBacklog）
 QueueExtension queue = engine.addExtensionIfAbsent(new QueueExtension());
+
+// 调整上限用 builder
+QueueExtension queue2 = QueueExtension.builder().maxSize(50).maxTextLength(8192).build();
 ```
 
 装配后，引擎 `handle` 才会把"任务运行中的普通消息"自行入积压并返回 `DEFERRED`（没装 queue 时返回 `REJECTED("busy")`）；steer 插件的残留插话也会转入这里。不可排队的输入不进积压：程序轮次（`HarnessInput.ofProgram(...)`）与续流忙时返回 `REJECTED("busy")`，带附件的输入返回 `REJECTED("attachments_not_deferrable")`。
@@ -497,16 +500,16 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 
 ## 六、配置与限制
 
-本插件没有配置项，只有固定常量与只读数据结构。
+本插件只有两个容量类配置项，经 `QueueExtension.builder()` 设置；无参构造与 `builder().build()` 等价。
 
 ### 6.1 容量与长度
 
-| 常量 | 值 | 读取方式 | 说明 |
-|---|---|---|---|
-| `MAX_QUEUE_SIZE` | `20` | `QueueExtension.maxQueueSize()` | 待执行条数上限，不含运行中那条；满时 `enqueue` 返回 -1 |
-| `MAX_TEXT_LENGTH` | `4096` | `QueueExtension.maxTextLength()` | 单条文本最大字符数（门面按 trim 后长度校验） |
+| Builder 方法 | 缺省 | 取值范围 | 读取方式 | 说明 |
+|---|---|---|---|---|
+| `maxSize(int)` | `20` | 1 ~ 10000 | `queue.getMaxSize()` | 每会话待执行条数上限，不含运行中那条；满时 `enqueue` 返回 -1 |
+| `maxTextLength(int)` | `4096` | 1 ~ 1000000 | `queue.getMaxTextLength()` | 单条文本最大字符数（门面按 trim 后长度校验） |
 
-常量定义在包内类 `QueueStore`，外部只能经上述两个静态方法读取，仅用于展示或预校验；受理判定以 `enqueue` 返回值为准。
+上限是实例级的（没有静态读取方法），读出的值仅用于展示或预校验；受理判定以 `enqueue` 返回值为准。
 
 ### 6.2 QueueItem 字段
 
@@ -604,8 +607,9 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 | `cancelPending(session)` | `boolean` | 否 | 管理 | 清空并递增代际；session 非 null 即返回 true |
 | `importItems(session, rows)` | `int` | 否 | 运维 | 旧数据迁移，返回实际导入条数 |
 | `static isPersisted(FlowContext)` | `boolean` | — | 运维 | 快照中是否有队列投影 |
-| `static maxQueueSize()` | `int` | — | — | `20` |
-| `static maxTextLength()` | `int` | — | — | `4096` |
+| `getMaxSize()` | `int` | — | — | 本实例的待执行条数上限（缺省 `20`） |
+| `getMaxTextLength()` | `int` | — | — | 本实例的单条文本上限（缺省 `4096`） |
+| `static builder()` | `Builder` | — | 装配 | `maxSize(int)` / `maxTextLength(int)` |
 
 `QueueClaim`（`implements TurnDispatch`，由插件创建）：
 
@@ -625,7 +629,7 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 
 1. **入队只是登记**：装配插件、执行 `/queue`、调用管理接口都不会让队列自己动起来。宿主必须在受理位释放、任务终态、管理接口添加之后调用 `drainLoop` 或 `claimNext`，否则队列永远不消费。
 2. **canDrain / canAccept 要传“是否被占用”而不是 `isIdle`**：`engine.isIdle` 把积压也算作不空闲，队列非空时恒为 false。
-3. **drainLoop 的返回值是最后一次领取的结果**：异步 handler 启动一条后若仍有待执行项，且 `canDrain` 仍为 true（或为 null），下一次领取会因已有 in-flight 而得到 `NO_TASK` 并返回它。不要用返回值判断“本次是否启动过任务”。drainLoop 单次调用最多循环 `MAX_QUEUE_SIZE + 1` 次作为失控保护。
+3. **drainLoop 的返回值是最后一次领取的结果**：异步 handler 启动一条后若仍有待执行项，且 `canDrain` 仍为 true（或为 null），下一次领取会因已有 in-flight 而得到 `NO_TASK` 并返回它。不要用返回值判断“本次是否启动过任务”。drainLoop 单次调用的循环次数有上限作为失控保护。
 4. **START_FAILED 不要立即重试**：任务已回到队首，立即重试会对同一条失败任务无限循环。
 5. **回滚遇到队列已满**：回滚允许在待执行已有 20 条时再放回 1 条；超过时回滚被拒，任务保持 in-flight，派发登记也保持，需要再次收口。
 6. **cancelPending 不停流**：它只清空队列、移除 in-flight 记录并递增代际，正在跑的流需要用 `engine.interrupt` 停止。之后该流终态的 `settle` 为空操作。

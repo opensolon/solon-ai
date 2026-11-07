@@ -150,7 +150,6 @@ public class HarnessEngine {
     private final TerminalTalent terminalTalent;
     private final SkillTalent skillTalent;
 
-    private final CommandRegistry commandRegistry = new CommandRegistry();
     /** 输入受理流水线（handle 的实现）。 */
     private final InputPipeline inputPipeline;
     /** 会话控制面（admit/status/isIdle/中断第一段的实现）。 */
@@ -165,7 +164,7 @@ public class HarnessEngine {
     }
 
     public CommandRegistry getCommandRegistry() {
-        return commandRegistry;
+        return options.commandRegistry;
     }
 
     public AgentManager getAgentManager() {
@@ -272,7 +271,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public MountSource getWorkspaceSource() {
-        return options.getMountManager().getWorkspaceSource();
+        return options.mountManager.getWorkspaceSource();
     }
 
     public TodoTalent getTodoTalent() {
@@ -704,11 +703,11 @@ public class HarnessEngine {
     }
 
     public Collection<Mount> getMounts() {
-        return options.getMountManager().getMounts();
+        return options.mountManager.getMounts();
     }
 
     public Mount getMount(String alias) {
-        return options.getMountManager().getMount(alias);
+        return options.mountManager.getMount(alias);
     }
 
     public SkillDescriptor getSkill(String name) {
@@ -1154,12 +1153,12 @@ public class HarnessEngine {
             throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
         }
         // 同别名替换时，清除旧挂载关联的运行时定义。
-        if (mount != null && options.getMountManager().hasMount(mount.getAlias())) {
+        if (mount != null && options.mountManager.hasMount(mount.getAlias())) {
             String key = mount.getAlias().startsWith("@") ? mount.getAlias() : "@" + mount.getAlias();
             agentManager.removeByMountAlias(key);
         }
 
-        options.getMountManager().register(mount);
+        options.mountManager.register(mount);
     }
 
     public void removeMount(String alias) {
@@ -1170,7 +1169,7 @@ public class HarnessEngine {
         String key = alias.startsWith("@") ? alias : "@" + alias;
         agentManager.removeByMountAlias(key);
 
-        options.getMountManager().remove(alias);
+        options.mountManager.remove(alias);
     }
 
     private static String normalizeMountAlias(String alias) {
@@ -1179,7 +1178,7 @@ public class HarnessEngine {
     }
 
     public boolean hasMount(String alias) {
-        return options.getMountManager().hasMount(alias);
+        return options.mountManager.hasMount(alias);
     }
 
     public void refreshMount(@Nullable String alias) {
@@ -1443,7 +1442,7 @@ public class HarnessEngine {
 
     private HarnessEngine(HarnessOptions options) {
         this.options = options;
-        this.sessionControl = new SessionControl(this, options, commandRegistry);
+        this.sessionControl = new SessionControl(this, options, options.commandRegistry);
         this.inputPipeline = new InputPipeline(this, options, sessionControl);
 
         //上下文压缩拦截器默认处理
@@ -1470,7 +1469,7 @@ public class HarnessEngine {
         }
 
 
-        MountManager mountManager = options.getMountManager();
+        MountManager mountManager = options.mountManager;
         mountManager.register(Mount.builder()
                 .alias(BUILTIN_AGENT_MOUNT)
                 .description("Harness built-in agents")
@@ -1510,10 +1509,10 @@ public class HarnessEngine {
         }
         this.lspTalent = new LspTalent(lspManager, options.getWorkspace());
         this.lspManager.setDiagnosticsCallback(lspTalent::updateDiagnostics);
-        if (options.getMountManager() != null) {
+        if (options.mountManager != null) {
             //lsp 工具的路径入参要与 read/grep 一致地支持挂载点逻辑路径，否则同一个 @xx/a.java
             //能 read 却做不了导航，只报「文件不存在」
-            this.lspTalent.setPathResolver(options.getMountManager()::resolve);
+            this.lspTalent.setPathResolver(options.mountManager::resolve);
         }
 
         if (options.getMemoryProvider() != null) {
@@ -1545,7 +1544,7 @@ public class HarnessEngine {
         }
 
         //受保护的 <hh>commands|agents 与物化缓存 ~/<hh>cache/mount 都跟随引擎配置的 harnessHome
-        terminalTalent = new TerminalTalent(options.getMountManager(), options.getHarnessHome());
+        terminalTalent = new TerminalTalent(options.mountManager, options.getHarnessHome());
         skillTalent = new SkillTalent(this.skillCatalog);
 
         agentManager = new AgentManager(this.agentCatalog);
@@ -2305,7 +2304,17 @@ public class HarnessEngine {
             if (mount != null && BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(mount.getAlias()))) {
                 throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
             }
-            options.getMountManager().register(mount);
+            options.mountManager.register(mount);
+            return this;
+        }
+
+        public Builder commandAdd(Command command) {
+            options.commandRegistry.register(command);
+            return this;
+        }
+
+        public Builder commandLoad(MountSource source, String dir) {
+            options.commandRegistry.load(source, dir);
             return this;
         }
 
