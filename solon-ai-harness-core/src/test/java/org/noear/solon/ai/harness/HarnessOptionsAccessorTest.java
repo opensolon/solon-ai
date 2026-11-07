@@ -381,6 +381,51 @@ class HarnessOptionsAccessorTest {
     }
 
     @Test
+    void serverFacingAccessorsAndProfile() {
+        HarnessOptions o = new HarnessOptions("work", ".solon");
+        assertEquals(HarnessProfile.CODING, o.getProfile());
+        assertFalse(o.isMemorySessionIsolation());
+        assertTrue(o.isSandboxSelfBootstrap());
+        assertTrue(o.isRuntimeMutable());
+        assertNull(o.getCwdPolicy());
+        assertEquals(HarnessOptions.DEFAULT_PROTECTED_STATE_PATHS, o.getProtectedStatePaths());
+        assertNull(o.getStateSourceOrNull(), "未显式设置时不触发缺省来源");
+
+        o.applyProfile(HarnessProfile.SERVER, java.util.Collections.<String>emptySet());
+        assertEquals(HarnessProfile.SERVER, o.getProfile());
+        assertTrue(o.isMemorySessionIsolation());
+        assertFalse(o.isSandboxSelfBootstrap());
+        assertFalse(o.isRuntimeMutable());
+        assertFalse(o.isSandboxAllowUserHome());
+        assertTrue(o.isScopeRequired());
+
+        // 预设之后的 setter 仍可覆盖
+        o.setScopeRequired(false);
+        assertFalse(o.isScopeRequired());
+        o.setMemorySessionIsolation(false);
+        o.setSandboxSelfBootstrap(true);
+        o.setRuntimeMutable(true);
+        o.setCwdPolicy(c -> c.startsWith("/t"));
+        o.setProtectedStatePaths(Arrays.asList("sessions"));
+        assertFalse(o.isMemorySessionIsolation());
+        assertTrue(o.isSandboxSelfBootstrap());
+        assertTrue(o.isRuntimeMutable());
+        assertTrue(o.getCwdPolicy().test("/t/a"));
+        assertEquals(Arrays.asList("sessions"), o.getProtectedStatePaths());
+        o.setProtectedStatePaths(null);
+        assertTrue(o.getProtectedStatePaths().isEmpty());
+
+        // 多租户：作用域解析器与会话归属（null 归一为 LOCAL）
+        assertNull(o.getScopeResolver());
+        org.noear.solon.ai.harness.scope.TurnScopeResolver resolver = (s, in) -> null;
+        o.setScopeResolver(resolver);
+        assertSame(resolver, o.getScopeResolver());
+        assertSame(org.noear.solon.ai.harness.spi.SessionOwnership.LOCAL, o.getSessionOwnership());
+        o.setSessionOwnership(null);
+        assertSame(org.noear.solon.ai.harness.spi.SessionOwnership.LOCAL, o.getSessionOwnership());
+    }
+
+    @Test
     void allSettersAreExercisedByThisTest() {
         List<String> expected = Arrays.stream(HarnessOptions.class.getDeclaredMethods())
                 .filter(m -> m.getName().startsWith("set") || m.getName().startsWith("add"))
@@ -403,6 +448,8 @@ class HarnessOptionsAccessorTest {
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
                 "setHitlInterceptor", "setMemoryProvider", "setStateSource",
+                "setMemorySessionIsolation", "setSandboxSelfBootstrap", "setRuntimeMutable",
+                "setCwdPolicy", "setProtectedStatePaths", "setScopeResolver", "setScopeRequired", "setSessionOwnership",
                 "addHttpCustomize", "addTools", "addDisallowedTools", "addModel");
 
         List<String> missing = expected.stream()

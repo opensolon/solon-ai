@@ -37,6 +37,17 @@ import org.noear.solon.core.util.Assert;
  * @since 4.2.0
  */
 class QueueCommand extends AbsCommand {
+    /** 实例上限（由所属 QueueExtension 注入） */
+    final QueueExtension.Limits limits;
+
+    QueueCommand() {
+        this(QueueExtension.Limits.DEFAULT);
+    }
+
+    QueueCommand(QueueExtension.Limits limits) {
+        this.limits = limits;
+    }
+
 
     @Override
     public String name() {
@@ -69,8 +80,8 @@ class QueueCommand extends AbsCommand {
             return;
         }
 
-        if (text.length() > QueueStore.MAX_TEXT_LENGTH) {
-            ctx.println("排队内容过长（上限 " + QueueStore.MAX_TEXT_LENGTH + " 字符）");
+        if (text.length() > limits.maxTextLength) {
+            ctx.println("排队内容过长（上限 " + limits.maxTextLength + " 字符）");
             return;
         }
 
@@ -79,9 +90,10 @@ class QueueCommand extends AbsCommand {
         // 此处不再兜底硬编码渠道名——本地无渠道来源（NONE）是合法值，展示层用 channelOr 自行降级。
         InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
 
-        int n = QueueStore.enqueue(session, text, resolved);
+        int n = QueueStore.enqueue(session, text, resolved, null, null, null, null, null, false, null,
+                limits.maxSize, limits.maxTextLength);
         if (n < 0) {
-            ctx.println("排队失败（队列已满，上限 " + QueueStore.MAX_QUEUE_SIZE + " 条），请稍后再试");
+            ctx.println("排队失败（队列已满，上限 " + limits.maxSize + " 条），请稍后再试");
         } else {
             ctx.println("已加入队列（第 " + n + " 位），将按顺序在任务空闲后自动发送");
         }

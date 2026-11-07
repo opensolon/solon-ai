@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LoopStoreMountTest {
     private static LoopExtension loaded(InMemoryMountSource source) {
         LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
-                .store(source, "loop/tasks.json").build();
+                .store(source, "loop").build();
         ext.scheduler().load();
         return ext;
     }
@@ -24,7 +24,7 @@ class LoopStoreMountTest {
         LoopTask task = first.schedule("s1", LoopSpec.of("hello").everyMinutes(10));
 
         assertEquals(32, task.getId().length(), "新任务使用完整 128 bit ID");
-        String json = source.readStringOrNull("loop/tasks.json");
+        String json = source.readStringOrNull("loop/s1.json");
         assertNotNull(json, "必须写入来源，而不是本地文件");
         assertEquals("s1", ONode.ofJson(json).get("tasks").get(0).get("sessionId").getString());
 
@@ -36,12 +36,12 @@ class LoopStoreMountTest {
     @Test
     void corruptContentIsBackedUpInsideSource() throws Exception {
         InMemoryMountSource source = new InMemoryMountSource();
-        source.writeString("loop/tasks.json", "{not json");
+        source.writeString("loop/s1.json", "{not json");
         LoopExtension ext = loaded(source);
         ext.schedule("s1", LoopSpec.of("x").everyMinutes(10));
 
         long backups = source.list("loop").stream()
-                .filter(e -> e.getName().startsWith("tasks.json.corrupt-")).count();
+                .filter(e -> e.getName().startsWith("s1.json.corrupt-")).count();
         assertEquals(1, backups, "读不懂的内容在来源内改名备份，绝不被空快照覆盖");
     }
 }

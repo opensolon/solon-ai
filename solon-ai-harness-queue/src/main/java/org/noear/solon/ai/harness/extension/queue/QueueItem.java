@@ -168,7 +168,7 @@ public final class QueueItem {
     static QueueItem fromMap(Map<String, Object> map) {
         if (map == null) return null;
         String text = value(map.get("text"));
-        if (text == null || text.trim().isEmpty() || text.trim().length() > QueueStore.MAX_TEXT_LENGTH) return null;
+        if (text == null || text.trim().isEmpty() || text.trim().length() > QueueStore.HARD_MAX_TEXT_LENGTH) return null; // 入队时已按实例上限校验；恢复只防御失控
         String id = value(map.get("id"));
         InputOrigin origin = InputOrigin.fromMap(map);
         QueueItem item = new QueueItem(id, text.trim(), origin,

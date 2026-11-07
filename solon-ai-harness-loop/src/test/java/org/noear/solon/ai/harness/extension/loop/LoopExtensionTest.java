@@ -55,6 +55,21 @@ class LoopExtensionTest {
         return b.build();
     }
 
+    /** 按会话分存目录下全部会话文件的内容 */
+    private String storeText() throws Exception {
+        Path dir = workspace.resolve("loop");
+        if (!Files.isDirectory(dir)) {
+            return "";
+        }
+        StringBuilder buf = new StringBuilder();
+        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+            for (Path p : (Iterable<Path>) files.sorted()::iterator) {
+                buf.append(new String(Files.readAllBytes(p), "UTF-8"));
+            }
+        }
+        return buf.toString();
+    }
+
     private static LoopExtension.Builder builder(FakeJobManager jm) {
         return LoopExtension.builder().jobManager(jm == null ? null : jm.proxy).defaultExecutor(false);
     }
@@ -68,7 +83,7 @@ class LoopExtensionTest {
                 + "\"createdAt\":\"2026-01-01T00:00:00Z\",\"autoInterval\":false,\"enabled\":true,"
                 + "\"sessionId\":\"s1\"}]}").getBytes("UTF-8"));
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), "loop", store.getFileName().toString()).build();
 
         HarnessEngine engine = engine(loop);
 
@@ -76,6 +91,8 @@ class LoopExtensionTest {
         assertEquals(1, loop.list("s1").size(), "onAttach 必须加载 tasks.json");
         assertTrue(loop.scheduler().isJobRegistered("s1", loop.get("s1", "aaaa0001")), "启用任务必须注册 job");
         assertSame(loop, engine.addExtensionIfAbsent(builder(jm).build()), "按类型幂等");
+        assertTrue(loop.getToolNames().containsAll(Arrays.asList("loop_add", "loop_list", "loop_control")),
+                "向作用域守卫声明自己的工具");
     }
 
     @Test
@@ -89,8 +106,8 @@ class LoopExtensionTest {
         Files.write(storeA, json.getBytes("UTF-8"));
         Files.write(storeB, json.getBytes("UTF-8"));
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension a = builder(jm).store(FileMountSource.of(workspace), storeA.getFileName().toString()).build();
-        LoopExtension b = builder(jm).store(FileMountSource.of(workspace), storeB.getFileName().toString()).build();
+        LoopExtension a = builder(jm).store(FileMountSource.of(workspace), "loop-a", storeA.getFileName().toString()).build();
+        LoopExtension b = builder(jm).store(FileMountSource.of(workspace), "loop-b", storeB.getFileName().toString()).build();
         engine(a);
         engine(b);
 
@@ -124,7 +141,7 @@ class LoopExtensionTest {
     void removeSessionStopsAndDeletesTasksOfThatSessionOnly() throws Exception {
         Path store = workspace.resolve("tasks.json");
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), "loop", store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         loop.schedule("s2", LoopSpec.of("b").everyMinutes(5));
@@ -135,8 +152,8 @@ class LoopExtensionTest {
         assertTrue(loop.list("s1").isEmpty(), "onSessionRemove 必须删除该会话的任务");
         assertEquals(1, loop.list("s2").size(), "其它会话不受影响");
         assertEquals(1, jm.jobs.size(), "该会话的 job 必须注销");
-        String json = new String(Files.readAllBytes(store), "UTF-8");
-        assertFalse(json.contains("\"s1\""), "tasks.json 里不得再有该会话");
+        String json = storeText();
+        assertFalse(json.contains("\"s1\""), "存储里不得再有该会话");
         assertFalse(sessions.containsKey("s1"), "删除流程不得把会话建出来");
 
         engine.removeSession("s1"); // 幂等
@@ -146,7 +163,7 @@ class LoopExtensionTest {
     void detachUnloadsJobsButKeepsRecords() throws Exception {
         Path store = workspace.resolve("tasks.json");
         FakeJobManager jm = new FakeJobManager();
-        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
+        LoopExtension loop = builder(jm).store(FileMountSource.of(workspace), "loop", store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
         assertEquals(1, jm.jobs.size());
@@ -155,8 +172,8 @@ class LoopExtensionTest {
 
         assertTrue(jm.jobs.isEmpty(), "onDetach 必须卸载全部 job（否则带着已废引擎空转）");
         assertFalse(loop.hasActiveTasks());
-        String json = new String(Files.readAllBytes(store), "UTF-8");
-        assertTrue(json.contains("\"prompt\""), "tasks.json 记录必须保留（重启可恢复）");
+        String json = storeText();
+        assertTrue(json.contains("\"prompt\""), "存储记录必须保留（重启可恢复）");
     }
 
     @Test
@@ -204,7 +221,7 @@ class LoopExtensionTest {
     @Test
     void inFlightRoundAfterDetachDoesNotWipeStore() throws Exception {
         Path store = workspace.resolve("tasks.json");
-        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
+        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), "loop", store.getFileName().toString()).build();
         HarnessEngine engine = engine(loop);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -225,7 +242,7 @@ class LoopExtensionTest {
         round.join(3000);
         loop.removeAll("s2");          // 宿主删会话等调用，同样不得写盘
 
-        String json = new String(Files.readAllBytes(store), "UTF-8");
+        String json = storeText();
         assertTrue(json.contains("keep-me") && json.contains("keep-me-too"),
                 "摘除后任何写盘都必须跳过，否则以空快照覆盖文件：" + json);
     }
@@ -233,7 +250,7 @@ class LoopExtensionTest {
     @Test
     void reattachLoadsAgainAndPersistsAgain() throws Exception {
         Path store = workspace.resolve("tasks.json");
-        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), store.getFileName().toString()).build();
+        LoopExtension loop = builder(null).store(FileMountSource.of(workspace), "loop", store.getFileName().toString()).build();
         HarnessEngine first = engine(loop);
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
         first.shutdown();
@@ -241,7 +258,7 @@ class LoopExtensionTest {
         engine(loop);               // 同一实例重新挂接
         assertEquals(1, loop.list("s1").size(), "重新挂接必须重新加载");
         loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
-        String json = new String(Files.readAllBytes(store), "UTF-8");
+        String json = storeText();
         assertTrue(json.contains("\"b\""), "重新挂接后恢复写盘：" + json);
     }
 

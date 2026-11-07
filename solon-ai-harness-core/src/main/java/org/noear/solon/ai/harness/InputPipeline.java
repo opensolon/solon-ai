@@ -17,6 +17,8 @@ package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActRequest;
+import org.noear.solon.ai.harness.scope.TurnScope;
+import org.noear.solon.ai.harness.scope.TurnScopeResolver;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
@@ -60,6 +62,8 @@ import java.util.*;
  * @since 4.2.0
  */
 final class InputPipeline {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(InputPipeline.class);
+
     /**
      * 本线程上已受理（正在装配）的会话：命令内部再次调用 {@code handle} 时继承外层占位，
      * 不再判定（否则会被外层自己的「受理中」拒掉）。
@@ -135,6 +139,22 @@ final class InputPipeline {
             }
         }
 
+        // 请求级作用域：显式携带优先，其次引擎级解析器（扩展可在 onInput 里就地设置）。
+        // 要求作用域时解析不到就拒绝（缺失不得等于不限制）；未要求时解析器异常照旧上抛。
+        final TurnScope scope;
+        try {
+            scope = resolveScope(input);
+        } catch (RuntimeException e) {
+            if (options.isScopeRequired() == false) {
+                throw e;
+            }
+            LOG.warn("[Harness] scope resolve failed, input rejected: {}", e.toString());
+            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, e.getMessage());
+        }
+        if (scope == null && options.isScopeRequired()) {
+            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+        }
+
         final AgentSession session = input.getSession();
         final InputAttachments attachments = input.getAttachments();
 
@@ -154,7 +174,7 @@ final class InputPipeline {
                 //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
                 rememberEffectiveAgent(session, agentName);
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()), true);
+                        assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope), true);
             }
 
             //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
@@ -170,7 +190,7 @@ final class InputPipeline {
                     ? input.getExplicitAgent() : effectiveAgentOf(session);
             rememberEffectiveAgent(session, agentName);
             return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
+                    assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope));
         }
 
         if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
@@ -213,7 +233,7 @@ final class InputPipeline {
         String modelName = resolveSessionModelName(session, input.getSelectedModel());
         rememberEffectiveAgent(session, agentName);
         return InputOutcome.task(prompt, agentName, modelName,
-                assembleRequest(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps()));
+                assembleRequest(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope));
     }
 
     /**
@@ -223,7 +243,8 @@ final class InputPipeline {
                                   @Nullable String selectedModel,
                                   @Nullable String selectedAgent,
                                   @Nullable List<String> selectedSkills,
-                                  @Nullable List<String> selectedMcps) {
+                                  @Nullable List<String> selectedMcps,
+                                  @Nullable TurnScope scope) {
         ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(selectedAgent));
 
         if (session != null) {
@@ -259,7 +280,31 @@ final class InputPipeline {
             }
         }
 
+        // 作用域放在最后（andThen 叠加：后写覆盖），模型覆盖也必须晚于上面的会话模型
+        if (scope != null) {
+            request.options(scope::applyTo);
+        }
+
         return request;
+    }
+
+    /**
+     * 解析本轮作用域（显式携带优先，其次引擎级解析器；解析结果回写到输入上，便于宿主回读）
+     */
+    @Nullable
+    private TurnScope resolveScope(HarnessInput input) {
+        if (input.getScope() != null) {
+            return input.getScope();
+        }
+
+        TurnScopeResolver resolver = options.getScopeResolver();
+        if (resolver == null) {
+            return null;
+        }
+
+        TurnScope scope = resolver.resolve(input.getSession(), input);
+        input.scope(scope);
+        return scope;
     }
 
     /**

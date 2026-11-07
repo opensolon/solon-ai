@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.scope.TurnScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.MountSource;
 import java.nio.file.Path;
@@ -44,6 +46,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 
 /**
  * Harness 运行时配置（内部使用）
@@ -97,8 +101,32 @@ class HarnessOptions implements NonSerializable {
 
     private volatile boolean hitlEnabled = false;
     private volatile PermissionContext permissionContext = PermissionContext.create();
+    private final Object permissionLock = new Object();
     private volatile boolean subagentEnabled = true;
     private volatile boolean bashAsyncEnabled = false;
+
+    // ========== 多租户 / 服务端 ==========
+    private volatile HarnessProfile profile = HarnessProfile.CODING;
+    /** 记忆是否按会话隔离（SERVER 缺省 true） */
+    private volatile boolean memorySessionIsolation = false;
+    /** 是否由引擎自行初始化进程级 OS 沙盒（SERVER 缺省 false，由宿主 SandboxBootstrap.initOnce） */
+    private volatile boolean sandboxSelfBootstrap = true;
+    /** 运行期是否允许修改引擎级全局配置（SERVER 缺省 false） */
+    private volatile boolean runtimeMutable = true;
+    /** 会话工作目录的边界策略（null = 不校验） */
+    private volatile Predicate<String> cwdPolicy;
+    /** 请求级作用域解析器（null = 不解析） */
+    private volatile TurnScopeResolver scopeResolver;
+    /** 是否要求每轮都有作用域（SERVER 缺省 true）：缺失时受理拒绝、守卫禁用全部工具 */
+    private volatile boolean scopeRequired = false;
+    /** 会话归属（多节点单写者租约；缺省本机恒成功） */
+    private volatile SessionOwnership sessionOwnership =
+            SessionOwnership.LOCAL;
+    /** 受保护的状态子路径（相对 harnessHome）：模型文件工具与 bash 都不得读写 */
+    private volatile List<String> protectedStatePaths = DEFAULT_PROTECTED_STATE_PATHS;
+
+    static final List<String> DEFAULT_PROTECTED_STATE_PATHS = Collections.unmodifiableList(
+            Arrays.asList("sessions", "memory", "channels", "tasks.json", "loop", "goal"));
 
     // ========== 重试配置 ==========
     private volatile int apiRetries = 3;
@@ -419,7 +447,21 @@ class HarnessOptions implements NonSerializable {
 
     void setPermissionContext(PermissionContext permissionContext) {
         if (permissionContext != null) {
-            this.permissionContext = permissionContext;
+            synchronized (permissionLock) {
+                this.permissionContext = permissionContext;
+            }
+        }
+    }
+
+    /**
+     * 原子地读-改-写权限上下文（并发审批 / 宿主加规则时不丢规则）
+     */
+    void updatePermissionContext(UnaryOperator<PermissionContext> updater) {
+        synchronized (permissionLock) {
+            PermissionContext next = updater.apply(this.permissionContext);
+            if (next != null) {
+                this.permissionContext = next;
+            }
         }
     }
 
@@ -492,6 +534,106 @@ class HarnessOptions implements NonSerializable {
         if (modelRetries != null) {
             this.modelRetries = modelRetries;
         }
+    }
+
+    // ========== 多租户 / 服务端 ==========
+
+    HarnessProfile getProfile() {
+        return profile;
+    }
+
+    /**
+     * 在 {@code build()} 时合成预设：显式值 &gt; 预设值 &gt; 默认值，与调用顺序无关。
+     *
+     * @param explicit 用户显式设过的字段名（这些字段不被预设覆盖）
+     */
+    void applyProfile(HarnessProfile profile, Set<String> explicit) {
+        if (profile == null) {
+            return;
+        }
+        this.profile = profile;
+        if (profile == HarnessProfile.SERVER) {
+            if (!explicit.contains("sandboxEnabled")) this.sandboxEnabled = true;
+            if (!explicit.contains("sandboxAllowUserHome")) this.sandboxAllowUserHome = false;
+            if (!explicit.contains("sandboxSystemRestrict")) this.sandboxSystemRestrict = true;
+            if (!explicit.contains("sandboxSelfBootstrap")) this.sandboxSelfBootstrap = false;
+            if (!explicit.contains("bashAsyncEnabled")) this.bashAsyncEnabled = false;
+            if (!explicit.contains("memorySessionIsolation")) this.memorySessionIsolation = true;
+            if (!explicit.contains("runtimeMutable")) this.runtimeMutable = false;
+            if (!explicit.contains("scopeRequired")) this.scopeRequired = true;
+        }
+    }
+
+    boolean isScopeRequired() {
+        return scopeRequired;
+    }
+
+    void setScopeRequired(boolean scopeRequired) {
+        this.scopeRequired = scopeRequired;
+    }
+
+    boolean isMemorySessionIsolation() {
+        return memorySessionIsolation;
+    }
+
+    void setMemorySessionIsolation(boolean memorySessionIsolation) {
+        this.memorySessionIsolation = memorySessionIsolation;
+    }
+
+    boolean isSandboxSelfBootstrap() {
+        return sandboxSelfBootstrap;
+    }
+
+    void setSandboxSelfBootstrap(boolean sandboxSelfBootstrap) {
+        this.sandboxSelfBootstrap = sandboxSelfBootstrap;
+    }
+
+    boolean isRuntimeMutable() {
+        return runtimeMutable;
+    }
+
+    void setRuntimeMutable(boolean runtimeMutable) {
+        this.runtimeMutable = runtimeMutable;
+    }
+
+    Predicate<String> getCwdPolicy() {
+        return cwdPolicy;
+    }
+
+    void setCwdPolicy(Predicate<String> cwdPolicy) {
+        this.cwdPolicy = cwdPolicy;
+    }
+
+    TurnScopeResolver getScopeResolver() {
+        return scopeResolver;
+    }
+
+    void setScopeResolver(TurnScopeResolver scopeResolver) {
+        this.scopeResolver = scopeResolver;
+    }
+
+    SessionOwnership getSessionOwnership() {
+        return sessionOwnership;
+    }
+
+    void setSessionOwnership(SessionOwnership sessionOwnership) {
+        this.sessionOwnership = sessionOwnership == null
+                ? SessionOwnership.LOCAL : sessionOwnership;
+    }
+
+    List<String> getProtectedStatePaths() {
+        return protectedStatePaths;
+    }
+
+    void setProtectedStatePaths(List<String> protectedStatePaths) {
+        this.protectedStatePaths = protectedStatePaths == null
+                ? Collections.<String>emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(protectedStatePaths));
+    }
+
+    /** 显式设置的状态来源（不触发缺省值） */
+    MountSource getStateSourceOrNull() {
+        return stateSource;
     }
 
     // ========== 缓存控制 ==========

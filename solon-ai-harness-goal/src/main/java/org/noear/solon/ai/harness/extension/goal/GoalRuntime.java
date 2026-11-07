@@ -22,6 +22,10 @@ import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
+import org.noear.solon.ai.harness.extension.goal.validate.CommandRunner;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
+import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator.ValidationResult;
+import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.flow.FlowContext;
@@ -95,6 +99,13 @@ class GoalRuntime {
      * 并按 AND 语义阻断完成。改为实例持有后，注册项不再跨引擎累加。</p>
      */
     private final List<ValidatorRegistration> validators = new CopyOnWriteArrayList<>();
+    /** 验证「无法判定」时的去向（缺省 FAIL_OPEN；GoalExtension 按引擎模式配置） */
+    private volatile ValidatorPolicy validatorPolicy = ValidatorPolicy.FAIL_OPEN;
+    /** 内置验证命令超时（毫秒） */
+    private volatile int validatorTimeoutMs = DEFAULT_VALIDATOR_TIMEOUT_MS;
+
+    static final int DEFAULT_VALIDATOR_TIMEOUT_MS = 180_000;
+    private static final int VALIDATOR_MAX_OUTPUT_CHARS = 64_000;
 
     public GoalRuntime(HarnessEngine engine, BudgetThresholds budgetThresholds,
                       int stagnationThreshold, int maxConsecutiveErrors, boolean validatorEnabled) {
@@ -392,15 +403,64 @@ class GoalRuntime {
         }
     }
 
+    /** 配置验证策略与超时（由 GoalExtension 在挂接时按引擎模式决定） */
+    void configureValidation(ValidatorPolicy policy, int timeoutMs) {
+        if (policy != null) {
+            this.validatorPolicy = policy;
+        }
+        if (timeoutMs > 0) {
+            this.validatorTimeoutMs = timeoutMs;
+        }
+    }
+
+    ValidatorPolicy getValidatorPolicy() {
+        return validatorPolicy;
+    }
+
+    /**
+     * 内置验证器的命令执行口：走引擎 TerminalTalent 执行链（OS 沙盒、超时整树终止、输出上限）。
+     * 没有引擎时（纯单测）返回 FAILED，验证器据此得出 INCONCLUSIVE。
+     */
+    CommandResult runValidationCommand(String command, String workDir) {
+        if (engine == null || engine.getTerminalTalent() == null) {
+            return CommandResult.failed("no command runner (engine not attached)");
+        }
+        return engine.getTerminalTalent().exec(command, workDir, validatorTimeoutMs, VALIDATOR_MAX_OUTPUT_CHARS);
+    }
+
+    /**
+     * 按目标条件验证，并按 {@link ValidatorPolicy} 处理「无法判定」：返回值只会是 PASSED 或 FAILED。
+     */
+    ValidationResult validate(String condition, String workDir) {
+        ValidationResult vr;
+        try {
+            vr = resolveValidator(condition).validate(condition, workDir);
+        } catch (Throwable e) {
+            vr = ValidationResult.inconclusive("验证器异常: " + e.getMessage());
+        }
+        if (vr == null) {
+            vr = ValidationResult.inconclusive("验证器无结果");
+        }
+        if (!vr.isInconclusive()) {
+            return vr;
+        }
+        if (validatorPolicy == ValidatorPolicy.FAIL_OPEN) {
+            LOG.warn("Goal validation inconclusive, treated as passed (FAIL_OPEN): {}", vr.detail());
+            return ValidationResult.passed();
+        }
+        return ValidationResult.failed("无法完成验证（" + vr.detail() + "）");
+    }
+
     /** 注册默认验证器（执行目录在验证时传入）。 */
     private void registerDefaultValidators() {
+        CommandRunner runner = this::runValidationCommand;
         registerValidator(
                 condition -> condition.contains("test")
                         || condition.contains("pass")
                         || condition.contains("check")
                         || condition.contains("ensure")
                         || condition.contains("verify"),
-                new TestsPassValidator());
+                new TestsPassValidator(runner));
 
         registerValidator(
                 condition -> condition.contains("build")
@@ -411,7 +471,7 @@ class GoalRuntime {
                         || condition.contains("create")
                         || condition.contains("add")
                         || condition.contains("write"),
-                new BuildPassValidator());
+                new BuildPassValidator(runner));
     }
 
     /** 注册一个带条件匹配的验证器（多次注册按 AND 语义链式生效）。 */

@@ -128,6 +128,7 @@ public final class InputOutcome {
          * <li>{@code busy} —— 会话忙且无处可延（没装积压能力、程序轮次、续流等不可排队的输入）；</li>
          * <li>{@code attachments_not_deferrable} —— 会话忙且输入带附件（附件不进积压）；</li>
          * <li>{@code backlog_unavailable} —— 会话忙，积压拒收（已满 / 超长 / 已停用）。</li>
+         * <li>{@code not_owner} —— 多节点：会话由其它节点持有（detail 为持有者），由网关转发。</li>
          * </ul>
          */
         REJECTED
@@ -141,6 +142,18 @@ public final class InputOutcome {
     public static final String REJECT_ATTACHMENTS_NOT_DEFERRABLE = "attachments_not_deferrable";
     /** 拒绝原因：会话忙，积压拒收 */
     public static final String REJECT_BACKLOG_UNAVAILABLE = "backlog_unavailable";
+    /**
+     * 多节点部署：本节点不持有该会话（{@code getRejectDetail()} 为持有者节点标识，可空），由网关转发
+     *
+     * @since 4.2.0
+     */
+    public static final String REJECT_NOT_OWNER = "not_owner";
+    /**
+     * 要求作用域（{@code scopeRequired}）但本轮解析不到（解析器返回 null 或抛异常）
+     *
+     * @since 4.2.0
+     */
+    public static final String REJECT_SCOPE_UNAVAILABLE = "scope_unavailable";
 
     /** 宿主动作路由值（六值互斥穷尽，语义见 {@link Kind}） */
     private final Kind kind;

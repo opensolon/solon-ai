@@ -20,6 +20,8 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessProfile;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.input.HarnessInput;
@@ -31,6 +33,8 @@ import org.noear.solon.scheduling.simple.JobManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -69,6 +73,8 @@ import java.util.function.Predicate;
  * @since 3.9.2
  */
 public class GoalExtension extends AbsHarnessExtension {
+    /** 活跃 goal 索引在状态来源中的目录（每会话一个标记文件；在引擎缺省受保护名单内，模型工具读写不到） */
+    public static final String INDEX_PATH = "goal/active";
 
     /**
      * 会话状态事实：当前 goal 的状态（无 goal 时为 null）。
@@ -86,8 +92,12 @@ public class GoalExtension extends AbsHarnessExtension {
     private final int stagnationThreshold;
     private final int maxConsecutiveErrors;
     private final boolean validatorEnabled;
+    private final Boolean defaultValidators;
+    private final ValidatorPolicy validatorPolicy;
+    private final int validatorTimeoutMs;
     private final IJobManager jobManager;
     private final GoalListener listener;
+    private final int roundConcurrency;
 
     private HarnessEngine engine;
     private GoalRuntime goalRuntime;
@@ -100,7 +110,11 @@ public class GoalExtension extends AbsHarnessExtension {
         this.stagnationThreshold = b.stagnationThreshold;
         this.maxConsecutiveErrors = b.maxConsecutiveErrors;
         this.validatorEnabled = b.validatorEnabled;
+        this.defaultValidators = b.defaultValidators;
+        this.validatorPolicy = b.validatorPolicy;
+        this.validatorTimeoutMs = b.validatorTimeoutMs;
         this.listener = b.listener;
+        this.roundConcurrency = b.roundConcurrency;
 
         IJobManager jm = b.jobManagerSet ? b.jobManager : resolveJobManager();
         if (jm == null && !b.jobManagerSet) {
@@ -135,15 +149,23 @@ public class GoalExtension extends AbsHarnessExtension {
         }
         this.engine = engine;
         // 验证器在本轮会话工作目录下执行（由 goal_update 传入，不再固定为引擎工作区）
+        // 服务端模式缺省不注册内置构建/测试验证器（它们会在宿主上跑模型写的构建脚本），
+        // 且「无法判定」按未通过处理；本地编码模式保持原有体验
+        boolean server = engine.getProfile() == HarnessProfile.SERVER;
+        boolean registerDefaults = defaultValidators != null ? defaultValidators : !server;
+        ValidatorPolicy policy = validatorPolicy != null ? validatorPolicy
+                : (server ? ValidatorPolicy.FAIL_CLOSED : ValidatorPolicy.FAIL_OPEN);
         goalRuntime = new GoalRuntime(engine, budgetThresholds, stagnationThreshold,
-                maxConsecutiveErrors, validatorEnabled, true);
+                maxConsecutiveErrors, validatorEnabled, registerDefaults);
+        goalRuntime.configureValidation(policy, validatorTimeoutMs);
         goalRuntime.setDefaultExecutor(defaultExecutor(engine));
         if (listener != null) {
             goalRuntime.addListener(listener);
         }
 
         if (jobManager != null) {
-            goalScheduler = new GoalScheduler(goalRuntime, jobManager);
+            goalScheduler = new GoalScheduler(goalRuntime, jobManager, roundConcurrency);
+            goalScheduler.setIndex(engine.getStateSource(), INDEX_PATH);
         }
 
         goalCommand = new GoalCommand(this);
@@ -152,6 +174,12 @@ public class GoalExtension extends AbsHarnessExtension {
 
         goalTalent = new GoalTalent(goalRuntime, engine);
         goalTalent.setEnabled(isEnabled());
+    }
+
+    @Override
+    public Collection<String> getToolNames() {
+        GoalTalent t = goalTalent;
+        return t == null ? Collections.emptyList() : t.getToolMap().keySet();
     }
 
     @Override
@@ -182,11 +210,17 @@ public class GoalExtension extends AbsHarnessExtension {
         }
     }
 
+    /** 引擎池回收判定：仍有 goal 在调度时不静默（回收会让 goal 随引擎一起停摆）。 */
+    @Override
+    public boolean isQuiescent(HarnessEngine engine) {
+        return hasActiveGoals() == false;
+    }
+
     /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转）；会话里的 goal 记录保留。 */
     @Override
     public void onDetach(HarnessEngine engine) {
         if (goalScheduler != null) {
-            goalScheduler.stopAll();
+            goalScheduler.close();
         }
     }
 
@@ -412,6 +446,28 @@ public class GoalExtension extends AbsHarnessExtension {
         return recovered;
     }
 
+    /**
+     * 重启后按活跃索引恢复调度（无需宿主枚举会话）：索引是状态来源的 {@value #INDEX_PATH} 目录，
+     * 每会话一个标记文件，登记 / 注销 goal 时维护。只挂调度、不立即跑；会话已不存在或 goal 已非活跃的，
+     * 在首拍时自动注销。多节点共用状态来源时，非持有节点的轮次会被 {@code not_owner} 拒绝并跳过。
+     *
+     * @return 挂上调度的会话数
+     * @since 4.2.0
+     */
+    public int recover() {
+        if (goalScheduler == null || isEnabled() == false) {
+            return 0;
+        }
+        int recovered = 0;
+        for (String sessionId : goalScheduler.readIndex()) {
+            if (goalScheduler.isScheduled(sessionId) == false) {
+                schedule(sessionId, false);
+                recovered++;
+            }
+        }
+        return recovered;
+    }
+
     /** 是否仍有 goal 在调度（宿主闲置回收判定用）。 */
     public boolean hasActiveGoals() {
         return goalScheduler != null && goalScheduler.hasScheduledJobs();
@@ -525,9 +581,13 @@ public class GoalExtension extends AbsHarnessExtension {
         private int stagnationThreshold = 3;
         private int maxConsecutiveErrors = 3;
         private boolean validatorEnabled = true;
+        private Boolean defaultValidators;
+        private ValidatorPolicy validatorPolicy;
+        private int validatorTimeoutMs = GoalRuntime.DEFAULT_VALIDATOR_TIMEOUT_MS;
         private IJobManager jobManager;
         private boolean jobManagerSet;
         private GoalListener listener;
+        private int roundConcurrency = GoalScheduler.DEFAULT_ROUND_CONCURRENCY;
 
         private Builder() {
         }
@@ -556,10 +616,58 @@ public class GoalExtension extends AbsHarnessExtension {
             return this;
         }
 
+        /**
+         * 是否注册内置的构建/测试验证器；缺省按引擎模式（SERVER 不注册，其它注册）。
+         * 内置验证器经引擎 TerminalTalent 在 OS 沙盒内执行。
+         *
+         * @since 4.2.0
+         */
+        public Builder defaultValidators(boolean enabled) {
+            this.defaultValidators = enabled;
+            return this;
+        }
+
+        /**
+         * 验证「无法判定」（超时、执行异常、无执行目录）时的去向；缺省按引擎模式
+         * （SERVER = FAIL_CLOSED，其它 = FAIL_OPEN）。
+         *
+         * @since 4.2.0
+         */
+        public Builder validatorPolicy(ValidatorPolicy policy) {
+            this.validatorPolicy = policy;
+            return this;
+        }
+
+        /**
+         * 内置验证命令超时（毫秒，缺省 180000）；超时后整树终止并返回「无法判定」。
+         *
+         * @since 4.2.0
+         */
+        public Builder validatorTimeoutMs(int timeoutMs) {
+            if (timeoutMs <= 0) {
+                throw new IllegalArgumentException("validatorTimeoutMs must be > 0: " + timeoutMs);
+            }
+            this.validatorTimeoutMs = timeoutMs;
+            return this;
+        }
+
         /** 调度管理器；缺省取 {@code JobManager.getInstance()}；显式传 null = 关闭调度（纯测试宿主）。 */
         public Builder jobManager(IJobManager jobManager) {
             this.jobManager = jobManager;
             this.jobManagerSet = true;
+            return this;
+        }
+
+        /**
+         * 本实例同时执行的 goal 轮次上限（缺省 4）。所有会话共用一个调度节拍，满额时到期会话顺延到下一拍。
+         *
+         * @since 4.2.0
+         */
+        public Builder roundConcurrency(int roundConcurrency) {
+            if (roundConcurrency < 1) {
+                throw new IllegalArgumentException("roundConcurrency must be >= 1");
+            }
+            this.roundConcurrency = roundConcurrency;
             return this;
         }
 

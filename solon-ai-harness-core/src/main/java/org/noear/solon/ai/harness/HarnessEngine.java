@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
+import org.noear.solon.ai.harness.scope.TurnScope;
+import org.noear.solon.ai.harness.scope.TurnScopeResolver;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -39,6 +43,7 @@ import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
+import org.noear.solon.ai.harness.hitl.SessionPermissions;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.turn.InterruptPlan;
@@ -52,6 +57,9 @@ import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.mount.catalog.*;
 import org.noear.solon.ai.mount.source.MountSource;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.noear.solon.ai.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.harness.agent.ToolName;
@@ -172,6 +180,34 @@ public class HarnessEngine {
         return options.getStopLoopInterceptor();
     }
 
+    /**
+     * 是否要求每轮都有作用域（见 {@link Builder#scopeRequired}）
+     *
+     * @since 4.2.0
+     */
+    public boolean isScopeRequired() {
+        return options.isScopeRequired();
+    }
+
+    /**
+     * 请求级作用域解析器（可为 null）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public TurnScopeResolver getScopeResolver() {
+        return options.getScopeResolver();
+    }
+
+    /**
+     * 会话归属（多节点单写者租约；单机为 {@link SessionOwnership#LOCAL}）
+     *
+     * @since 4.2.0
+     */
+    public SessionOwnership getSessionOwnership() {
+        return options.getSessionOwnership();
+    }
+
     public CacheControl getCacheControl() {
         return options.getCacheControl();
     }
@@ -189,8 +225,9 @@ public class HarnessEngine {
      * 添加权限规则
      */
     public void addPermissionRule(PermissionRule rule) {
+        assertMutable("addPermissionRule");
         if (rule != null) {
-            options.setPermissionContext(options.getPermissionContext().addRule(rule));
+            options.updatePermissionContext(ctx -> ctx.addRule(rule));
         }
     }
 
@@ -198,8 +235,9 @@ public class HarnessEngine {
      * 批量添加权限规则
      */
     public void addPermissionRules(List<PermissionRule> rules) {
+        assertMutable("addPermissionRules");
         if (Utils.isNotEmpty(rules)) {
-            options.setPermissionContext(options.getPermissionContext().addRules(rules));
+            options.updatePermissionContext(ctx -> ctx.addRules(rules));
         }
     }
 
@@ -245,12 +283,50 @@ public class HarnessEngine {
         return taskTalent;
     }
 
+    /** 经本引擎装配、正在执行的请求数（stream 订阅期间 / call 执行期间） */
+    private final AtomicInteger activeRuns = new AtomicInteger();
+
+    /**
+     * 是否静默（可安全回收）：没有正在执行的请求，且所有扩展都没有需要本引擎继续存活的后台工作
+     * （见 {@link HarnessExtension#isQuiescent}，如活跃的 goal、定时任务）。供引擎池按空闲回收。
+     *
+     * @since 4.2.0
+     */
+    public boolean isQuiescent() {
+        if (activeRuns.get() > 0) {
+            return false;
+        }
+
+        for (HarnessExtension extension : options.getExtensions()) {
+            try {
+                if (extension.isQuiescent(this) == false) {
+                    return false;
+                }
+            } catch (Throwable e) {
+                // 判定异常按「不静默」处理：宁可晚回收，不可误回收
+                LOG.warn("HarnessExtension isQuiescent failed: {}", extension.getClass().getName(), e);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 正在执行的请求数
+     *
+     * @since 4.2.0
+     */
+    public int getActiveRunCount() {
+        return activeRuns.get();
+    }
+
     /**
      * 释放引擎持有的资源
      *
-     * <p>两件事：① 通知全部扩展 {@link HarnessExtension#onDetach}（让扩展回收自己在
+     * <p>三件事：① 通知全部扩展 {@link HarnessExtension#onDetach}（让扩展回收自己在
      * onAttach 里建到<b>引擎之外</b>的资源，如 JVM 单例调度器上的 job、独立线程池、长连接——
-     * 引擎本身不知道这些资源的存在）；② 关闭子代理委派的私有执行器。</p>
+     * 引擎本身不知道这些资源的存在）；② 关闭子代理委派的私有执行器；③ 释放本引擎认领过的会话租约
+     * （多节点时让其它节点可以接管）。</p>
      *
      * <p>顺序：先扩展后执行器——扩展的清理动作（如停调度）不应与执行器回收并发。</p>
      *
@@ -271,6 +347,7 @@ public class HarnessEngine {
         }
 
         taskTalent.shutdown();
+        sessionControl.releaseAllOwnership();
     }
 
     public CodeTalent getCodeTalent() {
@@ -406,6 +483,7 @@ public class HarnessEngine {
         if (cwd == null || cwd.trim().isEmpty()) {
             session.attrs().remove(ATTR_CWD);
         } else {
+            checkCwdPolicy(cwd);
             session.attrs().put(ATTR_CWD, cwd);
         }
     }
@@ -413,7 +491,39 @@ public class HarnessEngine {
     /** 会话工作目录仅在未设置时补写（首次进入时定位，不覆盖用户后续选择）。@since 4.2.0 */
     public void setSessionCwdIfAbsent(AgentSession session, String cwd) {
         if (session == null || cwd == null || cwd.trim().isEmpty()) return;
+        checkCwdPolicy(cwd);
         session.attrs().putIfAbsent(ATTR_CWD, cwd);
+    }
+
+    /**
+     * 运行期全局配置锁：{@code runtimeMutable=false}（SERVER 缺省）时拒绝修改引擎级全局配置。
+     * 这些修改会影响共用本引擎的所有会话/用户，差异应在构建期决定，或按请求收窄。
+     */
+    private void assertMutable(String op) {
+        if (!options.isRuntimeMutable()) {
+            throw new IllegalStateException(op + " is locked at runtime (runtimeMutable=false): "
+                    + "decide engine-wide settings at build time");
+        }
+    }
+
+    /**
+     * 会话工作目录边界校验：会话 cwd 会被加进文件工具根与 OS 沙盒写白名单，
+     * 多租户下必须保证它不越出租户根目录（见 {@link Builder#cwdPolicy}）。
+     */
+    private void checkCwdPolicy(String cwd) {
+        Predicate<String> policy = options.getCwdPolicy();
+        if (policy != null && !policy.test(cwd)) {
+            throw new SecurityException("Session cwd is out of policy: " + cwd);
+        }
+    }
+
+    /**
+     * 引擎运行模式（插件据此选择各自的保守缺省）
+     *
+     * @since 4.2.0
+     */
+    public HarnessProfile getProfile() {
+        return options.getProfile();
     }
 
     // ========== 会话级选择项（模型 / 子代理）门面 ==========
@@ -634,6 +744,7 @@ public class HarnessEngine {
      * 动态禁用一个技能（按 aliasPath）
      */
     public void disallowSkill(String aliasPath) {
+        assertMutable("disallowSkill");
         skillCatalog.disallowSkill(aliasPath);
     }
 
@@ -641,6 +752,7 @@ public class HarnessEngine {
      * 动态允许一个技能（按 aliasPath）
      */
     public void allowSkill(String aliasPath) {
+        assertMutable("allowSkill");
         skillCatalog.allowSkill(aliasPath);
     }
 
@@ -648,6 +760,7 @@ public class HarnessEngine {
      * 批量重置被禁用的技能集合（按 aliasPath）
      */
     public void disallowSkillReset(Collection<String> disallowedSkills) {
+        assertMutable("disallowSkillReset");
         skillCatalog.setDisallowSkills(disallowedSkills);
     }
 
@@ -770,11 +883,13 @@ public class HarnessEngine {
     }
 
     public void setSandboxEnabled(Boolean sandboxEnabled) {
+        assertMutable("setSandboxEnabled");
         options.setSandboxEnabled(sandboxEnabled);
         terminalTalent.setSandboxEnabled(sandboxEnabled);
     }
 
     public void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
+        assertMutable("setSandboxAllowUserHome");
         options.setSandboxAllowUserHome(sandboxAllowUserHome);
         terminalTalent.setSandboxAllowUserHome(sandboxAllowUserHome);
     }
@@ -784,11 +899,13 @@ public class HarnessEngine {
     }
 
     public void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
+        assertMutable("setSandboxSystemRestrict");
         options.setSandboxSystemRestrict(sandboxSystemRestrict);
         terminalTalent.setSandboxSystemRestrict(sandboxSystemRestrict);
     }
 
     public void setHitlEnabled(Boolean hitlEnabled) {
+        assertMutable("setHitlEnabled");
         options.setHitlEnabled(hitlEnabled);
 
         if (options.getHitlInterceptor() != null) {
@@ -797,6 +914,7 @@ public class HarnessEngine {
     }
 
     public void setSubagentEnabled(Boolean subagentEnabled) {
+        assertMutable("setSubagentEnabled");
         options.setSubagentEnabled(subagentEnabled);
 
         generateTalent.setEnabled(options.isSubagentEnabled());
@@ -833,6 +951,7 @@ public class HarnessEngine {
     }
 
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
+        assertMutable("setBashAsyncEnabled");
         options.setBashAsyncEnabled(bashAsyncEnabled);
 
         terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
@@ -863,6 +982,7 @@ public class HarnessEngine {
 
 
     public void setSystemPrompt(String systemPrompt) {
+        assertMutable("setSystemPrompt");
         if (Assert.isNotEmpty(systemPrompt)) {
             options.setSystemPrompt(systemPrompt);
         }
@@ -882,6 +1002,7 @@ public class HarnessEngine {
      * @since 4.0.5
      */
     public void setHttpProxy(String host, int port) {
+        assertMutable("setHttpProxy");
         options.setHttpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
     }
 
@@ -891,6 +1012,7 @@ public class HarnessEngine {
      * @since 4.0.5
      */
     public void setHttpProxy(Proxy proxy) {
+        assertMutable("setHttpProxy");
         options.setHttpProxy(proxy);
     }
 
@@ -904,10 +1026,12 @@ public class HarnessEngine {
      * @since 4.0.5
      */
     public void addHttpCustomize(Consumer<HttpUtils> httpCustomize) {
+        assertMutable("addHttpCustomize");
         options.addHttpCustomize(httpCustomize);
     }
 
     public void setHttpCustomize(Consumer<HttpUtils> httpCustomize) {
+        assertMutable("setHttpCustomize");
         options.setHttpCustomize(httpCustomize);
     }
 
@@ -918,6 +1042,7 @@ public class HarnessEngine {
     // ========== 动态模型管理 ==========
 
     public void setDefaultModel(String defaultModel) {
+        assertMutable("setDefaultModel");
         String oldDefault = options.getDefaultModel();
         options.setDefaultModel(defaultModel);
 
@@ -929,6 +1054,7 @@ public class HarnessEngine {
     }
 
     public void addModel(ChatConfig config) {
+        assertMutable("addModel");
         options.addModel(config);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(config.getNameOrModel())) {
@@ -937,6 +1063,7 @@ public class HarnessEngine {
     }
 
     public void removeModel(String name) {
+        assertMutable("removeModel");
         options.removeModel(name);
 
         if (mainAgent != null && mainAgent.getModel().getNameOrModel().equals(name)) {
@@ -952,6 +1079,7 @@ public class HarnessEngine {
      * 动态授权一个工具（允许使用）
      */
     public void allowTool(String toolName) {
+        assertMutable("allowTool");
         if (Assert.isEmpty(toolName)) {
             return;
         }
@@ -964,6 +1092,7 @@ public class HarnessEngine {
     }
 
     public void allowToolReset(Collection<String> tools) {
+        assertMutable("allowToolReset");
         options.getTools().clear();
         if (tools != null) {
             options.getTools().addAll(tools);
@@ -995,6 +1124,7 @@ public class HarnessEngine {
      * 动态撤销一个工具的权限（禁用）
      */
     public void disallowTool(String toolName) {
+        assertMutable("disallowTool");
         if (Assert.isEmpty(toolName)) {
             return;
         }
@@ -1006,6 +1136,7 @@ public class HarnessEngine {
     }
 
     public void disallowToolReset(Collection<String> disallowedTools) {
+        assertMutable("disallowToolReset");
         options.getDisallowedTools().clear();
         if (disallowedTools != null) {
             options.getDisallowedTools().addAll(disallowedTools);
@@ -1017,6 +1148,7 @@ public class HarnessEngine {
 
 
     public void addMount(Mount mount) {
+        assertMutable("addMount");
         // 内置挂载不可被同名覆盖
         if (mount != null && BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(mount.getAlias()))) {
             throw new IllegalArgumentException("Built-in mount cannot be replaced: " + BUILTIN_AGENT_MOUNT);
@@ -1031,6 +1163,7 @@ public class HarnessEngine {
     }
 
     public void removeMount(String alias) {
+        assertMutable("removeMount");
         if (BUILTIN_AGENT_MOUNT.equals(normalizeMountAlias(alias))) {
             throw new IllegalArgumentException("Built-in mount cannot be removed: " + BUILTIN_AGENT_MOUNT);
         }
@@ -1071,6 +1204,7 @@ public class HarnessEngine {
      * 动态添加 API 源
      */
     public void addApiServer(ApiSource apiSource) {
+        assertMutable("addApiServer");
         openApiGatewayTalent.addApi(apiSource);
         options.getApiServers().put(apiSource.getDocUrl(), apiSource);
     }
@@ -1093,6 +1227,7 @@ public class HarnessEngine {
      * 动态移除 API 源
      */
     public void removeApiServer(String docUrl) {
+        assertMutable("removeApiServer");
         openApiGatewayTalent.removeApi(docUrl);
         options.getApiServers().remove(docUrl);
     }
@@ -1101,6 +1236,7 @@ public class HarnessEngine {
      * 动态添加 MCP 服务
      */
     public void addMcpServer(String name, McpServerParameters mcpServer) {
+        assertMutable("addMcpServer");
         mcpGatewayTalent.addMcpServer(name, mcpServer);
         options.getMcpServers().put(name, mcpServer);
     }
@@ -1117,6 +1253,7 @@ public class HarnessEngine {
      * 动态移除 MCP 服务（并关闭连接）
      */
     public void removeMcpServer(String name) {
+        assertMutable("removeMcpServer");
         mcpGatewayTalent.removeMcpServer(name);
         options.getMcpServers().remove(name);
     }
@@ -1125,6 +1262,7 @@ public class HarnessEngine {
      * 动态添加一个 LSP 服务器
      */
     public void addLspServer(String name, LspServerParameters lspServer) {
+        assertMutable("addLspServer");
         if (lspServer == null) {
             return;
         }
@@ -1142,6 +1280,7 @@ public class HarnessEngine {
      * 动态移除一个 LSP 服务器
      */
     public void removeLspServer(String name) {
+        assertMutable("removeLspServer");
         if (name == null) {
             return;
         }
@@ -1167,6 +1306,7 @@ public class HarnessEngine {
      * @param enabled   true 开 / false 关 / null 不改变
      */
     public void setExtensionEnabled(HarnessExtension extension, Boolean enabled) {
+        assertMutable("setExtensionEnabled");
         if (extension == null) {
             return;
         }
@@ -1218,6 +1358,7 @@ public class HarnessEngine {
     }
 
     public void addExtension(HarnessExtension extension) {
+        assertMutable("addExtension");
         if (extension == null) {
             return;
         }
@@ -1234,6 +1375,7 @@ public class HarnessEngine {
      * 动态移除一个扩展
      */
     public void removeExtension(HarnessExtension extension) {
+        assertMutable("removeExtension");
         if (extension == null) {
             return;
         }
@@ -1268,37 +1410,35 @@ public class HarnessEngine {
 
         options.setHitlInterceptor(new HITLInterceptor()
                 .onTool("bash", bashStrategy)
-                .onApproved((toolName, args) -> {
-                    // 记住本次审批：提取命令/路径，注入放行规则，后续相同操作免弹窗
-                    String pattern = null;
-                    if (args != null) {
-                        // 优先提取 command（bash 工具）
-                        Object cmd = args.get("command");
-                        if (cmd instanceof String && !((String) cmd).trim().isEmpty()) {
-                            pattern = (String) cmd;
-                        }
-
-                        // 其次提取 file_path（write/edit 工具）
-                        if (pattern == null) {
-                            Object path = args.get("file_path");
-                            if (path instanceof String && !((String) path).trim().isEmpty()) {
-                                pattern = (String) path;
-                            }
-                        }
+                .onApproved((HITLInterceptor.ApprovedHandler) (trace, toolName, args) -> {
+                    PermissionRule rule = rememberedRuleOf(toolName, args);
+                    if (rule == null) {
+                        // 提取不到命令/路径：不记忆（绝不退化为整工具放行），下次照常审批
+                        LOG.debug("HITL alwaysAllow ignored for '{}': no command/file_path to pin", toolName);
+                        return;
                     }
-
-                    if (pattern != null) {
-                        // 带模式的细粒度放行：后续相同 pattern 自动放行
-                        options.setPermissionContext(
-                                options.getPermissionContext().addRule(
-                                        PermissionRule.allow(toolName, pattern)));
-                    } else {
-                        // 无精确模式时退化为工具级放行（后续该工具的所有操作不再弹窗）
-                        options.setPermissionContext(
-                                options.getPermissionContext().addRule(
-                                        PermissionRule.allow(toolName)));
-                    }
+                    // 只记到本会话：同引擎的其它会话 / 用户照常审批（无会话时不记忆）
+                    SessionPermissions.remember(trace == null ? null : trace.getSession(), rule);
                 }));
+    }
+
+    /**
+     * 人工审批「总是允许」对应的记忆规则：只放行批准过的那一条命令 / 那一个路径（逐字相等）。
+     *
+     * <p>不用 glob：原文里的 {@code *} 会被当作通配符，批准 {@code rm -rf build/*} 会连带放行
+     * {@code rm -rf build/; curl x | sh}。提取不到时返回 null（不记忆）。</p>
+     */
+    static PermissionRule rememberedRuleOf(String toolName, Map<String, Object> args) {
+        if (toolName == null || args == null) {
+            return null;
+        }
+        for (String key : new String[]{"command", "file_path"}) {
+            Object v = args.get(key);
+            if (v instanceof String && !((String) v).trim().isEmpty()) {
+                return PermissionRule.allowExact(toolName, key, (String) v);
+            }
+        }
+        return null;
     }
 
     private HarnessEngine(HarnessOptions options) {
@@ -1378,7 +1518,7 @@ public class HarnessEngine {
 
         if (options.getMemoryProvider() != null) {
             this.memoryTalent = new MemoryTalent(options.getMemoryProvider())
-                    .sessionIsolation(false)
+                    .sessionIsolation(options.isMemorySessionIsolation())
                     .relevanceCount(options.getMemoryRelevanceCount())
                     .priorityCount(options.getMemoryPriorityCount())
                     .summaryLength(options.getMemorySummaryLength());
@@ -1414,6 +1554,9 @@ public class HarnessEngine {
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
         terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
+        terminalTalent.setSandboxSelfBootstrap(options.isSandboxSelfBootstrap());
+        //harness 状态目录（缺省在工作区内）对模型不可读写：里面是其它会话/用户的数据
+        terminalTalent.setProtectedStatePaths(options.getProtectedStatePaths());
 
         //LSP 与文件工具接线：诊断靠 write/edit 自动注入（不依赖模型主动调工具），read 后异步预热。
         //钩子内部会在总开关关闭 / 文件类型无匹配服务器 / 服务器已知启动失败时零成本短路。
@@ -1625,7 +1768,7 @@ public class HarnessEngine {
 
         // 与 targetAgent.prompt(prompt) 等价（ReActAgent 内部即 new ReActRequest(agent, prompt)），
         // 换成能携带受理占位的子类：handle 受理的 TASK 由请求自己在开流时释放占位。
-        return new AdmittedRequest(targetAgent, prompt)
+        return new AdmittedRequest(targetAgent, prompt, activeRuns)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
@@ -1872,6 +2015,16 @@ public class HarnessEngine {
 
     public static class Builder {
         private final HarnessOptions options;
+        /** 预设在 build() 时合成；显式设过的字段不被预设覆盖 */
+        private HarnessProfile profile;
+        private final Set<String> explicit = new HashSet<>();
+
+        private Builder explicit(String field, Object value) {
+            if (value != null) {
+                explicit.add(field);
+            }
+            return this;
+        }
 
         public Builder(String workspace, String harnessHome) {
             this.options = new HarnessOptions(workspace, harnessHome);
@@ -2033,17 +2186,17 @@ public class HarnessEngine {
 
         public Builder sandboxEnabled(Boolean sandboxEnabled) {
             options.setSandboxEnabled(sandboxEnabled);
-            return this;
+            return explicit("sandboxEnabled", sandboxEnabled);
         }
 
         public Builder sandboxAllowUserHome(Boolean sandboxAllowUserHome) {
             options.setSandboxAllowUserHome(sandboxAllowUserHome);
-            return this;
+            return explicit("sandboxAllowUserHome", sandboxAllowUserHome);
         }
 
         public Builder sandboxSystemRestrict(Boolean sandboxSystemRestrict) {
             options.setSandboxSystemRestrict(sandboxSystemRestrict);
-            return this;
+            return explicit("sandboxSystemRestrict", sandboxSystemRestrict);
         }
 
         // ========== 权限系统 ==========
@@ -2052,7 +2205,7 @@ public class HarnessEngine {
          * 添加权限规则
          */
         public Builder permissionRuleAdd(PermissionRule rule) {
-            options.setPermissionContext(options.getPermissionContext().addRule(rule));
+            options.updatePermissionContext(ctx -> ctx.addRule(rule));
             return this;
         }
 
@@ -2079,7 +2232,7 @@ public class HarnessEngine {
 
         public Builder bashAsyncEnabled(Boolean bashAsyncEnabled) {
             options.setBashAsyncEnabled(bashAsyncEnabled);
-            return this;
+            return explicit("bashAsyncEnabled", bashAsyncEnabled);
         }
 
         public Builder apiRetries(Integer apiRetries) {
@@ -2192,8 +2345,112 @@ public class HarnessEngine {
             return this;
         }
 
+        // ========== 多租户 / 服务端 ==========
+
+        /**
+         * 运行模式预设（在 {@code build()} 时合成一组缺省值；显式 setter 优先，与调用顺序无关）
+         *
+         * @since 4.2.0
+         */
+        public Builder profile(HarnessProfile profile) {
+            this.profile = profile;
+            return this;
+        }
+
+        /**
+         * 记忆是否按会话隔离（CODING 缺省 false，SERVER 缺省 true）
+         *
+         * @since 4.2.0
+         */
+        public Builder memorySessionIsolation(boolean memorySessionIsolation) {
+            options.setMemorySessionIsolation(memorySessionIsolation);
+            return explicit("memorySessionIsolation", memorySessionIsolation);
+        }
+
+        /**
+         * 是否由引擎自行初始化进程级 OS 沙盒（CODING 缺省 true；SERVER 缺省 false，宿主启动时
+         * 调用一次 {@code SandboxBootstrap.initOnce}）。网络白名单是进程级的，不按引擎区分。
+         *
+         * @since 4.2.0
+         */
+        public Builder sandboxSelfBootstrap(boolean sandboxSelfBootstrap) {
+            options.setSandboxSelfBootstrap(sandboxSelfBootstrap);
+            return explicit("sandboxSelfBootstrap", sandboxSelfBootstrap);
+        }
+
+        /**
+         * 运行期是否允许修改引擎级全局配置（工具、模型、MCP、沙盒、HITL 开关）。
+         * CODING 缺省 true；SERVER 缺省 false：这些修改会影响共用本引擎的所有用户。
+         *
+         * @since 4.2.0
+         */
+        public Builder runtimeMutable(boolean runtimeMutable) {
+            options.setRuntimeMutable(runtimeMutable);
+            return explicit("runtimeMutable", runtimeMutable);
+        }
+
+        /**
+         * 会话工作目录边界策略：{@link HarnessEngine#setSessionCwd} 不满足时抛 {@link SecurityException}。
+         * 会话 cwd 会被加进文件工具根与 OS 沙盒写白名单，多租户下必须限制在租户根目录内。
+         *
+         * @since 4.2.0
+         */
+        public Builder cwdPolicy(Predicate<String> cwdPolicy) {
+            options.setCwdPolicy(cwdPolicy);
+            return this;
+        }
+
+        /**
+         * 请求级作用域解析器：每次受理的输入（含 goal / loop / queue 的程序输入）都会解析一次，
+         * 输入已显式携带作用域时不调用。作用域只能收窄，且是强制边界（见 {@link TurnScope}）。
+         *
+         * @since 4.2.0
+         */
+        public Builder scopeResolver(TurnScopeResolver scopeResolver) {
+            options.setScopeResolver(scopeResolver);
+            return this;
+        }
+
+        /**
+         * 是否要求每轮都有作用域（SERVER 缺省 true）。开启后：解析器返回 null 或抛异常时
+         * {@code handle} 返回 {@code REJECTED} + {@code InputOutcome.REJECT_SCOPE_UNAVAILABLE}；
+         * 绕过受理的请求（如已废弃的 {@code prompt(...)}）由守卫禁用全部工具（时钟除外）。
+         *
+         * @since 4.2.0
+         */
+        public Builder scopeRequired(boolean scopeRequired) {
+            options.setScopeRequired(scopeRequired);
+            return explicit("scopeRequired", scopeRequired);
+        }
+
+        /**
+         * 会话归属（多节点部署的单写者租约；缺省 {@link SessionOwnership#LOCAL}）。
+         * 非持有节点上的受理返回 {@code REJECTED} + {@code InputOutcome.REJECT_NOT_OWNER}。
+         *
+         * @since 4.2.0
+         */
+        public Builder sessionOwnership(SessionOwnership sessionOwnership) {
+            options.setSessionOwnership(sessionOwnership);
+            return this;
+        }
+
+        /**
+         * 受保护的状态子路径（相对 harnessHome，缺省 sessions / memory / channels / tasks.json）：
+         * 模型的文件工具与 bash 都不得读写。传空列表表示不保护。
+         *
+         * @since 4.2.0
+         */
+        public Builder protectedStatePaths(List<String> protectedStatePaths) {
+            options.setProtectedStatePaths(protectedStatePaths);
+            return this;
+        }
+
         public HarnessEngine build() {
             Objects.requireNonNull(options.getSessionProvider(), "sessionProvider");
+            options.applyProfile(profile, explicit);
+            if (options.getProfile() == HarnessProfile.SERVER) {
+                validateServerProfile(options);
+            }
 
             HarnessEngine engine = new HarnessEngine(options);
 
@@ -2202,6 +2459,35 @@ public class HarnessEngine {
             }
 
             return engine;
+        }
+
+        /**
+         * SERVER 模式的快速失败校验（把「第一次请求才发现」的配置错误提前到构建期）
+         */
+        static void validateServerProfile(HarnessOptions options) {
+            MountSource state = options.getStateSourceOrNull();
+            if (state == null) {
+                throw new IllegalStateException("SERVER profile requires an explicit stateSource "
+                        + "outside the workspace (e.g. db / <data>/<tenant>)");
+            }
+            Path stateRoot = state.getLocalRoot().orElse(null);
+            if (stateRoot != null && Assert.isNotEmpty(options.getWorkspace())) {
+                Path ws = Paths.get(options.getWorkspace()).toAbsolutePath().normalize();
+                Path sr = stateRoot.toAbsolutePath().normalize();
+                if (sr.startsWith(ws)) {
+                    throw new IllegalStateException("SERVER profile requires stateSource outside the workspace: " + sr);
+                }
+            }
+            if (options.getModels().isEmpty()) {
+                throw new IllegalStateException("SERVER profile requires at least one model: call modelAdd(...)");
+            }
+            if (Assert.isNotEmpty(options.getDefaultModel()) && !options.hasModel(options.getDefaultModel())) {
+                throw new IllegalStateException("defaultModel not found: " + options.getDefaultModel());
+            }
+            if (!options.isSandboxEnabled() || !options.isSandboxSystemRestrict()) {
+                LOG.warn("[Harness] SERVER profile with OS sandbox relaxed (sandboxEnabled={}, sandboxSystemRestrict={})",
+                        options.isSandboxEnabled(), options.isSandboxSystemRestrict());
+            }
         }
     }
 }

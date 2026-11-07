@@ -58,7 +58,76 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     public static final SessionStatus.Key<Integer> STATUS_PENDING = SessionStatus.Key.count("queue.pending");
 
-    private final QueueCommand queueCommand = new QueueCommand();
+    private final Limits limits;
+    private final QueueCommand queueCommand;
+
+    /** 缺省上限（20 条 / 4096 字符）；需要调整用 {@link #builder()} */
+    public QueueExtension() {
+        this(Limits.DEFAULT);
+    }
+
+    private QueueExtension(Limits limits) {
+        this.limits = limits;
+        this.queueCommand = new QueueCommand(limits);
+    }
+
+    /** @since 4.2.0 */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /** 本实例的队列容量上限 @since 4.2.0 */
+    public int getMaxSize() {
+        return limits.maxSize;
+    }
+
+    /** 本实例的单条文本上限 @since 4.2.0 */
+    public int getMaxTextLength() {
+        return limits.maxTextLength;
+    }
+
+    /** 实例级上限（不可变） */
+    static final class Limits {
+        static final Limits DEFAULT = new Limits(QueueStore.MAX_QUEUE_SIZE, QueueStore.MAX_TEXT_LENGTH);
+        final int maxSize;
+        final int maxTextLength;
+
+        Limits(int maxSize, int maxTextLength) {
+            this.maxSize = maxSize;
+            this.maxTextLength = maxTextLength;
+        }
+    }
+
+    /** @since 4.2.0 */
+    public static final class Builder {
+        private int maxSize = QueueStore.MAX_QUEUE_SIZE;
+        private int maxTextLength = QueueStore.MAX_TEXT_LENGTH;
+
+        private Builder() {
+        }
+
+        /** 每会话待执行条数上限（1 /Users/noear 10000，缺省 20） */
+        public Builder maxSize(int maxSize) {
+            if (maxSize < 1 || maxSize > QueueStore.HARD_MAX_QUEUE_SIZE) {
+                throw new IllegalArgumentException("maxSize must be in [1, " + QueueStore.HARD_MAX_QUEUE_SIZE + "]");
+            }
+            this.maxSize = maxSize;
+            return this;
+        }
+
+        /** 单条文本字符上限（1 /Users/noear 1000000，缺省 4096） */
+        public Builder maxTextLength(int maxTextLength) {
+            if (maxTextLength < 1 || maxTextLength > QueueStore.HARD_MAX_TEXT_LENGTH) {
+                throw new IllegalArgumentException("maxTextLength must be in [1, " + QueueStore.HARD_MAX_TEXT_LENGTH + "]");
+            }
+            this.maxTextLength = maxTextLength;
+            return this;
+        }
+
+        public QueueExtension build() {
+            return new QueueExtension(new Limits(maxSize, maxTextLength));
+        }
+    }
 
     @Override
     public void onAttach(HarnessEngine engine) {
@@ -94,7 +163,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
         String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
         return QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
-                null, null, agent, false, input.getAttrs());
+                null, null, agent, false, input.getAttrs(), limits.maxSize, limits.maxTextLength);
     }
 
     /**
@@ -132,7 +201,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (isEnabled() == false) {
             return -1;
         }
-        return QueueStore.enqueue(session, text, origin);
+        return QueueStore.enqueue(session, text, origin, null, null, null, null, null, false, null,
+                limits.maxSize, limits.maxTextLength);
     }
 
     /**
@@ -155,7 +225,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             return -1;
         }
         return QueueStore.enqueue(session, text, origin, id, model, reasoningEffort,
-                thinkingMode, selectedAgent, hasFiles);
+                thinkingMode, selectedAgent, hasFiles, null, limits.maxSize, limits.maxTextLength);
     }
 
     /** 待执行数量（不含 in-flight，运行中的那条不占容量）。 */
@@ -259,7 +329,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         QueueClaimStatus last = QueueClaimStatus.NO_TASK;
         // 单次调用最多续发一轮队列容量：正常情况下每条领取都会消耗一个待执行项，
         // 这里的上限只是防御「宿主 handler 把同一项反复塞回」的失控情形，不应被触达。
-        for (int guard = 0; guard <= QueueStore.MAX_QUEUE_SIZE; guard++) {
+        for (int guard = 0; guard <= limits.maxSize; guard++) {
             // 本处只是快速出口（省一次入锁构造），权威判定在 claimNext 内部与领取权同一把锁完成。
             // 两处都判不是冗余防御，而是「能看见就早退」，不要把这里当成唯一关卡。
             if (canDrain != null && !canDrain.test(session)) {
@@ -296,23 +366,6 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     /** 旧版 queue-tasks.json 的一次性迁移入口。@return 实际导入条数 */
     public int importItems(AgentSession session, List<Map<String, Object>> rows) {
-        return QueueStore.importItems(session, rows);
-    }
-
-    /**
-     * 队列容量上限（与内核同源，仅供宿主做展示/预校验）。
-     *
-     * <p>宿主<b>不需要</b>用它做受理判定：{@link #enqueue} 超限会返回 {@code -1}，
-     * 宿主只映射应答即可。本方法保留给「前端先提示队列已满」这类展示用途。</p>
-     *
-     * @since 4.2.0
-     */
-    public static int maxQueueSize() {
-        return QueueStore.MAX_QUEUE_SIZE;
-    }
-
-    /** 单条队列文本的最大字符数（与内核同源，仅供宿主展示/预校验）。@since 4.2.0 */
-    public static int maxTextLength() {
-        return QueueStore.MAX_TEXT_LENGTH;
+        return QueueStore.importItems(session, rows, limits.maxSize);
     }
 }

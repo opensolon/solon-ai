@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.spi.SessionOwnership;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.harness.agent.*;
@@ -36,6 +37,7 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 会话控制面（包内）：受理判定、运行态快照、空闲判定与中断第一段的实现。
@@ -52,6 +54,8 @@ final class SessionControl {
     private final HarnessEngine engine;
     private final HarnessOptions options;
     private final CommandRegistry commandRegistry;
+    /** 本引擎认领过的会话（shutdown 时释放；LOCAL 不登记） */
+    private final Set<String> ownedSessions = ConcurrentHashMap.newKeySet();
 
     SessionControl(HarnessEngine engine, HarnessOptions options, CommandRegistry commandRegistry) {
         this.engine = engine;
@@ -106,6 +110,25 @@ final class SessionControl {
                 LOG.warn("Extension onSessionRemove failed: {}", extension.getClass().getName(), e);
             }
         }
+
+        ownedSessions.remove(sessionId);
+        releaseOwnership(sessionId);
+    }
+
+    /** 引擎关闭：释放认领过的全部会话租约，让其它节点可以接管 */
+    void releaseAllOwnership() {
+        for (String sessionId : new ArrayList<>(ownedSessions)) {
+            ownedSessions.remove(sessionId);
+            releaseOwnership(sessionId);
+        }
+    }
+
+    private void releaseOwnership(String sessionId) {
+        try {
+            options.getSessionOwnership().release(sessionId);
+        } catch (Throwable e) {
+            LOG.warn("[Harness] release session ownership failed: {}", sessionId, e);
+        }
     }
 
     boolean isIdle(AgentSession session) {
@@ -149,6 +172,17 @@ final class SessionControl {
         final AgentSession session = input.getSession();
         if (session == null) {
             return Admission.free();
+        }
+
+        // 0) 会话归属（多节点单写者）：锁外判定——租约实现可能有网络 IO，不得持会话锁等待。
+        //    HITL 决策同样要求持有：挂起的 trace 与运行态都在持有节点内存里。
+        SessionOwnership ownership = options.getSessionOwnership();
+        if (ownership.tryAcquire(session.getSessionId()) == false) {
+            return Admission.outcome(InputOutcome.rejected(InputOutcome.REJECT_NOT_OWNER,
+                    ownership.ownerOf(session.getSessionId())));
+        }
+        if (ownership != SessionOwnership.LOCAL) {
+            ownedSessions.add(session.getSessionId());
         }
 
         synchronized (session.attrs()) {

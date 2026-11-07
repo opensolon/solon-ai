@@ -1,13 +1,7 @@
 package org.noear.solon.ai.harness.extension.goal.validate;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * 构建通过验证器 — 自动检测项目类型并运行编译检查。
@@ -18,82 +12,39 @@ import java.nio.file.Paths;
  *   <li>Gradle (build.gradle / build.gradle.kts → {@code gradle compileJava -q})</li>
  * </ul>
  *
- * <p>无构建工具或构建工具不可用时不阻塞完成（返回 passed）。在调用方传入的执行目录
- * （本轮会话工作目录）下检测与运行；目录为空时不阻塞。</p>
+ * <p>没有已知构建工具时视为通过（没有可编译的对象，例如写文档类目标）；无执行目录、超时、
+ * 执行失败返回 INCONCLUSIVE（由 {@link ValidatorPolicy} 决定去向）。命令经 {@link CommandRunner}
+ * 在 OS 沙盒内执行。</p>
  *
  * <p>匹配含 build/compile/implement/refactor/fix/create/add/write 等关键字的目标。</p>
  *
  * @author noear
  * @since 3.9.4
  */
-public class BuildPassValidator implements GoalValidator {
-    private static final Logger log = LoggerFactory.getLogger(BuildPassValidator.class);
+public class BuildPassValidator extends CommandValidator {
 
-    @Override
-    public ValidationResult validate(String condition, String workDir) {
-        if (workDir == null || workDir.isEmpty()) {
-            return ValidationResult.passed(); // 无工作目录信息时不阻塞
-        }
-
-        Path workspacePath = Paths.get(workDir);
-
-        try {
-            // 检测 Maven 项目
-            if (Files.exists(workspacePath.resolve("pom.xml"))) {
-                return runCommand("mvn compile -q -o", workspacePath);
-            }
-            // 检测 Gradle 项目
-            if (Files.exists(workspacePath.resolve("build.gradle")) ||
-                    Files.exists(workspacePath.resolve("build.gradle.kts"))) {
-                return runCommand("gradle compileJava -q", workspacePath);
-            }
-
-            // 无已知构建工具时跳过，不阻塞完成
-            log.info("BuildPassValidator: no known build tool detected, skipping");
-            return ValidationResult.passed();
-        } catch (Exception e) {
-            log.warn("BuildPassValidator 执行异常: {}", e.getMessage());
-            return ValidationResult.passed(); // 异常时不阻塞完成
-        }
+    public BuildPassValidator(CommandRunner runner) {
+        super(runner);
     }
 
-    private ValidationResult runCommand(String command, Path workDir) {
-        try {
-            log.info("BuildPassValidator 运行: {} (工作目录: {})", command, workDir);
-
-            ProcessBuilder pb = new ProcessBuilder();
-            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                pb.command("cmd.exe", "/c", command);
-            } else {
-                pb.command("sh", "-c", command);
-            }
-            pb.directory(workDir.toFile());
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-            // Java 8 兼容：手动读取 InputStream
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int len;
-            while ((len = process.getInputStream().read(buffer)) != -1) {
-                baos.write(buffer, 0, len);
-            }
-            String output = new String(baos.toByteArray(), StandardCharsets.UTF_8);
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0) {
-                log.info("BuildPassValidator: 编译通过 (exit code=0)");
-                return ValidationResult.passed();
-            } else {
-                String tail = output.length() > 500
-                        ? output.substring(output.length() - 500)
-                        : output;
-                log.warn("BuildPassValidator: 编译失败 (exit code={})", exitCode);
-                return ValidationResult.failed("编译失败 (exit=" + exitCode + "): " + tail.trim());
-            }
-        } catch (Exception e) {
-            log.warn("BuildPassValidator 命令执行异常: {}", e.getMessage());
-            return ValidationResult.passed(); // 异常时不阻塞完成
+    @Override
+    protected String detectCommand(Path workDir) {
+        if (Files.exists(workDir.resolve("pom.xml"))) {
+            return "mvn compile -q -o";
         }
+        if (Files.exists(workDir.resolve("build.gradle")) || Files.exists(workDir.resolve("build.gradle.kts"))) {
+            return "gradle compileJava -q";
+        }
+        return null;
+    }
+
+    @Override
+    protected ValidationResult whenNothingToRun() {
+        return ValidationResult.passed();
+    }
+
+    @Override
+    protected String failurePrefix() {
+        return "编译失败";
     }
 }

@@ -18,12 +18,12 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
- * tasks.json 存储契约：
+ * 按会话分存的数据保护契约（会话文件 {@code loop/<sid>.json}）：
  * <ul>
  *   <li>D1：本插件不认识的条目（type=GOAL、缺 sessionId、解析失败）在任何修改后都原样保留；</li>
  *   <li>孤儿清理只删本插件的条目，且不会以空快照清空文件；</li>
  *   <li>宿主扩展字段（automation）往返不变；</li>
- *   <li>P2：整个文件读不懂时先备份原文件，绝不以空快照覆盖；读不出来时只读。</li>
+ *   <li>P2：会话文件读不懂时先备份原文件，绝不以空快照覆盖；读不出来时只读。</li>
  * </ul>
  */
 class LoopStoreTest {
@@ -31,15 +31,28 @@ class LoopStoreTest {
     Path dir;
 
     private Path tasksFile() {
-        return dir.resolve("tasks.json");
+        return tasksFile("s1");
+    }
+
+    private Path tasksFile(String sessionId) {
+        return dir.resolve("loop").resolve(sessionId + ".json");
     }
 
     private void writeFile(String json) throws Exception {
-        Files.write(tasksFile(), json.getBytes(StandardCharsets.UTF_8));
+        writeFile("s1", json);
+    }
+
+    private void writeFile(String sessionId, String json) throws Exception {
+        Files.createDirectories(dir.resolve("loop"));
+        Files.write(tasksFile(sessionId), json.getBytes(StandardCharsets.UTF_8));
     }
 
     private ONode readFile() throws Exception {
-        return ONode.ofJson(new String(Files.readAllBytes(tasksFile()), StandardCharsets.UTF_8));
+        return readFile("s1");
+    }
+
+    private ONode readFile(String sessionId) throws Exception {
+        return ONode.ofJson(new String(Files.readAllBytes(tasksFile(sessionId)), StandardCharsets.UTF_8));
     }
 
     private static List<ONode> entries(ONode root) {
@@ -54,7 +67,7 @@ class LoopStoreTest {
 
     private LoopExtension loaded(java.util.function.Predicate<String> alive) {
         LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
-                .store(FileMountSource.of(dir), "tasks.json").sessionAlive(alive).build();
+                .store(FileMountSource.of(dir), "loop").sessionAlive(alive).build();
         ext.scheduler().load();
         return ext;
     }
@@ -108,8 +121,8 @@ class LoopStoreTest {
 
     @Test
     void orphanCleanupKeepsForeignAndDoesNotWipeFile() throws Exception {
-        writeFile("{\"version\":2,\"tasks\":["
-                + loopEntry("aaaa0003", "alive") + ","
+        writeFile("alive", "{\"version\":2,\"tasks\":[" + loopEntry("aaaa0003", "alive") + "]}");
+        writeFile("gone", "{\"version\":2,\"tasks\":["
                 + loopEntry("aaaa0004", "gone") + ","
                 + "{\"id\":\"g1\",\"type\":\"GOAL\",\"sessionId\":\"gone\"}"
                 + "]}");
@@ -118,15 +131,15 @@ class LoopStoreTest {
 
         assertEquals(1, ext.list("alive").size());
         assertTrue(ext.list("gone").isEmpty(), "孤儿会话的任务不再恢复");
-        List<ONode> after = entries(readFile());
-        assertEquals(2, after.size(), "孤儿任务被删，存活任务与外来条目保留（不得以空快照清空）");
-        assertTrue(after.stream().anyMatch(n -> "aaaa0003".equals(n.get("id").getString())));
-        assertTrue(after.stream().anyMatch(n -> "g1".equals(n.get("id").getString())));
+        assertEquals(1, entries(readFile("alive")).size(), "存活任务保留");
+        List<ONode> gone = entries(readFile("gone"));
+        assertEquals(1, gone.size(), "孤儿任务被删，外来条目保留（不得以空快照清空）");
+        assertEquals("g1", gone.get(0).get("id").getString());
     }
 
     @Test
     void automationExtraRoundTripsThroughFile() throws Exception {
-        writeFile("{\"version\":2,\"tasks\":["
+        writeFile("auto-1", "{\"version\":2,\"tasks\":["
                 + loopEntry("aaaa0005", "auto-1").replace("\"sessionId\"",
                 "\"automation\":{\"id\":\"a1\",\"name\":\"日报\",\"modelName\":\"m\"},\"sessionId\"")
                 + "]}");
@@ -136,7 +149,7 @@ class LoopStoreTest {
         assertEquals("日报", t.getExtra("automation").get("name").getString());
 
         ext.toggle("auto-1", "aaaa0005"); // 任意修改触发落盘
-        ONode node = entries(readFile()).get(0);
+        ONode node = entries(readFile("auto-1")).get(0);
         assertEquals("a1", node.get("automation").get("id").getString());
         assertEquals("m", node.get("automation").get("modelName").getString());
         assertEquals("auto-1", node.get("sessionId").getString());
@@ -147,7 +160,7 @@ class LoopStoreTest {
         LoopExtension ext = LoopExtension.builder().jobManager(null).build();
         ext.scheduler().load();
         ext.schedule("s1", LoopSpec.of("p").everyMinutes(5));
-        assertFalse(Files.exists(tasksFile()));
+        assertFalse(Files.exists(dir.resolve("loop")));
         assertEquals(1, ext.list("s1").size());
     }
 
@@ -162,8 +175,8 @@ class LoopStoreTest {
     // ==================== P2：损坏文件 ====================
 
     private List<Path> corruptBackups() throws Exception {
-        try (Stream<Path> files = Files.list(dir)) {
-            return files.filter(f -> f.getFileName().toString().startsWith("tasks.json.corrupt-"))
+        try (Stream<Path> files = Files.list(dir.resolve("loop"))) {
+            return files.filter(f -> f.getFileName().toString().startsWith("s1.json.corrupt-"))
                     .collect(Collectors.toList());
         }
     }

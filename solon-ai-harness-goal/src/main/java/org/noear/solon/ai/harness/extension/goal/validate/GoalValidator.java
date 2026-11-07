@@ -29,24 +29,48 @@ public interface GoalValidator {
      * 验证结果 — 不可变值对象。
      */
     final class ValidationResult {
-        private final boolean passed;
+        /** 结论种类 */
+        public enum Kind {
+            PASSED,
+            FAILED,
+            /** 无法判定（超时、执行异常、沙盒不可用、无执行目录）：由 {@link ValidatorPolicy} 决定去向 */
+            INCONCLUSIVE
+        }
+
+        private final Kind kind;
         private final String detail;
 
-        private ValidationResult(boolean passed, String detail) {
-            this.passed = passed;
-            this.detail = detail;
+        private ValidationResult(Kind kind, String detail) {
+            this.kind = kind;
+            this.detail = detail == null ? "" : detail;
         }
 
         public static ValidationResult passed() {
-            return new ValidationResult(true, "");
+            return new ValidationResult(Kind.PASSED, "");
         }
 
         public static ValidationResult failed(String detail) {
-            return new ValidationResult(false, detail);
+            return new ValidationResult(Kind.FAILED, detail);
         }
 
+        /** @since 4.2.0 */
+        public static ValidationResult inconclusive(String detail) {
+            return new ValidationResult(Kind.INCONCLUSIVE, detail);
+        }
+
+        /** 仅 PASSED 为 true（INCONCLUSIVE 不算通过，去向由策略决定） */
         public boolean isPassed() {
-            return passed;
+            return kind == Kind.PASSED;
+        }
+
+        /** @since 4.2.0 */
+        public boolean isInconclusive() {
+            return kind == Kind.INCONCLUSIVE;
+        }
+
+        /** @since 4.2.0 */
+        public Kind getKind() {
+            return kind;
         }
 
         public String detail() {

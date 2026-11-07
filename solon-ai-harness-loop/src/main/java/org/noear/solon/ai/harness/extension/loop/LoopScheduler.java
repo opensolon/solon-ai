@@ -41,13 +41,13 @@ import java.util.function.UnaryOperator;
  * 定时任务调度器（插件内部实现，宿主只经 {@link LoopExtension} 门面交互）。
  *
  * <p>职责：任务注册/移除、IJobManager 动态调度、触发守卫（摘除/版本/禁用/忙）、执行器认领、
- * 任务级连续错误处理、tasks.json 持久化（经 {@link LoopStore}）。</p>
+ * 任务级连续错误处理、按会话分存持久化（经 {@link LoopStore}）。</p>
  *
  * <p><b>版本与身份</b>：同一 id 的任务可能被 {@link #update} 替换成新版本。触发守卫只放行「当前版本」，
  * 本轮结果记到最新版本上，一次性任务只注销触发它的那个版本（按对象身份，不按 id）。</p>
  *
  * <p><b>摘除后惰性</b>：{@link #unloadAll} 之后不再写盘、不再注册 job、不再放行触发，
- * 直到下一次 {@link #load}。否则在途那一轮结束时会用已清空的内存表覆盖 tasks.json。</p>
+ * 直到下一次 {@link #load}。否则在途那一轮结束时会用已清空的内存表覆盖存储。</p>
  *
  * @author noear
  * @since 3.9.1
@@ -75,6 +75,8 @@ final class LoopScheduler {
 
     private final String jobPrefix;
     private final int maxTasks;
+    /** 会话 → 该会话任务上限（≤0 = 不限；按租户配额时由宿主提供） */
+    private final java.util.function.ToIntFunction<String> sessionQuota;
     private final IntSupplier maxErrors;
     private final Predicate<String> sessionAlive;
     private final UnaryOperator<Runnable> triggerWrapper;
@@ -91,8 +93,9 @@ final class LoopScheduler {
     /** 已摘除（unloadAll 置位、load 清除）。 */
     private volatile boolean detached = false;
 
-    LoopScheduler(LoopStore store, IJobManager jobManager, int maxTasks,
+    LoopScheduler(LoopStore store, IJobManager jobManager, int maxTasks, java.util.function.ToIntFunction<String> sessionQuota,
                   IntSupplier maxErrors, Predicate<String> sessionAlive, UnaryOperator<Runnable> triggerWrapper) {
+        this.sessionQuota = sessionQuota;
         this.store = store;
         this.jobManager = jobManager;
         this.jobPrefix = "loop-" + JOB_SEQ.incrementAndGet() + ":";
@@ -107,7 +110,7 @@ final class LoopScheduler {
      *
      * <p>JobManager 是 JVM 单例，且同名 job 已存在时静默沿用旧 job（新回调被丢弃），
      * 所以每个调度器实例取一个进程内唯一的序号做前缀，防止多个扩展实例（多引擎、重建引擎）撞名。
-     * 前缀只保证本进程内唯一：job 只在内存、不跨重启，job 名也不落盘（tasks.json 只存 taskId），
+     * 前缀只保证本进程内唯一：job 只在内存、不跨重启，job 名也不落盘（存储里只有 taskId），
      * 重启后序号从头计数不影响正确性。不要改成时间戳（同毫秒创建会重复）。</p>
      *
      * <p>名字里带上 sessionId：任务 ID 只保证会话内可寻址（历史数据里还有 8 位截断 ID），
@@ -165,6 +168,16 @@ final class LoopScheduler {
         List<LoopTask> tasks = sessionTasks.computeIfAbsent(sessionId,
                 k -> Collections.synchronizedList(new ArrayList<>()));
         cleanExpired(sessionId, tasks);
+
+        int quota;
+        try {
+            quota = sessionQuota.applyAsInt(sessionId);
+        } catch (RuntimeException e) {
+            quota = 0;
+        }
+        if (quota > 0 && tasks.size() >= quota) {
+            throw new IllegalStateException("Max tasks per session reached: " + quota);
+        }
         registerJob(sessionId, task, true);
         tasks.add(task);
         persistAll();
@@ -319,7 +332,7 @@ final class LoopScheduler {
 
     // ==================== 批量停止 ====================
 
-    /** 停止会话全部任务并从 tasks.json 删除该会话的记录（onSessionRemove / /loop stop-all）。 */
+    /** 停止会话全部任务并删除该会话的存储记录（onSessionRemove / /loop stop-all）。 */
     void removeAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.remove(sessionId);
         if (tasks != null) {
@@ -334,7 +347,7 @@ final class LoopScheduler {
     }
 
     /**
-     * 卸载全部 job 但保留 tasks.json 记录（扩展摘除 / 引擎关闭）。
+     * 卸载全部 job 但保留存储记录（扩展摘除 / 引擎关闭）。
      *
      * <p>先置摘除标志再清内存表：之后任何写盘（在途一轮结束、关闭时的报错、宿主的 removeAll）都跳过，
      * 否则会用空快照覆盖文件、丢掉全部任务。</p>
@@ -360,7 +373,7 @@ final class LoopScheduler {
 
     // ==================== 加载 ====================
 
-    /** 全量加载 tasks.json 并注册全部启用任务（幂等）。 */
+    /** 全量加载存储并注册全部启用任务（幂等）。 */
     synchronized void load() {
         if (loaded) return;
         loaded = true; // 先置位：即便后续异常也不再重试
@@ -409,10 +422,10 @@ final class LoopScheduler {
                 }
             }
             if (!sessionTasks.isEmpty()) {
-                LOG.info("Loaded {} sessions of loop tasks from tasks.json", sessionTasks.size());
+                LOG.info("Loaded {} sessions of loop tasks from store", sessionTasks.size());
             }
         } catch (Exception e) {
-            LOG.error("Failed to load tasks.json: {}", e.getMessage());
+            LOG.error("Failed to load loop store: {}", e.getMessage());
         }
     }
 
@@ -682,7 +695,7 @@ final class LoopScheduler {
         return count;
     }
 
-    /** 全量落盘：内存快照 + 外来条目 → tasks.json（已摘除时跳过：内存表已清空，写下去就是清空文件）。 */
+    /** 全量落盘：内存快照 → 按会话分存（已摘除时跳过：内存表已清空，写下去就是清空文件）。 */
     private void persistAll() {
         if (detached) {
             return;

@@ -625,31 +625,91 @@ class GoalRoundExecutionTest {
         assertTrue(new NoopValidator().validate("任意条件", null).isPassed());
     }
 
+    /** 不应被调用的执行口（探测不到项目类型时不跑命令） */
+    private static final org.noear.solon.ai.harness.extension.goal.validate.CommandRunner NEVER = (c, d) -> {
+        throw new AssertionError("should not run: " + c);
+    };
+
     @Test
-    void buildValidatorPassesWithoutWorkspace() {
-        // 无工作区信息时不阻塞完成
-        assertTrue(new BuildPassValidator().validate("build", null).isPassed());
-        assertTrue(new BuildPassValidator().validate("build", "").isPassed());
+    void validatorsWithoutWorkspaceAreInconclusive() {
+        // 无工作目录：无法判定（不再「无信息即通过」），去向由 ValidatorPolicy 决定
+        assertTrue(new BuildPassValidator(NEVER).validate("build", null).isInconclusive());
+        assertTrue(new BuildPassValidator(NEVER).validate("build", "").isInconclusive());
+        assertTrue(new TestsPassValidator(NEVER).validate("test", null).isInconclusive());
+        assertFalse(new TestsPassValidator(NEVER).validate("test", "").isPassed());
     }
 
     @Test
     void buildValidatorPassesWhenNoBuildToolDetected() {
-        // 临时目录既无 pom.xml 也无 build.gradle → 跳过，不阻塞
-        assertTrue(new BuildPassValidator().validate("build", System.getProperty("java.io.tmpdir")).isPassed());
-    }
-
-    @Test
-    void testsValidatorFailsWithoutWorkspace() {
-        // 与 BuildPassValidator 不同：无工作区时测试无法验证，按"未通过"处理（更保守）。
-        // goal_update 总会传入会话工作目录（缺省为引擎工作区），活路径上不会是空。
-        assertFalse(new TestsPassValidator().validate("test", null).isPassed());
-        assertFalse(new TestsPassValidator().validate("test", "").isPassed());
+        // 临时目录既无 pom.xml 也无 build.gradle → 没有可编译的对象，通过
+        assertTrue(new BuildPassValidator(NEVER).validate("build", System.getProperty("java.io.tmpdir")).isPassed());
     }
 
     @Test
     void testsValidatorFailsWhenNoBuildToolDetected() {
-        // 未检测到项目类型时同样保守失败
-        assertFalse(new TestsPassValidator().validate("test", System.getProperty("java.io.tmpdir")).isPassed());
+        // 未检测到项目类型时保守失败（明确的 FAILED，不是无法判定）
+        GoalValidator.ValidationResult r = new TestsPassValidator(NEVER)
+                .validate("test", System.getProperty("java.io.tmpdir"));
+        assertFalse(r.isPassed());
+        assertFalse(r.isInconclusive());
+    }
+
+    @Test
+    void commandValidatorMapsRunnerResult(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) throws Exception {
+        java.nio.file.Files.write(dir.resolve("pom.xml"), "<project/>".getBytes());
+        String wd = dir.toString();
+        java.util.List<String> ran = new java.util.ArrayList<>();
+
+        assertTrue(new BuildPassValidator((c, d) -> {
+            ran.add(c + "@" + d);
+            return org.noear.solon.ai.talents.cli.CommandResult.completed(0, "ok");
+        }).validate("build", wd).isPassed());
+        assertEquals("mvn compile -q -o@" + wd, ran.get(0), "命令在本轮工作目录下经执行口运行");
+
+        GoalValidator.ValidationResult failed = new BuildPassValidator((c, d) ->
+                org.noear.solon.ai.talents.cli.CommandResult.completed(1, "ERROR x")).validate("build", wd);
+        assertFalse(failed.isPassed());
+        assertFalse(failed.isInconclusive());
+        assertTrue(failed.detail().contains("exit=1"));
+
+        assertTrue(new BuildPassValidator((c, d) ->
+                org.noear.solon.ai.talents.cli.CommandResult.timedOut("slow")).validate("build", wd).isInconclusive());
+        assertTrue(new BuildPassValidator((c, d) ->
+                org.noear.solon.ai.talents.cli.CommandResult.failed("sandbox down")).validate("build", wd).isInconclusive());
+        assertTrue(new BuildPassValidator((c, d) -> {
+            throw new IllegalStateException("boom");
+        }).validate("build", wd).isInconclusive(), "异常不再即通过");
+    }
+
+    @Test
+    void validatorPolicyDecidesInconclusive() {
+        GoalRuntime rt = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
+                BudgetThresholds.defaults(), 3, 3, true);
+        rt.registerValidator(c -> c.contains("x"),
+                (c, d) -> GoalValidator.ValidationResult.inconclusive("timeout"));
+
+        // 缺省 FAIL_OPEN（本地编码体验不变）
+        assertTrue(rt.validate("x", "/w").isPassed());
+
+        rt.configureValidation(org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy.FAIL_CLOSED, 0);
+        GoalValidator.ValidationResult r = rt.validate("x", "/w");
+        assertFalse(r.isPassed());
+        assertFalse(r.isInconclusive(), "策略处理后只剩通过/未通过");
+        assertTrue(r.detail().contains("timeout"));
+
+        // 验证器抛异常同样按「无法判定」走策略
+        rt.registerValidator(c -> c.contains("y"), (c, d) -> {
+            throw new RuntimeException("boom");
+        });
+        assertFalse(rt.validate("y", "/w").isPassed());
+    }
+
+    @Test
+    void runtimeWithoutEngineHasNoCommandRunner() {
+        GoalRuntime rt = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
+                BudgetThresholds.defaults(), 3, 3, true, true);
+        assertEquals(org.noear.solon.ai.talents.cli.CommandResult.Status.FAILED,
+                rt.runValidationCommand("echo hi", "/tmp").getStatus());
     }
 
     @Test

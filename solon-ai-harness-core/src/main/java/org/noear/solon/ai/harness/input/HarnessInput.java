@@ -21,6 +21,7 @@ import org.noear.solon.ai.harness.command.CommandContextFactory;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.scope.TurnScope;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -90,6 +91,8 @@ public final class HarnessInput {
     private List<String> selectedSkills;
     /** 本次请求显式选中的 MCP 服务名；null 表示不限制（沿用全部已注册服务） */
     private List<String> selectedMcps;
+
+    private TurnScope scope;
     /** 命令上下文工厂；为空时 handle 内部落为 BufferedCommandContextFactory（回执缓冲进 commandOutput） */
     private CommandContextFactory commandContextFactory;
     /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
@@ -379,6 +382,24 @@ public final class HarnessInput {
     public HarnessInput selectedMcp(@Nullable String... names) {
         this.selectedMcps = normalizeSelection(names);
         return this;
+    }
+
+    /**
+     * 本次请求的作用域（只能收窄；强制边界）。未设置时由引擎的 {@code scopeResolver} 解析。
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput scope(@Nullable TurnScope scope) {
+        this.scope = scope;
+        return this;
+    }
+
+    /**
+     * @since 4.2.0
+     */
+    @Nullable
+    public TurnScope getScope() {
+        return scope;
     }
 
     /**

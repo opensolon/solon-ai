@@ -24,7 +24,9 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.LlmErrorClassifier;
+import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.harness.scope.TurnScope;
 import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -464,6 +466,8 @@ public class TaskTalent extends AbsTalent {
         /** 父代理本次生效的技能 / MCP 视野（子代理必须继承，否则父子行为不一致） */
         private final List<String> skillsSelected;
         private final List<String> mcpsSelected;
+        /** 父请求的作用域（强制边界与租户模型，子代理必须继承，否则可经委派绕过） */
+        private final TurnScope scope;
 
         MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
@@ -478,16 +482,21 @@ public class TaskTalent extends AbsTalent {
             // 只解析一次，多个子任务共享同一份视野快照
             this.skillsSelected = SkillTalent.getSelected(parentTrace.getOptions().getToolContext());
             this.mcpsSelected = McpGatewayTalent.getSelected(parentTrace.getOptions().getToolContext());
+            this.scope = TurnScope.of(parentTrace);
         }
 
         /** 把继承到的视野写进子代理的 toolContext */
-        private void applyScope(ModelOptionsAmend<?, ?> options) {
+        private void applyScope(ReActOptionsAmend options) {
             if (skillsSelected.isEmpty() == false) {
                 options.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, skillsSelected);
             }
 
             if (mcpsSelected.isEmpty() == false) {
                 options.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, mcpsSelected);
+            }
+
+            if (scope != null) {
+                scope.applyTo(options);
             }
         }
     }

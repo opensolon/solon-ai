@@ -23,6 +23,9 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Nullable;
 import reactor.core.publisher.Flux;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * 携带受理占位的请求（包内）：引擎装配的每个请求都是它。
  *
@@ -40,9 +43,12 @@ import reactor.core.publisher.Flux;
  */
 final class AdmittedRequest extends ReActRequest {
     private volatile InputGate.Ticket ticket;
+    /** 引擎级运行计数（供 {@code HarnessEngine#isQuiescent} 判定空闲回收） */
+    private final AtomicInteger activeRuns;
 
-    AdmittedRequest(ReActAgent agent, @Nullable Prompt prompt) {
+    AdmittedRequest(ReActAgent agent, @Nullable Prompt prompt, AtomicInteger activeRuns) {
         super(agent, prompt);
+        this.activeRuns = activeRuns;
     }
 
     /** 挂上受理占位（仅 handle 第 0 步占到时）。 */
@@ -61,16 +67,29 @@ final class AdmittedRequest extends ReActRequest {
 
     @Override
     public Flux<AgentEvent> stream() {
+        final AtomicBoolean counted = new AtomicBoolean();
         return super.stream()
-                .doOnSubscribe(s -> release())
-                .doFinally(s -> release());
+                .doOnSubscribe(s -> {
+                    if (counted.compareAndSet(false, true)) {
+                        activeRuns.incrementAndGet();
+                    }
+                    release();
+                })
+                .doFinally(s -> {
+                    if (counted.compareAndSet(true, false)) {
+                        activeRuns.decrementAndGet();
+                    }
+                    release();
+                });
     }
 
     @Override
     public ReActResponse call() throws Throwable {
+        activeRuns.incrementAndGet();
         try {
             return super.call();
         } finally {
+            activeRuns.decrementAndGet();
             release();
         }
     }

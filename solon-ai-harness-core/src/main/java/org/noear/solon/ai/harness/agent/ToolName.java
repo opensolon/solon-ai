@@ -17,9 +17,7 @@ package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.lang.Preview;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * 工具名（代理定义 {@code tools} / {@code disallowedTools} 的取值）
@@ -93,6 +91,88 @@ public enum ToolName {
      * 把工具名展开为具体工具名列表（分组名按固定顺序展开；其它名称原样返回单元素列表）。
      */
     public static List<String> expand(String name) {
+        return expandGroup(name);
+    }
+
+    // ========== 逻辑名 → 运行时工具名（唯一来源：AgentFactory 装配终端工具与作用域守卫都读这里）==========
+    // Talent 提供的工具名变化时必须同步（ToolNameRuntimeDriftTest 守护）。
+
+    private static final Map<String, List<String>> RUNTIME = new HashMap<>();
+    private static final Set<String> BUILTIN_RUNTIME = new HashSet<>();
+    /** 不受作用域名单约束的无害工具（时钟） */
+    private static final Set<String> ALWAYS_ALLOWED = Collections.singleton("now");
+
+    static {
+        runtime("read", "read");
+        runtime("write", "write");
+        runtime("edit", "edit");
+        runtime("glob", "glob");
+        runtime("grep", "grep");
+        runtime("ls", "ls");
+        runtime("list", "ls");
+        runtime("bash", "bash", "bash_start", "bash_wait", "bash_stop");
+        runtime("skill", "skilllist", "skillsearch", "skillread", "skillrefresh");
+        runtime("todo", "todoread", "todowrite");
+        runtime("todoread", "todoread");
+        runtime("todowrite", "todowrite");
+        runtime("webfetch", "webfetch");
+        runtime("websearch", "websearch");
+        runtime("codesearch", "codesearch");
+        runtime("memory", "memory_search", "memory_recall", "memory_extract", "memory_prune", "memory_consolidate");
+        runtime("task", "task", "multitask");
+        runtime("subagent", "task", "multitask");
+        runtime("generate", "generate");
+        runtime("mcp", "search_tools", "get_tool_detail", "call_tool");
+        runtime("openapi", "search_apis", "get_api_detail", "call_api");
+        runtime("restapi", "search_apis", "get_api_detail", "call_api");
+        runtime("lsp", "lsp");
+        runtime("code"); // 只有指令，无工具
+        runtime("hitl"); // 拦截器，非工具
+    }
+
+    private static void runtime(String logical, String... runtimeNames) {
+        RUNTIME.put(logical, Collections.unmodifiableList(Arrays.asList(runtimeNames)));
+        BUILTIN_RUNTIME.addAll(Arrays.asList(runtimeNames));
+    }
+
+    /** 逻辑名对应的运行时工具名（未知名称原样返回单元素列表，视为运行时名） */
+    public static List<String> runtimeNamesOf(String name) {
+        List<String> list = RUNTIME.get(name);
+        return list == null ? Collections.singletonList(name) : list;
+    }
+
+    /** 是否是内置 Talent 提供的运行时工具名（含时钟） */
+    public static boolean isBuiltinRuntime(String runtimeName) {
+        return BUILTIN_RUNTIME.contains(runtimeName) || ALWAYS_ALLOWED.contains(runtimeName);
+    }
+
+    /** 是否是不受作用域约束的无害工具 */
+    public static boolean isAlwaysAllowed(String runtimeName) {
+        return ALWAYS_ALLOWED.contains(runtimeName);
+    }
+
+    /**
+     * 展开为运行时工具名：分组（pi / * / **）→ 逻辑名 → 运行时名；保留逻辑名 {@code mcp} 作为标记，
+     * 供守卫判断 MCP 直连工具。
+     */
+    public static Set<String> expandRuntime(Collection<String> names) {
+        Set<String> out = new LinkedHashSet<>();
+        for (String raw : names) {
+            if (raw == null || raw.trim().isEmpty()) {
+                continue;
+            }
+
+            for (String name : expandGroup(raw.trim())) {
+                if (TOOL_MCP.name.equals(name)) {
+                    out.add(TOOL_MCP.name);
+                }
+                out.addAll(runtimeNamesOf(name));
+            }
+        }
+        return out;
+    }
+
+    private static List<String> expandGroup(String name) {
         ToolName[] group;
         if (TOOL_ALL_FULL.name.equals(name)) {
             group = GROUP_FULL;

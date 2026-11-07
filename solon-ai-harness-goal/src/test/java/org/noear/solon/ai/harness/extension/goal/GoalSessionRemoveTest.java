@@ -88,7 +88,7 @@ class GoalSessionRemoveTest {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).build();
         engine(ext);
 
-        ext.create("s1", GoalSpec.of("目标").runNow(false));
+        ext.create("s1", GoalSpec.of("目标").runNow(true)); // 下一拍即到期
         JobHandler job = jobs.values().iterator().next();
 
         sessions.remove("s1"); // 宿主绕过 removeSession 直接删掉了会话
@@ -116,10 +116,10 @@ class GoalSessionRemoveTest {
 
         a.create("s1", GoalSpec.of("A").runNow(false));
         b.create("s1", GoalSpec.of("B").runNow(false));
-        String nameA = a.getGoalScheduler().jobName("s1");
-        String nameB = b.getGoalScheduler().jobName("s1");
+        String nameA = a.getGoalScheduler().tickJobName();
+        String nameB = b.getGoalScheduler().tickJobName();
         assertNotEquals(nameA, nameB, "不同实例同一会话的 job 不得撞名");
-        assertEquals(2, jobs.size(), "两个 job 都必须注册上（撞名时 JobManager 会静默沿用旧 job）");
+        assertEquals(2, jobs.size(), "两个实例的节拍 job 都必须注册上（撞名时 JobManager 会静默沿用旧 job）");
 
         engineA.removeSession("s1");
         assertFalse(jobs.containsKey(nameA));

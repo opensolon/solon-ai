@@ -23,6 +23,9 @@ import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collection;
+import java.util.Collections;
+
 /**
  * Harness 扩展接口
  *
@@ -333,5 +336,38 @@ public interface HarnessExtension extends AiSwitchable {
      */
     default void onSessionRemove(HarnessEngine engine, String sessionId) {
 
+    }
+
+    /**
+     * 是否没有需要本引擎继续存活的后台工作（事实收集）
+     *
+     * <p><b>调用点</b>：{@code HarnessEngine.isQuiescent()}——引擎池按空闲回收前询问。
+     * 返回 false 的典型情形：还有活跃的 goal、已登记的定时任务。</p>
+     *
+     * <p><b>注意</b>：不判 {@code isEnabled()}（事实类：停用前建的定时任务仍然存在）；
+     * 必须廉价、无副作用；异常按「不静默」处理。</p>
+     *
+     * @param engine 引擎
+     * @return 缺省 true
+     * @since 4.2.0
+     */
+    default boolean isQuiescent(HarnessEngine engine) {
+        return true;
+    }
+
+    /**
+     * 本扩展给模型挂的工具名（声明）
+     *
+     * <p><b>调用点</b>：作用域守卫。已声明的工具不受 {@code TurnScope.tools} 名单约束（跟随扩展是否挂载），
+     * 否则 goal 会因名单里没写 {@code goal_update} 而永远无法完成；未声明的非内置、非 MCP 工具
+     * （如宿主自注册的工具）与内置工具同口径，必须在名单内。</p>
+     *
+     * <p>必须廉价、无副作用；建议直接取自己 Talent 的工具表，避免手写名字与实际工具漂移。</p>
+     *
+     * @return 缺省空
+     * @since 4.2.0
+     */
+    default Collection<String> getToolNames() {
+        return Collections.emptyList();
     }
 }

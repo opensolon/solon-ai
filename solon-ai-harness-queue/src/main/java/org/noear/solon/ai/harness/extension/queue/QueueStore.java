@@ -41,8 +41,13 @@ import java.util.Map;
  */
 final class QueueStore {
     private static final Logger LOG = LoggerFactory.getLogger(QueueStore.class);
+    /** 缺省队列容量（实例可经 {@code QueueExtension.builder().maxSize(n)} 调整） */
     public static final int MAX_QUEUE_SIZE = 20;
+    /** 缺省单条文本上限（实例可经 {@code QueueExtension.builder().maxTextLength(n)} 调整） */
     public static final int MAX_TEXT_LENGTH = 4096;
+    /** 绝对上限：恢复与回收路径的防御值（实例配置不得超过） */
+    static final int HARD_MAX_QUEUE_SIZE = 10_000;
+    static final int HARD_MAX_TEXT_LENGTH = 1_000_000;
     private static final String ATTR_QUEUE = QueueAttrs.QUEUE;
     private static final String ATTR_GENERATION = QueueAttrs.QUEUE_GENERATION;
     private static final String ATTR_CLAIM = QueueAttrs.QUEUE_CLAIM;
@@ -126,12 +131,21 @@ final class QueueStore {
                               String id, String model, String reasoningEffort,
                               String thinkingMode, String selectedAgent, boolean hasFiles,
                               Map<String, String> attrs) {
+        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles,
+                attrs, MAX_QUEUE_SIZE, MAX_TEXT_LENGTH);
+    }
+
+    /** 完整入队（按实例上限）。 */
+    static int enqueue(AgentSession session, String text, InputOrigin origin,
+                       String id, String model, String reasoningEffort,
+                       String thinkingMode, String selectedAgent, boolean hasFiles,
+                       Map<String, String> attrs, int maxSize, int maxTextLength) {
         if (session == null || text == null) return -1;
         String normalized = text.trim();
-        if (normalized.isEmpty() || normalized.length() > MAX_TEXT_LENGTH) return -1;
+        if (normalized.isEmpty() || normalized.length() > maxTextLength) return -1;
         synchronized (session.attrs()) {
             Deque<QueueItem> q = queue(session, true);
-            if (q.size() >= MAX_QUEUE_SIZE) return -1;
+            if (q.size() >= maxSize) return -1;
             if (id != null) {
                 for (QueueItem existing : q) if (id.equals(existing.getId())) return -1;
                 Object running = session.attrs().get(ATTR_IN_FLIGHT);
@@ -209,8 +223,8 @@ final class QueueStore {
         synchronized (session.attrs()) {
             if (!isGenerationActive(session, generation)) return false;
             Deque<QueueItem> q = queue(session, true);
-            // in-flight 回收不能因 pending 已满而丢失；允许短暂保留一个恢复槽位。
-            if (q.size() > MAX_QUEUE_SIZE) return false;
+            // in-flight 回收不能因 pending 已满而丢失（实例上限可能大于缺省值）：只用绝对上限防御失控。
+            if (q.size() > HARD_MAX_QUEUE_SIZE) return false;
             item.setStatus("PENDING"); item.setClaimedAt(null); q.offerFirst(item);
             session.attrs().remove(ATTR_IN_FLIGHT);
             saveLocked(session, q);
@@ -331,6 +345,10 @@ final class QueueStore {
      * @return 实际导入条数
      */
     public static int importItems(AgentSession session, List<Map<String, Object>> rows) {
+        return importItems(session, rows, MAX_QUEUE_SIZE);
+    }
+
+    static int importItems(AgentSession session, List<Map<String, Object>> rows, int maxSize) {
         if (session == null || rows == null || rows.isEmpty()) return 0;
         synchronized (session.attrs()) {
             Deque<QueueItem> q = queue(session, true);
@@ -338,7 +356,7 @@ final class QueueStore {
             List<QueueItem> pendings = new ArrayList<>();
             int total = q.size();
             for (Map<String, Object> row : rows) {
-                if (total >= MAX_QUEUE_SIZE) break;
+                if (total >= maxSize) break;
                 QueueItem item = QueueItem.fromMap(row);
                 if (item == null) continue;
                 boolean duplicated = false;

@@ -100,7 +100,7 @@ public class SteerInterceptorTest {
 
     private static String hugeText() {
         StringBuilder huge = new StringBuilder();
-        for (int i = 0; i < org.noear.solon.ai.harness.extension.queue.QueueExtension.maxTextLength() + 10; i++) {
+        for (int i = 0; i < new org.noear.solon.ai.harness.extension.queue.QueueExtension().getMaxTextLength() + 10; i++) {
             huge.append('x');
         }
         return huge.toString();
@@ -484,14 +484,14 @@ public class SteerInterceptorTest {
     @Test
     @DisplayName("dropped: 队列满时失败项暂存为 orphans 并标记 failed，pending 仍可见")
     public void dropped_queueFullParksAsOrphan() {
-        for (int i = 0; i < org.noear.solon.ai.harness.extension.queue.QueueExtension.maxQueueSize(); i++) {
+        for (int i = 0; i < new org.noear.solon.ai.harness.extension.queue.QueueExtension().getMaxSize(); i++) {
             assertTrue(new org.noear.solon.ai.harness.extension.queue.QueueExtension().enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
         }
         SteerState state = startWithInbox(trace, "do not lose me");
 
         interceptor.onAgentEnd(trace);
 
-        assertEquals(org.noear.solon.ai.harness.extension.queue.QueueExtension.maxQueueSize(), new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session), "队列不得超上限");
+        assertEquals(new org.noear.solon.ai.harness.extension.queue.QueueExtension().getMaxSize(), new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session), "队列不得超上限");
         assertEquals(1, state.orphans.size(), "失败项必须暂存待重试");
         assertEquals(0, state.inbox.size(), "失败项不得回到邮箱（会被注入下一任务）");
         assertEquals("s0", state.snapshot().get(0).getId());

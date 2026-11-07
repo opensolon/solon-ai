@@ -182,8 +182,8 @@ public class GoalTalent extends AbsTalent {
             }
 
             if (goalRuntime.isValidatorEnabled()) {
-                GoalValidator validator = goalRuntime.resolveValidator(gs.getObjective());
-                GoalValidator.ValidationResult vr = validator.validate(gs.getObjective(), workDir);
+                // 已按 ValidatorPolicy 处理「无法判定」：这里只会拿到通过/未通过
+                GoalValidator.ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.detail());
                     return errJson("VALIDATION_FAILED",

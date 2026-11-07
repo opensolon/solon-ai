@@ -117,7 +117,8 @@ public class WriteToolStrategy implements HITLStrategy {
             }
         }
 
-        return global;
+        // 会话级记忆（人工审批「总是允许」只对本会话生效）
+        return SessionPermissions.merge(global, trace);
     }
 
     @Override

@@ -26,10 +26,12 @@ import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
 
 /**
@@ -39,15 +41,16 @@ import java.util.function.UnaryOperator;
  *
  * <pre>{@code
  * // 最简：一行装配，缺省执行器经 engine.handle(...) 同步跑一轮
- * engine.addExtensionIfAbsent(LoopExtension.builder().store(engine.getStateSource(), "tasks.json").build());
+ * engine.addExtensionIfAbsent(LoopExtension.builder().store(engine.getStateSource(), "loop").build());
  *
  * // 完整：
  * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
- *         .store(engine.getStateSource(), "tasks.json")             // 本地/db/http；缺省 = 只在内存
+ *         .store(engine.getStateSource(), "loop", "tasks.json")     // 按会话分存，并迁移旧单文件；缺省 = 只在内存
+ *         .quota(id -> 20)                                         // 每会话（租户）上限；缺省不限
  *         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id)))   // 孤儿清理；缺省恒 true
  *         .maxErrors(() -> 3)                                      // 任务级连续失败阈值；每次实时读
  *         .triggerWrapper(r -> withLogScope(r))                    // 调度线程包装；缺省原样执行
- *         .build());                                               // onAttach 内注册 /loop 并加载 tasks.json
+ *         .build());                                               // onAttach 内注册 /loop 并加载任务
  * loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> LoopOutcome.done(runRound(sid, prompt)));
  *
  * // 宿主的增删改查（请求参数原样传入，null = 未设置/保持）：
@@ -57,7 +60,7 @@ import java.util.function.UnaryOperator;
  * Map<String, Object> view = t.toMap();
  * }</pre>
  *
- * <p><b>钩子</b>：{@code onAttach} 绑定引擎、注册 /loop、加载并调度 tasks.json；{@code onRequestAssemble}
+ * <p><b>钩子</b>：{@code onAttach} 绑定引擎、注册 /loop、加载并调度已存任务；{@code onRequestAssemble}
  * 给顶层请求挂 {@link LoopTalent}（委派不挂：子代理走临时会话，建出来的任务会成为孤儿）；
  * {@code contributeSessionStatus} 贡献 {@link #STATUS_TASKS}；{@code onSessionRemove} 停止并删除该会话全部任务；
  * {@code onDetach} 卸载全部 job 但保留记录。
@@ -103,8 +106,9 @@ public class LoopExtension extends AbsHarnessExtension {
                             + "loop tasks will be stored but never fire. "
                             + "Use builder.jobManager(null) to disable scheduling explicitly.");
         }
-        this.scheduler = new LoopScheduler(new LoopStore(b.storeSource, b.storePath), jm,
-                b.maxTasks, b.maxErrors, b.sessionAlive, b.triggerWrapper);
+        LoopStore store = new LoopStore(b.storeSource, b.storeDir, b.legacyFile);
+        this.scheduler = new LoopScheduler(store, jm,
+                b.maxTasks, b.quota, b.maxErrors, b.sessionAlive, b.triggerWrapper);
         this.loopTalent = new LoopTalent(scheduler);
         this.loopCommand = new LoopCommand(scheduler);
         this.defaultExecutorEnabled = b.defaultExecutor;
@@ -143,6 +147,11 @@ public class LoopExtension extends AbsHarnessExtension {
         }
     }
 
+    @Override
+    public Collection<String> getToolNames() {
+        return loopTalent.getToolMap().keySet();
+    }
+
     /** 事实口径，不判开关；只读内存计数（可能在会话锁内调用，无 IO、无其它锁）。 */
     @Override
     public void contributeSessionStatus(HarnessEngine engine, AgentSession session, SessionStatus.Builder builder) {
@@ -155,7 +164,13 @@ public class LoopExtension extends AbsHarnessExtension {
         scheduler.removeAll(sessionId);
     }
 
-    /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转），tasks.json 记录保留。 */
+    /** 引擎池回收判定：存在会自动触发的任务时不静默（只剩暂停任务时可以回收）。 */
+    @Override
+    public boolean isQuiescent(HarnessEngine engine) {
+        return hasActiveTasks() == false;
+    }
+
+    /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转），存储记录保留。 */
     @Override
     public void onDetach(HarnessEngine engine) {
         scheduler.unloadAll();
@@ -289,7 +304,9 @@ public class LoopExtension extends AbsHarnessExtension {
 
     public static class Builder {
         private MountSource storeSource;
-        private String storePath;
+        private String storeDir;
+        private String legacyFile;
+        private ToIntFunction<String> quota = id -> 0;
         private Predicate<String> sessionAlive = id -> true;
         private IntSupplier maxErrors = () -> DEFAULT_MAX_ERRORS;
         private int maxTasks = DEFAULT_MAX_TASKS;
@@ -302,15 +319,38 @@ public class LoopExtension extends AbsHarnessExtension {
         }
 
         /**
-         * 任务存储到挂载来源（本地、db、http 均可）。通常传 {@code engine.getStateSource()}，
-         * 本地目录用 {@code FileMountSource.of(dir)}；不设置则只在内存、不持久化。
+         * 任务存储到挂载来源（本地、db、http 均可），按会话分存：每个会话一个文件
+         * {@code <dir>/<encode(sessionId)>.json}，变更只重写该会话的文件。不设置则只在内存、不持久化。
          *
-         * @param source 存储来源（null = 只在内存）
-         * @param path   来源内路径（如 {@code "tasks.json"}）；source 非 null 时不可为空
+         * @param source 存储来源（null = 只在内存）；通常传 {@code engine.getStateSource()}
+         * @param dir    来源内目录（建议 {@code "loop"}：在引擎缺省受保护名单内，模型工具读写不到；
+         *               用其它目录名时需加进 {@code protectedStatePaths}）
          */
-        public Builder store(MountSource source, String path) {
+        public Builder store(MountSource source, String dir) {
+            return store(source, dir, null);
+        }
+
+        /**
+         * 同 {@link #store(MountSource, String)}，并在首次加载时迁移旧单文件：把其中的任务拆成分存文件，
+         * 旧文件改名为 {@code <legacyFile>.migrated-<时间戳>} 备份（外来条目随备份完整保留）。
+         *
+         * @param legacyFile 旧单文件（如 {@code "tasks.json"}；可空 = 不迁移）
+         */
+        public Builder store(MountSource source, String dir, String legacyFile) {
             this.storeSource = source;
-            this.storePath = path;
+            this.storeDir = dir;
+            this.legacyFile = legacyFile;
+            return this;
+        }
+
+        /**
+         * 按会话（租户）配额：sessionId → 上限（≤0 = 不限；固定每会话上限写 {@code id -> 20}）；
+         * 异常按不限处理（总量上限 {@link #maxTasks} 仍然生效）。缺省不限。
+         *
+         * @since 4.2.0
+         */
+        public Builder quota(ToIntFunction<String> sessionIdToLimit) {
+            this.quota = sessionIdToLimit == null ? id -> 0 : sessionIdToLimit;
             return this;
         }
 
