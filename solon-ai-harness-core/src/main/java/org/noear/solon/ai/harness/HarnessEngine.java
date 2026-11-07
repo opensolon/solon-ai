@@ -653,8 +653,16 @@ public class HarnessEngine {
     private void assertMutable(String op) {
         if (!options.isRuntimeMutable()) {
             throw new IllegalStateException(op + " is locked at runtime (runtimeMutable=false): "
-                    + "decide engine-wide settings at build time");
+                    + "decide engine-wide settings at build time" + buildTimeHint(op));
         }
+    }
+
+    /** 锁定报错里给出构建期的对应写法（最常见的误用是 build 之后再挂扩展）。 */
+    private static String buildTimeHint(String op) {
+        if ("addExtension".equals(op) || "removeExtension".equals(op)) {
+            return "; attach extensions before build() with HarnessEngine.Builder.extensionAdd(...)";
+        }
+        return "";
     }
 
     /**
@@ -1491,8 +1499,8 @@ public class HarnessEngine {
     /**
      * 按类型幂等挂载扩展：引擎上已有同类型（{@code extension.getClass()} 的实例）时不再添加。
      *
-     * <p>{@link #addExtension} 不查重，重复添加会二次回调 {@code onAttach}（重复注册、重复建调度器）。
-     * 组合根装配插件时用本方法，重复装配拿到的是<b>已挂载</b>的那个实例：</p>
+     * <p>{@link #addExtension} 只跳过同一实例（同类的另一个实例照常添加）；组合根装配插件时用本方法，
+     * 重复装配拿到的是<b>已挂载</b>的那个实例：</p>
      *
      * <pre>{@code
      * engine.addExtensionIfAbsent(new SteerExtension());
@@ -1523,9 +1531,15 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * 动态挂载一个扩展（同一实例已挂载时直接跳过，不会二次回调 {@code onAttach}；同类的另一个实例照常添加）。
+     */
     public void addExtension(HarnessExtension extension) {
         assertMutable("addExtension");
         if (extension == null) {
+            return;
+        }
+        if (containsSame(options.getExtensions(), extension)) {
             return;
         }
         options.getExtensions().add(extension);
@@ -1535,6 +1549,16 @@ public class HarnessEngine {
         extension.onAttach(this);
 
         rebuildMainAgentIfBuilt();
+    }
+
+    /** 按引用查重（不用 equals：扩展可能自定义 equals，而重复 onAttach 只发生在同一实例上） */
+    private static boolean containsSame(List<HarnessExtension> list, HarnessExtension extension) {
+        for (HarnessExtension e : list) {
+            if (e == extension) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -2498,8 +2522,11 @@ public class HarnessEngine {
             return this;
         }
 
+        /** 挂载扩展（构建期；同一实例重复添加只算一次，null 忽略） */
         public Builder extensionAdd(HarnessExtension val) {
-            options.getExtensions().add(val);
+            if (val != null && containsSame(options.getExtensions(), val) == false) {
+                options.getExtensions().add(val);
+            }
             return this;
         }
 
@@ -2671,7 +2698,7 @@ public class HarnessEngine {
         }
 
         /**
-         * 受保护的状态子路径（相对 harnessHome，缺省 sessions / memory / channels / tasks.json）：
+         * 受保护的状态子路径（相对 harnessHome，缺省 sessions / memory / channels / tasks.json / loop / goal）：
          * 模型的文件工具与 bash 都不得读写。传空列表表示不保护。
          *
          * @since 4.2.0

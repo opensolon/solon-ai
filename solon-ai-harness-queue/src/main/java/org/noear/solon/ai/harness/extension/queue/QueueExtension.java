@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * <p>装配后宿主只需掌握一个时机：任务终态续发。首选 {@link #drainLoop}（自动套领取循环 +
  * 三态终止），单条控制用 {@link #claimNext}；二者都把「一次领取」封成 {@link QueueClaim}，
- * 代际快照与终态收口（{@code acknowledge}/{@code rollback}）归 harness。
+ * 代际快照与终态收口归 harness（handler 返回 true 时内核当场收口，异步启动时由流终态的 {@code RunTicket#settle} 收口）。
  * 启动恢复用 {@link #isPersisted} 探测后直接 drain。</p>
  *
  * <p>历史上曾有一组「异步 drain + 宿主自管代际」的接口
@@ -106,7 +106,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         private Builder() {
         }
 
-        /** 每会话待执行条数上限（1 /Users/noear 10000，缺省 20） */
+        /** 每会话待执行条数上限（1 ~ 10000，缺省 20） */
         public Builder maxSize(int maxSize) {
             if (maxSize < 1 || maxSize > QueueStore.HARD_MAX_QUEUE_SIZE) {
                 throw new IllegalArgumentException("maxSize must be in [1, " + QueueStore.HARD_MAX_QUEUE_SIZE + "]");
@@ -115,7 +115,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             return this;
         }
 
-        /** 单条文本字符上限（1 /Users/noear 1000000，缺省 4096） */
+        /** 单条文本字符上限（1 ~ 1000000，缺省 4096） */
         public Builder maxTextLength(int maxTextLength) {
             if (maxTextLength < 1 || maxTextLength > QueueStore.HARD_MAX_TEXT_LENGTH) {
                 throw new IllegalArgumentException("maxTextLength must be in [1, " + QueueStore.HARD_MAX_TEXT_LENGTH + "]");

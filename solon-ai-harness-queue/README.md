@@ -637,4 +637,4 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 8. **RunTicket.begin 必须在领取回调内、订阅之前调用**：否则捕获不到本次 `QueueClaim`（`settle` 会退回收口会话当前的派发）。
 9. **不要直接读写 `session.queue.*`**：宿主只经 `QueueExtension` 操作。`QueueStore` 为包内实现。
 10. **重启后 RUNNING 会重新执行**：如果任务不可重放，宿主需要自行做幂等处理。
-11. **装配建议用 `addExtensionIfAbsent`**：`addExtension` 不查重，重复添加会再次回调 `onAttach`。
+11. **装配建议用 `addExtensionIfAbsent`**：同一实例重复添加只算一次（按引用查重）。**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）：改在构建期用 `Builder.extensionAdd(...)`。

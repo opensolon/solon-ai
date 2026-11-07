@@ -547,6 +547,35 @@ class HarnessPluginContractTest {
         assertNull(engine.addExtensionIfAbsent(null));
     }
 
+    @Test
+    void sameInstanceIsAttachedOnlyOnce() {
+        AtomicInteger attached = new AtomicInteger();
+
+        class Counting implements HarnessExtension {
+            @Override
+            public void onAttach(HarnessEngine engine) {
+                attached.incrementAndGet();
+            }
+        }
+
+        // 构建期：同一实例重复 extensionAdd 只算一次；null 忽略
+        Counting one = new Counting();
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .extensionAdd(one)
+                .extensionAdd(one)
+                .extensionAdd(null)
+                .build();
+        assertEquals(1, attached.get());
+        assertEquals(1, engine.getExtensions().stream().filter(e -> e == one).count());
+
+        // 运行期：同一实例再 addExtension 不二次 onAttach；同类另一个实例照常挂载
+        engine.addExtension(one);
+        assertEquals(1, attached.get(), "同一实例不得二次 onAttach");
+        engine.addExtension(new Counting());
+        assertEquals(2, attached.get(), "同类不同实例照常挂载");
+    }
+
     // ==================== 守卫：核心不认识插件 ====================
 
     @Test

@@ -18,10 +18,11 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * harness 跨模块结构守护（core + goal/loop/queue/steer 四插件）。
+ * harness 跨模块结构守护（core + goal/loop/queue/steer 四插件 + 聚合包的宿主层 host）。
  *
  * <ol>
- *   <li>依赖方向：core 不 import 任何插件；插件之间零 import（只经 core 契约协作：钩子、spi、会话槽位）；</li>
+ *   <li>依赖方向：core 不 import 任何插件；插件之间零 import（只经 core 契约协作：钩子、spi、会话槽位）；
+ *       聚合包主代码只在 {@code host} 包（可以依赖全部插件），core 与插件不得反向依赖它；</li>
  *   <li>插件内部实现类（{@code *Runtime/*Store/*Mailbox/*Scheduler}）不得 public——宿主只经 {@code XxxExtension} 门面；</li>
  *   <li>未发布前不留兼容层：主代码无 {@code @Deprecated}；</li>
  *   <li>{@code @since} 不超过当前版本线（4.2.0）。</li>
@@ -56,7 +57,30 @@ class HarnessStructureGuardTest {
         for (String plugin : PLUGINS) {
             all.addAll(javaFiles(mainOf("solon-ai-harness-" + plugin)));
         }
+        all.addAll(javaFiles(mainOf("solon-ai-harness")));
         return all;
+    }
+
+    @Test
+    void hostLayerIsTopOnly() throws IOException {
+        List<String> violations = new ArrayList<>();
+        Path hostRoot = mainOf("solon-ai-harness");
+        for (Path f : javaFiles(hostRoot)) {
+            String rel = hostRoot.relativize(f).toString().replace('\\', '/');
+            if (rel.startsWith(PKG + "/host/") == false) {
+                violations.add("聚合包主代码只能在 host 包：" + rel);
+            }
+        }
+        List<Path> lower = new ArrayList<>(javaFiles(mainOf("solon-ai-harness-core")));
+        for (String plugin : PLUGINS) {
+            lower.addAll(javaFiles(mainOf("solon-ai-harness-" + plugin)));
+        }
+        for (Path f : lower) {
+            if (read(f).contains("org.noear.solon.ai.harness.host.")) {
+                violations.add("core/插件不得依赖 host：" + f.getFileName());
+            }
+        }
+        assertTrue(violations.isEmpty(), violations.toString());
     }
 
     @Test

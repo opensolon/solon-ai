@@ -64,7 +64,8 @@ public class CommandRegistry {
 
     private void assertNotSealed(String op) {
         if (sealed) {
-            throw new IllegalStateException("CommandRegistry is sealed (runtimeMutable=false): " + op);
+            throw new IllegalStateException("CommandRegistry is sealed (runtimeMutable=false): " + op
+                    + "; register commands at build time with HarnessEngine.Builder.commandAdd / commandLoad");
         }
     }
 

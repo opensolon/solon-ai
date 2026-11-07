@@ -14,7 +14,7 @@
     <artifactId>solon-ai-harness</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
-    <description>solon-ai-harness 聚合包：核心 + 全部会话插件（goal / queue / steer / loop）。只聚合依赖，不含代码；插件仍需宿主显式 addExtensionIfAbsent 装配</description>
+    <description>solon-ai-harness 聚合包：核心 + 全部会话插件（goal / queue / steer / loop）。另含宿主层 host 包（HarnessHost 宿主骨架、AdminView 管理入口）；插件不会自动生效，需在构建期用 Builder.extensionAdd 装配（SERVER 模式必须如此）</description>
 
     <dependencies>
         <dependency>

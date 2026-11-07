@@ -68,7 +68,8 @@ final class LoopScheduler {
         }
     }
 
-    private final LoopStore store;
+    /** 存储（只在加载前替换一次：{@code store(dir)} 形式要等挂接时才拿到引擎的状态来源） */
+    private volatile LoopStore store;
     private final IJobManager jobManager;
     /** 调度器实例序号（job 名前缀用，见 {@link #jobName}）。 */
     private static final AtomicLong JOB_SEQ = new AtomicLong();
@@ -127,6 +128,11 @@ final class LoopScheduler {
 
     void bindEngine(HarnessEngine engine) {
         this.engine = engine;
+    }
+
+    /** 换用存储（挂接时、{@link #load()} 之前调用） */
+    void useStore(LoopStore store) {
+        this.store = store;
     }
 
     void setDefaultExecutor(LoopExecutor executor) {

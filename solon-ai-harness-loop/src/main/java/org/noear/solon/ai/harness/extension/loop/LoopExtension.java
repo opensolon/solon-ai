@@ -41,8 +41,8 @@ import java.util.function.UnaryOperator;
  * <p><b>注意</b>：本模块是 harness 的「会话定时任务」（/loop、loop_* 工具），与会话目标（goal 插件）无关。</p>
  *
  * <pre>{@code
- * // 最简：一行装配，缺省执行器经 engine.handle(...) 同步跑一轮
- * engine.addExtensionIfAbsent(LoopExtension.builder().store(engine.getStateSource(), "loop").build());
+ * // 最简：构建期一行装配（存到引擎状态来源的 loop/ 目录），缺省执行器经 engine.handle(...) 同步跑一轮
+ * HarnessEngine.of(ws, ".solon/") ... .extensionAdd(LoopExtension.builder().store("loop").build()).build();
  *
  * // 完整：
  * LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
@@ -97,6 +97,8 @@ public class LoopExtension extends AbsHarnessExtension {
     private final LoopTalent loopTalent;
     private final LoopCommand loopCommand;
     private final boolean defaultExecutorEnabled;
+    /** {@code store(dir)} 形式：挂接时在引擎状态来源的这个目录里存（可空） */
+    private final String engineStateDir;
 
     private LoopExtension(Builder b) {
         IJobManager jm = b.jobManagerSet ? b.jobManager : resolveJobManager();
@@ -113,6 +115,7 @@ public class LoopExtension extends AbsHarnessExtension {
         this.loopTalent = new LoopTalent(scheduler);
         this.loopCommand = new LoopCommand(scheduler);
         this.defaultExecutorEnabled = b.defaultExecutor;
+        this.engineStateDir = b.engineStateDir;
     }
 
     /** 无 Solon 容器（纯 JUnit）时为 null，调度能力随之失效（任务仅作元数据）。 */
@@ -137,6 +140,9 @@ public class LoopExtension extends AbsHarnessExtension {
     public void onAttach(HarnessEngine engine) {
         this.engine = engine;
         scheduler.bindEngine(engine);
+        if (engineStateDir != null && engine.getStateSource() != null) {
+            scheduler.useStore(new LoopStore(engine.getStateSource(), engineStateDir, null));
+        }
         if (defaultExecutorEnabled) {
             scheduler.setDefaultExecutor(defaultExecutor(engine));
         }
@@ -329,6 +335,7 @@ public class LoopExtension extends AbsHarnessExtension {
         private MountSource storeSource;
         private String storeDir;
         private String legacyFile;
+        private String engineStateDir;
         private ToIntFunction<String> quota = id -> 0;
         private Predicate<String> sessionAlive = id -> true;
         private IntSupplier maxErrors = () -> DEFAULT_MAX_ERRORS;
@@ -363,6 +370,25 @@ public class LoopExtension extends AbsHarnessExtension {
             this.storeSource = source;
             this.storeDir = dir;
             this.legacyFile = legacyFile;
+            this.engineStateDir = null;
+            return this;
+        }
+
+        /**
+         * 任务存到引擎的状态来源（{@code engine.getStateSource()}）里的 {@code dir} 目录，挂接时才取来源——
+         * 构建期装配（{@code Builder.extensionAdd}）时不必先拿到引擎。其余同 {@link #store(MountSource, String)}。
+         *
+         * @param dir 状态来源内目录（建议 {@code "loop"}）
+         * @since 4.2.0
+         */
+        public Builder store(String dir) {
+            if (dir == null || dir.trim().isEmpty()) {
+                throw new IllegalArgumentException("Loop store dir must not be empty");
+            }
+            this.storeSource = null;
+            this.storeDir = null;
+            this.legacyFile = null;
+            this.engineStateDir = dir;
             return this;
         }
 

@@ -96,6 +96,26 @@ class LoopExtensionTest {
     }
 
     @Test
+    void storeDirUsesEngineStateSourceOnAttach() throws Exception {
+        // 构建期装配不必先拿到引擎：store(dir) 在挂接时取 engine.getStateSource()
+        Path state = workspace.resolve("state");
+        LoopExtension loop = builder(null).store("loop").build();
+        assertFalse(loop.scheduler().isPersistent(), "挂接前只在内存");
+
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id))
+                .stateSource(FileMountSource.of(state))
+                .extensionAdd(loop)
+                .build();
+
+        assertTrue(loop.scheduler().isPersistent(), "挂接后落到引擎状态来源");
+        loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
+        assertTrue(Files.isRegularFile(state.resolve("loop").resolve("s1.json")), "写在 <stateSource>/loop/ 下");
+        assertNotNull(engine.getCommandRegistry().find("loop"));
+        assertThrows(IllegalArgumentException.class, () -> LoopExtension.builder().store(" "));
+    }
+
+    @Test
     void twoInstancesNeverShareJobNames() throws Exception {
         // 两个扩展实例共用同一个 JobManager，各自加载同 id、同会话的任务（如复制出来的 tasks.json）
         String json = "{\"version\":2,\"tasks\":[{\"id\":\"aaaa0001\",\"prompt\":\"p\",\"intervalMinutes\":5,"

@@ -98,6 +98,10 @@ import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
         .store(engine.getStateSource(), "loop")
         .build());
+
+// 构建期装配（SERVER 模式必须如此）：还没有 engine，用 store("loop")，挂接时取引擎的状态来源
+LoopExtension loop = LoopExtension.builder().store("loop").build();
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/") /* ... */ .extensionAdd(loop).build();
 ```
 
 装配完成后两种时态都已可用：用户输入 `/loop ...` 或让模型调用 `loop_add`（使用态），宿主也可以直接调用 `loop.schedule(...)`（管理态）。
@@ -791,7 +795,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ## 9. 注意事项
 
-1. **用 `addExtensionIfAbsent` 装配**：按类型幂等；重复 `addExtension` 会二次 `onAttach`。
+1. **用 `addExtensionIfAbsent` 装配**：按类型幂等；同一实例重复 `addExtension` 只算一次。**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）：改在构建期用 `Builder.extensionAdd(...)`。
 2. **会话忙时本轮直接放弃**：不计错误、不重试、也不消耗一次性配额，等下一次到点。执行器无需自行判断会话忙。
 3. **同一任务不会并发**：上一轮未结束时到点的触发被丢弃。
 4. **一次性任务**：由调度触发且通过守卫后，无论 done / skip / failed 都会被删除；`trigger` 手动执行不消耗配额。

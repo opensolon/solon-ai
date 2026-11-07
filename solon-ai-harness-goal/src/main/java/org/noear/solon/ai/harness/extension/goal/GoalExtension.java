@@ -48,6 +48,10 @@ import java.util.function.Predicate;
  *         .build());                  // onAttach 内注册 /goal 命令
  * goal.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> runRound(sid, prompt));
  *
+ * // SERVER 模式（runtimeMutable=false）下 build 之后不能再挂扩展，改在构建期挂：
+ * GoalExtension goal = GoalExtension.builder().build();
+ * HarnessEngine engine = HarnessEngine.of(ws, ".solon/").profile(HarnessProfile.SERVER) ... .extensionAdd(goal).build();
+ *
  * // 宿主的增删改查（一律按 sessionId 定位；taskId 可空 = 本会话当前 goal，非空时不匹配即视为不存在）：
  * GoalTask t = goal.create(sid, GoalSpec.of(prompt).maxTokens(2000));
  * goal.update(sid, t.getId(), GoalPatch.create().objective(newPrompt), stopper);
@@ -269,9 +273,7 @@ public class GoalExtension extends AbsHarnessExtension {
             } catch (Throwable e) {
                 throw new IllegalStateException(e.getMessage() != null ? e.getMessage() : e.toString(), e);
             }
-            boolean hasToolCalls = response.getTrace() != null && response.getTrace().getToolCallCount() > 0;
-            long tokens = response.getMetrics() != null ? response.getMetrics().getTotalTokens() : 0L;
-            return GoalOutcome.done(response.getContent(), hasToolCalls, tokens);
+            return GoalOutcome.done(response);
         };
     }
 
@@ -552,7 +554,8 @@ public class GoalExtension extends AbsHarnessExtension {
 
     private GoalRuntime requireAttached() {
         if (goalRuntime == null) {
-            throw new IllegalStateException("GoalExtension is not attached; call engine.addExtension(...) first");
+            throw new IllegalStateException("GoalExtension is not attached; attach it first with "
+                    + "HarnessEngine.Builder.extensionAdd(...) (or engine.addExtensionIfAbsent(...) when runtimeMutable)");
         }
         return goalRuntime;
     }

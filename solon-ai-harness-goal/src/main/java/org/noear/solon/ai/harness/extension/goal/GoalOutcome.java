@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.ai.agent.react.ReActResponse;
+
 /**
  * goal 执行器一轮的结论（与 loop 的 {@code LoopOutcome} 同语义，类型各自独立）。
  *
@@ -56,6 +58,21 @@ public final class GoalOutcome {
      */
     public static GoalOutcome done(String finalText, boolean hasToolCalls, long tokensUsed) {
         return new GoalOutcome(Kind.DONE, finalText == null ? "" : finalText, hasToolCalls, Math.max(0L, tokensUsed));
+    }
+
+    /**
+     * 执行完成：工具证据取自响应轨迹、token 取自响应指标（缺省执行器与经 {@code engine.handle(...).call()}
+     * 跑一轮的自定义执行器共用这一口径）。
+     *
+     * @since 4.2.0
+     */
+    public static GoalOutcome done(ReActResponse response) {
+        if (response == null) {
+            return failed("no response");
+        }
+        boolean hasToolCalls = response.getTrace() != null && response.getTrace().getToolCallCount() > 0;
+        long tokens = response.getMetrics() != null ? response.getMetrics().getTotalTokens() : 0L;
+        return done(response.getContent(), hasToolCalls, tokens);
     }
 
     /** 本通道认领，但此刻不宜执行：本轮跳过，不计错误。@param reason 日志用原因 */

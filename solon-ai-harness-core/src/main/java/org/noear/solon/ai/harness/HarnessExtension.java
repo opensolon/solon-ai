@@ -130,8 +130,8 @@ public interface HarnessExtension extends AiSwitchable {
      *
      * <p><b>注意</b>：不判 {@code isEnabled()}——停用的扩展也要完成装配；
      * 抛出异常会让引擎构建 <i>fail-fast</i>（不会静默吞掉）。
-     * 同一实例重复 {@code addExtension} 会重复回调（引擎列表不查重），且 {@code removeExtension}
-     * 只移除首个——调用方需自行保证「只添加一次」。</p>
+     * 同一实例重复 {@code extensionAdd} / {@code addExtension} 只算一次（引擎按引用查重），不会重复回调；
+     * 同类的不同实例各自挂载（按类型去重用 {@code addExtensionIfAbsent}）。一个实例只应挂到一个引擎上。</p>
      *
      * @param engine 引擎（此刻已装配完毕）
      * @since 4.2.0（原名 {@code initialize}）

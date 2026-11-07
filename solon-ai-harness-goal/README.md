@@ -865,5 +865,5 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 8. **时长预算只在轮前检查**：单轮执行时间可能超出 `maxDurationMs`，下一轮开始前才转 `BUDGET_LIMITED`。
 9. **displayObjective 的实际效果**：按当前源码，设置了不同的展示正文后，运行态只保存展示正文；后续每轮提示词、执行型关键词判定与验证器匹配均基于展示正文，执行正文（如拼入的附件全文）不会被保存。
 10. **默认验证器会执行真实构建命令**：`mvn test` 等命令在本轮会话工作目录同步执行，可能耗时较长；不需要时用 `validatorEnabled(false)`，或注册更精确的自定义验证器（注意内置验证器按 AND 与自定义验证器一起生效）。
-11. **装配用 `addExtensionIfAbsent`**：`addExtension` 不查重，重复挂载会二次 `onAttach`。`/goal` 命令注册幂等，引擎上已有同名命令时保持原实例。
+11. **装配用 `addExtensionIfAbsent`**：同一实例重复挂载只算一次（按引用查重）。`/goal` 命令注册幂等，引擎上已有同名命令时保持原实例。**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）：改在构建期用 `Builder.extensionAdd(...)`。
 12. **`BudgetThresholds` 为包内类型**：宿主只能通过 `Builder.budget(...)` 配置阈值。

@@ -2,6 +2,9 @@
 
 本文面向把 harness 部署成**多租户服务端**的开发者（Web API、IM 网关、企业 Agent 平台）。单机 CLI / 桌面 / 单用户 Web 请看 [README.md](README.md)，本文只讲服务端额外要做的事。
 
+> **先看 [QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)**：用宿主骨架 `HarnessHost` 搭服务端，只需实现两个输出回调；术语见 [CONCEPTS.md](CONCEPTS.md)。
+> 本文是参考手册：隔离模型、作用域、多节点、存储与容量，以及不用骨架、直连 `engine.handle`（L1）时的写法。
+
 > 文中 `TenantStore`、`Authz`、`RedisOwnership`、`ImHost` 等是**宿主自己的类**（示意），harness 不提供；
 > `HarnessEngine`、`HarnessEnginePool`、`InputScope`、`SessionOwnership` 等才是 harness 的 API。
 > 标 `@Preview("4.2.0")` 的类型（引擎池、作用域、会话归属）在 4.2.x 内可能还有调整。
@@ -59,9 +62,12 @@ public class SaasHarness {
         Path ws    = tenants.workspaceOf(tenantId);   // 如 /data/ws/<tenant>
         Path state = tenants.stateDirOf(tenantId);    // 如 /data/state/<tenant>（必须在工作区之外）
 
+        MountSource stateSrc = FileMountSource.of(state);              // 或 db / http 实现的 MountSource
+        GoalExtension goal = GoalExtension.builder().roundConcurrency(2).build();
+
         HarnessEngine engine = HarnessEngine.of(ws.toString(), ".solon/")
                 .profile(HarnessProfile.SERVER)                        // 保守缺省 + 构建期校验
-                .stateSource(FileMountSource.of(state))                // 或 db / http 实现的 MountSource
+                .stateSource(stateSrc)
                 .sessionProvider(tenants.sessionProviderOf(tenantId))  // 会话持久化（见 §五）
                 .modelAdd(tenants.modelsOf(tenantId))
                 .defaultModel(tenants.defaultModelOf(tenantId))
@@ -70,18 +76,18 @@ public class SaasHarness {
                 .cwdPolicy(cwd -> Paths.get(cwd).startsWith(ws))       // 引擎先取真实路径再交给策略
                 .sessionOwnership(SessionOwnership.namespaced(tenantId, redisOwnership))  // 多节点才需要；单机省略
                 .taskExecutor(taskExecutor)                            // 可选：共享执行器，引擎 shutdown 不关闭它
+                // ④ 会话插件（按需）：SERVER 下 build 之后引擎全局配置已锁定，插件必须在构建期挂上
+                //    （build 之后再 addExtensionIfAbsent 会抛 IllegalStateException）
+                .extensionAdd(QueueExtension.builder().maxSize(20).build())
+                .extensionAdd(new SteerExtension())
+                .extensionAdd(goal)                                    // SERVER 下缺省不注册内置构建验证器、且 FAIL_CLOSED
+                .extensionAdd(LoopExtension.builder()
+                        .store(stateSrc, "loop")                       // 与引擎共用状态来源；按会话分存，在缺省受保护名单内
+                        .maxTasks(200).quota(sid -> 20)
+                        .build())
                 .build();
 
-        // ④ 会话插件（按需）：SERVER 模式下 goal 缺省不注册内置构建验证器、且 FAIL_CLOSED
-        engine.addExtensionIfAbsent(QueueExtension.builder().maxSize(20).build());
-        engine.addExtensionIfAbsent(new SteerExtension());
-        GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder().roundConcurrency(2).build());
-        engine.addExtensionIfAbsent(LoopExtension.builder()
-                .store(engine.getStateSource(), "loop")                // 按会话分存，在缺省受保护名单内
-                .maxTasks(200).quota(sid -> 20)
-                .build());
-
-        goal.recover();                                                // 按 goal/active/ 索引恢复调度
+        goal.recover();                                                // build 之后：按 goal/active/ 索引恢复调度
         return engine;
     }
 
@@ -90,6 +96,10 @@ public class SaasHarness {
     }
 }
 ```
+
+插件就是普通扩展：不要哪个删哪一行，宿主自己的扩展也是同一种 `extensionAdd` 写法（同一实例重复添加只算一次）。
+loop 不想持有 `stateSrc` 变量时可写 `.store("loop")`，挂接时取引擎的状态来源。
+用 `HarnessHost`（L0）时不必自己调 `goal.recover()`：骨架首次取到引擎时先登记后台执行器再恢复，见 [QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)。
 
 `ToolName.TOOL_ALL_PUBLIC` 即 `*`（公有工具组，不含 `task` / `generate` / `mcp` / `hitl` / `memory`）；关键是**引擎级给上限、作用域再收窄**。需要 MCP 时显式加 `ToolName.TOOL_MCP` 一类的工具。
 
@@ -239,7 +249,7 @@ public class RedisOwnership implements SessionOwnership {
 |---|---|---|---|
 | 对话历史、会话快照（含 queue 投影、goal 投影、会话主体、会话 cwd、会话级子代理） | 会话实现 | `sessionProvider` | 要能跨节点读到（共享存储），且只由持有节点写 |
 | goal 活跃索引 | `stateSource` 的 `goal/active/`（每会话一个空标记文件） | 引擎 | 多节点共用来源时不会互相覆盖 |
-| loop 任务 | `store(source, dir)` 指定，每会话一个文件 `<dir>/<encode(sid)>.json` | 宿主 | 建议传 `engine.getStateSource()` |
+| loop 任务 | `store(source, dir)` 指定，每会话一个文件 `<dir>/<encode(sid)>.json` | 宿主 | 建议传构建引擎时用的同一个 `stateSource` |
 | 全局子代理（`generate(saveToFile=true)`） | 工作区代理目录 `<harnessAgents>/<name>.md` | 引擎 | SERVER 缺省禁止创建 |
 | 长期记忆 | `memoryProvider` | 宿主 | 缓存与索引在进程内存，其它节点写入后需重建实例才能检索到 |
 | steer 邮箱、受理占位、运行句柄、派发事务（`session.run.dispatch`） | 进程内存 | — | 不落盘；重启后未注入的插话丢失 |
@@ -269,6 +279,12 @@ loop 用其它目录名时，请把它加进这个名单。
 ---
 
 ## 六、宿主接入：使用态与管理态
+
+**推荐用宿主骨架**：`HarnessHost.submit / decide / stop` 与 `host.admin(tenant, principal)` 已代办本节的全部约定
+（只查不建会话、`RunTicket`、`afterRun` 续发、`isOccupied` 口径、派发轮次的回复路由、开流前失败的 `discard`、
+`engine_closed` 重试、`not_owner` 转发、管理门面的统一结果码与鉴权、入队后自动续发），写法见 [QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)。
+
+下面是**不用骨架**、直连 `engine.handle`（L1）时的写法，适用于自带终态门或需要自定义输出时序的宿主。
 
 ### 6.1 使用态（用户发消息）
 
@@ -395,7 +411,13 @@ public class AdminController {
 ## 八、运行期配置
 
 SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionReset`）、模型、MCP / OpenAPI / LSP、挂载、沙盒、HITL 开关、系统提示词、记忆开关、子代理默认并发、缓存控制、扩展增删等引擎级修改会抛 `IllegalStateException`；
-命令注册表与子代理注册表在 `build()` 末尾封口，`getCommandRegistry().register(...)`、`getAgentManager().addAgent(...)` 同样抛异常。差异请在**构建期**决定，按用户的差异用 `InputScope` 表达。
+命令注册表与子代理注册表在 `build()` 末尾封口，`getCommandRegistry().register(...)`、`getAgentManager().addAgent(...)` 同样抛异常。差异请在**构建期**决定，按用户的差异用 `InputScope` 表达：
+
+| 运行期写法（SERVER 下抛异常） | 构建期写法 |
+|---|---|
+| `engine.addExtensionIfAbsent(ext)` / `addExtension(ext)` | `Builder.extensionAdd(ext)`（扩展的 `onAttach` 在注册表封口前执行，插件自带的命令照常注册） |
+| `engine.getCommandRegistry().register(cmd)` | `Builder.commandAdd(cmd)` |
+| `engine.getCommandRegistry().load(source, dir)` | `Builder.commandLoad(source, dir)` |
 
 推理调优类参数（`setMaxTurns`、`setSessionWindowSize`、`setCompressionThreshold`、重试次数等）不在锁内，可以在运行期调。
 会话级选择（`setSessionModel`、`setSessionAgent`、`setSessionCwd`、`setSessionPrincipal`）也不受锁约束；`setSessionCwd` 受 `cwdPolicy` 约束，`setSessionPrincipal` 设置后不可改。
@@ -406,19 +428,22 @@ SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionRese
 
 ## 九、上线检查清单
 
+用 `HarnessHost` 时，带「（L1）」的项由骨架代办，可跳过。
+
 - [ ] `profile(HarnessProfile.SERVER)`；`stateSource` 在工作区之外
 - [ ] 启动时 `SandboxBootstrap.initOnce(...)`，网络白名单按全进程的需求配置
 - [ ] 创建会话时 `setSessionPrincipal`；`scopeResolver` 用 `byPrincipal` 查授权表并做短期缓存；授权服务异常时宁可拒绝
 - [ ] `cwdPolicy` 限制在租户根目录内；换目录走 `setSessionCwd`
 - [ ] 多节点：粘滞路由，或 `SessionOwnership.namespaced(tenantId, redisOwnership)`；网关处理 `not_owner` 转发
-- [ ] 管理接口：`requireSession` / `getSessionOrNull` 校验存在性；处理门面的 `NOT_OWNER` / `NotOwnerException`；租户鉴权；入队 / 置顶后调用 `drain`
-- [ ] 队列续发挂在 `outcome.afterRun(...)`；`drainLoop` 的谓词用 `isOccupied`；订阅前 `RunTicket.begin`
-- [ ] 结局分派处理 `scope_not_deferrable`、`engine_closed` 两个拒绝码
+- [ ] 管理接口：租户鉴权（骨架下配置 `adminAuthorizer`）；（L1）`requireSession` / `getSessionOrNull` 校验存在性、处理门面的 `NOT_OWNER` / `NotOwnerException`、入队 / 置顶后调用 `drain`
+- [ ] （L1）队列续发挂在 `outcome.afterRun(...)`；`drainLoop` 的谓词用 `isOccupied`；订阅前 `RunTicket.begin`
+- [ ] （L1）结局分派处理 `scope_not_deferrable`、`engine_closed` 两个拒绝码
 - [ ] 只注册服务端可用的命令，或用作用域的 `commands` 维度收窄
 - [ ] `generate` 全局创建：保持 SERVER 缺省拒绝，或用 `agentPersistPolicy` 只对管理员开放
 - [ ] goal：确认 `FAIL_CLOSED` 的影响；需要构建 / 测试验证时显式 `defaultValidators(true)` 并评估命令执行风险
-- [ ] loop：`store(engine.getStateSource(), "loop")`、`maxTasks`、`quota`
-- [ ] 引擎池：`maxEngines`、`idleTtl`、`whenFull`；启动时 `warmup` 有后台工作的租户；`goal.recover()`
+- [ ] 插件全部在构建期用 `Builder.extensionAdd(...)` 挂上（SERVER 下 build 之后不能再挂）；自定义命令用 `Builder.commandAdd` / `commandLoad`
+- [ ] loop：`store(stateSrc, "loop")`（与引擎同一个状态来源）、`maxTasks`、`quota`
+- [ ] 引擎池：`maxEngines`、`idleTtl`、`whenFull`；启动时 `warmup` 有后台工作的租户；build 之后调用 `goal.recover()`
 - [ ] 会话提供者：实例缓存有上限；`createIfAbsent=false` 无副作用
 - [ ] 删除会话：判忙 → `engine.removeSession(id)` → 移出内存 → 删除存储
 
@@ -426,11 +451,11 @@ SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionRese
 
 ## 十、已知限制
 
-以下问题已经识别、尚未在框架层解决，详细分析见 [SAAS-ISSUES.md](SAAS-ISSUES.md)，方案与进度见 [SAAS-PLAN.md](SAAS-PLAN.md)：
+以下问题已经识别、尚未在框架层解决：
 
-1. 门面不经过作用域校验，管理接口要宿主自己鉴权；
+1. 插件门面不经过作用域校验：用 `AdminView` 时由 `AdminAuthorizer` 统一鉴权，直连门面时要宿主自己鉴权；
 2. 引擎之间不共享模型实例与 MCP 连接，也没有进程级的节拍与按模型并发闸门（M5b 未落地）；
 3. 引擎池不会自动知道哪些租户有后台工作，`warmup` 的租户清单由宿主维护；
 4. goal / loop 执行器只能按 `sessionId` 认领（M6.2 未落地）；
-5. 宿主胶水（续发、终态、停流入口选择）仍靠约定，官方宿主骨架 `HarnessHost` 未落地（M6.1）；
+5. 宿主骨架 `HarnessHost`（M6.1）已落地（`@Preview`）；goal / loop 的后台轮次经骨架时同步执行、不推送流事件；
 6. `SessionOwnership` 没有续约接口，长运行期间的租约保活由实现负责。

@@ -8,7 +8,7 @@ package org.noear.solon.ai.harness.extension.queue;
  * 领取一条队列任务的运行者。
  *
  * <p>「上下文完整性」是它存在的理由：拿到的是 {@link QueueClaim}，自带领取时的代际快照
- * 与收口方法（{@code acknowledge} / {@code rollback}），宿主不再需要自己记住 item id、
+ * 与唯一收口入口 {@link QueueClaim#settle(boolean)}（通常不必自己调，见下文返回值契约），宿主不再需要自己记住 item id、
  * 也不需要在终态现取代际。历史上还有一个只拿 {@code QueueItem} 的布尔型同步变体
  * （{@code QueueTaskRunner}），已随双路径收敛删除。</p>
  *
