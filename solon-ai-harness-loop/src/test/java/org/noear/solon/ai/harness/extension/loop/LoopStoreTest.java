@@ -148,7 +148,7 @@ class LoopStoreTest {
         LoopTask t = ext.get("auto-1", "aaaa0005");
         assertEquals("日报", t.getExtra("automation").get("name").getString());
 
-        ext.toggle("auto-1", "aaaa0005"); // 任意修改触发落盘
+        ext.pause("auto-1", "aaaa0005"); // 任意修改触发落盘
         ONode node = entries(readFile("auto-1")).get(0);
         assertEquals("a1", node.get("automation").get("id").getString());
         assertEquals("m", node.get("automation").get("modelName").getString());

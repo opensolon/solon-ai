@@ -73,7 +73,7 @@ public interface GoalValidator {
             return kind;
         }
 
-        public String detail() {
+        public String getDetail() {
             return detail;
         }
     }

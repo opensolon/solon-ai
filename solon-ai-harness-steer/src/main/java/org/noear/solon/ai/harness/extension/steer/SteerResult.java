@@ -26,7 +26,7 @@ public final class SteerResult {
         /** 当前没有运行中的轮次 */
         NOT_RUNNING,
         /** 请求所带 runId 已不是当前轮次 */
-        TURN_CHANGED,
+        RUN_CHANGED,
         /** 本轮邮箱已满 */
         BOX_FULL,
         /** steerId 重复（重试幂等） */
@@ -58,8 +58,6 @@ public final class SteerResult {
     }
 
     public Code getCode() { return code; }
-    /** 应答码字符串（= {@code getCode().name()}） */
-    public String getCodeName() { return code.name(); }
     public String getSteerId() { return steerId; }
     /** 投递后本轮邮箱里待注入的条数 */
     public int getPendingCount() { return pendingCount; }
@@ -68,7 +66,7 @@ public final class SteerResult {
     /** 当前没有运行中的轮次 */
     public boolean isNotRunning() { return code == Code.NOT_RUNNING; }
     /** 轮次已切换（请求所带 runId 过期） */
-    public boolean isTurnChanged() { return code == Code.TURN_CHANGED; }
+    public boolean isRunChanged() { return code == Code.RUN_CHANGED; }
 
     @Override
     public String toString() {

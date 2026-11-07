@@ -33,7 +33,7 @@ class GoalProjectionTest {
         assertTrue(projection != null);
         assertEquals(gs.getId(), projection.getGoalId());
         assertEquals("全部测试通过", projection.getObjective());
-        assertEquals(GoalTask.Status.PURSUING, projection.getStatus());
+        assertEquals(GoalSnapshot.Status.PURSUING, projection.getStatus());
         assertTrue(projection.isActive());
         assertFalse(projection.isTerminal());
         assertEquals(1000, projection.getMaxTokens());
@@ -56,7 +56,7 @@ class GoalProjectionTest {
         assertTrue(restored != null);
         assertEquals(gs.getId(), restored.getId());
         assertEquals(gs.getObjective(), restored.getObjective());
-        assertEquals(GoalTask.Status.PAUSED, restored.getStatus());
+        assertEquals(GoalSnapshot.Status.PAUSED, restored.getStatus());
         assertEquals(gs.getMaxTokens(), restored.getMaxTokens());
     }
 
@@ -87,7 +87,7 @@ class GoalProjectionTest {
         GoalProjection.builder()
                 .goalId("g-1")
                 .objective("完成重构")
-                .status(GoalTask.Status.PURSUING)
+                .status(GoalSnapshot.Status.PURSUING)
                 .maxTokens(2000)
                 .maxIterations(3)
                 .build()
@@ -100,14 +100,14 @@ class GoalProjectionTest {
         assertTrue(read.isActive());
         assertEquals(2000, read.getMaxTokens());
 
-        assertEquals(GoalTask.Status.PURSUING, GoalProjection.statusOf(context));
+        assertEquals(GoalSnapshot.Status.PURSUING, GoalProjection.statusOf(context));
     }
 
     /** 迁移场景：按历史状态名填充，非法名不得产出半残投影。 */
     @Test
     void builderStatusNameToleratesBadInput() {
         GoalProjection ok = GoalProjection.builder().statusName("ACHIEVED").build();
-        assertEquals(GoalTask.Status.ACHIEVED, ok.getStatus());
+        assertEquals(GoalSnapshot.Status.ACHIEVED, ok.getStatus());
         assertTrue(ok.isTerminal());
 
         GoalProjection bad = GoalProjection.builder().statusName("NOPE").build();
@@ -120,11 +120,11 @@ class GoalProjectionTest {
     @Test
     void statusOfReflectsActiveAndTerminal() {
         FlowContext pursuing = FlowContext.fromJson("{}");
-        GoalProjection.builder().status(GoalTask.Status.PURSUING).build().writeTo(pursuing);
+        GoalProjection.builder().status(GoalSnapshot.Status.PURSUING).build().writeTo(pursuing);
         assertTrue(GoalProjection.statusOf(pursuing).isActive());
 
         FlowContext achieved = FlowContext.fromJson("{}");
-        GoalProjection.builder().status(GoalTask.Status.ACHIEVED).build().writeTo(achieved);
+        GoalProjection.builder().status(GoalSnapshot.Status.ACHIEVED).build().writeTo(achieved);
         assertTrue(GoalProjection.statusOf(achieved).isTerminal());
         assertFalse(GoalProjection.statusOf(achieved).isActive());
     }

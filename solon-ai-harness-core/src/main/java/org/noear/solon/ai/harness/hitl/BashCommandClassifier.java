@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.harness.hitl;
 
-import org.noear.solon.ai.harness.permission.PermissionDecision;
+import org.noear.solon.ai.harness.permission.PermissionBehavior;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -86,24 +86,24 @@ public class BashCommandClassifier {
      * @param command bash 命令字符串
      * @return 决策结果：DENY（不完整）、ALLOW（只读）、ASK（其他）
      */
-    public PermissionDecision classify(String command) {
+    public PermissionBehavior classify(String command) {
         // 1. 空命令拒绝
         if (command == null || command.trim().isEmpty()) {
-            return PermissionDecision.DENY;
+            return PermissionBehavior.DENY;
         }
 
         // 2. 不完整命令拒绝
         if (isIncompleteCommand(command)) {
-            return PermissionDecision.DENY;
+            return PermissionBehavior.DENY;
         }
 
         // 3. 只读命令放行
         if (isSearchOrReadCommand(command)) {
-            return PermissionDecision.ALLOW;
+            return PermissionBehavior.ALLOW;
         }
 
         // 4. 其他命令交由人工确认
-        return PermissionDecision.ASK;
+        return PermissionBehavior.ASK;
     }
 
     /**

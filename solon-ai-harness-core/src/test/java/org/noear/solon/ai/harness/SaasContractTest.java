@@ -19,7 +19,7 @@ import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.harness.spi.InputBacklog;
-import org.noear.solon.ai.harness.spi.NotOwnerException;
+import org.noear.solon.ai.harness.session.NotOwnerException;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
 import reactor.core.Disposable;
 

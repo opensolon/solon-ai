@@ -8,20 +8,22 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.spi.InputBacklog;
+import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Queue 一键装配扩展 —— queue 能力从头到尾只接触这一个类。
  *
  * <p>{@code engine.addExtension(new QueueExtension())} 一步完成：注册 /queue 命令
- * （幂等）+ 提供队列操作门面。宿主不再分别接触 {@link QueueStore} 静态工具类——本类内部中转，静态实现与
- * {@code session.queue.*} attrs 契约零改动。</p>
+ * （幂等）+ 提供队列操作门面。写操作统一返回 {@link HarnessResult}（失败用结果码表达，不用哨兵值）。</p>
  *
  * <p>装配后宿主只需掌握一个时机：任务终态续发。首选 {@link #drainLoop}（自动套领取循环 +
  * 三态终止），单条控制用 {@link #claimNext}；二者都把「一次领取」封成 {@link QueueClaim}，
@@ -129,13 +131,6 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
     }
 
-    /**
-     * 写门面在非持有节点上的返回值（多节点部署：本节点不持有该会话，宿主按 {@code engine.checkOwner} 的持有者转发）
-     *
-     * @since 4.2.0
-     */
-    public static final int NOT_OWNER = -2;
-
     private volatile HarnessEngine engine;
 
     @Override
@@ -179,9 +174,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
         String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
         // 输入快照：技能 / MCP 视野、终端标记与显式作用域随积压保存，续发时还原（解析所得的作用域不存，续发时重新解析）
-        return QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
-                null, null, agent, false, input.getAttrs(), QueueItem.snapshotOf(input),
-                limits.maxSize, limits.maxTextLength);
+        int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
+                agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
+        return position > 0 ? position : -1;
     }
 
     /**
@@ -220,43 +215,56 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * <p>注意：门面入队不经 {@code handle} 受理，因此不做作用域预检；作用域在续发时由解析器解析
      * （{@code scopeRequired} 下解析不到即被拒绝）。</p>
      *
-     * @return 队列位置（从 1 计）；-1 表示失败（满/超长/参数空/扩展已停用）；{@link #NOT_OWNER} 表示本节点不持有该会话
+     * @return OK 时值为队列位置（从 1 计）；DISABLED（已停用）/ NOT_OWNER（本节点不持有该会话）/
+     *         INVALID（文本为空或超长）/ FULL（队列已满）
      */
-    public int enqueue(AgentSession session, String text, InputOrigin origin) {
-        if (isEnabled() == false) {
-            return -1;
-        }
-        if (owned(session) == false) {
-            return NOT_OWNER;
-        }
-        return QueueStore.enqueue(session, text, origin, null, null, null, null, null, false, null,
-                limits.maxSize, limits.maxTextLength);
+    public HarnessResult<Integer> enqueue(AgentSession session, String text, InputOrigin origin) {
+        return enqueue(HarnessInput.of(session, text).origin(origin), null);
     }
 
     /**
      * 入队（来源缺省为 {@code channel("queue")}）。
      *
-     * <p>程序宿主调用时通常不关心来源元数据，不必为一个必填参数编造渠道标识
-     * （与 {@code /queue} 命令的内部兜底同口径）。
-     *
-     * @return 队列位置（从 1 计）；-1 表示失败
+     * <p>程序宿主调用时通常不关心来源元数据，不必为一个必填参数编造渠道标识。</p>
      */
-    public int enqueue(AgentSession session, String text) {
+    public HarnessResult<Integer> enqueue(AgentSession session, String text) {
         return enqueue(session, text, InputOrigin.channel("queue"));
     }
 
-    /** 完整参数入队（HTTP 重试幂等用 id 去重；model/effort 等随任务执行）。已停用时返回 -1。 */
-    public int enqueue(AgentSession session, String text, InputOrigin origin,
-                       String id, String model, String reasoningEffort,
-                       String thinkingMode, String selectedAgent, boolean hasFiles) {
+    /**
+     * 完整入队：正文、来源、显式模型 / 子代理选择、宿主域属性（{@code input.attr(...)}，如推理强度、思考模式）
+     * 与技能 / MCP 视野原样保存，续发经 {@link QueueItem#toInput} 原样带回。
+     *
+     * @param input 输入（会话取自 {@code input.getSession()}；附件不进队列）
+     * @param id    条目 id（HTTP 重试幂等用；null = 自动生成）。重复时为 INVALID
+     * @since 4.2.0
+     */
+    public HarnessResult<Integer> enqueue(HarnessInput input, String id) {
+        if (input == null || input.getSession() == null) {
+            return HarnessResult.invalid("session is required");
+        }
         if (isEnabled() == false) {
-            return -1;
+            return HarnessResult.disabled("queue is disabled");
         }
-        if (owned(session) == false) {
-            return NOT_OWNER;
+        AgentSession session = input.getSession();
+        HarnessResult<Integer> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
         }
-        return QueueStore.enqueue(session, text, origin, id, model, reasoningEffort,
-                thinkingMode, selectedAgent, hasFiles, null, limits.maxSize, limits.maxTextLength);
+        String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
+        int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), id, input.getSelectedModel(),
+                agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
+        if (position > 0) {
+            return HarnessResult.ok(position);
+        }
+        switch (position) {
+            case QueueStore.ENQUEUE_FULL:
+                return HarnessResult.full("队列已满，上限 " + limits.maxSize + " 条");
+            case QueueStore.ENQUEUE_DUPLICATE:
+                return HarnessResult.invalid("duplicate queue item id: " + id);
+            default:
+                return HarnessResult.invalid("text is empty or longer than " + limits.maxTextLength);
+        }
     }
 
     /** 待执行数量（不含 in-flight，运行中的那条不占容量）。 */
@@ -296,7 +304,6 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * （同步完成）或流终态的 {@code RunTicket#settle}（异步启动）完成——不需要往会话 attrs 里塞
      * QueueItem，也不需要在终态现取代际。</p>
      *
-     * @see QueueStore#claimNext(AgentSession, QueueClaimHandler)
      * @since 4.2.0
      */
     public QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
@@ -316,7 +323,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
      * @since 4.2.0
      */
-    public QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+    public QueueClaimStatus claimNext(AgentSession session, Predicate<AgentSession> canAccept,
                                 QueueClaimHandler handler) {
         if (isEnabled() == false || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
@@ -351,7 +358,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * @return 最后一次领取的结果（未发生领取时为 {@link QueueClaimStatus#NO_TASK}）
      * @since 4.2.0
      */
-    public QueueClaimStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
+    public QueueClaimStatus drainLoop(AgentSession session, Predicate<AgentSession> canDrain,
                                 QueueClaimHandler handler) {
         if (isEnabled() == false || session == null || handler == null || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
@@ -380,26 +387,67 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         return last;
     }
 
-    /** 取消单条待执行任务。 */
-    public boolean cancelItem(AgentSession session, String itemId) {
-        return owned(session) && QueueStore.cancelItem(session, itemId);
+    /** 取消单条待执行任务（运行中的那条不能取消，为 NOT_FOUND）。 */
+    public HarnessResult<Void> cancelItem(AgentSession session, String itemId) {
+        HarnessResult<Void> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
+        }
+        return QueueStore.cancelItem(session, itemId) ? HarnessResult.<Void>ok() : HarnessResult.<Void>notFound("queue item not found");
     }
 
     /** 置顶单条待执行任务。 */
-    public boolean promote(AgentSession session, String itemId) {
-        return owned(session) && QueueStore.promote(session, itemId);
-    }
-
-    /** 清空待执行并递增代际（in-flight 不受影响；旧代际 requeue 被拒）。 */
-    public boolean cancelPending(AgentSession session) {
-        return owned(session) && QueueStore.cancelPending(session);
-    }
-
-    /** 旧版 queue-tasks.json 的一次性迁移入口。@return 实际导入条数 */
-    public int importItems(AgentSession session, List<Map<String, Object>> rows) {
-        if (owned(session) == false) {
-            return NOT_OWNER;
+    public HarnessResult<Void> promote(AgentSession session, String itemId) {
+        HarnessResult<Void> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
         }
-        return QueueStore.importItems(session, rows, limits.maxSize);
+        return QueueStore.promote(session, itemId) ? HarnessResult.<Void>ok() : HarnessResult.<Void>notFound("queue item not found");
+    }
+
+    /**
+     * 作废全部排队（Stop 语义）：清空待执行、连同运行中那条的登记一起作废并递增代际
+     * （旧代际的回滚被拒，被停掉的任务不会复活）。只想清空待执行、让当前这条照常跑完时用 {@link #clearPending}。
+     */
+    public HarnessResult<Void> cancelPending(AgentSession session) {
+        HarnessResult<Void> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
+        }
+        QueueStore.cancelPending(session);
+        return HarnessResult.ok();
+    }
+
+    /**
+     * 清空全部待执行（不动正在执行的那条、不递增代际）。
+     *
+     * @return OK 时值为清掉的条数
+     * @since 4.2.0
+     */
+    public HarnessResult<Integer> clearPending(AgentSession session) {
+        HarnessResult<Integer> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
+        }
+        return HarnessResult.ok(QueueStore.clearPending(session));
+    }
+
+    /** 旧版 queue-tasks.json 的一次性迁移入口。OK 时值为实际导入条数 */
+    public HarnessResult<Integer> importItems(AgentSession session, List<Map<String, Object>> rows) {
+        HarnessResult<Integer> owner = ownerCheck(session);
+        if (owner != null) {
+            return owner;
+        }
+        return HarnessResult.ok(QueueStore.importItems(session, rows, limits.maxSize));
+    }
+
+    /** 写门面的归属检查：本节点持有时返回 null，否则返回 NOT_OWNER（未挂载时视为持有：单测与无引擎场景） */
+    private <T> HarnessResult<T> ownerCheck(AgentSession session) {
+        HarnessEngine e = engine;
+        if (session == null || e == null) {
+            return null;
+        }
+        OwnerCheck check = e.checkOwner(session);
+        return check.isOwned() ? null : HarnessResult.<T>notOwner(check.getOwner());
     }
 }

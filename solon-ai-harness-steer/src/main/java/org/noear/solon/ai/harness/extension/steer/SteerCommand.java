@@ -121,7 +121,7 @@ class SteerCommand extends AbsCommand {
                 ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
                 break;
             case NOT_RUNNING:
-            case TURN_CHANGED:
+            case RUN_CHANGED:
                 ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
                 break;
             case TEXT_TOO_LONG:
@@ -131,7 +131,7 @@ class SteerCommand extends AbsCommand {
                 ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
                 break;
             default:
-                ctx.println("插话未生效：" + result.getCodeName());
+                ctx.println("插话未生效：" + result.getCode().name());
         }
     }
 }

@@ -231,10 +231,8 @@ public class RedisOwnership implements SessionOwnership {
 
 | 门面 | 失败方式 |
 |---|---|
-| `queue.enqueue` / `importItems` | 返回 `QueueExtension.NOT_OWNER`（-2） |
-| `queue.cancelItem` / `promote` / `cancelPending` | 返回 false（与「条目不存在」同值，需要区分时先调 `engine.checkOwner`） |
+| queue / goal / loop 的全部写门面（`enqueue`、`cancelItem`、`create`、`pause`、`schedule` 等） | 返回 `HarnessResult` 的 `NOT_OWNER`（`getOwner()` 为持有者；与「不存在」的 `NOT_FOUND` 可区分） |
 | `steer.steer` / `steerOnRun` / `cancelOnRun` | `SteerResult.Code.NOT_OWNER` / `SteerCancelResult.Code.NOT_OWNER` |
-| `goal.create` / `update` / `pause` 等、`loop.schedule` 等 | 抛 `NotOwnerException`（`getOwner()` 为持有者） |
 | `engine.interrupt` | 返回 false；`engine.prepareInterrupt(session).isNotOwner()` 可与「没有在跑」区分 |
 
 - **后台派发**：goal / loop 调度在**加载会话之前**先查归属，非持有节点不会把会话加载进内存。goal 没拿到租约时按 `GoalExtension.builder().ownerProbeIntervalMs(...)`（缺省 15 秒）退避，持有节点宕机、租约过期后在一个探测间隔内接管；建议探测间隔不超过租期的一半。
@@ -339,7 +337,7 @@ private void drain(HarnessEngine engine, AgentSession session) {
 
 | 检查 | `handle` 路径 | 门面路径 | 宿主要做的 |
 |---|---|---|---|
-| 会话归属 | 自动（`not_owner`） | 自动（见 §四的失败方式表） | 按失败值或 `NotOwnerException.getOwner()` 转发 |
+| 会话归属 | 自动（`not_owner`） | 自动（见 §四的失败方式表） | 按 `NOT_OWNER` 的 `getOwner()` 转发 |
 | 作用域 / 权限 | 自动（工具级、命令级） | **不检查** | 在控制器上做租户与角色鉴权 |
 | 会话存在性 | 宿主传入会话对象 | goal 门面不再新建会话；其它门面收会话对象 | 用 `engine.requireSession(sid)`（不存在抛 `IllegalArgumentException`）或 `getSessionOrNull`，映射为 404 |
 | 续发 | 引擎自动入积压 | `enqueue` / `promote` 后不会自动续发 | 调用使用态的同一个 `drain` |
@@ -366,12 +364,14 @@ public class AdminController {
 
     @Post @Mapping("goal/pause")
     public Result pauseGoal(String tenant, String sid) {
-        HarnessEngine engine = saas.engineOf(tenant);
-        try {
-            return Result.succeed(engine.getExtension(GoalExtension.class)
-                    .map(g -> g.pause(sid, null)).orElse(false));
-        } catch (NotOwnerException e) {
-            return Result.failure(307, e.getOwner());
+        GoalExtension goal = saas.engineOf(tenant).getExtension(GoalExtension.class).orElse(null);
+        if (goal == null) return Result.failure(501, "goal not installed");
+        HarnessResult<Void> r = goal.pause(sid);
+        switch (r.getCode()) {
+            case OK:        return Result.succeed();
+            case NOT_OWNER: return Result.failure(307, r.getOwner());   // 网关转发
+            case NOT_FOUND: return Result.failure(404, r.getDetail());
+            default:        return Result.failure(409, r.getDetail());  // INVALID：当前状态不可暂停
         }
     }
 }
@@ -435,7 +435,7 @@ SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionRese
 - [ ] 创建会话时 `setSessionPrincipal`；`scopeResolver` 用 `byPrincipal` 查授权表并做短期缓存；授权服务异常时宁可拒绝
 - [ ] `cwdPolicy` 限制在租户根目录内；换目录走 `setSessionCwd`
 - [ ] 多节点：粘滞路由，或 `SessionOwnership.namespaced(tenantId, redisOwnership)`；网关处理 `not_owner` 转发
-- [ ] 管理接口：租户鉴权（骨架下配置 `adminAuthorizer`）；（L1）`requireSession` / `getSessionOrNull` 校验存在性、处理门面的 `NOT_OWNER` / `NotOwnerException`、入队 / 置顶后调用 `drain`
+- [ ] 管理接口：租户鉴权（骨架下配置 `adminAuthorizer`）；（L1）`requireSession` / `getSessionOrNull` 校验存在性、处理门面的 `NOT_OWNER`、入队 / 置顶后调用 `drain`
 - [ ] （L1）队列续发挂在 `outcome.afterRun(...)`；`drainLoop` 的谓词用 `isOccupied`；订阅前 `RunTicket.begin`
 - [ ] （L1）结局分派处理 `scope_not_deferrable`、`engine_closed` 两个拒绝码
 - [ ] 只注册服务端可用的命令，或用作用域的 `commands` 维度收窄
@@ -453,7 +453,7 @@ SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionRese
 
 以下问题已经识别、尚未在框架层解决：
 
-1. 插件门面不经过作用域校验：用 `AdminView` 时由 `AdminAuthorizer` 统一鉴权，直连门面时要宿主自己鉴权；
+1. 插件门面不经过作用域校验：用 `AdminGateway` 时由 `AdminAuthorizer` 统一鉴权，直连门面时要宿主自己鉴权；
 2. 引擎之间不共享模型实例与 MCP 连接，也没有进程级的节拍与按模型并发闸门（M5b 未落地）；
 3. 引擎池不会自动知道哪些租户有后台工作，`warmup` 的租户清单由宿主维护；
 4. goal / loop 执行器只能按 `sessionId` 认领（M6.2 未落地）；

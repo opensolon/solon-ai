@@ -28,18 +28,24 @@ import java.util.List;
  * /loop 命令 —— 会话定时任务管理。
  *
  * <pre>
- *   /loop 5m check if deployment finished    → fixed interval (5m)
- *   /loop check ci status                   → auto interval (5m default)
- *   /loop cron:"0 *&#47;5 * * * ? *" check status  → cron expression (7 fields)
- *   /loop 5m --now check status             → run first round immediately
- *   /loop ls                                → list tasks
- *   /loop stop &lt;id&gt;                         → stop (delete) a task
- *   /loop stop-all                          → stop all tasks of this session
- *   /loop pause &lt;id&gt;                        → disable a scheduled task
- *   /loop resume &lt;id&gt;                       → enable a scheduled task
+ *   /loop check ci status                     → 缺省每 5 分钟
+ *   /loop --every 5m check deployment          → 固定间隔（s / m / h）
+ *   /loop --cron "0 *&#47;5 * * * ? *" check     → cron 表达式（7 段）
+ *   /loop --every 5m --now check status        → 立即跑首轮
+ *   /loop list                                 → 列出任务
+ *   /loop remove &lt;id&gt;                          → 删除任务
+ *   /loop clear                                → 删除本会话全部任务
+ *   /loop pause &lt;id&gt; | /loop resume &lt;id&gt;       → 暂停 / 恢复
+ *   /loop -- list the files                    → 「--」之后一律按提示词处理
  * </pre>
  *
- * <p>停止任务只在该任务<b>正在执行</b>时才中断会话：否则会无端打断用户当前这一轮并清空队列。</p>
+ * <p>旧写法继续可用（帮助里只展示新写法）：{@code ls}、{@code stop <id>}、{@code stop-all}、
+ * 首参 {@code 5m}、首参 {@code cron:"expr"}。子命令只在参数个数完全匹配时生效
+ * （{@code list}/{@code clear} 独占整行、{@code remove/pause/resume} 后恰好一个 id），
+ * 「list the files every hour」这类自然语言照常作为提示词。</p>
+ *
+ * <p>停止任务只在该任务<b>正在执行</b>时才停流，且用程序级取消（{@code engine.cancelStream}）：
+ * 定时轮次是程序发起的，不应清空用户的排队，也不应在历史里留下「用户已取消」。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -67,62 +73,63 @@ final class LoopCommand extends AbsCommand {
 
     @Override
     public String description() {
-        return "定时任务 (ls, stop, stop-all, pause, resume, <interval> <prompt>, cron:<expr> <prompt>)";
+        return "定时任务 (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)";
     }
 
     @Override
     public String[] examples() {
         return new String[]{
-                "/loop ls",
-                "/loop stop <id>",
-                "/loop stop-all",
+                "/loop --every 5m <prompt>",
+                "/loop --cron \"<expr>\" <prompt>",
+                "/loop list",
+                "/loop remove <id>",
+                "/loop clear",
                 "/loop pause <id>",
                 "/loop resume <id>",
-                "/loop 5m <prompt>",
-                "/loop cron:\"<expr>\" <prompt> ",
         };
     }
 
     @Override
     public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
         String sessionId = ctx.getSession().getSessionId();
+        int argc = ctx.argCount();
         String sub = ctx.argAt(0);
 
-        if (sub == null || sub.isEmpty() || "ls".equals(sub)) {
+        if (argc == 0 || (argc == 1 && ("list".equals(sub) || "ls".equals(sub)))) {
             doList(ctx, sessionId);
-        } else if ("stop".equals(sub)) {
-            String taskId = ctx.argAt(1);
-            if (taskId == null || taskId.isEmpty()) {
-                ctx.println(ctx.color(RED + "Usage: /loop stop <id>" + RESET));
-                return;
-            }
-            LoopTask task = tasks.get(sessionId, taskId);
-            if (task == null) {
-                ctx.println(ctx.color(RED + "Loop task '" + taskId + "' not found." + RESET));
-                return;
-            }
-            boolean wasRunning = task.isRunning();
-            tasks.remove(sessionId, taskId);
-            if (wasRunning) {
-                // 只中断正在执行的那一轮（清队列 + 停流 + 补写取消消息与快照）
-                engine.interrupt(ctx.getSession());
-            }
-            ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' stopped." + RESET));
-        } else if ("stop-all".equals(sub)) {
+        } else if (argc == 2 && ("remove".equals(sub) || "stop".equals(sub))) {
+            doRemove(engine, ctx, sessionId, ctx.argAt(1));
+        } else if (argc == 1 && ("clear".equals(sub) || "stop-all".equals(sub))) {
             boolean anyRunning = false;
             for (LoopTask t : tasks.list(sessionId)) {
                 anyRunning |= t.isRunning();
             }
             tasks.removeAll(sessionId);
             if (anyRunning) {
-                engine.interrupt(ctx.getSession());
+                // 程序级取消：不清用户的排队、不写「用户已取消」消息
+                engine.cancelStream(ctx.getSession());
             }
-            ctx.println(ctx.color(GREEN + "All loop tasks stopped." + RESET));
-        } else if ("pause".equals(sub) || "resume".equals(sub)) {
+            ctx.println(ctx.color(GREEN + "All loop tasks removed." + RESET));
+        } else if (argc == 2 && ("pause".equals(sub) || "resume".equals(sub))) {
             doPauseResume(ctx, sessionId, "resume".equals(sub));
         } else {
             doSchedule(ctx, sessionId);
         }
+    }
+
+    private void doRemove(HarnessEngine engine, CommandContext ctx, String sessionId, String taskId) {
+        LoopTask task = tasks.get(sessionId, taskId);
+        if (task == null) {
+            ctx.println(ctx.color(RED + "Loop task '" + taskId + "' not found." + RESET));
+            return;
+        }
+        boolean wasRunning = task.isRunning();
+        tasks.remove(sessionId, taskId);
+        if (wasRunning) {
+            // 只停正在执行的那一轮（程序级取消：不清用户的排队、不写「用户已取消」消息）
+            engine.cancelStream(ctx.getSession());
+        }
+        ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' removed." + RESET));
     }
 
     private void doPauseResume(CommandContext ctx, String sessionId, boolean resume) {
@@ -144,45 +151,50 @@ final class LoopCommand extends AbsCommand {
         int intervalMinutes = 5; // default
         String cronExpr = null;
         boolean runNow = false;
-
-        int promptStartIndex = 0;
-        String first = ctx.argAt(0);
-
-        if (first != null && first.startsWith("cron:")) {
-            cronExpr = first.substring(5).trim();
-            if ((cronExpr.startsWith("\"") && cronExpr.endsWith("\"")) ||
-                    (cronExpr.startsWith("'") && cronExpr.endsWith("'"))) {
-                cronExpr = cronExpr.substring(1, cronExpr.length() - 1);
-            }
-            if (cronExpr.isEmpty()) {
-                ctx.println(ctx.color(RED + "Usage: /loop cron:<expr> <prompt>" + RESET));
-                ctx.println(ctx.color(DIM + "  /loop cron:\"0 */5 * * * ? *\" check status" + RESET));
-                return;
-            }
-            promptStartIndex = 1;
-        } else {
-            Integer parsed = parseInterval(first);
-            if (parsed != null) {
-                intervalMinutes = parsed;
-                promptStartIndex = 1;
-            }
-        }
-
         StringBuilder promptBuilder = new StringBuilder();
-        for (int i = promptStartIndex; ; i++) {
-            String arg = ctx.argAt(i);
-            if (arg == null) break;
 
-            if (arg.startsWith("--")) {
-                String flag = arg.substring(2);
-                if ("now".equals(flag)) {
-                    runNow = true;
-                } else {
-                    ctx.println(ctx.color(YELLOW + "Unknown flag: --" + flag + RESET));
+        int argc = ctx.argCount();
+        for (int i = 0; i < argc; i++) {
+            String arg = ctx.argAt(i);
+            if ("--".equals(arg)) {
+                // 之后一律是提示词
+                for (int j = i + 1; j < argc; j++) {
+                    appendWord(promptBuilder, ctx.argAt(j));
                 }
+                break;
+            }
+            if ("--every".equals(arg) || "--cron".equals(arg)) {
+                String value = i + 1 < argc ? ctx.argAt(++i) : null;
+                if ("--every".equals(arg)) {
+                    Integer parsed = parseInterval(value);
+                    if (parsed == null) {
+                        ctx.println(ctx.color(RED + "Invalid interval: " + value + " (e.g. 30s, 5m, 2h)" + RESET));
+                        return;
+                    }
+                    intervalMinutes = parsed;
+                } else {
+                    cronExpr = unquote(value);
+                    if (cronExpr == null || cronExpr.isEmpty()) {
+                        printUsage(ctx);
+                        return;
+                    }
+                }
+            } else if ("--now".equals(arg)) {
+                runNow = true;
+            } else if (arg.startsWith("--")) {
+                ctx.println(ctx.color(YELLOW + "Unknown flag: " + arg + RESET));
+            } else if (i == 0 && arg.startsWith("cron:")) {
+                // 旧写法：cron:"expr"
+                cronExpr = unquote(arg.substring(5).trim());
+                if (cronExpr.isEmpty()) {
+                    printUsage(ctx);
+                    return;
+                }
+            } else if (i == 0 && parseInterval(arg) != null) {
+                // 旧写法：首参 5m
+                intervalMinutes = parseInterval(arg);
             } else {
-                if (promptBuilder.length() > 0) promptBuilder.append(" ");
-                promptBuilder.append(arg);
+                appendWord(promptBuilder, arg);
             }
         }
 
@@ -216,11 +228,25 @@ final class LoopCommand extends AbsCommand {
         }
     }
 
+    private static void appendWord(StringBuilder buf, String word) {
+        if (buf.length() > 0) buf.append(" ");
+        buf.append(word);
+    }
+
+    private static String unquote(String value) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (v.length() >= 2 && ((v.startsWith("\"") && v.endsWith("\"")) || (v.startsWith("'") && v.endsWith("'")))) {
+            v = v.substring(1, v.length() - 1);
+        }
+        return v;
+    }
+
     private void doList(CommandContext ctx, String sessionId) {
         List<LoopTask> list = tasks.list(sessionId);
         if (list.isEmpty()) {
             ctx.println(ctx.color(DIM + "No active loop tasks." + RESET));
-            ctx.println(ctx.color(DIM + "Usage: /loop [interval] <prompt>" + RESET));
+            ctx.println(ctx.color(DIM + "Usage: /loop [--every 5m | --cron <expr>] [--now] <prompt>" + RESET));
             return;
         }
         ctx.println(ctx.color(BOLD + "Active Loop Tasks:" + RESET));
@@ -248,7 +274,7 @@ final class LoopCommand extends AbsCommand {
             line.append(lastInfo);
             ctx.println(ctx.color(line.toString()));
         }
-        ctx.println(ctx.color(DIM + "\nUsage: /loop stop <id> | /loop pause <id> | /loop resume <id> | /loop stop-all" + RESET));
+        ctx.println(ctx.color(DIM + "\nUsage: /loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear" + RESET));
     }
 
     /**
@@ -297,12 +323,12 @@ final class LoopCommand extends AbsCommand {
     }
 
     private void printUsage(CommandContext ctx) {
-        ctx.println(ctx.color(RED + "Usage: /loop [options] [interval|cron:<expr>] <prompt>" + RESET));
+        ctx.println(ctx.color(RED + "Usage: /loop [--every <interval> | --cron <expr>] [--now] <prompt>" + RESET));
         ctx.println(ctx.color(DIM + "Basic:" + RESET));
-        ctx.println(ctx.color(DIM + "  /loop 5m check deployment" + RESET));
-        ctx.println(ctx.color(DIM + "  /loop 30s check CI status" + RESET));
+        ctx.println(ctx.color(DIM + "  /loop --every 5m check deployment" + RESET));
+        ctx.println(ctx.color(DIM + "  /loop --every 30s check CI status" + RESET));
         ctx.println(ctx.color(DIM + "  /loop check CI status   (auto 5m)" + RESET));
-        ctx.println(ctx.color(DIM + "  /loop cron:\"0 */5 * * * ? *\" check status" + RESET));
+        ctx.println(ctx.color(DIM + "  /loop --cron \"0 */5 * * * ? *\" check status" + RESET));
     }
 
     private static String formatInterval(int minutes) {

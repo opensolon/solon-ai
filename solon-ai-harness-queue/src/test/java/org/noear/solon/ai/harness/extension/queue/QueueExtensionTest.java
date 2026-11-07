@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 
 import java.nio.file.Path;
@@ -45,8 +46,8 @@ class QueueExtensionTest {
         QueueExtension queue = new QueueExtension();
         AgentSession session = InMemoryAgentSession.of();
 
-        assertEquals(1, queue.enqueue(session, "第一条", null));
-        assertEquals(2, queue.enqueue(session, "第二条", null));
+        assertEquals(1, queue.enqueue(session, "第一条", null).getValue().intValue());
+        assertEquals(2, queue.enqueue(session, "第二条", null).getValue().intValue());
         assertEquals(2, queue.pendingSize(session));
         assertEquals(2, queue.list(session).size());
         assertTrue(queue.hasItems(session));
@@ -71,7 +72,7 @@ class QueueExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
 
         // 程序宿主不必为一个必填参数编造渠道标识
-        assertEquals(1, queue.enqueue(session, "最简入队"));
+        assertEquals(1, queue.enqueue(session, "最简入队").getValue().intValue());
         assertEquals("最简入队", queue.list(session).get(0).getText());
         assertEquals("queue", queue.list(session).get(0).getSource(), "缺省来源不得为 null（与静态实现契约一致）");
     }
@@ -81,7 +82,7 @@ class QueueExtensionTest {
         QueueExtension queue = new QueueExtension();
         queue.setEnabled(false);
 
-        assertEquals(-1, queue.enqueue(InMemoryAgentSession.of(), "x"),
+        assertEquals(HarnessResult.Code.DISABLED, queue.enqueue(InMemoryAgentSession.of(), "x").getCode(),
                 "便捷重载不得绕过开关语义");
     }
 
@@ -112,7 +113,7 @@ class QueueExtensionTest {
         queue.enqueue(session, "a", null);
         queue.enqueue(session, "b", null);
 
-        assertTrue(queue.cancelPending(session));
+        assertTrue(queue.cancelPending(session).isOk());
         assertEquals(0, queue.pendingSize(session));
         assertFalse(queue.hasItems(session));
     }
@@ -143,7 +144,7 @@ class QueueExtensionTest {
         queue.setEnabled(false);
 
         AgentSession session = InMemoryAgentSession.of();
-        assertEquals(-1, queue.enqueue(session, "x", null), "停用后不再接单");
+        assertEquals(HarnessResult.Code.DISABLED, queue.enqueue(session, "x", null).getCode(), "停用后不再接单");
         assertFalse(queue.hasItems(session));
     }
 }

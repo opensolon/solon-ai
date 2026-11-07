@@ -155,7 +155,7 @@ class QueueEngineIntegrationTest {
         QueueItem item = QueueStore.snapshot(session).get(0);
         assertEquals("gpt-x", item.getModel());
         assertEquals("coder", item.getSelectedAgent());
-        assertEquals("high", item.getReasoningEffort(), "宿主属性按约定键回读");
+        assertEquals("high", item.getAttrs().get("reasoningEffort"), "宿主属性原样保存");
         assertEquals("deep", item.getAttrs().get("thinkingMode"));
         assertEquals("feishu", item.getOrigin().getChannel());
 

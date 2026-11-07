@@ -150,7 +150,7 @@ public class SteerExtension extends AbsHarnessExtension {
     }
 
     /**
-     * 严格轮次绑定投递（Web 首选）：{@code runId} 必填，空或与当前轮次不符即 {@link SteerResult.Code#TURN_CHANGED}。
+     * 严格轮次绑定投递（Web 首选）：{@code runId} 必填，空或与当前轮次不符即 {@link SteerResult.Code#RUN_CHANGED}。
      *
      * <p>任务的首个事件到达前无法确认归属，此时放行会让插话落入「任务结束 / 轮次切换」的窄窗。</p>
      *

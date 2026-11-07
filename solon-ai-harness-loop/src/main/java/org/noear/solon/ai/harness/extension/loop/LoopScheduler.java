@@ -213,11 +213,6 @@ final class LoopScheduler {
         return true;
     }
 
-    boolean toggle(String sessionId, String taskId) {
-        LoopTask t = get(sessionId, taskId);
-        return t != null && setEnabled(sessionId, t, !t.isEnabled());
-    }
-
     /** 置为指定启停状态（已是目标状态时不动）。@return false 表示不存在 */
     boolean setEnabled(String sessionId, String taskId, boolean enabled) {
         LoopTask t = get(sessionId, taskId);

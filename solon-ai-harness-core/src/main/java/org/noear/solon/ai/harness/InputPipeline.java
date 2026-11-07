@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.spi.OwnerCheck;
+import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.agent.task.SessionAgentsTalent;
 import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;

@@ -18,14 +18,14 @@ class GoalValidationResultTest {
     void passedResultCarriesEmptyDetail() {
         GoalValidator.ValidationResult r = GoalValidator.ValidationResult.passed();
         assertTrue(r.isPassed());
-        assertEquals("", r.detail());
+        assertEquals("", r.getDetail());
     }
 
     @Test
     void failedResultCarriesDetail() {
         GoalValidator.ValidationResult r = GoalValidator.ValidationResult.failed("测试未通过：3 个用例失败");
         assertFalse(r.isPassed());
-        assertNotNull(r.detail());
-        assertTrue(r.detail().contains("3 个用例失败"));
+        assertNotNull(r.getDetail());
+        assertTrue(r.getDetail().contains("3 个用例失败"));
     }
 }

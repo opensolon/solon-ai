@@ -25,9 +25,9 @@
 | | `InputScope` / `InputScopeResolver` | 「这次输入能用什么」：工具、技能、MCP、命令名单；按主体解析，只能收窄 |
 | 交互 | `Submitted` | 提交结果，只用于映射状态码（内容已经经 sink 发出） |
 | | `HitlCard` / `HITLAction` | 待审批的工具调用 / 审批决策（approve、reject、skip） |
-| | `StopMode` | `ALL`（清队列 + 停流 + 写取消消息）或 `CURRENT_RUN`（只停当前流） |
-| 管理 | `AdminView` | 管理入口 `call(sid, op, 扩展类型, 操作)`：统一鉴权、归属、存在性检查，任意扩展同一写法 |
-| | `FacadeResult` | 管理门面的统一结果码：OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / FORBIDDEN |
+| | `StopMode` | `STOP_AND_CLEAR`（清队列 + 停流 + 写取消消息）或 `STOP_RUN`（只停当前流） |
+| 管理 | `AdminGateway` | 管理入口 `call(sid, op, 扩展类型, 操作)`：统一鉴权、归属、存在性检查，任意扩展同一写法 |
+| | `HarnessResult` | goal / loop / queue 写门面与管理入口的统一结果：OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / FORBIDDEN |
 | 多节点（可选） | `SessionOwnership` | 会话单写者租约：同一时刻只由一个节点执行一个会话 |
 
 ## 隔离的三层
@@ -42,4 +42,4 @@
 
 `InputOutcome` 的六种结局与约 25 个访问方法、`RunTicket`、`RunDispatch`、`afterRun`、`discard`、`QueueClaim` /
 `drainLoop`、`InterruptPlan`、`isBusy` / `isOccupied` / `isIdle` 等状态口径、`interrupt` / `cancelStream` /
-`preemptStream` 三个停流入口、`NotOwnerException` 与 queue 的 int 返回码。只有自带终态门、需要自定义输出时序的宿主才需要它们。
+`preemptStream` 三个停流入口与 `NotOwnerException`。只有自带终态门、需要自定义输出时序的宿主才需要它们。

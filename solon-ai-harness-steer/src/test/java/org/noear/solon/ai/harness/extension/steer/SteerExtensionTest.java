@@ -154,18 +154,18 @@ class SteerExtensionTest {
         assertTrue(ext.steer(runningSession("run-1"), "补充").isSteered(), "无引擎即无忙概念，应放行");
     }
 
-    /** steerOnRun 的 runId 必填：空即 TURN_CHANGED，不生成 steerId、不碰邮箱。 */
+    /** steerOnRun 的 runId 必填：空即 RUN_CHANGED，不生成 steerId、不碰邮箱。 */
     @Test
     void steerOnRunRequiresRunId() {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
         SteerResult blank = ext.steerOnRun(session, "  ", null, "补充");
-        assertEquals(SteerResult.Code.TURN_CHANGED, blank.getCode());
+        assertEquals(SteerResult.Code.RUN_CHANGED, blank.getCode());
         assertNull(blank.getSteerId(), "被拒绝的投递不得生成 steerId");
         assertTrue(ext.pending(session).isEmpty());
 
-        assertEquals(SteerResult.Code.TURN_CHANGED, ext.steerOnRun(session, null, null, "补充").getCode());
+        assertEquals(SteerResult.Code.RUN_CHANGED, ext.steerOnRun(session, null, null, "补充").getCode());
         assertTrue(ext.steer(session, "补充").isSteered(), "非严格形态允许省略 runId");
     }
 
@@ -174,7 +174,7 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        assertEquals(SteerResult.Code.TURN_CHANGED, ext.steerOnRun(session, "run-2", null, "补充").getCode());
+        assertEquals(SteerResult.Code.RUN_CHANGED, ext.steerOnRun(session, "run-2", null, "补充").getCode());
         SteerResult ok = ext.steerOnRun(session, "run-1", "web-1", "补充");
         assertTrue(ok.isSteered());
         assertEquals("web-1", ok.getSteerId(), "前端生成的 steerId 原样使用");
@@ -192,8 +192,8 @@ class SteerExtensionTest {
         assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", " ").getCode());
         assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", "12345").getCode(),
                 "超长按实例上限判定");
-        assertEquals(SteerCancelResult.Code.TURN_CHANGED, ext.cancelOnRun(session, "run-2", "a").getCode());
-        assertEquals(SteerCancelResult.Code.TURN_CHANGED, ext.cancelOnRun(session, null, "a").getCode());
+        assertEquals(SteerCancelResult.Code.RUN_CHANGED, ext.cancelOnRun(session, "run-2", "a").getCode());
+        assertEquals(SteerCancelResult.Code.RUN_CHANGED, ext.cancelOnRun(session, null, "a").getCode());
 
         SteerCancelResult ok = ext.cancelOnRun(session, "run-1", " " + a.getSteerId() + " ");
         assertTrue(ok.isCanceled());

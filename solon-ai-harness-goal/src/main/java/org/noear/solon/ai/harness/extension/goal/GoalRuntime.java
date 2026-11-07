@@ -141,7 +141,7 @@ class GoalRuntime {
     private void notifyChanged(AgentSession session, GoalState gs, boolean removed) {
         if (gs == null || listeners.isEmpty()) return;
         String sessionId = session.getSessionId();
-        GoalTask snapshot = GoalTask.of(gs, removed == false && isRunning(session));
+        GoalSnapshot snapshot = GoalSnapshot.of(gs, removed == false && isRunning(session));
         for (GoalListener listener : listeners) {
             try {
                 listener.onChanged(sessionId, snapshot, removed);
@@ -453,10 +453,10 @@ class GoalRuntime {
             return vr;
         }
         if (validatorPolicy == ValidatorPolicy.FAIL_OPEN) {
-            LOG.warn("Goal validation inconclusive, treated as passed (FAIL_OPEN): {}", vr.detail());
+            LOG.warn("Goal validation inconclusive, treated as passed (FAIL_OPEN): {}", vr.getDetail());
             return ValidationResult.passed();
         }
-        return ValidationResult.failed("无法完成验证（" + vr.detail() + "）");
+        return ValidationResult.failed("无法完成验证（" + vr.getDetail() + "）");
     }
 
     /** 注册默认验证器（执行目录在验证时传入）。 */
@@ -676,8 +676,8 @@ class GoalRuntime {
     }
 
     /** 只读快照（无 goal 时为 null）。 */
-    GoalTask snapshot(AgentSession session) {
-        return GoalTask.of(state(session), isRunning(session));
+    GoalSnapshot snapshot(AgentSession session) {
+        return GoalSnapshot.of(state(session), isRunning(session));
     }
 
     /** 清除本会话 goal（移除投影并落盘）。 */
@@ -816,7 +816,7 @@ class GoalRuntime {
             if (elapsed >= gs.getMaxDurationMs()) {
                 LOG.info("Goal '{}' duration exceeded ({}ms), wrap-up turn", gs.getId(), elapsed);
                 executeBudgetWrapUp(session, gs);
-                if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
+                if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
                     gs.markBudgetLimited();
                 }
                 commit(session, gs);
@@ -828,7 +828,7 @@ class GoalRuntime {
         if (gs.isBudgetExceeded()) {
             LOG.info("Goal '{}' token budget exceeded, wrap-up turn", gs.getId());
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -906,7 +906,7 @@ class GoalRuntime {
         }
 
         // 完成判定（由 goal_update(complete) 驱动，此处只做证据复核）
-        boolean achieved = gs.getStatus() == GoalTask.Status.ACHIEVED;
+        boolean achieved = gs.getStatus() == GoalSnapshot.Status.ACHIEVED;
         if (achieved && requiresActionEvidence(gs.getObjective())
                 && !result.hasToolCalls()) {
             gs.rejectAchievement();
@@ -924,7 +924,7 @@ class GoalRuntime {
         // 轮后 Token 预算
         if (gs.isBudgetExceeded()) {
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalTask.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -1114,7 +1114,7 @@ class GoalRuntime {
     /** 投影状态名是否终态（损坏/未知值按非终态处理，交由 hydrate 与守卫兜底）。 */
     public static boolean isTerminalStatus(String statusName) {
         try {
-            return GoalTask.Status.valueOf(statusName).isTerminal();
+            return GoalSnapshot.Status.valueOf(statusName).isTerminal();
         } catch (Throwable e) {
             return false;
         }
@@ -1123,7 +1123,7 @@ class GoalRuntime {
     /** 投影状态名是否活跃（PURSUING；损坏/未知值按非活跃处理，恢复时不动）。 */
     public static boolean isActiveStatus(String statusName) {
         try {
-            return GoalTask.Status.valueOf(statusName).isActive();
+            return GoalSnapshot.Status.valueOf(statusName).isActive();
         } catch (Throwable e) {
             return false;
         }

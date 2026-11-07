@@ -19,5 +19,5 @@ public interface GoalListener {
      * @param task      变更后的快照（removed=true 时为清除前的快照）
      * @param removed   是否因清除而移除
      */
-    void onChanged(String sessionId, GoalTask task, boolean removed);
+    void onChanged(String sessionId, GoalSnapshot task, boolean removed);
 }

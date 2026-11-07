@@ -14,7 +14,7 @@
     <artifactId>solon-ai-harness</artifactId>
     <name>${project.artifactId}</name>
     <packaging>jar</packaging>
-    <description>solon-ai-harness 聚合包：核心 + 全部会话插件（goal / queue / steer / loop）。另含宿主层 host 包（HarnessHost 宿主骨架、AdminView 管理入口）；插件不会自动生效，需在构建期用 Builder.extensionAdd 装配（SERVER 模式必须如此）</description>
+    <description>solon-ai-harness 聚合包（只做引用、不含代码）：核心 + 全部会话插件（goal / queue / steer / loop）+ 宿主骨架（solon-ai-harness-host）。插件不会自动生效，需在构建期用 Builder.extensionAdd 装配（SERVER 模式必须如此）</description>
 
     <dependencies>
         <dependency>
@@ -44,8 +44,7 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-test</artifactId>
-            <scope>test</scope>
+            <artifactId>solon-ai-harness-host</artifactId>
         </dependency>
     </dependencies>
 

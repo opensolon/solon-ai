@@ -15,7 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.harness.spi.OwnerCheck;
+import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.intercept.HITL;
@@ -42,7 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 会话控制面（包内）：受理判定、运行态快照、空闲判定与中断第一段的实现。
  *
- * <p>对应 {@code handle} 第 0 步的受理判定与引擎门面 {@code status / isIdle / isBusyBypassCommand / resolveCommand / prepareInterrupt}。
+ * <p>对应 {@code handle} 第 0 步的受理判定与引擎门面 {@code status / isIdle / isRunnableWhenBusy / resolveCommand / prepareInterrupt}。
  * 这些判定共用同一把会话锁（{@code session.attrs()}）与同一组扩展回调，集中在一处才能保证口径一致。</p>
  *
  * @author noear
@@ -178,7 +178,7 @@ final class SessionControl {
         return false;
     }
 
-    boolean isBusyBypassCommand(String input) {
+    boolean isRunnableWhenBusy(String input) {
         Command command = resolveCommand(input);
         return command != null && !command.terminalOnly() && command.runnableWhenBusy();
     }

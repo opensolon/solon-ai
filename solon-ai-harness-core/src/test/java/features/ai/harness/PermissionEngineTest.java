@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
 
 import org.noear.solon.ai.harness.permission.PermissionRule;
@@ -29,7 +28,7 @@ public class PermissionEngineTest {
             .addRule(PermissionRule.allow("bash"))
             .addRule(PermissionRule.deny("bash"));
 
-        Assertions.assertEquals(PermissionDecision.DENY,
+        Assertions.assertEquals(PermissionBehavior.DENY,
             engine.evaluate("bash", args("ls"), ctx));
     }
 
@@ -39,7 +38,7 @@ public class PermissionEngineTest {
             .addRule(PermissionRule.ask("bash"))
             .addRule(PermissionRule.deny("bash"));
 
-        Assertions.assertEquals(PermissionDecision.DENY,
+        Assertions.assertEquals(PermissionBehavior.DENY,
             engine.evaluate("bash", args("ls"), ctx));
     }
 
@@ -49,7 +48,7 @@ public class PermissionEngineTest {
             .addRule(PermissionRule.ask("bash"))
             .addRule(PermissionRule.allow("bash"));
 
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("bash", args("ls"), ctx));
     }
 
@@ -60,7 +59,7 @@ public class PermissionEngineTest {
             .addRule(PermissionRule.ask("bash"));
 
         // allow 在前 -> 先匹配到 ALLOW
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("bash", args("ls"), ctx));
     }
 
@@ -73,9 +72,9 @@ public class PermissionEngineTest {
         PermissionContext ctx = PermissionContext.create()
             .addRule(PermissionRule.allow("*"));
 
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("bash", args("ls"), ctx));
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("write", args("test.txt"), ctx));
     }
 
@@ -86,9 +85,9 @@ public class PermissionEngineTest {
         PermissionContext ctx = PermissionContext.create()
             .addRule(PermissionRule.allow("bash", "git *"));
 
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("bash", args("git log --oneline"), ctx));
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionBehavior.ASK,
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
@@ -97,9 +96,9 @@ public class PermissionEngineTest {
         PermissionContext ctx = PermissionContext.create()
             .addRule(PermissionRule.deny("bash", "rm -rf *"));
 
-        Assertions.assertEquals(PermissionDecision.DENY,
+        Assertions.assertEquals(PermissionBehavior.DENY,
             engine.evaluate("bash", args("rm -rf /tmp"), ctx));
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionBehavior.ASK,
             engine.evaluate("bash", args("rm /tmp/test"), ctx));
     }
 
@@ -109,7 +108,7 @@ public class PermissionEngineTest {
     public void testDefaultAllowRule() {
         PermissionContext ctx = PermissionContext.create()
             .addRule(PermissionRule.allow("*").priority(-100));
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
@@ -118,16 +117,16 @@ public class PermissionEngineTest {
         PermissionContext ctx = PermissionContext.create()
             .addRule(PermissionRule.allow("*").priority(-100))
             .addRule(PermissionRule.deny("bash", "rm -rf *").priority(10));
-        Assertions.assertEquals(PermissionDecision.DENY,
+        Assertions.assertEquals(PermissionBehavior.DENY,
             engine.evaluate("bash", args("rm -rf /tmp"), ctx));
-        Assertions.assertEquals(PermissionDecision.ALLOW,
+        Assertions.assertEquals(PermissionBehavior.ALLOW,
             engine.evaluate("write", args("test.txt"), ctx));
     }
 
     @Test
     public void testNoRuleDefaultAsk() {
         PermissionContext ctx = PermissionContext.create();
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionBehavior.ASK,
             engine.evaluate("bash", args("rm -rf /"), ctx));
     }
 
@@ -136,14 +135,14 @@ public class PermissionEngineTest {
     @Test
     public void testNullArgs() {
         PermissionContext ctx = PermissionContext.create();
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionBehavior.ASK,
             engine.evaluate("bash", null, ctx));
     }
 
     @Test
     public void testEmptyArgs() {
         PermissionContext ctx = PermissionContext.create();
-        Assertions.assertEquals(PermissionDecision.ASK,
+        Assertions.assertEquals(PermissionBehavior.ASK,
             engine.evaluate("bash", new HashMap<>(), ctx));
     }
 

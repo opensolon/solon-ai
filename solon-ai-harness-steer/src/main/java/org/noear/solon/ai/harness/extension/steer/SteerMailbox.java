@@ -67,7 +67,7 @@ final class SteerMailbox {
      * @param origin       来源身份（可空，空同 {@link InputOrigin#NONE}）
      * @param busyRecheck  入邮箱后复查会话是否仍繁忙的回调，可为 null（为 null 时仅依据轮次判定）
      * @param limits       容量 / 长度约束
-     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerResult.Code#TURN_CHANGED}，且不生成 steerId
+     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerResult.Code#RUN_CHANGED}，且不生成 steerId
      * @return 入队结果（status 与 /web/chat/steer 的应答码同名）
      */
     static SteerResult steer(AgentSession session, String runId, String steerId, String text,
@@ -87,7 +87,7 @@ final class SteerMailbox {
 
         if (requireRunId && (runId == null || runId.trim().isEmpty())) {
             // 严格轮次绑定：先于 id 生成拒绝，避免调用方拿到一个无意义的 steerId
-            return new SteerResult(SteerResult.Code.TURN_CHANGED, null, 0);
+            return new SteerResult(SteerResult.Code.RUN_CHANGED, null, 0);
         }
 
         if (steerId == null || steerId.trim().isEmpty()) {
@@ -104,12 +104,12 @@ final class SteerMailbox {
         long epoch;
         synchronized (state) {
             if (state.runId == null) {
-                // 任务尚未开轮或已结束：Web 端有明确 runId 时按 TURN_CHANGED 由前端决策；
+                // 任务尚未开轮或已结束：Web 端有明确 runId 时按 RUN_CHANGED 由前端决策；
                 // IM 端（runId==null）按 NOT_RUNNING 由调用方如实告知用户，不代为降级。
-                return new SteerResult(runId != null ? SteerResult.Code.TURN_CHANGED : SteerResult.Code.NOT_RUNNING, steerId, 0);
+                return new SteerResult(runId != null ? SteerResult.Code.RUN_CHANGED : SteerResult.Code.NOT_RUNNING, steerId, 0);
             }
             if (runId != null && runId.equals(state.runId) == false) {
-                return new SteerResult(SteerResult.Code.TURN_CHANGED, steerId, 0);
+                return new SteerResult(SteerResult.Code.RUN_CHANGED, steerId, 0);
             }
             // 先判重再判容量：满邮箱中的同 ID 重试仍应返回准确的重复结果，
             // 不能误报 BOX_FULL 后被前端降级为普通任务而造成重复执行。
@@ -131,7 +131,7 @@ final class SteerMailbox {
                 return new SteerResult(SteerResult.Code.STEERED, steerId, state.inbox.size());
             }
             if (state.inbox.remove(steer)) {
-                return new SteerResult(sameRun ? SteerResult.Code.NOT_RUNNING : SteerResult.Code.TURN_CHANGED, steerId, 0);
+                return new SteerResult(sameRun ? SteerResult.Code.NOT_RUNNING : SteerResult.Code.RUN_CHANGED, steerId, 0);
             }
         }
 
@@ -151,7 +151,7 @@ final class SteerMailbox {
                 return SteerCancelResult.canceled(steerId, 1, state.inbox.size() + state.orphans.size());
             }
             if (runId == null || runId.equals(state.runId) == false) {
-                return SteerCancelResult.of(SteerCancelResult.Code.TURN_CHANGED, steerId,
+                return SteerCancelResult.of(SteerCancelResult.Code.RUN_CHANGED, steerId,
                         state.inbox.size() + state.orphans.size());
             }
             if (SteerState.removeById(state.inbox, steerId)) {

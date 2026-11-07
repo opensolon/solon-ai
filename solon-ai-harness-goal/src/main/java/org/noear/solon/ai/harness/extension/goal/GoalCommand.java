@@ -68,9 +68,11 @@ class GoalCommand extends AbsCommand {
     public String[] examples() {
         return new String[]{
                 "/goal <objective>",
-                "/goal --max-tokens:2000 <objective>",
-                "/goal --max-duration:30 <objective>",
+                "/goal --max-tokens 2000 <objective>",
+                "/goal --max-duration 30m <objective>",
+                "/goal --max-iterations 20 <objective>",
                 "/goal pause | resume | clear",
+                "/goal -- <objective starting with a sub-command word>",
                 "/goal"
         };
     }
@@ -91,22 +93,26 @@ class GoalCommand extends AbsCommand {
             return;
         }
 
-        // 子命令：全部转调 GoalExtension（避免与门面实现分叉）
-        switch (first.toLowerCase()) {
-            case "pause": {
-                pauseSub(ctx, session);
-                return;
+        // 子命令只在「恰好一个参数」时生效："/goal pause the build" 是目标正文，不是暂停。
+        // 与 /loop、/queue 同口径；全部转调 GoalExtension（避免与门面实现分叉）
+        if (ctx.argCount() == 1) {
+            switch (first.toLowerCase()) {
+                case "pause": {
+                    pauseSub(ctx, session);
+                    return;
+                }
+                case "resume": {
+                    resumeSub(ctx, session);
+                    return;
+                }
+                case "clear":
+                case "remove": {
+                    clearSub(ctx, session);
+                    return;
+                }
+                default:
+                    break;
             }
-            case "resume": {
-                resumeSub(ctx, session);
-                return;
-            }
-            case "clear": {
-                clearSub(ctx, session);
-                return;
-            }
-            default:
-                break;
         }
 
         // 创建目标：flag → GoalSpec → 与编程 API 同一条路径
@@ -115,16 +121,16 @@ class GoalCommand extends AbsCommand {
             spec = parseSpec(ctx);
         } catch (IllegalArgumentException e) {
             ctx.println(ctx.color(RED + e.getMessage() + RESET));
-            ctx.println(ctx.color(DIM + "  Usage: /goal [--max-tokens:N] [--max-duration:MIN] [--max-iterations:N] <objective>" + RESET));
+            ctx.println(ctx.color(DIM + "  Usage: /goal [--max-tokens N] [--max-duration 30m] [--max-iterations N] <objective>" + RESET));
             ctx.println(ctx.color(DIM + "  /goal 修复登录模块的鉴权缺陷" + RESET));
             return;
         }
 
         try {
-            GoalTask task = goal.create(session, spec);
+            GoalSnapshot task = goal.create(session, spec);
             printCreated(ctx, task);
         } catch (IllegalStateException e) {
-            GoalTask existing = goal.snapshot(session);
+            GoalSnapshot existing = goal.snapshot(session);
             ctx.println(ctx.color(YELLOW + "WARN: " + e.getMessage() + RESET));
             if (existing != null) {
                 ctx.println(ctx.color(DIM + "  Active: " + existing.getObjective() + RESET));
@@ -136,7 +142,10 @@ class GoalCommand extends AbsCommand {
     /**
      * flag 解析：本类唯一的文本解析点，产出 {@link GoalSpec} 后文本形态即被丢弃。
      *
-     * @throws IllegalArgumentException 数字非法或正文为空（调用方据此打印用法）
+     * <p>写法：{@code --max-tokens N}、{@code --max-duration 30m}（s / m / h，纯数字按分钟）、
+     * {@code --max-iterations N}；旧写法 {@code --key:value} 仍可用。{@code --} 之后全部当作正文。</p>
+     *
+     * @throws IllegalArgumentException 数字非法或缺值（调用方据此打印用法）
      */
     private GoalSpec parseSpec(CommandContext ctx) {
         StringBuilder objective = new StringBuilder();
@@ -144,39 +153,58 @@ class GoalCommand extends AbsCommand {
         Long maxDurationMs = null;
         Integer maxIterations = null;
 
-        for (int i = 0; ; i++) {
+        int argc = ctx.argCount();
+        for (int i = 0; i < argc; i++) {
             String arg = ctx.argAt(i);
-            if (arg == null) break;
+
+            if ("--".equals(arg)) {
+                // 转义：之后的全部当作正文（允许正文以 pause / -- 等开头）
+                for (int j = i + 1; j < argc; j++) {
+                    appendWord(objective, ctx.argAt(j));
+                }
+                break;
+            }
 
             if (arg.startsWith("--") == false) {
-                if (objective.length() > 0) objective.append(" ");
-                objective.append(arg);
+                appendWord(objective, arg);
                 continue;
             }
 
             String flag = arg.substring(2);
+            String key;
+            String val;
             int colonIdx = flag.indexOf(':');
-            if (colonIdx <= 0) {
-                ctx.println(ctx.color(YELLOW + "Unknown flag: --" + flag + RESET));
-                continue;
+            if (colonIdx > 0) {
+                // 旧写法 --key:value
+                key = flag.substring(0, colonIdx);
+                val = flag.substring(colonIdx + 1);
+            } else {
+                key = flag;
+                val = null;
             }
 
-            String key = flag.substring(0, colonIdx);
-            String val = flag.substring(colonIdx + 1);
+            if (isKnownFlag(key) == false) {
+                ctx.println(ctx.color(YELLOW + "Unknown flag: --" + key + RESET));
+                continue;
+            }
+            if (val == null) {
+                val = i + 1 < argc ? ctx.argAt(++i) : null;
+                if (val == null) {
+                    throw new IllegalArgumentException("Missing value for --" + key);
+                }
+            }
+
             try {
                 switch (key) {
                     case "max-tokens":
                         maxTokens = Long.parseLong(val);
                         break;
                     case "max-duration":
-                        // 命令行单位是「分钟」，换算只在此处发生一次
-                        maxDurationMs = Long.parseLong(val) * 60_000L;
-                        break;
-                    case "max-iterations":
-                        maxIterations = Integer.parseInt(val);
+                        maxDurationMs = parseDurationMs(val);
                         break;
                     default:
-                        ctx.println(ctx.color(YELLOW + "Unknown flag: --" + key + RESET));
+                        maxIterations = Integer.parseInt(val);
+                        break;
                 }
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid --" + key + " value: " + val);
@@ -190,8 +218,43 @@ class GoalCommand extends AbsCommand {
         return spec;
     }
 
+    private static boolean isKnownFlag(String key) {
+        return "max-tokens".equals(key) || "max-duration".equals(key) || "max-iterations".equals(key);
+    }
+
+    private static void appendWord(StringBuilder buf, String word) {
+        if (buf.length() > 0) {
+            buf.append(' ');
+        }
+        buf.append(word);
+    }
+
+    /**
+     * 时长解析（毫秒）：{@code 90s}、{@code 30m}、{@code 2h}；纯数字按分钟（兼容旧写法 {@code --max-duration:30}）。
+     *
+     * @throws NumberFormatException 格式非法
+     */
+    static long parseDurationMs(String value) {
+        String s = value.trim().toLowerCase();
+        if (s.isEmpty()) {
+            throw new NumberFormatException(value);
+        }
+        long unitMs;
+        char last = s.charAt(s.length() - 1);
+        if (last == 's') {
+            unitMs = 1_000L;
+        } else if (last == 'm') {
+            unitMs = 60_000L;
+        } else if (last == 'h') {
+            unitMs = 3_600_000L;
+        } else {
+            return Long.parseLong(s) * 60_000L;
+        }
+        return Long.parseLong(s.substring(0, s.length() - 1)) * unitMs;
+    }
+
     private void pauseSub(CommandContext ctx, AgentSession session) {
-        GoalTask gs = goal.snapshot(session);
+        GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             return;
@@ -204,7 +267,7 @@ class GoalCommand extends AbsCommand {
     }
 
     private void resumeSub(CommandContext ctx, AgentSession session) {
-        GoalTask gs = goal.snapshot(session);
+        GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             return;
@@ -224,7 +287,7 @@ class GoalCommand extends AbsCommand {
         ctx.println(ctx.color(GREEN + "Goal cleared." + RESET));
     }
 
-    private void printCreated(CommandContext ctx, GoalTask gs) {
+    private void printCreated(CommandContext ctx, GoalSnapshot gs) {
         ctx.println(ctx.color(GREEN + "Goal registered:" + RESET));
         ctx.println(ctx.color("  " + BOLD + "Objective:" + RESET + " " + gs.getObjective()));
         if (gs.getMaxTokens() > 0) {
@@ -240,7 +303,7 @@ class GoalCommand extends AbsCommand {
     }
 
     private void printStatus(CommandContext ctx, AgentSession session) {
-        GoalTask gs = goal.snapshot(session);
+        GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
             ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
             ctx.println(ctx.color(DIM + "Usage: /goal <objective>" + RESET));
@@ -260,7 +323,7 @@ class GoalCommand extends AbsCommand {
         }
     }
 
-    private static String statusColor(GoalTask.Status status) {
+    private static String statusColor(GoalSnapshot.Status status) {
         switch (status) {
             case ACHIEVED:
                 return GREEN;

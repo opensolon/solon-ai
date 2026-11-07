@@ -146,7 +146,7 @@ class QueueClaimDispatchTest {
 
         assertTrue(ref.get().settle(false));
         assertEquals("task", QueueStore.snapshot(session).get(0).getText());
-        assertEquals("PENDING", QueueStore.snapshot(session).get(0).getStatus());
+        assertEquals(QueueItem.Status.PENDING, QueueStore.snapshot(session).get(0).getStatus());
         assertNull(QueueClaim.current(session));
     }
 

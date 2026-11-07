@@ -106,11 +106,11 @@ class GoalRuntimeTest {
         GoalState gs = engine.attach(session, "目标", 0, 0, 0);
 
         assertTrue(engine.pause(session, gs));
-        assertEquals(GoalTask.Status.PAUSED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.PAUSED, gs.getStatus());
         assertEquals("PAUSED", ((Map<?, ?>) session.getContext().data().get(GoalAttrs.GOAL)).get("status"));
 
         assertTrue(engine.resume(session, gs));
-        assertEquals(GoalTask.Status.PURSUING, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus());
     }
 
     @Test
@@ -121,7 +121,7 @@ class GoalRuntimeTest {
         gs.markBlocked();
 
         assertFalse(engine.pause(session, gs), "BLOCKED 是熔断态，不得由 pause 转换");
-        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus());
     }
 
     @Test

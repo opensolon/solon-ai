@@ -1,6 +1,9 @@
 package org.noear.solon.ai.harness.extension.queue;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 import org.noear.solon.ai.harness.input.InputOrigin;
 
 import java.util.Map;
@@ -25,14 +28,13 @@ class QueueItemTest {
 
         assertEquals("id1", item.getId());
         assertEquals("hello", item.getText());
-        assertEquals("PENDING", item.getStatus());
+        assertEquals(QueueItem.Status.PENDING, item.getStatus());
         assertEquals(1000L, item.getCreatedAt());
         assertNotNull(item.getOrigin());
         assertNull(item.getModel());
-        assertNull(item.getThinkingMode());
+        assertTrue(item.getAttrs().isEmpty());
         assertNull(item.getSelectedAgent());
         assertNull(item.getClaimedAt());
-        assertFalse(item.hasFiles());
     }
 
     @Test
@@ -62,16 +64,16 @@ class QueueItemTest {
 
     @Test
     void statusIsNormalizedToOnlyTwoValues() {
-        assertEquals("RUNNING", new QueueItem("i", "t", InputOrigin.NONE, 1, "running").getStatus());
-        assertEquals("RUNNING", new QueueItem("i", "t", InputOrigin.NONE, 1, "RUNNING").getStatus());
-        assertEquals("PENDING", new QueueItem("i", "t", InputOrigin.NONE, 1, "WHATEVER").getStatus());
-        assertEquals("PENDING", new QueueItem("i", "t", InputOrigin.NONE, 1, null).getStatus());
+        assertEquals(QueueItem.Status.RUNNING, new QueueItem("i", "t", InputOrigin.NONE, 1, "running").getStatus());
+        assertEquals(QueueItem.Status.RUNNING, new QueueItem("i", "t", InputOrigin.NONE, 1, "RUNNING").getStatus());
+        assertEquals(QueueItem.Status.PENDING, new QueueItem("i", "t", InputOrigin.NONE, 1, "WHATEVER").getStatus());
+        assertEquals(QueueItem.Status.PENDING, new QueueItem("i", "t", InputOrigin.NONE, 1, null).getStatus());
 
         QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 1, "PENDING");
-        item.setStatus("running");
-        assertEquals("RUNNING", item.getStatus());
-        item.setStatus("bogus");
-        assertEquals("PENDING", item.getStatus());
+        item.setStatus(QueueItem.Status.RUNNING);
+        assertEquals(QueueItem.Status.RUNNING, item.getStatus());
+        item.setStatus(null);
+        assertEquals(QueueItem.Status.PENDING, item.getStatus());
     }
 
     @Test
@@ -83,14 +85,28 @@ class QueueItemTest {
 
     @Test
     void fullConstructorKeepsAllOptionalFields() {
+        Map<String, String> attrs = new HashMap<>();
+        attrs.put("reasoningEffort", "high");
         QueueItem item = new QueueItem("i", "t", InputOrigin.NONE, 1, "PENDING",
-                "model-x", "high", "thinking", "sub-agent", true);
+                "model-x", "sub-agent", attrs);
 
         assertEquals("model-x", item.getModel());
-        assertEquals("high", item.getReasoningEffort());
-        assertEquals("thinking", item.getThinkingMode());
+        assertEquals("high", item.getAttrs().get("reasoningEffort"));
         assertEquals("sub-agent", item.getSelectedAgent());
-        assertTrue(item.hasFiles());
+    }
+
+    @Test
+    void legacyTopLevelEffortFieldsMergeIntoAttrs() {
+        Map<String, Object> row = new HashMap<>();
+        row.put("id", "i");
+        row.put("text", "t");
+        row.put("reasoningEffort", "high");
+        row.put("thinkingMode", "deep");
+        row.put("hasFiles", true);
+        QueueItem item = QueueItem.fromMap(row);
+        assertEquals("high", item.getAttrs().get("reasoningEffort"));
+        assertEquals("deep", item.getAttrs().get("thinkingMode"));
+        assertFalse(item.toPersistMap().containsKey("reasoningEffort"), "新格式只写 attrs");
     }
 
     @Test
@@ -134,7 +150,7 @@ class QueueItemTest {
 
         assertEquals("i", view.getId());
         assertEquals("hello world", view.getText());
-        assertEquals("PENDING", view.getStatus());
+        assertEquals(QueueItem.Status.PENDING, view.getStatus());
         assertFalse(view.isRunning());
         assertEquals("WEB", view.getSource());
         assertEquals("hello world", view.toMap().get("displayText"));

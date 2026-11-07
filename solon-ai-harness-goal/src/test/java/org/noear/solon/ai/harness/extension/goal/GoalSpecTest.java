@@ -20,6 +20,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessResult;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -108,10 +109,10 @@ class GoalSpecTest {
     void extensionAppliesSpecBudgets() {
         GoalExtension ext = newExtension();
 
-        GoalTask gs = ext.create(newSession(), GoalSpec.of("目标")
+        GoalSnapshot gs = ext.create(newSession(), GoalSpec.of("目标")
                 .maxTokens(2000)
                 .maxDuration(Duration.ofMinutes(30))
-                .maxIterations(5));
+                .maxIterations(5)).getValue();
 
         assertNotNull(gs);
         assertEquals(2000L, gs.getMaxTokens());
@@ -123,7 +124,7 @@ class GoalSpecTest {
     void simplestTwoArgFormMeansUnlimited() {
         GoalExtension ext = newExtension();
 
-        GoalTask gs = ext.create(newSession(), GoalSpec.of("让测试全绿"));
+        GoalSnapshot gs = ext.create(newSession(), GoalSpec.of("让测试全绿")).getValue();
 
         assertNotNull(gs);
         assertEquals("让测试全绿", gs.getObjective());
@@ -136,7 +137,7 @@ class GoalSpecTest {
     void specFormAndRawFormAreInterchangeable() {
         GoalExtension ext = newExtension();
 
-        GoalTask viaSpec = ext.create(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2));
+        GoalSnapshot viaSpec = ext.create(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2)).getValue();
         GoalState viaRaw = ext.getGoalRuntime().attach(sessions.computeIfAbsent(newSession(), InMemoryAgentSession::of), "目标", 7, 0, 2);
 
         assertEquals(viaRaw.getObjective(), viaSpec.getObjective());
@@ -153,8 +154,7 @@ class GoalSpecTest {
         ext.create(session, GoalSpec.of("第一个目标"));
 
         // 每会话最多一个 goal：参数对象入口不得放宽既有约束
-        assertThrows(IllegalStateException.class,
-                () -> ext.create(session, GoalSpec.of("第二个目标")));
+        assertEquals(HarnessResult.Code.INVALID, ext.create(session, GoalSpec.of("第二个目标")).getCode());
     }
 
     @Test
@@ -163,7 +163,7 @@ class GoalSpecTest {
         String session = newSession();
 
         // 无调度器时调度为 no-op，但创建语义必须完整
-        GoalTask gs = ext.create(session, GoalSpec.of("让测试全绿").runNow(false));
+        GoalSnapshot gs = ext.create(session, GoalSpec.of("让测试全绿").runNow(false)).getValue();
 
         assertNotNull(gs);
         assertEquals(gs.getId(), ext.get(session).getId());

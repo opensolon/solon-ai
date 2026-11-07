@@ -354,11 +354,11 @@ PermissionContext ctx = PermissionContext.builder()
 
 Map<String, Object> args = Map.of("command", "rm -rf /tmp");
 
-PermissionDecision decision = engine.evaluate("bash", args, ctx);
+PermissionBehavior decision = engine.evaluate("bash", args, ctx);
 // 返回 DENY — 匹配到 deny 规则
 ```
 
-### 6.4 决策结果 (PermissionDecision)
+### 6.4 决策结果 (PermissionBehavior)
 
 | 结果 | 说明 |
 |------|------|
@@ -922,7 +922,7 @@ public class DatabaseStrategy implements HITLInterceptor.InterventionStrategy {
         }
 
         // 委托 PermissionEngine
-        PermissionDecision decision = engine.evaluate("execute_sql", args, ctxSupplier.get());
+        PermissionBehavior decision = engine.evaluate("execute_sql", args, ctxSupplier.get());
         switch (decision) {
             case ALLOW: return null;
             case DENY:  return "操作被权限策略拒绝。";

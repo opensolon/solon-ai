@@ -46,7 +46,7 @@ class GoalPromptBuilderTest {
      * @param consumedTokens  已消耗 Token
      * @param iteration       迭代次数（影响上一轮摘要是否出现）
      */
-    private GoalState createGoalTask(long maxTokens, long consumedTokens, int iteration) {
+    private GoalState createGoalSnapshot(long maxTokens, long consumedTokens, int iteration) {
         GoalState gs = new GoalState("test goal objective here", maxTokens);
         if (consumedTokens > 0) {
             gs.addTokens(consumedTokens);
@@ -70,7 +70,7 @@ class GoalPromptBuilderTest {
     @Test
     void fullModeWhenBudgetAbove30Percent() {
         // 消耗 2000 / 10000 → 剩余 80% → 完整模式
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         double ratio = computeRemainingRatio(task);
         assertTrue(ratio >= 0.30, "budget ratio should be >= 0.30 for full mode, got " + ratio);
 
@@ -93,7 +93,7 @@ class GoalPromptBuilderTest {
     @Test
     void fullModeWhenBudgetExactlyAtThreshold() {
         // 消耗 7000 / 10000 → 剩余 0.30 → 完整模式（阈值边界，≥ 0.30 走 full）
-        GoalState task = createGoalTask(10000, 7000, 0);
+        GoalState task = createGoalSnapshot(10000, 7000, 0);
         double ratio = computeRemainingRatio(task);
         assertTrue(ratio >= 0.30, "ratio at boundary should be full mode");
 
@@ -104,7 +104,7 @@ class GoalPromptBuilderTest {
     @Test
     void fullModeIncludesStagnationCheckWhenTriggered() {
         GoalPromptBuilder builderWithLowThreshold = new GoalPromptBuilder(2);
-        GoalState task = createGoalTask(10000, 2000, 3);
+        GoalState task = createGoalSnapshot(10000, 2000, 3);
         // 模拟 3 次停滞
         task.recordStagnation();
         task.recordStagnation();
@@ -120,7 +120,7 @@ class GoalPromptBuilderTest {
     @Test
     void compactModeWhenBudgetBetween15And30Percent() {
         // 消耗 8000 / 10000 → 剩余 20% → 精简模式
-        GoalState task = createGoalTask(10000, 8000, 2);
+        GoalState task = createGoalSnapshot(10000, 8000, 2);
         task.updateLastExecution("previous step result with some data");
         double ratio = computeRemainingRatio(task);
         assertTrue(ratio >= 0.15 && ratio < 0.30, "ratio should be in compact range, got " + ratio);
@@ -142,7 +142,7 @@ class GoalPromptBuilderTest {
 
     @Test
     void compactModeShowsBudgetInfo() {
-        GoalState task = createGoalTask(10000, 8000, 0);
+        GoalState task = createGoalSnapshot(10000, 8000, 0);
         String result = builder.buildEffectivePrompt(task);
         assertTrue(result.contains("80%"), "should show consumed percentage");
     }
@@ -152,7 +152,7 @@ class GoalPromptBuilderTest {
     @Test
     void minimalModeWhenBudgetBelow15Percent() {
         // 消耗 9000 / 10000 → 剩余 10% → 极简模式
-        GoalState task = createGoalTask(10000, 9000, 0);
+        GoalState task = createGoalSnapshot(10000, 9000, 0);
         double ratio = computeRemainingRatio(task);
         assertTrue(ratio < 0.15, "ratio should be in minimal range, got " + ratio);
 
@@ -170,7 +170,7 @@ class GoalPromptBuilderTest {
     @Test
     void minimalModeAtExactThresholdBoundary() {
         // 消耗 8501 / 10000 → 剩余 14.99% → < 15% → 极简
-        GoalState task = createGoalTask(10000, 8501, 0);
+        GoalState task = createGoalSnapshot(10000, 8501, 0);
         double ratio = computeRemainingRatio(task);
         assertTrue(ratio < 0.15, "ratio 0.1499 should trigger minimal, got " + ratio);
 
@@ -180,7 +180,7 @@ class GoalPromptBuilderTest {
 
     @Test
     void minimalModeDoesNotShowPreviousSummary() {
-        GoalState task = createGoalTask(10000, 9000, 5);
+        GoalState task = createGoalSnapshot(10000, 9000, 5);
         task.updateLastExecution("some previous work");
         String result = builder.buildEffectivePrompt(task);
         // 极简模式不应包含上一轮摘要
@@ -190,7 +190,7 @@ class GoalPromptBuilderTest {
     // ===== 非 Goal 模式 =====
     // 说明：旧版 buildEffectivePrompt(LoopTask) 对非 goal 任务原样返回 prompt。
     // 新版 GoalPromptBuilder 只接受 GoalState，该职责已由类型系统保证，
-    // 因此对应用例（nonGoalTaskReturnsPromptAsIs）随之删除，属语义收敛而非覆盖丢失。
+    // 因此对应用例（nonGoalSnapshotReturnsPromptAsIs）随之删除，属语义收敛而非覆盖丢失。
 
     // ===== budgetRatio 工具方法 =====
 
@@ -214,7 +214,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_smallTokens_noDuplication() {
         // consumed < 1000, maxTokens < 1000 — 最关键的 "tokens tokens" 修复场景
-        GoalState task = createGoalTask(500, 300, 0);
+        GoalState task = createGoalSnapshot(500, 300, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 300 tokens / 500 tokens"),
@@ -224,7 +224,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_smallConsumedLargeMax() {
         // consumed < 1000, maxTokens >= 1000
-        GoalState task = createGoalTask(10000, 300, 0);
+        GoalState task = createGoalSnapshot(10000, 300, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 300 tokens / 10.0k"),
@@ -234,7 +234,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_largeConsumedSmallMax() {
         // consumed >= 1000, maxTokens < 1000
-        GoalState task = createGoalTask(500, 2000, 0);
+        GoalState task = createGoalSnapshot(500, 2000, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 2.0k / 500 tokens"),
@@ -244,7 +244,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_largeTokensBoth() {
         // consumed >= 1000, maxTokens >= 1000
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 2.0k / 10.0k"),
@@ -254,7 +254,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_unlimitedMaxTokens_smallConsumed() {
         // maxTokens = 0, consumed < 1000
-        GoalState task = createGoalTask(0, 300, 0);
+        GoalState task = createGoalSnapshot(0, 300, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 300 tokens"),
@@ -264,7 +264,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_unlimitedMaxTokens_largeConsumed() {
         // maxTokens = 0, consumed >= 1000
-        GoalState task = createGoalTask(0, 2000, 0);
+        GoalState task = createGoalSnapshot(0, 2000, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 2.0k"),
@@ -274,7 +274,7 @@ class GoalPromptBuilderTest {
     @Test
     void budgetLimitPrompt_zeroConsumed() {
         // 边界：consumed = 0
-        GoalState task = createGoalTask(10000, 0, 0);
+        GoalState task = createGoalSnapshot(10000, 0, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertFalse(result.contains("tokens tokens"), "should not duplicate 'tokens'");
         assertTrue(result.contains("- 已消耗: 0 tokens"),
@@ -326,7 +326,7 @@ class GoalPromptBuilderTest {
 
     @Test
     void budgetLimitPrompt_containsAllSections() {
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertTrue(result.contains("预算耗尽 (Budget Limit)"), "should have header");
         assertTrue(result.contains("目标:"), "should contain goal label");
@@ -342,7 +342,7 @@ class GoalPromptBuilderTest {
     @Test
     void fullModeWithPreviousSummary() {
         // 完整模式 + 非首轮 + 有上一轮结果（覆盖 "上一轮执行摘要" + truncateForPrompt 截断）
-        GoalState task = createGoalTask(10000, 2000, 3);
+        GoalState task = createGoalSnapshot(10000, 2000, 3);
         String longResult = "第一轮：分析了项目结构，发现主要模块。\n" +
                 "第二轮：实现了核心功能，包括A、B、C三个组件。\n" +
                 "第三轮：编写了单元测试，编写了大量测试用例确保覆盖率。";
@@ -361,7 +361,7 @@ class GoalPromptBuilderTest {
     @Test
     void fullModeWithoutStagnationCheck() {
         // 完整模式 + stagnationCount < threshold → 不应出现质疑章节
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         task.recordStagnation(); // 1 < 3
         String result = builder.buildEffectivePrompt(task);
         assertFalse(result.contains("进展质疑 (Stagnation Check)"), "should NOT show stagnation when count < threshold");
@@ -372,7 +372,7 @@ class GoalPromptBuilderTest {
         // isBudgetCritical() 在完整模式下通常不可达（ratio >= 0.30 → consumed <= 70%，
         // 而 critical 默认需要 >= 85%）。改为实例级阈值注入（原静态 configure 已移除），
         // 设置 critical 阈值 1% 以覆盖该分支。
-        GoalState task = createGoalTask(10000, 1000, 0);
+        GoalState task = createGoalSnapshot(10000, 1000, 0);
         task.setThresholds(new BudgetThresholds(70, 1));
         String result = builder.buildEffectivePrompt(task);
         assertTrue(result.contains("[紧急]"), "full mode should show '[紧急]' when budget critical");
@@ -380,7 +380,7 @@ class GoalPromptBuilderTest {
 
     @Test
     void fullModeContainsGoalUpdateInstruction() {
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         String result = builder.buildEffectivePrompt(task);
         assertTrue(result.contains("goal_update(complete)"), "full mode should contain goal_update(complete) instruction");
         assertFalse(result.contains("[GOAL_ACHIEVED]"), "full mode should NOT contain [GOAL_ACHIEVED]");
@@ -391,7 +391,7 @@ class GoalPromptBuilderTest {
     @Test
     void compactModeFirstIter_noPreviousSummary() {
         // 精简模式 + isFirstIter → 不应有上一轮摘要
-        GoalState task = createGoalTask(10000, 8000, 0); // iter=0
+        GoalState task = createGoalSnapshot(10000, 8000, 0); // iter=0
         String result = builder.buildEffectivePrompt(task);
         assertFalse(result.contains("上一轮"), "compact mode first iter should NOT show previous round");
     }
@@ -399,7 +399,7 @@ class GoalPromptBuilderTest {
     @Test
     void compactModeNullLastResult_noPreviousSummary() {
         // 精简模式 + 非首轮但 lastResult=null → 不应有上一轮摘要
-        GoalState task = createGoalTask(10000, 8000, 2);
+        GoalState task = createGoalSnapshot(10000, 8000, 2);
         // lastResult 显式置 null
         task.updateLastExecution(null);
         String result = builder.buildEffectivePrompt(task);
@@ -528,7 +528,7 @@ class GoalPromptBuilderTest {
 
     @Test
     void budgetLimitPrompt_containsDurationLine() {
-        GoalState task = createGoalTask(10000, 2000, 0);
+        GoalState task = createGoalSnapshot(10000, 2000, 0);
         String result = builder.buildBudgetLimitPrompt(task);
         assertTrue(result.contains("- 耗时:"), "budget limit prompt should contain duration line");
     }

@@ -24,18 +24,31 @@ import java.util.UUID;
  * 队列自身不解释这些字段，仅原样透传与持久化。</p>
  */
 public final class QueueItem {
+    /**
+     * 条目状态（落盘与展示仍写名字字符串，旧数据可读）
+     *
+     * @since 4.2.0
+     */
+    public enum Status {
+        /** 待执行 */
+        PENDING,
+        /** 已被领取、正在执行（in-flight） */
+        RUNNING;
+
+        static Status of(String value) {
+            return "RUNNING".equalsIgnoreCase(value) ? RUNNING : PENDING;
+        }
+    }
+
     private final String id;
     private final String text;
     private final InputOrigin origin;
     private final long createdAt;
-    private String status;
+    private Status status;
     private Long claimedAt;
-    private String model;
-    private String reasoningEffort;
-    private String thinkingMode;
-    private String selectedAgent;
-    private boolean hasFiles;
-    /** 宿主域属性（引擎积压入口带入的 {@code HarnessInput#getAttrs()}；原样保存，不解读） */
+    private final String model;
+    private final String selectedAgent;
+    /** 宿主域属性（{@code HarnessInput#getAttrs()}，如推理强度、思考模式；原样保存，不解读） */
     private final Map<String, String> attrs;
     /** 输入快照（技能 / MCP 视野、终端标记、显式作用域规格；版本见 {@link #SNAPSHOT_VERSION}） */
     private Map<String, Object> snapshot = Collections.emptyMap();
@@ -44,28 +57,18 @@ public final class QueueItem {
     static final int SNAPSHOT_VERSION = 1;
 
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
-        this(id, text, origin, createdAt, status, null, null, null, null, false);
+        this(id, text, origin, createdAt, status, null, null, null);
     }
 
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
-                     String model, String reasoningEffort, String thinkingMode,
-                     String selectedAgent, boolean hasFiles) {
-        this(id, text, origin, createdAt, status, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles, null);
-    }
-
-    QueueItem(String id, String text, InputOrigin origin, long createdAt, String status,
-                     String model, String reasoningEffort, String thinkingMode,
-                     String selectedAgent, boolean hasFiles, Map<String, String> attrs) {
+              String model, String selectedAgent, Map<String, String> attrs) {
         this.id = id == null || id.trim().isEmpty() ? "q_" + UUID.randomUUID() : id;
         this.text = text;
         this.origin = origin == null ? InputOrigin.NONE : origin;
         this.createdAt = createdAt > 0 ? createdAt : System.currentTimeMillis();
-        this.status = "RUNNING".equalsIgnoreCase(status) ? "RUNNING" : "PENDING";
+        this.status = Status.of(status);
         this.model = model;
-        this.reasoningEffort = reasoningEffort;
-        this.thinkingMode = thinkingMode;
         this.selectedAgent = selectedAgent;
-        this.hasFiles = hasFiles;
         this.attrs = attrs == null || attrs.isEmpty()
                 ? Collections.<String, String>emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(attrs));
@@ -74,15 +77,12 @@ public final class QueueItem {
     public String getId() { return id; }
     public String getText() { return text; }
     public long getCreatedAt() { return createdAt; }
-    public String getStatus() { return status; }
+    /** 条目状态 */
+    public Status getStatus() { return status; }
     public Long getClaimedAt() { return claimedAt; }
     public String getModel() { return model; }
-    /** 推理强度：完整参数入队的显式值优先，其次宿主域属性 {@code reasoningEffort}。 */
-    public String getReasoningEffort() { return reasoningEffort != null ? reasoningEffort : attrs.get("reasoningEffort"); }
-    /** 思考模式：完整参数入队的显式值优先，其次宿主域属性 {@code thinkingMode}。 */
-    public String getThinkingMode() { return thinkingMode != null ? thinkingMode : attrs.get("thinkingMode"); }
     /**
-     * 宿主域属性（只读，永不为 null；引擎积压入口带入的 {@code HarnessInput#getAttrs()}）。
+     * 宿主域属性（只读，永不为 null；入队时带入的 {@code HarnessInput#getAttrs()}，如推理强度、思考模式）。
      *
      * @since 4.2.0
      */
@@ -102,8 +102,6 @@ public final class QueueItem {
                 .selectedModel(model)
                 .selectedAgent(selectedAgent)
                 .attrs(attrs);
-        if (reasoningEffort != null) input.attr("reasoningEffort", reasoningEffort);
-        if (thinkingMode != null) input.attr("thinkingMode", thinkingMode);
         applySnapshot(input);
         return input;
     }
@@ -150,15 +148,14 @@ public final class QueueItem {
         return out.toArray(new String[0]);
     }
     public String getSelectedAgent() { return selectedAgent; }
-    public boolean hasFiles() { return hasFiles; }
     /** 运行状态：仅 harness 队列内核可写（宿主不得改写 in-flight 状态）。 */
-    void setStatus(String status) { this.status = "RUNNING".equalsIgnoreCase(status) ? "RUNNING" : "PENDING"; }
+    void setStatus(Status status) { this.status = status == null ? Status.PENDING : status; }
 
     /** 领取时间：仅 harness 队列内核可写。 */
     void setClaimedAt(Long claimedAt) { this.claimedAt = claimedAt; }
 
     /** 是否正在执行（in-flight）。 */
-    public boolean isRunning() { return "RUNNING".equals(status); }
+    public boolean isRunning() { return status == Status.RUNNING; }
 
     /** 来源渠道标识（前端据此显示 IM 徽标；无来源时为 null）。 */
     public String getSource() { return origin.getChannel(); }
@@ -181,14 +178,11 @@ public final class QueueItem {
         map.put("text", text);
         // 展示文本与原文分开：将来做截断/脱敏不必动持久化字段
         map.put("displayText", text);
-        map.put("status", status);
+        map.put("status", status.name());
         map.put("createdAt", createdAt);
         if (claimedAt != null) map.put("claimedAt", claimedAt);
         if (model != null && !model.isEmpty()) map.put("model", model);
-        if (reasoningEffort != null && !reasoningEffort.isEmpty()) map.put("reasoningEffort", reasoningEffort);
-        if (thinkingMode != null && !thinkingMode.isEmpty()) map.put("thinkingMode", thinkingMode);
         if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
-        if (hasFiles) map.put("hasFiles", true);
         if (origin.getChannel() != null) map.put("source", origin.getChannel());
         if (!attrs.isEmpty()) map.put("attrs", new LinkedHashMap<>(attrs));
         return map;
@@ -205,14 +199,11 @@ public final class QueueItem {
         map.put("text", text);
         // 键名沿用历史命名（source / sourceUserId / replyTarget / messageId），保证落盘数据向后兼容
         map.putAll(origin.toMap());
-        map.put("status", status);
+        map.put("status", status.name());
         map.put("createdAt", createdAt);
         if (claimedAt != null) map.put("claimedAt", claimedAt);
         if (model != null && !model.isEmpty()) map.put("model", model);
-        if (reasoningEffort != null && !reasoningEffort.isEmpty()) map.put("reasoningEffort", reasoningEffort);
-        if (thinkingMode != null && !thinkingMode.isEmpty()) map.put("thinkingMode", thinkingMode);
         if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
-        if (hasFiles) map.put("hasFiles", true);
         if (!attrs.isEmpty()) map.put("attrs", new LinkedHashMap<>(attrs));
         if (!snapshot.isEmpty()) map.put("input", new LinkedHashMap<>(snapshot));
         return map;
@@ -224,10 +215,13 @@ public final class QueueItem {
         if (text == null || text.trim().isEmpty() || text.trim().length() > QueueStore.HARD_MAX_TEXT_LENGTH) return null; // 入队时已按实例上限校验；恢复只防御失控
         String id = value(map.get("id"));
         InputOrigin origin = InputOrigin.fromMap(map);
+        Map<String, String> attrs = attrs(map.get("attrs"));
+        // 旧格式把推理强度 / 思考模式存为顶层字段：并入宿主域属性（属性里已有的优先）
+        attrs = mergeLegacy(attrs, "reasoningEffort", value(map.get("reasoningEffort")));
+        attrs = mergeLegacy(attrs, "thinkingMode", value(map.get("thinkingMode")));
         QueueItem item = new QueueItem(id, text.trim(), origin,
                 number(map.get("createdAt"), System.currentTimeMillis()), value(map.get("status")),
-                value(map.get("model")), value(map.get("reasoningEffort")), value(map.get("thinkingMode")),
-                value(map.get("selectedAgent")), Boolean.TRUE.equals(map.get("hasFiles")), attrs(map.get("attrs")));
+                value(map.get("model")), value(map.get("selectedAgent")), attrs);
         item.setClaimedAt(numberObject(map.get("claimedAt")));
         if (map.get("input") instanceof Map) {
             @SuppressWarnings("unchecked")
@@ -235,6 +229,13 @@ public final class QueueItem {
             item.setInputSnapshot(snap);
         }
         return item;
+    }
+
+    private static Map<String, String> mergeLegacy(Map<String, String> attrs, String key, String legacy) {
+        if (legacy == null || legacy.isEmpty() || (attrs != null && attrs.containsKey(key))) return attrs;
+        Map<String, String> result = attrs == null ? new LinkedHashMap<String, String>() : attrs;
+        result.put(key, legacy);
+        return result;
     }
 
     private static String value(Object value) { return value == null ? null : String.valueOf(value); }

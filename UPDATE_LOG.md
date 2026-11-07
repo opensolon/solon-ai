@@ -1,5 +1,18 @@
 ### vNEXT
 
+* **harness：API 收敛（错误模型、命名、命令、模块结构）**（4.2.0；破坏性，未发布直接改，不留桥接）:
+  * **统一结果**：新增 core `org.noear.solon.ai.harness.HarnessResult<T>`（OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / FORBIDDEN）。queue / goal / loop 的写门面全部改返回它：不再有 `int` 哨兵值（`-1`、`QueueExtension.NOT_OWNER = -2` 已删）、`boolean` 与业务异常（`IllegalStateException` / `NotOwnerException`）。host 层 `FacadeResult` 删除。steer 继续用 `SteerResult` / `SteerCancelResult`（码值下发前端）
+  * **queue**：9 参 `enqueue` 删除，改为 `enqueue(HarnessInput, id)`；`QueueItem` 删除 `getReasoningEffort` / `getThinkingMode` / `hasFiles`（宿主字段走 `attrs`，读旧数据时顶层字段并入 attrs）；新增 `QueueItem.Status` 枚举（落盘仍写字符串）与 `clearPending`（只清待执行、不递增代际）
+  * **goal**：`GoalTask` → `GoalSnapshot`；每会话永远只有一个 goal，`pause` / `resume` / `trigger` / `remove` / `update` 去掉 `taskId`，`get(sid, taskId)` 删除；`toMap()` 不再带 loop 字段；门面只取已有会话（不存在为 `NOT_FOUND`）；`ValidationResult.detail()` → `getDetail()`
+  * **loop**：`toggle` 删除；`removeAll` 补归属检查；`/loop remove`（原 `stop`）与 `/loop clear`（原 `stop-all`）停在途一轮改用 `engine.cancelStream`，不再清空用户排队、不再写「用户已取消」
+  * **steer**：`SteerResult.Code.TURN_CHANGED` / `SteerCancelResult.Code.TURN_CHANGED` → `RUN_CHANGED`，`isTurnChanged()` → `isRunChanged()`（与 runId、`SteerDroppedEvent.Reason.RUN_*` 同词）；`getCodeName()` 删除。soloncode-cli 前端 `app-streaming.js` 同步改判 `RUN_CHANGED`
+  * **core**：`PermissionDecision` 并入 `PermissionBehavior`；`isBusyBypassCommand` → `isRunnableWhenBusy`；`OwnerCheck` / `NotOwnerException` 从 `spi` 移到 `session`（`spi` 只留接口）；`InputOutcome.admitted` 返回副本、不再改写原对象；`REJECTED` 注释补齐 8 个拒绝码；test-jar 发布共享的 `Fakes`（queue / steer 测试引用，去掉两份副本）
+  * **命令写法统一**（旧写法保留为别名，帮助里只展示新写法）：`/goal --max-duration 30m`（`--key value`，时长 s / m / h）；`/loop --every 5m` / `--cron "expr"` / `list` / `remove <id>` / `clear`；`/queue list` / `cancel <id|序号>` / `clear`（IM 端无面板也能管理队列）；三个命令都支持 `--` 转义，子命令只在参数个数完全匹配时生效
+  * **模块**：新建 `solon-ai-harness-host`（`HarnessHost` / `HostSink` / `HostRun` / `Submitted` / `StopMode` / `AdminGateway` / `AdminAuthorizer`）；`solon-ai-harness` 变为只做引用的聚合包（无源码）。host 层改名：`AdminView` → `AdminGateway`、`StopMode.ALL / CURRENT_RUN` → `STOP_AND_CLEAR / STOP_RUN`、`Submitted.Kind` 的 `REPLIED / HITL_PENDING` → `REPLY / HITL`。solon-parent 版本管理与 `__release/solon-ai-bundle1` 同步加入 host
+  * **守卫**（`solon-ai-harness-host` 的 `HarnessStructureGuardTest`）：聚合包无源码且引用全部 6 个模块；goal / loop / queue 写门面必须返回 `HarnessResult`；`noDeprecatedInMainCode` 改为白名单（只放行 `HarnessEngine.prompt / resume`）
+  * **文档**：新增 `solon-ai-harness-host/README.md`；聚合 README / QUICKSTART-SAAS / SAAS / CONCEPTS 与 goal / loop / queue / steer README 按新接口更新（删去已不存在的 `ToolPermission` 说明）
+  * **验证**：goal 232 / loop 102 / queue 98 / steer 72 / host 25 全绿；core 666 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor 既有用例）
+
 * **harness：术语收敛为 input / run / step，`turn` 包取消**（4.2.0；破坏性，未发布直接改名，不留桥接）:
   * `scope.TurnScope` → `scope.InputScope`、`scope.TurnScopeResolver` → `scope.InputScopeResolver`、`spi.TurnDispatch` → `spi.RunDispatch`
   * `turn.SessionTurn` → 根包 `RunTicket`，`turn.InterruptPlan` → 根包 `InterruptPlan`（`turn` 包只剩两个类，并入根包）

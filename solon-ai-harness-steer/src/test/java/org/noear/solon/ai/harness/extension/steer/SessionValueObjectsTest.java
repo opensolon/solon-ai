@@ -21,7 +21,7 @@ class SessionValueObjectsTest {
     @Test
     void steerCodeNameIsEnumName() {
         for (SteerResult.Code s : SteerResult.Code.values()) {
-            assertEquals(s.name(), new SteerResult(s, null, 0).getCodeName());
+            assertEquals(s.name(), new SteerResult(s, null, 0).getCode().name());
         }
     }
 
@@ -34,20 +34,20 @@ class SessionValueObjectsTest {
         assertFalse(steered.isNotRunning());
         assertEquals("s1", steered.getSteerId());
         assertEquals(2, steered.getPendingCount());
-        assertEquals("STEERED", steered.getCodeName());
+        assertEquals("STEERED", steered.getCode().name());
 
         SteerResult full =
                 new SteerResult(SteerResult.Code.BOX_FULL, "s2", 5);
         assertTrue(full.isBoxFull());
         assertFalse(full.isSteered());
 
-        // NOT_RUNNING 与 TURN_CHANGED 各有独立判定，不再混为一谈
+        // NOT_RUNNING 与 RUN_CHANGED 各有独立判定，不再混为一谈
         assertTrue(new SteerResult(
                 SteerResult.Code.NOT_RUNNING, null, 0).isNotRunning());
         assertFalse(new SteerResult(
-                SteerResult.Code.TURN_CHANGED, null, 0).isNotRunning());
+                SteerResult.Code.RUN_CHANGED, null, 0).isNotRunning());
         assertTrue(new SteerResult(
-                SteerResult.Code.TURN_CHANGED, null, 0).isTurnChanged());
+                SteerResult.Code.RUN_CHANGED, null, 0).isRunChanged());
         assertFalse(new SteerResult(
                 SteerResult.Code.EMPTY_TEXT, null, 0).isNotRunning());
     }

@@ -218,7 +218,7 @@ class GoalRoundExecutionTest {
         gs.achieve();
 
         assertFalse(e.runRound(s));
-        assertEquals(GoalTask.Status.ACHIEVED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.ACHIEVED, gs.getStatus());
     }
 
     @Test
@@ -231,7 +231,7 @@ class GoalRoundExecutionTest {
         fb.duringRound = gs::achieve;
 
         assertFalse(e.runRound(s));
-        assertEquals(GoalTask.Status.ACHIEVED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.ACHIEVED, gs.getStatus());
     }
 
     /**
@@ -317,7 +317,7 @@ class GoalRoundExecutionTest {
         assertFalse(e.runRound(s));
         // 一轮收尾（wrap-up），然后标记预算受限
         assertEquals(1, fb.prompts.size());
-        assertEquals(GoalTask.Status.BUDGET_LIMITED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BUDGET_LIMITED, gs.getStatus());
     }
 
     @Test
@@ -331,7 +331,7 @@ class GoalRoundExecutionTest {
 
         assertFalse(e.runRound(s));
         assertTrue(fb.prompts.isEmpty(), "轮次超限应在执行前就停下");
-        assertEquals(GoalTask.Status.ITERATION_LIMITED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.ITERATION_LIMITED, gs.getStatus());
     }
 
     @Test
@@ -346,7 +346,7 @@ class GoalRoundExecutionTest {
 
         assertFalse(e.runRound(s));
         assertEquals(1, fb.prompts.size());
-        assertEquals(GoalTask.Status.BUDGET_LIMITED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BUDGET_LIMITED, gs.getStatus());
     }
 
     // ========== 异常分级熔断 ==========
@@ -401,7 +401,7 @@ class GoalRoundExecutionTest {
         assertNull(gs.getLastResult(), "skip 不写结果文本");
         assertEquals(0, gs.getCurrentIteration(), "skip 不计入迭代");
         assertEquals(0, gs.getConsecutiveErrors(), "skip 不计错误");
-        assertEquals(GoalTask.Status.PURSUING, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus());
     }
 
     /** failed 与执行器返回 null 都按失败计（参与错误熔断），不再有「null = 穿透」。 */
@@ -452,7 +452,7 @@ class GoalRoundExecutionTest {
         e.runRound(s);
         e.runRound(s);
 
-        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
@@ -467,7 +467,7 @@ class GoalRoundExecutionTest {
         e.runRound(s);
         e.runRound(s);
 
-        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
@@ -483,7 +483,7 @@ class GoalRoundExecutionTest {
         fb.failure = new IllegalArgumentException("b");
         e.runRound(s);
 
-        assertEquals(GoalTask.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus());
     }
 
     @Test
@@ -581,7 +581,6 @@ class GoalRoundExecutionTest {
 
         assertEquals("GOAL", item.get("type"));
         assertEquals("目标", item.get("prompt"));
-        assertEquals(true, item.get("enabled"));
         assertEquals(500L, item.get("maxTokens"));
         // 预算明细在嵌套 goal 内（与前端 goal.* 约定对齐）
         Map<?, ?> goal = (Map<?, ?>) item.get("goal");
@@ -670,7 +669,7 @@ class GoalRoundExecutionTest {
                 org.noear.solon.ai.talents.cli.CommandResult.completed(1, "ERROR x")).validate("build", wd);
         assertFalse(failed.isPassed());
         assertFalse(failed.isInconclusive());
-        assertTrue(failed.detail().contains("exit=1"));
+        assertTrue(failed.getDetail().contains("exit=1"));
 
         assertTrue(new BuildPassValidator((c, d) ->
                 org.noear.solon.ai.talents.cli.CommandResult.timedOut("slow")).validate("build", wd).isInconclusive());
@@ -695,7 +694,7 @@ class GoalRoundExecutionTest {
         GoalValidator.ValidationResult r = rt.validate("x", "/w");
         assertFalse(r.isPassed());
         assertFalse(r.isInconclusive(), "策略处理后只剩通过/未通过");
-        assertTrue(r.detail().contains("timeout"));
+        assertTrue(r.getDetail().contains("timeout"));
 
         // 验证器抛异常同样按「无法判定」走策略
         rt.registerValidator(c -> c.contains("y"), (c, d) -> {
@@ -718,8 +717,8 @@ class GoalRoundExecutionTest {
         GoalValidator.ValidationResult failed = GoalValidator.ValidationResult.failed("原因");
 
         assertTrue(passed.isPassed());
-        assertEquals("", passed.detail());
+        assertEquals("", passed.getDetail());
         assertFalse(failed.isPassed());
-        assertEquals("原因", failed.detail());
+        assertEquals("原因", failed.getDetail());
     }
 }

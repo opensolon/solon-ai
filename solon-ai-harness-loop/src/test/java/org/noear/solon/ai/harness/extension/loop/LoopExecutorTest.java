@@ -182,9 +182,9 @@ class LoopExecutorTest {
                 .triggerWrapper(r -> () -> { wrapped.incrementAndGet(); r.run(); })
                 .build()
                 .addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
-        LoopTask task = ext.schedule("s1", every5("p"));
+        LoopTask task = ext.schedule("s1", every5("p")).getValue();
 
-        assertTrue(ext.trigger("s1", task.getId()));
+        assertTrue(ext.trigger("s1", task.getId()).isOk());
         long deadline = System.currentTimeMillis() + 3000;
         while (task.getCurrentIteration() == 0 && System.currentTimeMillis() < deadline) {
             Thread.yield();
@@ -197,7 +197,7 @@ class LoopExecutorTest {
     @Test
     void oneShotUnregistersOnlyOnScheduledRound() {
         LoopExtension ext = ext().addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
-        LoopTask task = ext.schedule("s1", LoopSpec.of("p").cron("0 0 18 * * ?").oneShot(true));
+        LoopTask task = ext.schedule("s1", LoopSpec.of("p").cron("0 0 18 * * ?").oneShot(true)).getValue();
 
         ext.scheduler().doTrigger("s1", task, false);
         assertNotNull(ext.get("s1", task.getId()), "手动触发不消耗一次性配额");

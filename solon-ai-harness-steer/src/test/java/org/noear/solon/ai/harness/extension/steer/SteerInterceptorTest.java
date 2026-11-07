@@ -485,7 +485,7 @@ public class SteerInterceptorTest {
     @DisplayName("dropped: 队列满时失败项暂存为 orphans 并标记 failed，pending 仍可见")
     public void dropped_queueFullParksAsOrphan() {
         for (int i = 0; i < new org.noear.solon.ai.harness.extension.queue.QueueExtension().getMaxSize(); i++) {
-            assertTrue(new org.noear.solon.ai.harness.extension.queue.QueueExtension().enqueue(session, "task " + i, InputOrigin.channel("WEB")) > 0);
+            assertTrue(new org.noear.solon.ai.harness.extension.queue.QueueExtension().enqueue(session, "task " + i, InputOrigin.channel("WEB")).isOk());
         }
         SteerState state = startWithInbox(trace, "do not lose me");
 

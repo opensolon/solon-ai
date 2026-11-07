@@ -23,7 +23,7 @@ public final class SteerCancelResult {
         /** 不在待生效列表（已被注入或已转排队）：终态以 applied / dropped 事件为准，不得宣称撤销成功 */
         NOT_PENDING,
         /** 请求所带 runId 已不是当前轮次：旧 steerId 已无意义 */
-        TURN_CHANGED,
+        RUN_CHANGED,
         /** steerId 为空或超过长度上限 */
         INVALID_STEER_ID,
         /**
@@ -56,11 +56,6 @@ public final class SteerCancelResult {
 
     public Code getCode() {
         return code;
-    }
-
-    /** 应答码字符串（= {@code getCode().name()}） */
-    public String getCodeName() {
-        return code.name();
     }
 
     /** 单条撤销时为目标 steerId；批量撤销时为 null */

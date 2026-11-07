@@ -152,8 +152,8 @@ class LoopExtensionTest {
 
         assertEquals(0, engine.status(s).get(LoopExtension.STATUS_TASKS).intValue());
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
-        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
-        loop.toggle("s1", b.getId()); // 暂停的也计入
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5)).getValue();
+        loop.pause("s1", b.getId()); // 暂停的也计入
         assertEquals(2, engine.status(s).get(LoopExtension.STATUS_TASKS).intValue());
     }
 
@@ -214,8 +214,8 @@ class LoopExtensionTest {
     void errorStreakIsPerTaskAndResetsOnSuccess() {
         FakeJobManager jm = new FakeJobManager();
         LoopExtension loop = builder(jm).maxErrors(() -> 2).build();
-        LoopTask a = loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
-        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
+        LoopTask a = loop.schedule("s1", LoopSpec.of("a").everyMinutes(5)).getValue();
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5)).getValue();
 
         loop.scheduler().handleErrorForTest("s1", a, new RuntimeException("x"));
         assertEquals(1, a.getErrorStreak());
@@ -250,7 +250,7 @@ class LoopExtensionTest {
             await(release);
             return LoopOutcome.done("done");
         });
-        LoopTask t = loop.schedule("s1", LoopSpec.of("keep-me").everyMinutes(5));
+        LoopTask t = loop.schedule("s1", LoopSpec.of("keep-me").everyMinutes(5)).getValue();
         loop.schedule("s2", LoopSpec.of("keep-me-too").everyMinutes(5));
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", t, false));
@@ -296,13 +296,13 @@ class LoopExtensionTest {
             await(release);
             return LoopOutcome.done("result of " + p);
         });
-        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5));
+        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5)).getValue();
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", old, false));
         round.start();
         assertTrue(entered.await(3, TimeUnit.SECONDS));
 
-        LoopTask updated = loop.update("s1", old.getId(), LoopPatch.create().prompt("v2").everyMinutes(10));
+        LoopTask updated = loop.update("s1", old.getId(), LoopPatch.create().prompt("v2").everyMinutes(10)).getValue();
         assertSame(updated, loop.get("s1", old.getId()));
         assertTrue(updated.isRunning(), "新版本必须继承在途一轮的运行标记");
 
@@ -327,7 +327,7 @@ class LoopExtensionTest {
             await(release);
             return LoopOutcome.done("ok");
         });
-        LoopTask old = loop.schedule("s1", LoopSpec.of("once").cron("0 0 18 * * ?").oneShot(true));
+        LoopTask old = loop.schedule("s1", LoopSpec.of("once").cron("0 0 18 * * ?").oneShot(true)).getValue();
 
         Thread round = new Thread(() -> loop.scheduler().doTrigger("s1", old, true));
         round.start();
@@ -350,7 +350,7 @@ class LoopExtensionTest {
             executions.incrementAndGet();
             return LoopOutcome.done("ok");
         });
-        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5));
+        LoopTask old = loop.schedule("s1", LoopSpec.of("v1").everyMinutes(5)).getValue();
         loop.update("s1", old.getId(), LoopPatch.create().prompt("v2"));
 
         loop.scheduler().doTrigger("s1", old, false); // 旧版本的错误重试 / 迟到回调
@@ -373,7 +373,7 @@ class LoopExtensionTest {
         LoopExtension loop = builder(null).build();
         HarnessEngine engine = engine(loop);
         AgentSession s = engine.getSession("s1");
-        LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5));
+        LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5)).getValue();
 
         StubContext ctx = new StubContext(s, "pause", t.getId());
         loop.command().execute(engine, ctx, InputOrigin.NONE);
@@ -389,25 +389,28 @@ class LoopExtensionTest {
     }
 
     @Test
-    void stopInterruptsOnlyWhenTaskRunning() throws Exception {
+    void stopNeverUserInterruptsSession() throws Exception {
         InterruptProbe probe = new InterruptProbe();
         LoopExtension loop = builder(null).build();
         HarnessEngine engine = engine(loop, probe);
         AgentSession s = engine.getSession("s1");
 
-        LoopTask idle = loop.schedule("s1", LoopSpec.of("idle").everyMinutes(5));
+        LoopTask idle = loop.schedule("s1", LoopSpec.of("idle").everyMinutes(5)).getValue();
         loop.command().execute(engine, new StubContext(s, "stop", idle.getId()), InputOrigin.NONE);
         assertNull(loop.get("s1", idle.getId()));
         assertEquals(0, probe.count.get(), "任务空闲时停止不得打断用户当前这一轮");
 
-        LoopTask busy = loop.schedule("s1", LoopSpec.of("busy").everyMinutes(5));
+        LoopTask busy = loop.schedule("s1", LoopSpec.of("busy").everyMinutes(5)).getValue();
         assertTrue(busy.tryStart());
         loop.command().execute(engine, new StubContext(s, "stop", busy.getId()), InputOrigin.NONE);
-        assertEquals(1, probe.count.get(), "任务正在执行时停止必须中断那一轮");
+        assertNull(loop.get("s1", busy.getId()));
+        // 运行中的定时轮次只做程序级取消（cancelStream）：不走用户中断（那会清空用户排队并写取消消息）
+        assertEquals(0, probe.count.get(), "停止定时任务不得触发用户级中断");
+        assertTrue(s.getMessages().isEmpty(), "不得补写「用户已取消」消息");
     }
 
     @Test
-    void removeAllInterruptsOnlyWhenAnyRunning() throws Exception {
+    void stopAllNeverUserInterruptsSession() throws Exception {
         InterruptProbe probe = new InterruptProbe();
         LoopExtension loop = builder(null).build();
         HarnessEngine engine = engine(loop, probe);
@@ -418,10 +421,11 @@ class LoopExtensionTest {
         assertTrue(loop.list("s1").isEmpty());
         assertEquals(0, probe.count.get());
 
-        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5));
+        LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5)).getValue();
         b.tryStart();
         loop.command().execute(engine, new StubContext(s, "stop-all"), InputOrigin.NONE);
-        assertEquals(1, probe.count.get());
+        assertTrue(loop.list("s1").isEmpty());
+        assertEquals(0, probe.count.get(), "stop-all 不得触发用户级中断（会清空用户排队）");
     }
 
     @Test
@@ -443,6 +447,39 @@ class LoopExtensionTest {
 
         assertEquals(Integer.valueOf(1), LoopCommand.parseInterval("30s"));
         assertNull(LoopCommand.parseInterval("abc"));
+    }
+
+    @Test
+    void unifiedSyntaxWithFlagsVerbsAndEscape() throws Exception {
+        LoopExtension loop = builder(null).build();
+        HarnessEngine engine = engine(loop);
+        AgentSession s = engine.getSession("s1");
+
+        loop.command().execute(engine, new StubContext(s, "--every", "30m", "--now", "check", "ci"), InputOrigin.NONE);
+        LoopTask t = loop.list("s1").get(0);
+        assertEquals(30, t.getIntervalMinutes());
+        assertTrue(t.isRunNow());
+        assertEquals("check ci", t.getPrompt());
+
+        loop.command().execute(engine, new StubContext(s, "--cron", "0 */5 * * * ? *", "check"), InputOrigin.NONE);
+        assertTrue(loop.list("s1").get(1).isCronMode());
+
+        // 自然语言不被误认成子命令；「--」之后一律是提示词
+        loop.command().execute(engine, new StubContext(s, "list", "the", "files"), InputOrigin.NONE);
+        loop.command().execute(engine, new StubContext(s, "--", "clear"), InputOrigin.NONE);
+        assertEquals(4, loop.list("s1").size());
+        assertEquals("list the files", loop.list("s1").get(2).getPrompt());
+        assertEquals("clear", loop.list("s1").get(3).getPrompt());
+
+        StubContext list = new StubContext(s, "list");
+        loop.command().execute(engine, list, InputOrigin.NONE);
+        assertTrue(list.output().contains(t.getId()), list.output());
+
+        loop.command().execute(engine, new StubContext(s, "remove", t.getId()), InputOrigin.NONE);
+        assertNull(loop.get("s1", t.getId()));
+
+        loop.command().execute(engine, new StubContext(s, "clear"), InputOrigin.NONE);
+        assertTrue(loop.list("s1").isEmpty());
     }
 
     // ==================== 命令上下文桩 ====================

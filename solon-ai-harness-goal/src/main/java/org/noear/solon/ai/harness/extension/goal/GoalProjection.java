@@ -55,7 +55,7 @@ public final class GoalProjection {
 
     private final String goalId;
     private final String objective;
-    private final GoalTask.Status status;
+    private final GoalSnapshot.Status status;
     private final long consumedTokens;
     private final long maxTokens;
     private final int maxIterations;
@@ -91,7 +91,7 @@ public final class GoalProjection {
     public String getObjective() { return objective; }
 
     /** 投影状态枚举（而非状态名字符串）。 */
-    public GoalTask.Status getStatus() { return status; }
+    public GoalSnapshot.Status getStatus() { return status; }
 
     /** 是否活跃（PURSUING）。 */
     public boolean isActive() { return status != null && status.isActive(); }
@@ -135,9 +135,9 @@ public final class GoalProjection {
         if (statusValue == null) {
             return null;
         }
-        GoalTask.Status status;
+        GoalSnapshot.Status status;
         try {
-            status = GoalTask.Status.valueOf(String.valueOf(statusValue));
+            status = GoalSnapshot.Status.valueOf(String.valueOf(statusValue));
         } catch (Throwable e) {
             // 未知状态名：按「无有效投影」处理，避免宿主拿到半残对象
             return null;
@@ -160,7 +160,7 @@ public final class GoalProjection {
     }
 
     /** 轻读投影状态（宿主做启动恢复判定时的最常用操作）。 */
-    public static GoalTask.Status statusOf(FlowContext context) {
+    public static GoalSnapshot.Status statusOf(FlowContext context) {
         GoalProjection projection = from(context);
         return projection == null ? null : projection.getStatus();
     }
@@ -237,7 +237,7 @@ public final class GoalProjection {
     public static final class Builder {
         private String goalId;
         private String objective;
-        private GoalTask.Status status;
+        private GoalSnapshot.Status status;
         private long consumedTokens;
         private long maxTokens;
         private int maxIterations;
@@ -251,12 +251,12 @@ public final class GoalProjection {
 
         public Builder goalId(String goalId) { this.goalId = goalId; return this; }
         public Builder objective(String objective) { this.objective = objective; return this; }
-        public Builder status(GoalTask.Status status) { this.status = status; return this; }
+        public Builder status(GoalSnapshot.Status status) { this.status = status; return this; }
         /** 按状态名设置；非法名返回 null（调用方据此判定迁移数据不可用）。 */
         public Builder statusName(String statusName) {
             if (statusName == null) return this;
             try {
-                this.status = GoalTask.Status.valueOf(statusName);
+                this.status = GoalSnapshot.Status.valueOf(statusName);
             } catch (Throwable e) {
                 this.status = null;
             }

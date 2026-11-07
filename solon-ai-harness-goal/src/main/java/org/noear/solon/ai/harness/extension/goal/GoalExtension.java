@@ -20,7 +20,8 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.spi.NotOwnerException;
+import org.noear.solon.ai.harness.HarnessResult;
+import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.HarnessProfile;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
@@ -52,15 +53,15 @@ import java.util.function.Predicate;
  * GoalExtension goal = GoalExtension.builder().build();
  * HarnessEngine engine = HarnessEngine.of(ws, ".solon/").profile(HarnessProfile.SERVER) ... .extensionAdd(goal).build();
  *
- * // 宿主的增删改查（一律按 sessionId 定位；taskId 可空 = 本会话当前 goal，非空时不匹配即视为不存在）：
- * GoalTask t = goal.create(sid, GoalSpec.of(prompt).maxTokens(2000));
- * goal.update(sid, t.getId(), GoalPatch.create().objective(newPrompt), stopper);
- * goal.pause(sid, t.getId()); goal.resume(sid, t.getId()); goal.trigger(sid, t.getId()); goal.remove(sid, t.getId());
+ * // 宿主的增删改查（每个会话只有一个 goal，一律按 sessionId 定位；写操作返回 HarnessResult）：
+ * HarnessResult<GoalSnapshot> r = goal.create(sid, GoalSpec.of(prompt).maxTokens(2000));
+ * goal.update(sid, GoalPatch.create().objective(newPrompt), stopper);
+ * goal.pause(sid); goal.resume(sid); goal.trigger(sid); goal.remove(sid);
  * Map<String, Object> view = goal.get(sid).toMap();
  * }</pre>
  *
- * <p><b>单槽</b>：每个会话最多一个 goal；已有非终态 goal 时 {@code create} 抛 {@link IllegalStateException}。
- * 状态以投影存放于会话快照，随对话持久化；对外只交只读快照 {@link GoalTask}。</p>
+ * <p><b>单槽</b>：每个会话永远只有一个 goal；已有非终态 goal 时 {@code create} 返回 INVALID。
+ * 状态以投影存放于会话快照，随对话持久化；对外只交只读快照 {@link GoalSnapshot}。</p>
  *
  * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器
  * （{@code engine.handle(HarnessInput.ofProgram(..., "goal")).call()}）。结论语义见 {@link GoalOutcome}。
@@ -86,7 +87,7 @@ public class GoalExtension extends AbsHarnessExtension {
      *
      * <p>经 {@code engine.status(session).get(GoalExtension.STATUS_GOAL)} 读取。</p>
      */
-    public static final SessionStatus.Key<GoalTask.Status> STATUS_GOAL = SessionStatus.Key.of("goal.status", null);
+    public static final SessionStatus.Key<GoalSnapshot.Status> STATUS_GOAL = SessionStatus.Key.of("goal.status", null);
 
     private static final Logger LOG = LoggerFactory.getLogger(GoalExtension.class);
 
@@ -307,31 +308,36 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     // ==================== 运行期门面 ====================
+    //
+    // 每个会话永远只有一个 goal：一律按 sessionId 定位，不需要任务 id。
+    // 写操作统一返回 HarnessResult（NOT_OWNER / NOT_FOUND / INVALID / DISABLED），不抛业务异常。
 
     /**
      * 创建本会话的 goal 并挂上调度（{@link GoalSpec#runNow} 决定是否立即跑首轮）。
      *
-     * @return 新 goal 的快照（{@code getId()} 即 taskId）
-     * @throws IllegalArgumentException 会话不存在（门面不新建会话）
-     * @throws IllegalStateException    本会话已有非终态 goal（单槽）
-     * @throws NotOwnerException        多节点部署时本节点不持有该会话
+     * @return OK 时值为新 goal 的快照；NOT_FOUND（会话不存在，门面不新建会话）/
+     *         INVALID（本会话已有非终态 goal，或规格不合法）/ NOT_OWNER（多节点部署时本节点不持有该会话）
      */
-    public GoalTask create(String sessionId, GoalSpec spec) {
-        requireOwner(sessionId);
-        return create(requireSession(sessionId), spec);
+    public HarnessResult<GoalSnapshot> create(String sessionId, GoalSpec spec) {
+        HarnessResult<GoalSnapshot> denied = checkWritable(sessionId);
+        if (denied != null) {
+            return denied;
+        }
+        AgentSession session = sessionOf(sessionId);
+        if (session == null) {
+            return HarnessResult.notFound("session not found: " + sessionId);
+        }
+        try {
+            return HarnessResult.ok(create(session, spec));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return HarnessResult.invalid(e.getMessage());
+        }
     }
 
     /** 本会话当前 goal（无则 null）。 */
-    public GoalTask get(String sessionId) {
+    public GoalSnapshot get(String sessionId) {
         AgentSession session = sessionOf(sessionId);
         return session == null ? null : goalRuntime.snapshot(session);
-    }
-
-    /** 按 taskId 定位（taskId 为空 = 当前 goal；不匹配返回 null，供与 loop 任务混排的列表分流）。 */
-    public GoalTask get(String sessionId, String taskId) {
-        AgentSession session = sessionOf(sessionId);
-        GoalState gs = locate(session, taskId);
-        return gs == null ? null : GoalTask.of(gs, goalRuntime.isRunning(session));
     }
 
     /**
@@ -340,22 +346,25 @@ public class GoalExtension extends AbsHarnessExtension {
      * <p>goal 活跃时按固定时序完成：暂停并摘调度 → 停流 → 等旧轮次停稳 → 改写 → 恢复并立即跑一轮；
      * 非活跃（PAUSED/BLOCKED）时只改写、不改状态。</p>
      *
-     * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧、清积压）；null = {@code engine.cancelStream}
-     * @return 修改后的快照；null 表示不存在
-     * @throws IllegalStateException goal 已是终态，或旧轮次未能及时停稳（此时 goal 保持暂停，可重试）
+     * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧）；null = {@code engine.cancelStream}。
+     *                不要传 {@code engine.interrupt}：那会清空用户的排队
+     * @return OK 时值为修改后的快照；NOT_FOUND（无 goal）/ INVALID（已是终态，或旧轮次未能及时停稳——此时 goal 保持暂停，可重试）
      */
-    public GoalTask update(String sessionId, String taskId, GoalPatch patch, Runnable stopper) {
-        requireOwner(sessionId);
+    public HarnessResult<GoalSnapshot> update(String sessionId, GoalPatch patch, Runnable stopper) {
+        HarnessResult<GoalSnapshot> denied = checkWritable(sessionId);
+        if (denied != null) {
+            return denied;
+        }
         AgentSession session = sessionOf(sessionId);
-        GoalState gs = locate(session, taskId);
+        GoalState gs = session == null ? null : goalRuntime.state(session);
         if (gs == null) {
-            return null;
+            return HarnessResult.notFound("goal not found");
         }
         if (gs.getStatus().isTerminal()) {
-            throw new IllegalStateException("已完成的 Goal 不能编辑，请先清除");
+            return HarnessResult.invalid("已完成的 Goal 不能编辑，请先清除");
         }
         if (patch == null || patch.isEmpty()) {
-            return goalRuntime.snapshot(session);
+            return HarnessResult.ok(goalRuntime.snapshot(session));
         }
 
         boolean wasActive = gs.getStatus().isActive();
@@ -373,57 +382,77 @@ public class GoalExtension extends AbsHarnessExtension {
                 LOG.debug("Goal stopper failed for session '{}': {}", sessionId, e.getMessage());
             }
             if (goalRuntime.awaitRoundStopped(session, UPDATE_STOP_TIMEOUT_MS) == false) {
-                throw new IllegalStateException("Goal is still stopping; please retry");
+                return HarnessResult.invalid("Goal is still stopping; please retry");
             }
-            if (gs.getStatus() != GoalTask.Status.PAUSED) {
-                throw new IllegalStateException("Goal state changed before settings could be applied");
+            if (gs.getStatus() != GoalSnapshot.Status.PAUSED) {
+                return HarnessResult.invalid("Goal state changed before settings could be applied");
             }
         }
 
-        goalRuntime.apply(session, gs, patch);
+        try {
+            goalRuntime.apply(session, gs, patch);
+        } catch (IllegalArgumentException e) {
+            return HarnessResult.invalid(e.getMessage());
+        }
 
         if (wasActive) {
             resume(session);
         }
-        return goalRuntime.snapshot(session);
+        return HarnessResult.ok(goalRuntime.snapshot(session));
     }
 
-    /** 暂停（PURSUING → PAUSED）并摘调度。@return false 表示不存在或当前状态不可暂停 */
-    public boolean pause(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        AgentSession session = sessionOf(sessionId);
-        return locate(session, taskId) != null && pause(session);
+    /** 暂停（PURSUING → PAUSED）并摘调度。NOT_FOUND = 无 goal；INVALID = 当前状态不可暂停 */
+    public HarnessResult<Void> pause(String sessionId) {
+        return transition(sessionId, "goal is not pursuing", this::pause);
     }
 
-    /** 恢复（PAUSED/BLOCKED → PURSUING）并挂调度、立即跑一轮。@return false 表示不存在或当前状态不可恢复 */
-    public boolean resume(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        AgentSession session = sessionOf(sessionId);
-        return locate(session, taskId) != null && resume(session);
+    /** 恢复（PAUSED/BLOCKED → PURSUING）并挂调度、立即跑一轮。NOT_FOUND = 无 goal；INVALID = 当前状态不可恢复 */
+    public HarnessResult<Void> resume(String sessionId) {
+        return transition(sessionId, "goal is not paused or blocked", this::resume);
     }
 
     /**
      * 立即异步跑一轮（只对活跃 goal；同一会话的轮次不会并发）。
      *
-     * @return false 表示不存在或不处于活跃态
+     * @return NOT_FOUND = 无 goal；INVALID = 不处于活跃态；DISABLED = 扩展已停用
      */
-    public boolean trigger(String sessionId, String taskId) {
-        requireOwner(sessionId);
+    public HarnessResult<Void> trigger(String sessionId) {
+        HarnessResult<Void> denied = checkWritable(sessionId);
+        if (denied != null) {
+            return denied;
+        }
+        if (isEnabled() == false) {
+            return HarnessResult.disabled("goal is disabled");
+        }
         AgentSession session = sessionOf(sessionId);
-        GoalState gs = locate(session, taskId);
-        if (gs == null || gs.getStatus().isActive() == false || isEnabled() == false) {
-            return false;
+        GoalState gs = session == null ? null : goalRuntime.state(session);
+        if (gs == null) {
+            return HarnessResult.notFound("goal not found");
+        }
+        if (gs.getStatus().isActive() == false) {
+            return HarnessResult.invalid("goal is not pursuing");
         }
         schedule(sessionId, false);
         RunUtil.async(() -> goalRuntime.runRound(session));
-        return true;
+        return HarnessResult.ok();
     }
 
-    /** 清除 goal（先摘调度再清状态，避免清除瞬间被 job 捞起）。@return false 表示不存在 */
-    public boolean remove(String sessionId, String taskId) {
-        requireOwner(sessionId);
+    /** 清除 goal（先摘调度再清状态，避免清除瞬间被 job 捞起）。NOT_FOUND = 无 goal */
+    public HarnessResult<Void> remove(String sessionId) {
+        return transition(sessionId, "goal not found", this::remove);
+    }
+
+    /** 状态迁移类写操作的共同骨架：归属 → 会话与 goal 存在 → 执行（false 时给出 INVALID） */
+    private HarnessResult<Void> transition(String sessionId, String invalidDetail, Predicate<AgentSession> action) {
+        HarnessResult<Void> denied = checkWritable(sessionId);
+        if (denied != null) {
+            return denied;
+        }
         AgentSession session = sessionOf(sessionId);
-        return locate(session, taskId) != null && remove(session);
+        if (session == null || goalRuntime.state(session) == null) {
+            return HarnessResult.notFound("goal not found");
+        }
+        return action.test(session) ? HarnessResult.<Void>ok() : HarnessResult.<Void>invalid(invalidDetail);
     }
 
     /**
@@ -435,7 +464,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * @param statusReader sessionId → 状态（无 goal 返回 null；抛异常按无 goal 处理）
      * @return 实际挂上调度的会话数
      */
-    public int recover(Iterable<String> sessionIds, Function<String, GoalTask.Status> statusReader) {
+    public int recover(Iterable<String> sessionIds, Function<String, GoalSnapshot.Status> statusReader) {
         if (sessionIds == null || statusReader == null || goalScheduler == null || isEnabled() == false) {
             return 0;
         }
@@ -444,7 +473,7 @@ public class GoalExtension extends AbsHarnessExtension {
             if (sessionId == null || sessionId.isEmpty()) {
                 continue;
             }
-            GoalTask.Status status;
+            GoalSnapshot.Status status;
             try {
                 status = statusReader.apply(sessionId);
             } catch (Throwable e) {
@@ -493,13 +522,13 @@ public class GoalExtension extends AbsHarnessExtension {
 
     // ==================== 包内（命令与测试共用的会话级实现） ====================
 
-    GoalTask create(AgentSession session, GoalSpec spec) {
+    GoalSnapshot create(AgentSession session, GoalSpec spec) {
         GoalState gs = requireAttached().attach(session, spec);
         schedule(session.getSessionId(), spec.isRunNow());
-        return GoalTask.of(gs, goalRuntime.isRunning(session));
+        return GoalSnapshot.of(gs, goalRuntime.isRunning(session));
     }
 
-    GoalTask snapshot(AgentSession session) {
+    GoalSnapshot snapshot(AgentSession session) {
         return requireAttached().snapshot(session);
     }
 
@@ -565,35 +594,13 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     /**
-     * 写门面的归属检查：多节点部署时非持有节点抛 {@link NotOwnerException}（宿主按持有者转发），
-     * 不在本地内存里改 goal 状态、写快照（否则两个节点同时写一个会话）。
+     * 写门面的归属检查：多节点部署时非持有节点返回 NOT_OWNER（宿主按持有者转发），
+     * 不在本地内存里改 goal 状态、写快照（否则两个节点同时写一个会话）。本节点持有时返回 null。
      */
-    private void requireOwner(String sessionId) {
+    private <T> HarnessResult<T> checkWritable(String sessionId) {
         requireAttached();
-        engine.requireOwner(sessionId);
-    }
-
-    private AgentSession requireSession(String sessionId) {
-        AgentSession session = sessionOf(sessionId);
-        if (session == null) {
-            throw new IllegalArgumentException("Session not found: " + sessionId);
-        }
-        return session;
-    }
-
-    /** 定位运行态：taskId 为空 = 当前 goal；不匹配返回 null。 */
-    private GoalState locate(AgentSession session, String taskId) {
-        if (session == null) {
-            return null;
-        }
-        GoalState gs = goalRuntime.state(session);
-        if (gs == null) {
-            return null;
-        }
-        if (taskId != null && taskId.isEmpty() == false && taskId.equals(gs.getId()) == false) {
-            return null;
-        }
-        return gs;
+        OwnerCheck check = engine.checkOwner(sessionId);
+        return check.isOwned() ? null : HarnessResult.<T>notOwner(check.getOwner());
     }
 
     // ==================== Builder ====================

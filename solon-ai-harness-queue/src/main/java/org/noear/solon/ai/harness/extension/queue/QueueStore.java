@@ -84,9 +84,9 @@ final class QueueStore {
         for (Object row : (List<?>) projection) {
             QueueItem item = row instanceof Map ? QueueItem.fromMap((Map<String, Object>) row) : null;
             if (item == null) continue;
-            if ("RUNNING".equals(item.getStatus())) {
+            if (item.getStatus() == QueueItem.Status.RUNNING) {
                 // RUNNING 只代表上一次进程曾领取过；新进程没有内存中的 in-flight 时必须恢复到队首。
-                item.setStatus("PENDING");
+                item.setStatus(QueueItem.Status.PENDING);
                 item.setClaimedAt(null);
                 runnings.add(item);
             } else {
@@ -110,59 +110,43 @@ final class QueueStore {
         session.updateSnapshot();
     }
 
+    /** 入队失败：参数空 / 文本为空或超长 */
+    static final int ENQUEUE_INVALID = -1;
+    /** 入队失败：队列已满 */
+    static final int ENQUEUE_FULL = -3;
+    /** 入队失败：id 重复（幂等重试） */
+    static final int ENQUEUE_DUPLICATE = -4;
+
     /**
-     * 入队（携带来源身份）
+     * 入队（携带来源身份；测试与简单场景用，缺省上限）
      *
-     * <p>不提供 {@code (String source)} 三参重载：它与本方法在传 null 时无法区分。
-     * 三参调用统一走本方法（null 即 {@link InputOrigin#NONE}）。</p>
+     * @return 位置（从 1 计）；失败为 {@code ENQUEUE_*}
      */
-    public static int enqueue(AgentSession session, String text, InputOrigin origin) {
-        return enqueue(session, text, origin, null, null, null, null, null, false);
+    static int enqueue(AgentSession session, String text, InputOrigin origin) {
+        return enqueue(session, text, origin, null, null, null, null, null, MAX_QUEUE_SIZE, MAX_TEXT_LENGTH);
     }
 
-    public static int enqueue(AgentSession session, String text, InputOrigin origin,
-                              String id, String model, String reasoningEffort,
-                              String thinkingMode, String selectedAgent, boolean hasFiles) {
-        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles, null);
-    }
-
-    /** 完整入队（含宿主域属性；属性原样保存与落盘）。 */
-    public static int enqueue(AgentSession session, String text, InputOrigin origin,
-                              String id, String model, String reasoningEffort,
-                              String thinkingMode, String selectedAgent, boolean hasFiles,
-                              Map<String, String> attrs) {
-        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles,
-                attrs, MAX_QUEUE_SIZE, MAX_TEXT_LENGTH);
-    }
-
-    /** 完整入队（按实例上限）。 */
+    /**
+     * 完整入队（按实例上限，含宿主域属性与输入快照）。
+     *
+     * @return 位置（从 1 计）；失败为 {@link #ENQUEUE_INVALID} / {@link #ENQUEUE_FULL} / {@link #ENQUEUE_DUPLICATE}
+     */
     static int enqueue(AgentSession session, String text, InputOrigin origin,
-                       String id, String model, String reasoningEffort,
-                       String thinkingMode, String selectedAgent, boolean hasFiles,
-                       Map<String, String> attrs, int maxSize, int maxTextLength) {
-        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles,
-                attrs, null, maxSize, maxTextLength);
-    }
-
-    /** 完整入队（按实例上限，含输入快照）。 */
-    static int enqueue(AgentSession session, String text, InputOrigin origin,
-                       String id, String model, String reasoningEffort,
-                       String thinkingMode, String selectedAgent, boolean hasFiles,
+                       String id, String model, String selectedAgent,
                        Map<String, String> attrs, Map<String, Object> snapshot, int maxSize, int maxTextLength) {
-        if (session == null || text == null) return -1;
+        if (session == null || text == null) return ENQUEUE_INVALID;
         String normalized = text.trim();
-        if (normalized.isEmpty() || normalized.length() > maxTextLength) return -1;
+        if (normalized.isEmpty() || normalized.length() > maxTextLength) return ENQUEUE_INVALID;
         synchronized (session.attrs()) {
             Deque<QueueItem> q = queue(session, true);
-            if (q.size() >= maxSize) return -1;
             if (id != null) {
-                for (QueueItem existing : q) if (id.equals(existing.getId())) return -1;
+                for (QueueItem existing : q) if (id.equals(existing.getId())) return ENQUEUE_DUPLICATE;
                 Object running = session.attrs().get(ATTR_IN_FLIGHT);
-                if (running instanceof QueueItem && id.equals(((QueueItem) running).getId())) return -1;
+                if (running instanceof QueueItem && id.equals(((QueueItem) running).getId())) return ENQUEUE_DUPLICATE;
             }
+            if (q.size() >= maxSize) return ENQUEUE_FULL;
             QueueItem item = new QueueItem(id, normalized,
-                    origin, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
-                    thinkingMode, selectedAgent, hasFiles, attrs);
+                    origin, System.currentTimeMillis(), "PENDING", model, selectedAgent, attrs);
             item.setInputSnapshot(snapshot);
             q.offerLast(item);
             saveLocked(session, q);
@@ -186,7 +170,7 @@ final class QueueStore {
             if (q == null || session.attrs().get(ATTR_IN_FLIGHT) instanceof QueueItem) return null;
             QueueItem item = q.pollFirst();
             if (item == null) return null;
-            item.setStatus("RUNNING");
+            item.setStatus(QueueItem.Status.RUNNING);
             item.setClaimedAt(System.currentTimeMillis());
             session.attrs().put(ATTR_IN_FLIGHT, item);
             saveLocked(session, q);
@@ -235,7 +219,7 @@ final class QueueStore {
             Deque<QueueItem> q = queue(session, true);
             // in-flight 回收不能因 pending 已满而丢失（实例上限可能大于缺省值）：只用绝对上限防御失控。
             if (q.size() > HARD_MAX_QUEUE_SIZE) return false;
-            item.setStatus("PENDING"); item.setClaimedAt(null); q.offerFirst(item);
+            item.setStatus(QueueItem.Status.PENDING); item.setClaimedAt(null); q.offerFirst(item);
             session.attrs().remove(ATTR_IN_FLIGHT);
             saveLocked(session, q);
             return true;
@@ -267,6 +251,23 @@ final class QueueStore {
             q.offerFirst(found);
             saveLocked(session, q);
             return true;
+        }
+    }
+
+    /**
+     * 清空全部待执行（不动 in-flight、不递增代际：正在执行的那条照常收口）。
+     *
+     * @return 清掉的条数
+     */
+    static int clearPending(AgentSession session) {
+        if (session == null) return 0;
+        synchronized (session.attrs()) {
+            Deque<QueueItem> q = queue(session, false);
+            if (q == null || q.isEmpty()) return 0;
+            int n = q.size();
+            q.clear();
+            saveLocked(session, q);
+            return n;
         }
     }
 
@@ -354,7 +355,7 @@ final class QueueStore {
      *
      * @return 实际导入条数
      */
-    public static int importItems(AgentSession session, List<Map<String, Object>> rows) {
+    static int importItems(AgentSession session, List<Map<String, Object>> rows) {
         return importItems(session, rows, MAX_QUEUE_SIZE);
     }
 
@@ -375,8 +376,8 @@ final class QueueStore {
                 for (QueueItem existing : pendings) if (item.getId().equals(existing.getId())) { duplicated = true; break; }
                 if (duplicated) continue;
                 total++;
-                if ("RUNNING".equals(item.getStatus())) {
-                    item.setStatus("PENDING");
+                if (item.getStatus() == QueueItem.Status.RUNNING) {
+                    item.setStatus(QueueItem.Status.PENDING);
                     item.setClaimedAt(null);
                     runnings.add(item);
                 } else {

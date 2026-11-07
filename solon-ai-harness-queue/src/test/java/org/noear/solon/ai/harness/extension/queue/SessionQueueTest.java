@@ -104,22 +104,24 @@ class SessionQueueTest {
         List<QueueItem> view = QueueStore.view(restarted);
         assertEquals(2, view.size());
         assertEquals("running", view.get(0).getText());
-        assertEquals("PENDING", view.get(0).getStatus());
+        assertEquals(QueueItem.Status.PENDING, view.get(0).getStatus());
         assertEquals("pending", view.get(1).getText());
     }
 
     @Test
     void snapshotRoundTripPreservesExecutionOptions() {
         AgentSession session = InMemoryAgentSession.of();
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("reasoningEffort", "high");
         assertEquals(1, QueueStore.enqueue(session, "run", null,
-                "q-1", "model-a", "high", "on", "agent-a", true));
+                "q-1", "model-a", "agent-a", attrs, null, 20, 4096));
         // 手工模拟一次快照序列化/反序列化往返（FlowContext.toJson/fromJson 口径）
         AgentSession restarted = InMemoryAgentSession.of(
                 org.noear.solon.flow.FlowContext.fromJson(session.getContext().toJson()));
         assertEquals(1, QueueStore.pendingSize(restarted));
         QueueItem item = QueueStore.snapshot(restarted).get(0);
         assertEquals("model-a", item.getModel());
-        assertEquals("high", item.getReasoningEffort());
+        assertEquals("high", item.getAttrs().get("reasoningEffort"));
     }
 
     @Test
@@ -132,7 +134,7 @@ class SessionQueueTest {
             held[0] = claim;
             return false;
         }));
-        assertEquals("RUNNING", QueueStore.view(session).get(0).getStatus());
+        assertEquals(QueueItem.Status.RUNNING, QueueStore.view(session).get(0).getStatus());
         assertNull(QueueStore.poll(session));
         assertNotNull(QueueClaim.current(session), "异步任务未终态前派发事务必须仍在登记");
         assertTrue(held[0].acknowledge(), "终态确认应成功");
@@ -156,9 +158,9 @@ class SessionQueueTest {
     void duplicateIdIsRejected() {
         AgentSession session = InMemoryAgentSession.of();
         assertEquals(1, QueueStore.enqueue(session, "first", null,
-                "same", null, null, null, null, false));
-        assertEquals(-1, QueueStore.enqueue(session, "second", null,
-                "same", null, null, null, null, false));
+                "same", null, null, null, null, 20, 4096));
+        assertEquals(QueueStore.ENQUEUE_DUPLICATE, QueueStore.enqueue(session, "second", null,
+                "same", null, null, null, null, 20, 4096));
     }
 
     @Test
@@ -170,7 +172,7 @@ class SessionQueueTest {
         assertTrue(QueueStore.cancelPending(session));
 
         assertFalse(QueueStore.requeueFront(session, running, generation));
-        assertEquals("RUNNING", running.getStatus());
+        assertEquals(QueueItem.Status.RUNNING, running.getStatus());
         assertEquals(0, QueueStore.size(session));
         assertFalse(session.getContext().data().containsKey("session.queue.items"));
     }

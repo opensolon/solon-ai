@@ -20,12 +20,14 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.spi.NotOwnerException;
+import org.noear.solon.ai.harness.HarnessResult;
+import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.List;
@@ -55,8 +57,8 @@ import java.util.function.UnaryOperator;
  * loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> LoopOutcome.done(runRound(sid, prompt)));
  *
  * // 宿主的增删改查（请求参数原样传入，null = 未设置/保持）：
- * LoopTask t = loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(interval).cron(cron).runNow(runNow));
- * loop.update(sid, t.getId(), LoopPatch.create().prompt(newPrompt).cron(newCron));
+ * LoopTask t = loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(interval).cron(cron).runNow(runNow)).getValue();
+ * loop.update(sid, t.getId(), LoopPatch.create().prompt(newPrompt).cron(newCron));   // 写操作都返回 HarnessResult
  * loop.pause(sid, t.getId()); loop.resume(sid, t.getId()); loop.remove(sid, t.getId());
  * Map<String, Object> view = t.toMap();
  * }</pre>
@@ -104,7 +106,7 @@ public class LoopExtension extends AbsHarnessExtension {
         IJobManager jm = b.jobManagerSet ? b.jobManager : resolveJobManager();
         if (jm == null && !b.jobManagerSet) {
             // 未显式关闭调度却取不到 JobManager：任务「看起来在、实际不跑」，必须让宿主看见
-            org.slf4j.LoggerFactory.getLogger(LoopExtension.class).warn(
+            LoggerFactory.getLogger(LoopExtension.class).warn(
                     "[Loop] No JobManager available (is solon-scheduling-simple started?); "
                             + "loop tasks will be stored but never fire. "
                             + "Use builder.jobManager(null) to disable scheduling explicitly.");
@@ -168,22 +170,29 @@ public class LoopExtension extends AbsHarnessExtension {
         builder.put(STATUS_TASKS, scheduler.count(session.getSessionId()));
     }
 
-    /** 会话被永久删除：停止并删除该会话全部任务（清理类，不判开关；幂等）。 */
+    /** 会话被永久删除：停止并删除该会话全部任务（清理类，不判开关；幂等）。非持有节点不动别人的任务。 */
     @Override
     public void onSessionRemove(HarnessEngine engine, String sessionId) {
-        requireOwner(sessionId);
-        scheduler.removeAll(sessionId);
+        if (checkOwner(sessionId) == null) {
+            scheduler.removeAll(sessionId);
+        }
     }
 
     /**
-     * 写门面的归属检查：多节点部署时非持有节点抛 {@link NotOwnerException}（宿主按持有者转发）。
+     * 写门面的归属检查：多节点部署时非持有节点返回 NOT_OWNER（宿主按持有者转发）；本节点持有时返回 null。
      * 未挂载时（无引擎）不检查。
      */
-    private void requireOwner(String sessionId) {
+    private <T> HarnessResult<T> checkOwner(String sessionId) {
         HarnessEngine e = engine;
-        if (e != null && sessionId != null) {
-            e.requireOwner(sessionId);
+        if (e == null || sessionId == null) {
+            return null;
         }
+        OwnerCheck check = e.checkOwner(sessionId);
+        return check.isOwned() ? null : HarnessResult.<T>notOwner(check.getOwner());
+    }
+
+    private static HarnessResult<Void> found(boolean found) {
+        return found ? HarnessResult.<Void>ok() : HarnessResult.<Void>notFound("loop task not found");
     }
 
     /** 引擎池回收判定：存在会自动触发的任务时不静默（只剩暂停任务时可以回收）。 */
@@ -224,59 +233,70 @@ public class LoopExtension extends AbsHarnessExtension {
     }
 
     // ==================== 运行期门面 ====================
+    //
+    // 写操作统一返回 HarnessResult（NOT_OWNER / NOT_FOUND / INVALID / FULL），不抛业务异常。
 
     /**
      * 新建任务并开始调度。
      *
-     * @return 新任务（{@code getId()} 即 taskId）
-     * @throws IllegalArgumentException 规格不合法（见 {@link LoopSpec}；含 cron 无法解析或已无未来触发时刻）
-     * @throws IllegalStateException    任务总数已达上限（{@link Builder#maxTasks}）
+     * @return OK 时值为新任务（{@code getId()} 即 taskId）；INVALID（规格不合法，含 cron 无法解析或已无未来触发时刻）/
+     *         FULL（任务总数或本会话配额已达上限）/ NOT_OWNER
      */
-    public LoopTask schedule(String sessionId, LoopSpec spec) {
-        requireOwner(sessionId);
-        return scheduler.schedule(sessionId, spec);
+    public HarnessResult<LoopTask> schedule(String sessionId, LoopSpec spec) {
+        HarnessResult<LoopTask> denied = checkOwner(sessionId);
+        if (denied != null) {
+            return denied;
+        }
+        try {
+            return HarnessResult.ok(scheduler.schedule(sessionId, spec));
+        } catch (IllegalArgumentException e) {
+            return HarnessResult.invalid(e.getMessage());
+        } catch (IllegalStateException e) {
+            return HarnessResult.full(e.getMessage());
+        }
     }
 
-    /** 删除任务。@return false 表示不存在 */
-    public boolean remove(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        return scheduler.remove(sessionId, taskId);
+    /** 删除任务。NOT_FOUND = 不存在 */
+    public HarnessResult<Void> remove(String sessionId, String taskId) {
+        HarnessResult<Void> denied = checkOwner(sessionId);
+        return denied != null ? denied : found(scheduler.remove(sessionId, taskId));
     }
 
-    /** 启用/停用切换。@return false 表示不存在 */
-    public boolean toggle(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        return scheduler.toggle(sessionId, taskId);
+    /** 暂停（保留记录、停止调度；已暂停则不动）。NOT_FOUND = 不存在 */
+    public HarnessResult<Void> pause(String sessionId, String taskId) {
+        HarnessResult<Void> denied = checkOwner(sessionId);
+        return denied != null ? denied : found(scheduler.setEnabled(sessionId, taskId, false));
     }
 
-    /** 暂停（保留记录、停止调度；已暂停则不动）。@return false 表示不存在 */
-    public boolean pause(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        return scheduler.setEnabled(sessionId, taskId, false);
-    }
-
-    /** 恢复调度（清零错误计数；已启用则不动）。@return false 表示不存在 */
-    public boolean resume(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        return scheduler.setEnabled(sessionId, taskId, true);
+    /** 恢复调度（清零错误计数；已启用则不动）。NOT_FOUND = 不存在 */
+    public HarnessResult<Void> resume(String sessionId, String taskId) {
+        HarnessResult<Void> denied = checkOwner(sessionId);
+        return denied != null ? denied : found(scheduler.setEnabled(sessionId, taskId, true));
     }
 
     /**
      * 按补丁修改（null 字段保持原值；启停、迭代、一次性属性随之保留）。
      * 任务正在执行时也可修改：新版本不会与在途那一轮并发，本轮结果记到新版本上。
      *
-     * @return 修改后的任务；null 表示不存在
-     * @throws IllegalArgumentException 补丁不合法（见 {@link LoopPatch}），此时原任务不变
+     * @return OK 时值为修改后的任务；NOT_FOUND（不存在）/ INVALID（补丁不合法，见 {@link LoopPatch}，此时原任务不变）
      */
-    public LoopTask update(String sessionId, String taskId, LoopPatch patch) {
-        requireOwner(sessionId);
-        return scheduler.update(sessionId, taskId, patch);
+    public HarnessResult<LoopTask> update(String sessionId, String taskId, LoopPatch patch) {
+        HarnessResult<LoopTask> denied = checkOwner(sessionId);
+        if (denied != null) {
+            return denied;
+        }
+        try {
+            LoopTask task = scheduler.update(sessionId, taskId, patch);
+            return task == null ? HarnessResult.<LoopTask>notFound("loop task not found") : HarnessResult.ok(task);
+        } catch (IllegalArgumentException e) {
+            return HarnessResult.invalid(e.getMessage());
+        }
     }
 
-    /** 立即异步执行一轮（不消耗 oneShot 配额）。@return false 表示不存在 */
-    public boolean trigger(String sessionId, String taskId) {
-        requireOwner(sessionId);
-        return scheduler.trigger(sessionId, taskId);
+    /** 立即异步执行一轮（不消耗 oneShot 配额）。NOT_FOUND = 不存在 */
+    public HarnessResult<Void> trigger(String sessionId, String taskId) {
+        HarnessResult<Void> denied = checkOwner(sessionId);
+        return denied != null ? denied : found(scheduler.trigger(sessionId, taskId));
     }
 
     public LoopTask get(String sessionId, String taskId) {
@@ -293,9 +313,14 @@ public class LoopExtension extends AbsHarnessExtension {
         return scheduler.listAll();
     }
 
-    /** 停止会话全部任务并删除记录（用于 /loop stop-all；删除会话走 {@code engine.removeSession} → onSessionRemove）。 */
-    public void removeAll(String sessionId) {
+    /** 停止会话全部任务并删除记录（删除会话走 {@code engine.removeSession} → onSessionRemove）。 */
+    public HarnessResult<Void> removeAll(String sessionId) {
+        HarnessResult<Void> denied = checkOwner(sessionId);
+        if (denied != null) {
+            return denied;
+        }
         scheduler.removeAll(sessionId);
+        return HarnessResult.ok();
     }
 
     /**

@@ -2,7 +2,7 @@ package org.noear.solon.ai.harness.hitl;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionDecision;
+import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.Arrays;
@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 三个内置策略的默认决策、可配置项与内置规则开关。
  *
- * <p>锁定一条安全不变量：三个策略的默认决策必须是 {@link PermissionDecision#ASK}。
+ * <p>锁定一条安全不变量：三个策略的默认决策必须是 {@link PermissionBehavior#ASK}。
  * 内置规则只是白/黑名单，未命中者恰是未知操作，默认放行等于绕过人工确认。</p>
  */
 class ToolStrategyDefaultsTest {
@@ -55,14 +55,14 @@ class ToolStrategyDefaultsTest {
     @Test
     void defaultDecisionAllowsWhenConfigured() {
         // 宿主可显式放宽（YOLO 模式）；null 表示不改动当前值
-        BashToolStrategy s = new BashToolStrategy().defaultDecision(PermissionDecision.ALLOW);
+        BashToolStrategy s = new BashToolStrategy().defaultDecision(PermissionBehavior.ALLOW);
         assertNull(s.evaluate(null, args("command", "rm -rf /tmp/x")));
 
         // null 表示不改动：仍保持 ALLOW
         s.defaultDecision(null);
         assertNull(s.evaluate(null, args("command", "rm -rf /tmp/x")));
         // 显式改回 ASK 才恢复拦截
-        s.defaultDecision(PermissionDecision.ASK);
+        s.defaultDecision(PermissionBehavior.ASK);
         assertNotNull(s.evaluate(null, args("command", "rm -rf /tmp/x")));
     }
 
@@ -72,7 +72,7 @@ class ToolStrategyDefaultsTest {
     void bashDisablingInternalRulesLetsBlacklistThrough() {
         BashToolStrategy s = new BashToolStrategy()
                 .internalRulesEnabled(false)
-                .defaultDecision(PermissionDecision.ALLOW);
+                .defaultDecision(PermissionBehavior.ALLOW);
         // 内置规则关闭后，注入类命令不再被 DENY，落到默认决策 ALLOW
         // 注意：不能用 echo 系命令验证，它在只读白名单里，本就放行；
         // 这里用 curl（既非只读白名单也非黑名单）
@@ -83,7 +83,7 @@ class ToolStrategyDefaultsTest {
     void writeDisablingInternalRulesLetsTraversalThrough() {
         WriteToolStrategy s = new WriteToolStrategy("write")
                 .internalRulesEnabled(false)
-                .defaultDecision(PermissionDecision.ALLOW);
+                .defaultDecision(PermissionBehavior.ALLOW);
         assertNull(s.evaluate(null, args("file_path", "../../etc/passwd")));
     }
 
@@ -91,7 +91,7 @@ class ToolStrategyDefaultsTest {
     void webDisablingInternalRulesLetsRiskyHostThrough() {
         WebToolStrategy s = new WebToolStrategy("webfetch")
                 .internalRulesEnabled(false)
-                .defaultDecision(PermissionDecision.ALLOW);
+                .defaultDecision(PermissionBehavior.ALLOW);
         assertNull(s.evaluate(null, args("url", "https://facebook.com/x")));
     }
 

@@ -224,7 +224,7 @@ class QueueClaimTest {
 
         assertEquals(QueueClaimStatus.START_FAILED, status);
         assertEquals("task", QueueStore.snapshot(session).get(0).getText(), "启动失败的任务回到队首");
-        assertEquals("PENDING", QueueStore.snapshot(session).get(0).getStatus());
+        assertEquals(QueueItem.Status.PENDING, QueueStore.snapshot(session).get(0).getStatus());
     }
 
     @Test

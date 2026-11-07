@@ -21,7 +21,6 @@ import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
-import org.noear.solon.ai.harness.permission.PermissionDecision;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
@@ -58,7 +57,7 @@ public class BashToolStrategy implements HITLStrategy {
     private final List<PermissionRule> internalRules = new ArrayList<>();
     private boolean internalRulesEnabled = true;
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
-    private PermissionDecision defaultDecision = PermissionDecision.ALLOW;
+    private PermissionBehavior defaultDecision = PermissionBehavior.ALLOW;
 
     public BashToolStrategy() {
         // 规则1：空命令放行
@@ -138,7 +137,7 @@ public class BashToolStrategy implements HITLStrategy {
     /**
      * 设置无规则匹配时的默认决策
      */
-    public BashToolStrategy defaultDecision(PermissionDecision decision) {
+    public BashToolStrategy defaultDecision(PermissionBehavior decision) {
         if (decision != null) {
             this.defaultDecision = decision;
         }
@@ -177,7 +176,7 @@ public class BashToolStrategy implements HITLStrategy {
 
         // 阶段2：用户配置规则 + 内置规则合并，委托引擎评估
         PermissionContext merged = ctx.addRules(internalRules);
-        PermissionDecision decision = permissionEngine.evaluate("bash", args, merged, this.defaultDecision);
+        PermissionBehavior decision = permissionEngine.evaluate("bash", args, merged, this.defaultDecision);
 
         return toDefaultResult(decision);
     }
@@ -206,7 +205,7 @@ public class BashToolStrategy implements HITLStrategy {
     /**
      * 将引擎决策结果转换为策略返回值（使用通用提示）
      */
-    private String toDefaultResult(PermissionDecision decision) {
+    private String toDefaultResult(PermissionBehavior decision) {
         switch (decision) {
             case ALLOW:
                 return null;

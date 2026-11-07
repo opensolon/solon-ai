@@ -17,10 +17,18 @@
     <description>solon-ai-harness 插件：会话级排队队列（/queue；实现核心 InputBacklog 能力与 onInterrupt 清队列）</description>
 
     <dependencies>
-        <!-- 只依赖核心契约（HarnessExtension / InputBacklog / TurnDispatch），不依赖其它插件 -->
+        <!-- 只依赖核心契约（HarnessExtension / InputBacklog / RunDispatch），不依赖其它插件 -->
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-harness-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-harness-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
         </dependency>
 
         <dependency>

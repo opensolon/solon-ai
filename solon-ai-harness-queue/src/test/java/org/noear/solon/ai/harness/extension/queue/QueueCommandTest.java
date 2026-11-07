@@ -3,6 +3,9 @@ package org.noear.solon.ai.harness.extension.queue;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.builtin.Fakes;
+import org.noear.solon.ai.harness.input.InputOrigin;
+
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -69,5 +72,54 @@ class QueueCommandTest {
         assertEquals(0, ctx.tasks.size());
         assertEquals(QueueStore.MAX_QUEUE_SIZE, QueueStore.pendingSize(session));
         assertTrue(ctx.output().contains("排队失败（队列已满，上限 20 条）"));
+    }
+
+    private static Fakes.StubContext args(AgentSession session, String... args) {
+        return new Fakes.StubContext(session, Arrays.asList(args));
+    }
+
+    @Test
+    void listCancelAndClearSubcommands() {
+        AgentSession session = Fakes.StubContext.local("x").getSession();
+        QueueStore.enqueue(session, "a", null);
+        QueueStore.enqueue(session, "b", null);
+        QueueStore.enqueue(session, "c", null);
+
+        Fakes.StubContext list = args(session, "list");
+        command.execute(null, list, InputOrigin.NONE);
+        assertTrue(list.output().contains("队列（共 3 条）"), list.output());
+
+        command.execute(null, args(session, "cancel", "1"), InputOrigin.NONE);
+        assertEquals(2, QueueStore.pendingSize(session), "按序号取消");
+        String idOfC = QueueStore.view(session).get(1).getId();
+        command.execute(null, args(session, "cancel", idOfC), InputOrigin.NONE);
+        assertEquals(1, QueueStore.pendingSize(session), "按 id 取消");
+
+        Fakes.StubContext clear = args(session, "clear");
+        command.execute(null, clear, InputOrigin.NONE);
+        assertEquals(0, QueueStore.pendingSize(session));
+        assertTrue(clear.output().contains("已清空 1 条"), clear.output());
+    }
+
+    @Test
+    void clearKeepsInFlightItem() {
+        AgentSession session = Fakes.StubContext.local("x").getSession();
+        QueueStore.enqueue(session, "running", null);
+        QueueStore.enqueue(session, "pending", null);
+        QueueStore.poll(session);
+
+        command.execute(null, args(session, "clear"), InputOrigin.NONE);
+        assertEquals(0, QueueStore.pendingSize(session));
+        assertTrue(QueueStore.hasItems(session), "正在执行的那条不受 clear 影响");
+    }
+
+    @Test
+    void naturalLanguageAndEscapedWordsAreEnqueued() {
+        AgentSession session = Fakes.StubContext.local("x").getSession();
+        command.execute(null, args(session, "list", "all", "files"), InputOrigin.NONE);
+        command.execute(null, args(session, "--", "clear"), InputOrigin.NONE);
+        assertEquals(2, QueueStore.pendingSize(session));
+        assertEquals("list all files", QueueStore.snapshot(session).get(0).getText());
+        assertEquals("clear", QueueStore.snapshot(session).get(1).getText());
     }
 }

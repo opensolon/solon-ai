@@ -17,10 +17,18 @@
     <description>solon-ai-harness 插件：运行中插话（/steer；残留插话经核心 InputBacklog 转排队，不依赖 queue 插件）</description>
 
     <dependencies>
-        <!-- 只依赖核心契约（HarnessExtension / InputBacklog / TurnDispatch），不依赖其它插件 -->
+        <!-- 只依赖核心契约（HarnessExtension / InputBacklog / RunDispatch），不依赖其它插件 -->
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-harness-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-harness-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
         </dependency>
 
         <dependency>

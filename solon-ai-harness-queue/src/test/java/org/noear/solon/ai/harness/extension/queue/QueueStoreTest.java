@@ -141,7 +141,7 @@ class QueueStoreTest {
 
         QueueItem first = QueueStore.poll(s);
         assertEquals("a", first.getText());
-        assertEquals("RUNNING", first.getStatus());
+        assertEquals(QueueItem.Status.RUNNING, first.getStatus());
 
         QueueStore.acknowledge(s, first.getId());
         // 确认后队列仍有剩余项
@@ -182,7 +182,7 @@ class QueueStoreTest {
     @Test
     void enqueueRejectsDuplicateId() {
         AgentSession s = session();
-        assertEquals(1, QueueStore.enqueue(s, "a", InputOrigin.NONE, "id-1", null, null, null, null, false));
-        assertEquals(-1, QueueStore.enqueue(s, "b", InputOrigin.NONE, "id-1", null, null, null, null, false));
+        assertEquals(1, QueueStore.enqueue(s, "a", InputOrigin.NONE, "id-1", null, null, null, null, 20, 4096));
+        assertEquals(QueueStore.ENQUEUE_DUPLICATE, QueueStore.enqueue(s, "b", InputOrigin.NONE, "id-1", null, null, null, null, 20, 4096));
     }
 }

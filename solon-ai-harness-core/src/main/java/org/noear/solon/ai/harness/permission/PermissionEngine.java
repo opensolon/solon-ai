@@ -56,15 +56,15 @@ public class PermissionEngine {
      * @param defaultDecision 无规则匹配时的默认决策
      * @return 决策结果
      */
-    public PermissionDecision evaluate(String toolName, Map<String, Object> args,
+    public PermissionBehavior evaluate(String toolName, Map<String, Object> args,
                                         PermissionContext context,
-                                        PermissionDecision defaultDecision) {
+                                        PermissionBehavior defaultDecision) {
         List<PermissionRule> rules = new ArrayList<>(context.rules());
         Collections.sort(rules, RULE_COMPARATOR);
 
         for (PermissionRule rule : rules) {
             if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, toolName, args)) {
-                return toDecision(rule.behavior());
+                return rule.behavior() != null ? rule.behavior() : PermissionBehavior.ASK;
             }
         }
 
@@ -74,11 +74,11 @@ public class PermissionEngine {
     /**
      * 评估工具调用（无规则匹配时默认返回 ASK）
      *
-     * @see #evaluate(String, Map, PermissionContext, PermissionDecision)
+     * @see #evaluate(String, Map, PermissionContext, PermissionBehavior)
      */
-    public PermissionDecision evaluate(String toolName, Map<String, Object> args,
+    public PermissionBehavior evaluate(String toolName, Map<String, Object> args,
                                         PermissionContext context) {
-        return evaluate(toolName, args, context, PermissionDecision.ASK);
+        return evaluate(toolName, args, context, PermissionBehavior.ASK);
     }
 
     private static final Comparator<PermissionRule> RULE_COMPARATOR = new Comparator<PermissionRule>() {
@@ -103,12 +103,6 @@ public class PermissionEngine {
             default:
                 return 0;
         }
-    }
-
-    private PermissionDecision toDecision(PermissionBehavior behavior) {
-        return behavior == PermissionBehavior.ALLOW
-                ? PermissionDecision.ALLOW
-                : behavior == PermissionBehavior.DENY ? PermissionDecision.DENY : PermissionDecision.ASK;
     }
 
     /**

@@ -12,7 +12,7 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 
 | 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
 |---|---|---|---|
-| 使用态 | 对话框 / IM 里输入 `/loop 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/loop` 命令；模型调用 `loop_add` 等工具 |
+| 使用态 | 对话框 / IM 里输入 `/loop --every 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/loop` 命令；模型调用 `loop_add` 等工具 |
 | 管理态 | 定时任务面板里点「新建 / 编辑 / 启停 / 立即执行 / 删除」 | 宿主自己的管理接口（HTTP 等） | `LoopExtension` 门面方法 |
 
 ---
@@ -158,14 +158,14 @@ flowchart LR
 
 | 对比项 | 使用态 | 管理态 |
 |---|---|---|
-| 用户动作 | 在对话中输入 `/loop 30m 检查 CI`；或用自然语言让模型建任务 | 在任务面板里新建、编辑、启停、立即执行、删除 |
+| 用户动作 | 在对话中输入 `/loop --every 30m 检查 CI`；或用自然语言让模型建任务 | 在任务面板里新建、编辑、启停、立即执行、删除 |
 | 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)` | 宿主自己的管理接口，直接调门面 |
 | 是否经过 `handle` 受理判定 | 是：任务运行中输入的 `/loop ...` 由引擎入积压，返回 `DEFERRED`；模型工具在任务内执行 | 否：随时可调 |
-| 本插件入口 | `LoopCommand`（引擎内分派）、`LoopTalent`（`loop_add` / `loop_list` / `loop_control`） | `schedule` / `update` / `pause` / `resume` / `toggle` / `trigger` / `remove` / `list` |
-| 结果怎么返回 | 命令：回执文本 `outcome.getCommandOutput()`；工具：JSON 交给模型 | 返回值：`LoopTask` 快照 / `boolean` / 异常 |
+| 本插件入口 | `LoopCommand`（引擎内分派）、`LoopTalent`（`loop_add` / `loop_list` / `loop_control`） | `schedule` / `update` / `pause` / `resume` / `trigger` / `remove` / `removeAll` / `get` / `list` |
+| 结果怎么返回 | 命令：回执文本 `outcome.getCommandOutput()`；工具：JSON 交给模型 | 写操作返回 `HarnessResult`（按 `getCode()` 判定，不抛业务异常）；读操作返回 `LoopTask` 快照 |
 | 只有这一态能做的 | `loop_add` 可建一次性任务 | 修改任务（`update`）、宿主扩展字段（`extra`）、跨会话列表（`listAll`） |
 
-两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop ls` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（3.4），与任务是哪种时态创建的无关。
+两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop list` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（3.4），与任务是哪种时态创建的无关。
 
 ### 3.4 执行器：到点的一轮怎么跑、输出回到哪
 
@@ -192,26 +192,34 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 ### 4.1 用户能输入什么
 
 ```text
-/loop 30m 检查 CI 是否通过 --now      # 每 30 分钟，并立即跑首轮
-/loop cron:"0 0 9 * * ?" 汇总昨日告警  # 每天 9 点
-/loop 提醒我喝水                       # 首个参数不是间隔时，按缺省 5 分钟
-/loop ls                               # 列出本会话任务
+/loop --every 30m --now 检查 CI 是否通过     # 每 30 分钟，并立即跑首轮
+/loop --cron "0 0 9 * * ?" 汇总昨日告警      # 每天 9 点
+/loop 提醒我喝水                             # 不带 --every / --cron 时按缺省 5 分钟
+/loop list                                   # 列出本会话任务
 /loop pause <id>  /  /loop resume <id>
-/loop stop <id>   /  /loop stop-all
+/loop remove <id> /  /loop clear
+/loop -- list the files                      # "--" 之后一律当作提示词
 ```
 
 | 用法 | 说明 |
 |---|---|
-| `/loop` 或 `/loop ls` | 列出本会话任务（状态 paused / running / idle、调度、迭代、最近结果） |
-| `/loop <interval> <prompt>` | 固定间隔任务；interval 如 `30s`、`5m`、`2h` |
-| `/loop <prompt>` | 首个参数不是间隔时，按缺省 5 分钟 |
-| `/loop cron:"<expr>" <prompt>` | cron 任务（引号可为双引号或单引号） |
-| `--now` | 附加在参数中，创建后立即执行首轮；其它 `--xxx` 提示 Unknown flag |
-| `/loop stop <id>` | 删除任务；若该任务正在执行，同时中断会话当前一轮 |
-| `/loop stop-all` | 删除本会话全部任务；若有任务正在执行，同时中断会话 |
+| `/loop` 或 `/loop list` | 列出本会话任务（状态 paused / running / idle、调度、迭代、最近结果） |
+| `/loop --every <interval> <prompt>` | 固定间隔任务；interval 如 `30s`、`5m`、`2h` |
+| `/loop <prompt>` | 不带调度参数时按缺省 5 分钟 |
+| `/loop --cron "<expr>" <prompt>` | cron 任务（引号可为双引号或单引号） |
+| `--now` | 创建后立即执行首轮；其它 `--xxx` 提示 Unknown flag |
+| `/loop remove <id>` | 删除任务；若该任务正在执行，用程序级取消（`engine.cancelStream`）停掉这一轮 |
+| `/loop clear` | 删除本会话全部任务；若有任务正在执行，同样只停这一轮 |
 | `/loop pause <id>` / `/loop resume <id>` | 暂停 / 恢复 |
+| `/loop -- <prompt>` | 转义：提示词恰好以 `list`、`clear` 等子命令开头时使用 |
 
-间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务。`/loop ls` 与创建回执里打印完整任务 ID，`stop` / `pause` / `resume` 需要传完整 ID。
+**子命令只在参数个数完全匹配时生效**：`list`、`clear` 必须独占整行，`remove` / `pause` / `resume` 后恰好跟一个 id。所以 `/loop list the files every hour` 照常建任务，不会被当成列表命令。
+
+**旧写法继续可用**（帮助里只展示新写法）：`ls` = `list`、`stop <id>` = `remove <id>`、`stop-all` = `clear`、首参 `30m` = `--every 30m`、首参 `cron:"expr"` = `--cron "expr"`。
+
+间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务。`/loop list` 与创建回执里打印完整任务 ID，`remove` / `pause` / `resume` 需要传完整 ID。
+
+**停止为什么不用 `engine.interrupt`**：`interrupt` 是用户级中断，会清空会话的排队消息、并在历史里补写「用户已取消」。定时轮次是程序发起的，删除任务时只应停掉这一轮，所以命令用 `cancelStream`：排队消息保留，历史里也不留取消记录。
 
 用户也可以直接用自然语言，例如"明天下午 6 点提醒我提交周报"、"每 10 分钟看一下部署好了没"：模型会调用 `loop_add`（支持 `at` 一次性时刻）、`loop_list`、`loop_control`，参数规则见 6.7。工具只挂在顶层请求上，子代理委派中不可用。
 
@@ -230,7 +238,7 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 ### 4.3 命令与工具共用的流程
 
 1. 用户输入 → 宿主 `engine.handle`（第 0 步受理判定：忙时可排队输入由引擎入积压并返回 `DEFERRED`）；
-2. `/loop ...`：引擎识别命令，`LoopCommand` 调用与管理态相同的 `schedule` / `pause` / `resume` / `remove`，结局 `REPLY`；
+2. `/loop ...`：引擎识别命令，`LoopCommand` 直接操作调度器（与门面同一张任务表；会话归属已在 `handle` 受理时校验过），结局 `REPLY`；
 3. 普通消息：结局 `TASK`，模型在这一轮里调用 `loop_add` 等工具，工具同样走 `schedule` 等门面；
 4. 到点后调度器调用执行器跑一轮，执行器把输出送回渠道。
 
@@ -352,8 +360,8 @@ public class ImLoopHost {
 2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
 3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。判空闲与开轮之间仍有窗口：`ofProgram` 的程序轮次忙时返回 `REJECTED("busy")`、不进积压，执行器在非 `TASK` 时返回 `skip`（缺省执行器即如此；它用 `engine.getSessionOrNull(sessionId)` 取会话，会话不存在时也 skip）。
 4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息由 `handle` 入积压并返回 `DEFERRED`；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
-5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop stop <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务、不会中断。要立刻停掉正在跑的一轮，用宿主的停止入口 `engine.interrupt(session)`（或忙时可执行的 `/interrupt` 命令），再 `loop.remove(sid, taskId)`。所有宿主（Web、IM、命令行终端）都经 `handle` 受理，忙时输入的 `/loop stop` 一律排队；命令里"顺带中断"的分支只是防御性兜底。
-6. **中断不删任务**：`engine.interrupt` 只停当前一轮，定时任务照常保留，下次到点继续。
+5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop remove <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务。要立刻停掉正在跑的一轮，宿主先 `engine.cancelStream(session)`（程序级取消，不清排队），再 `loop.remove(sid, taskId)`；用户要连排队一起清掉时才用 `engine.interrupt` 或 `/interrupt`。命令里"正在执行就停流"的分支只是防御性兜底。
+6. **中断不删任务**：`engine.interrupt` / `cancelStream` 只停当前一轮，定时任务照常保留，下次到点继续。
 7. **删除会话要先调 `engine.removeSession`**：它回调 `onSessionRemove`，删除该会话的全部任务并注销 job；顺序颠倒时，定时任务可能在删除过程中触发并把会话重新建出来。
 8. **一次性任务不能用命令建**：`/loop` 只支持间隔与 cron；一次性提醒让模型用 `loop_add` 的 `at` 参数，或走管理态 `LoopSpec.at(...)`。
 
@@ -365,23 +373,28 @@ public class ImLoopHost {
 
 ### 5.1 界面动作与门面对照
 
-| 界面动作 | 门面调用 | 成功返回 | 失败时（建议的 HTTP 映射） |
+写操作统一返回 `org.noear.solon.ai.harness.HarnessResult<T>`：`isOk()` 时 `getValue()` 为结果，失败时按 `getCode()` 映射状态、`getDetail()` 为原因。业务失败不再抛异常，也没有 `boolean` / `null` 哨兵值。
+
+| 界面动作 | 门面调用 | 成功（OK） | 失败码（建议的 HTTP 映射） |
 |---|---|---|---|
-| 本会话任务列表 | `loop.list(sid)` | `List<LoopTask>`，用 `toMap()` 渲染 | — |
+| 本会话任务列表 | `loop.list(sid)` | `List<LoopTask>`，用 `toMap()` 渲染 | —（读操作） |
 | 全部会话任务 | `loop.listAll()` | `Map<sessionId, List<LoopTask>>` | — |
 | 查看单个（编辑回填） | `loop.get(sid, taskId)` | `LoopTask` | null → 404 |
-| 新建 | `loop.schedule(sid, LoopSpec...)` | `LoopTask`（`getId()` 即 taskId） | 参数不合法：`IllegalArgumentException` → 400；总数达上限：`IllegalStateException` → 409 |
-| 编辑 | `loop.update(sid, taskId, LoopPatch...)` | 修改后的 `LoopTask` | null → 404；补丁不合法：`IllegalArgumentException` → 400（原任务不变） |
-| 启停开关 | `loop.toggle(sid, taskId)`，或 `pause` / `resume` | `true` | `false`：不存在 → 404 |
-| 立即执行一轮 | `loop.trigger(sid, taskId)` | `true` | `false`：不存在 → 404 |
-| 删除 | `loop.remove(sid, taskId)` | `true` | `false`：不存在 → 404 |
-| 清空本会话 | `loop.removeAll(sid)` | — | — |
+| 新建 | `loop.schedule(sid, LoopSpec...)` | 值为 `LoopTask`（`getId()` 即 taskId） | `INVALID` → 400；`FULL`（总数或配额达上限）→ 429 |
+| 编辑 | `loop.update(sid, taskId, LoopPatch...)` | 值为修改后的 `LoopTask` | `NOT_FOUND` → 404；`INVALID` → 400（原任务不变） |
+| 暂停 / 恢复 | `loop.pause(sid, taskId)` / `loop.resume(sid, taskId)` | 无值 | `NOT_FOUND` → 404 |
+| 立即执行一轮 | `loop.trigger(sid, taskId)` | 无值 | `NOT_FOUND` → 404 |
+| 删除 | `loop.remove(sid, taskId)` | 无值 | `NOT_FOUND` → 404 |
+| 清空本会话 | `loop.removeAll(sid)` | 无值 | — |
+
+所有写操作在多节点部署下还可能返回 `NOT_OWNER`（会话由其它节点持有，`getOwner()` 为持有者，宿主转发）。界面上的「启停开关」由宿主按 `isEnabled()` 选择 `pause` 或 `resume`，插件不提供 `toggle`。
 
 ### 5.2 完整示例：管理接口
 
 ```java
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopPatch;
 import org.noear.solon.ai.harness.extension.loop.LoopSpec;
@@ -442,20 +455,14 @@ public class LoopAdminController {
                               @Param(value = "oneShot", required = false) Boolean oneShot,
                               @Param(value = "runNow", required = false) Boolean runNow) {
         if (!sessionExists(sessionId)) return Result.failure(404, "Session not found");
-        try {
-            // 请求参数原样交给规格：null（及空白 cron）即未设置；优先级 at > cron > everyMinutes
-            LoopTask task = loop().schedule(sessionId, LoopSpec.of(prompt)
-                    .everyMinutes(intervalMinutes)
-                    .cron(cron)
-                    .at(at == null || at.isEmpty() ? null : LocalDateTime.parse(at))
-                    .oneShot(oneShot)
-                    .runNow(runNow));
-            return Result.succeed(task.getId());
-        } catch (IllegalArgumentException e) {
-            return Result.failure(400, e.getMessage()); // 间隔越界、cron 非法、at 不是未来时刻……
-        } catch (IllegalStateException e) {
-            return Result.failure(409, e.getMessage()); // 任务总数达到 maxTasks
-        }
+        // 请求参数原样交给规格：null（及空白 cron）即未设置；优先级 at > cron > everyMinutes
+        HarnessResult<LoopTask> r = loop().schedule(sessionId, LoopSpec.of(prompt)
+                .everyMinutes(intervalMinutes)
+                .cron(cron)
+                .at(at == null || at.isEmpty() ? null : LocalDateTime.parse(at))
+                .oneShot(oneShot)
+                .runNow(runNow));
+        return r.isOk() ? Result.succeed(r.getValue().getId()) : toFailure(r);
     }
 
     @Post
@@ -466,23 +473,23 @@ public class LoopAdminController {
                                               @Param(value = "intervalMinutes", required = false) Integer intervalMinutes,
                                               @Param(value = "cron", required = false) String cron,
                                               @Param(value = "runNow", required = false) Boolean runNow) {
-        try {
-            // null = 保持原值；cron 传 "" = 清除 cron、回到固定间隔
-            LoopTask t = loop().update(sessionId, taskId, LoopPatch.create()
-                    .prompt(prompt)
-                    .everyMinutes(intervalMinutes)
-                    .cron(cron)
-                    .runNow(runNow));
-            return t == null ? Result.failure(404, "Task not found") : Result.succeed(t.toMap());
-        } catch (IllegalArgumentException e) {
-            return Result.failure(400, e.getMessage());
-        }
+        // null = 保持原值；cron 传 "" = 清除 cron、回到固定间隔
+        HarnessResult<LoopTask> r = loop().update(sessionId, taskId, LoopPatch.create()
+                .prompt(prompt)
+                .everyMinutes(intervalMinutes)
+                .cron(cron)
+                .runNow(runNow));
+        return r.isOk() ? Result.succeed(r.getValue().toMap()) : toFailure(r);
     }
 
+    /** 启停开关：按当前状态选择 pause / resume */
     @Post
     @Mapping("toggle")
     public Result<Void> toggle(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
-        return loop().toggle(sessionId, taskId) ? Result.succeed() : Result.failure(404, "Task not found");
+        LoopTask t = loop().get(sessionId, taskId);
+        if (t == null) return Result.failure(404, "Task not found");
+        HarnessResult<Void> r = t.isEnabled() ? loop().pause(sessionId, taskId) : loop().resume(sessionId, taskId);
+        return r.isOk() ? Result.succeed() : toFailure(r);
     }
 
     @Post
@@ -491,8 +498,8 @@ public class LoopAdminController {
         LoopTask t = loop().get(sessionId, taskId);
         if (t == null) return Result.failure(404, "Task not found");
         if (!t.isEnabled()) return Result.failure(400, "Task is paused");   // 已暂停的任务触发后会被守卫放弃
-        loop().trigger(sessionId, taskId);                                   // 异步执行，会话忙时本轮放弃
-        return Result.succeed();
+        HarnessResult<Void> r = loop().trigger(sessionId, taskId);          // 异步执行，会话忙时本轮放弃
+        return r.isOk() ? Result.succeed() : toFailure(r);
     }
 
     @Post
@@ -503,12 +510,23 @@ public class LoopAdminController {
         LoopTask t = loop().get(sessionId, taskId);
         if (t == null) return Result.failure(404, "Task not found");
         if (Boolean.TRUE.equals(stopRunning) && t.isRunning()) {
-            // 与 /loop stop 同语义：顺带停掉正在跑的这一轮（interrupt 也会清空该会话的排队消息）
+            // 与 /loop remove 同语义：程序级取消，只停这一轮；不清排队、不写「用户已取消」
             AgentSession session = engine.getSessionOrNull(sessionId);
-            if (session != null) engine.interrupt(session);
+            if (session != null) engine.cancelStream(session);
         }
-        loop().remove(sessionId, taskId);
-        return Result.succeed();
+        HarnessResult<Void> r = loop().remove(sessionId, taskId);
+        return r.isOk() ? Result.succeed() : toFailure(r);
+    }
+
+    /** 结果码 → HTTP（各宿主按自己的协议映射即可） */
+    private static <T> Result<T> toFailure(HarnessResult<?> r) {
+        switch (r.getCode()) {
+            case NOT_FOUND: return Result.failure(404, r.getDetail());
+            case INVALID:   return Result.failure(400, r.getDetail());
+            case FULL:      return Result.failure(429, r.getDetail());
+            case NOT_OWNER: return Result.failure(409, "owned by " + r.getOwner());
+            default:        return Result.failure(500, String.valueOf(r.getCode()));
+        }
     }
 }
 ```
@@ -532,7 +550,7 @@ loop.schedule(sid, LoopSpec.of("年终提醒").cron("0 0 9 31 12 ? 2026").oneSho
 loop.schedule(sid, LoopSpec.of("remind me").at(LocalDateTime.of(2026, 12, 5, 18, 0)));
 ```
 
-调度方式优先级 `at > cron > everyMinutes`。校验失败抛 `IllegalArgumentException`，任务总数达上限抛 `IllegalStateException`，失败时不会留下半个任务。
+调度方式优先级 `at > cron > everyMinutes`。校验失败返回 `INVALID`，任务总数或会话配额达上限返回 `FULL`，失败时不会留下半个任务。
 
 ### 5.4 编辑：update + LoopPatch
 
@@ -540,7 +558,7 @@ loop.schedule(sid, LoopSpec.of("remind me").at(LocalDateTime.of(2026, 12, 5, 18,
 // null = 保持原值；启停、迭代、最近结果、一次性属性与扩展字段都保留
 LoopTask u = loop.update(sid, taskId, LoopPatch.create()
         .prompt(req.prompt)            // null 或空白 = 保持
-        .everyMinutes(req.interval)    // null = 保持；越界抛 IllegalArgumentException
+        .everyMinutes(req.interval)    // null = 保持；越界时 update 返回 INVALID
         .cron(req.cron)                // null = 保持；"" = 清除 cron，回到固定间隔
         .runNow(req.runNow));          // null = 保持
 
@@ -548,7 +566,7 @@ LoopTask u = loop.update(sid, taskId, LoopPatch.create()
 loop.update(sid, taskId, LoopPatch.create().cron("").everyMinutes(30));
 ```
 
-非法补丁抛 `IllegalArgumentException`，原任务保持不变（先校验、后替换）。任务正在执行时也可以修改：新版本不会与在途那一轮并发，本轮结果记到新版本上，不需要先停。
+非法补丁返回 `INVALID`，原任务保持不变（先校验、后替换）。任务正在执行时也可以修改：新版本不会与在途那一轮并发，本轮结果记到新版本上，不需要先停。
 
 ### 5.5 宿主扩展字段（extra）
 
@@ -582,11 +600,11 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ### 5.7 管理态要点
 
-1. **先校验会话**：门面不检查会话是否存在，给任意 sessionId 都能建任务；缺省执行器到点时用 `engine.getSession(sessionId)` 取会话，可能把它新建出来。管理接口应先确认会话存在并校验归属。
+1. **先校验会话**：门面只做多节点归属检查（`NOT_OWNER`），不检查会话是否存在，给任意 sessionId 都能建任务。缺省执行器到点时用 `engine.getSessionOrNull(sessionId)` 取会话，不存在就 skip，任务会一直空转。管理接口应先确认会话存在，并校验宿主自己的用户归属。
 2. **不需要判忙**：管理接口随时可调。会话忙时到点的一轮会被放弃（不计错误），等下一次到点。
-3. **立即执行可能被放弃**：`trigger` 是异步的，仍经守卫：任务已暂停或会话正忙时，这一轮直接放弃；返回 `true` 只表示任务存在。
-4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.interrupt(session)` 再 `remove`（示例的 `stopRunning`）。注意 `interrupt` 会同时清空该会话 queue 里的排队消息。
-5. **自动停用后需手动恢复**：连续失败达阈值后任务 `enabled = false`，面板上应显示为"已停用"，`resume` 或 `toggle` 会清零计数并重新调度。
+3. **立即执行可能被放弃**：`trigger` 是异步的，仍经守卫：任务已暂停或会话正忙时，这一轮直接放弃；返回 `OK` 只表示任务存在。
+4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.cancelStream(session)` 再 `remove`（示例的 `stopRunning`）。不要用 `engine.interrupt`：它会清空该会话 queue 里的排队消息，并在历史里写「用户已取消」。
+5. **自动停用后需手动恢复**：连续失败达阈值后任务 `enabled = false`，面板上应显示为"已停用"，`resume` 会清零计数并重新调度。
 6. **修改不会立即执行**：`LoopPatch.runNow` 只更新记录上的标志，立即首轮只在创建时生效；想立刻跑一轮用 `trigger`。
 7. **一次性任务只能通过 `schedule` 或 `loop_add` 创建**：`LoopPatch` 不能把普通任务改成一次性。
 
@@ -621,7 +639,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `runNow(runNow)` | `Boolean` | false | 创建后立即执行首轮（仅固定间隔生效）；与一次性互斥 |
 | `extra(key, value)` | `String`, `ONode` | 无 | 宿主扩展字段；value 为 null 表示不写；键非法抛异常 |
 
-`schedule` 时统一校验，失败抛 `IllegalArgumentException`：prompt 为空、间隔越界、at 不是未来时刻、一次性却没有 at/cron、一次性又要求 runNow、cron 无法解析或已无未来触发时刻、sessionId 为空。扩展字段键非法在调用 `extra` 时即抛出。
+`schedule` 时统一校验，失败返回 `INVALID`（`getDetail()` 为原因）：prompt 为空、间隔越界、at 不是未来时刻、一次性却没有 at/cron、一次性又要求 runNow、cron 无法解析或已无未来触发时刻、sessionId 为空。扩展字段键非法在调用 `extra` 时即抛出。
 
 ### 6.3 LoopPatch（修改参数）
 
@@ -630,7 +648,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | 方法 | 类型 | null 语义 | 其它规则 |
 |---|---|---|---|
 | `prompt(prompt)` | `String` | 保持 | 空白同样视为保持；保存前 trim |
-| `everyMinutes(minutes)` | `Integer` | 保持 | 越界 [1, 1440] 抛 `IllegalArgumentException` |
+| `everyMinutes(minutes)` | `Integer` | 保持 | 越界 [1, 1440] 时 `update` 返回 `INVALID` |
 | `cron(cron)` | `String` | 保持 | 空串 = 清除 cron、回到固定间隔；新 cron 无法解析或不可触发时抛异常 |
 | `runNow(runNow)` | `Boolean` | 保持 | 只更新记录上的标志；修改不会触发立即执行（立即首轮只在创建时生效） |
 | `extra(key, value)` | `String`, `ONode` | value 为 null = 删除该键 | 只改列出的键；键非法抛异常 |
@@ -774,14 +792,13 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 |---|---|---|---|
 | `LoopExtension.builder()` | `Builder` | 装配 | 构建入口 |
 | `addExecutor(channel, claim, handler)` | `LoopExtension` | 装配 | 注册通道执行器（可链式）；handler 为 null 时忽略 |
-| `schedule(sessionId, LoopSpec)` | `LoopTask` | 管理（`/loop`、`loop_add` 同路径） | 新建并调度；`IllegalArgumentException` / `IllegalStateException` |
-| `update(sessionId, taskId, LoopPatch)` | `LoopTask` | 管理 | 按补丁修改；null = 不存在；`IllegalArgumentException` |
-| `pause(sessionId, taskId)` | `boolean` | 管理（`/loop pause` 同路径） | 暂停；false = 不存在 |
-| `resume(sessionId, taskId)` | `boolean` | 管理（`/loop resume` 同路径） | 恢复并清零错误计数；false = 不存在 |
-| `toggle(sessionId, taskId)` | `boolean` | 管理 | 启停切换；false = 不存在 |
-| `trigger(sessionId, taskId)` | `boolean` | 管理 | 立即异步执行一轮；false = 不存在 |
-| `remove(sessionId, taskId)` | `boolean` | 管理（`/loop stop` 同路径） | 删除；false = 不存在 |
-| `removeAll(sessionId)` | `void` | 管理（`/loop stop-all` 同路径） | 删除本会话全部任务 |
+| `schedule(sessionId, LoopSpec)` | `HarnessResult<LoopTask>` | 管理（`/loop`、`loop_add` 同一张表） | 新建并调度；`INVALID` / `FULL` / `NOT_OWNER` |
+| `update(sessionId, taskId, LoopPatch)` | `HarnessResult<LoopTask>` | 管理 | 按补丁修改；`NOT_FOUND` / `INVALID` |
+| `pause(sessionId, taskId)` | `HarnessResult<Void>` | 管理（对应 `/loop pause`） | 暂停；`NOT_FOUND` |
+| `resume(sessionId, taskId)` | `HarnessResult<Void>` | 管理（对应 `/loop resume`） | 恢复并清零错误计数；`NOT_FOUND` |
+| `trigger(sessionId, taskId)` | `HarnessResult<Void>` | 管理 | 立即异步执行一轮；`NOT_FOUND` |
+| `remove(sessionId, taskId)` | `HarnessResult<Void>` | 管理（对应 `/loop remove`） | 删除（不停在途一轮）；`NOT_FOUND` |
+| `removeAll(sessionId)` | `HarnessResult<Void>` | 管理（对应 `/loop clear`） | 删除本会话全部任务；`NOT_OWNER` |
 | `get(sessionId, taskId)` | `LoopTask` | 管理 | 不存在为 null |
 | `list(sessionId)` | `List<LoopTask>` | 管理 | 本会话全部任务（含已暂停） |
 | `listAll()` | `Map<String, List<LoopTask>>` | 管理 | 全部会话，按 sessionId 排序 |

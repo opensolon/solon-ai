@@ -18,8 +18,8 @@ package org.noear.solon.ai.harness;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
-import org.noear.solon.ai.harness.spi.OwnerCheck;
-import org.noear.solon.ai.harness.spi.NotOwnerException;
+import org.noear.solon.ai.harness.session.OwnerCheck;
+import org.noear.solon.ai.harness.session.NotOwnerException;
 import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.scope.InputScopeResolver;
@@ -2242,8 +2242,8 @@ public class HarnessEngine {
      * @see Command#runnableWhenBusy()
      * @since 4.2.0
      */
-    public boolean isBusyBypassCommand(@Nullable String input) {
-        return sessionControl.isBusyBypassCommand(input);
+    public boolean isRunnableWhenBusy(@Nullable String input) {
+        return sessionControl.isRunnableWhenBusy(input);
     }
 
     /**

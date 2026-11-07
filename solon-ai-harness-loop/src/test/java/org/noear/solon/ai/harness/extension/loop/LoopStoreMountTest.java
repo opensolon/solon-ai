@@ -21,7 +21,7 @@ class LoopStoreMountTest {
     void roundTripThroughNonLocalSource() throws Exception {
         InMemoryMountSource source = new InMemoryMountSource();
         LoopExtension first = loaded(source);
-        LoopTask task = first.schedule("s1", LoopSpec.of("hello").everyMinutes(10));
+        LoopTask task = first.schedule("s1", LoopSpec.of("hello").everyMinutes(10)).getValue();
 
         assertEquals(32, task.getId().length(), "新任务使用完整 128 bit ID");
         String json = source.readStringOrNull("loop/s1.json");

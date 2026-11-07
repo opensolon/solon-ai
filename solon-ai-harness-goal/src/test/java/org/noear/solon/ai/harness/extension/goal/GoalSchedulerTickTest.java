@@ -101,7 +101,7 @@ class GoalSchedulerTickTest {
 
         // 全部注销后节拍 job 移除
         for (int i = 0; i < 50; i++) {
-            ext.remove("s" + i, null);
+            ext.remove("s" + i);
         }
         assertFalse(ext.hasActiveGoals());
         assertTrue(jobs.isEmpty(), "无活跃 goal 时不占定时任务");

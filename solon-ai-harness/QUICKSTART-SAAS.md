@@ -17,7 +17,7 @@
 | L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 |
 
 用 L0 时，下面这些都由框架代办，宿主不需要知道：`RunTicket`、`afterRun`、`drainLoop`、`discard`、
-派发事务的回复路由、五种状态口径、四个停流入口、`NotOwnerException` 与 int 返回码。
+派发事务的回复路由、五种状态口径、四个停流入口与 `NotOwnerException`。
 
 ---
 
@@ -26,10 +26,12 @@
 ```xml
 <dependency>
     <groupId>org.noear</groupId>
-    <artifactId>solon-ai-harness</artifactId>   <!-- 聚合包：核心 + 四个会话插件 + host 骨架 -->
+    <artifactId>solon-ai-harness</artifactId>   <!-- 聚合包：只做引用，核心 + 四个会话插件 + solon-ai-harness-host -->
     <version>${solon-ai.version}</version>
 </dependency>
 ```
+
+`HarnessHost` 等类型在独立模块 `solon-ai-harness-host`（包 `org.noear.solon.ai.harness.host`）。不想要聚合包时，直接引 `solon-ai-harness-host` 也一样：它依赖核心与四个插件。模块说明见 [solon-ai-harness-host/README.md](../solon-ai-harness-host/README.md)。
 
 ---
 
@@ -129,7 +131,7 @@ public String decide(String tenant, String sid, String callId, String action, Co
 @Post 
 @Mapping("/chat/{tenant}/{sid}/stop")
 public Result stop(String tenant, String sid) {
-    FacadeResult<Boolean> r = host.stop(tenant, sid, StopMode.ALL);
+    HarnessResult<Boolean> r = host.stop(tenant, sid, StopMode.STOP_AND_CLEAR);
     return r.isOk() ? Result.succeed(r.getValue()) : Result.failure(r.getCode().name());
 }
 ```
@@ -150,10 +152,10 @@ engine.setSessionPrincipal(engine.getSession(newSessionId), tenant + "/" + userI
 | Kind | 发生了什么 | sink 收到 | `httpStatus()` |
 |---|---|---|---|
 | `STARTED` | 已开流 | `runStarted` →（命令回执）→ `event`* → `hitl`（若挂起）→ `runFinished` | 200 |
-| `REPLIED` | 命令已执行，只有回执 | `reply` | 200 |
+| `REPLY` | 命令已执行，只有回执 | `reply` | 200 |
 | `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `reply(deferredText)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
 | `REJECTED` | 未受理，原因见 `getRejectReason()` | `reply(rejectText)`；`not_owner` 时为 `forward` | 404 / 307 / 403 / 503 / 409 |
-| `HITL_PENDING` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `reply(hitlExpiredText)` | 200 |
+| `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `reply(hitlExpiredText)` | 200 |
 | `IGNORED` | 空输入 | — | 200 |
 
 拒绝原因码：`session_not_found`（会话不存在，骨架只查不建）、`not_owner`、`scope_unavailable`、`busy`、
@@ -168,21 +170,20 @@ host.submit(tenant, sid, text, origin, in -> in.attachments(files).selectedModel
 
 ---
 
-## 五、管理态：`AdminView`
+## 五、管理态：`AdminGateway`
 
 控制台 / 后台 API 用 `host.admin(tenant, principal)`。只有一个入口 `call`：取扩展 → 调它自己的门面 → 给出结果码。
 queue / steer / goal / loop 和你自己的扩展都是同一种写法：
 
 ```java
-AdminView admin = host.admin(tenant, principal);
+AdminGateway admin = host.admin(tenant, principal);
 
-FacadeResult<List<LoopTask>> tasks = admin.call(sid, "loop.list", LoopExtension.class,
-        (loop, s) -> FacadeResult.ok(loop.list(sid)));
+HarnessResult<List<LoopTask>> tasks = admin.call(sid, "loop.list", LoopExtension.class,
+        (loop, s) -> HarnessResult.ok(loop.list(sid)));
 
-FacadeResult<Integer> r = admin.call(sid, "queue.enqueue", QueueExtension.class, (queue, s) -> {
-    int pos = queue.enqueue(s, text, InputOrigin.channel("console"));
-    return pos > 0 ? FacadeResult.ok(pos) : FacadeResult.fail(FacadeResult.Code.FULL, "queue full or disabled");
-});
+// 插件写门面本身就返回 HarnessResult，直接交出去即可
+HarnessResult<Integer> r = admin.call(sid, "queue.enqueue", QueueExtension.class,
+        (queue, s) -> queue.enqueue(s, text, InputOrigin.channel("console")));
 switch (r.getCode()) {
     case OK:        return Result.succeed(r.getValue());          // 队列位置
     case NOT_OWNER: return Result.failure(307, r.getOwner());     // 网关转发
@@ -191,7 +192,7 @@ switch (r.getCode()) {
     default:        return Result.failure(400, r.getDetail());   // DISABLED / FULL / INVALID
 }
 
-admin.stop(sid, StopMode.ALL);
+admin.stop(sid, StopMode.STOP_AND_CLEAR);
 ```
 
 `call` 按同一顺序检查：鉴权（`AdminAuthorizer`，未配置时不鉴权；操作名由你自定）→ 扩展是否装配（`DISABLED`）→
@@ -204,7 +205,7 @@ admin.stop(sid, StopMode.ALL);
 | `NOT_FOUND` | 会话、队列项或任务不存在 |
 | `NOT_OWNER` | 会话由其它节点持有，`getOwner()` 为持有者 |
 | `DISABLED` | 插件未装配或已停用 |
-| `FULL` | 队列满、插话邮箱满、loop 任务数达上限 |
+| `FULL` | 队列满、loop 任务数或会话配额达上限 |
 | `INVALID` | 参数或状态不允许，`getDetail()` 为原因 |
 | `FORBIDDEN` | `AdminAuthorizer` 拒绝（授权服务抛异常时同样拒绝） |
 
@@ -214,8 +215,8 @@ admin.stop(sid, StopMode.ALL);
 
 | StopMode | 行为 |
 |---|---|
-| `ALL` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息 |
-| `CURRENT_RUN` | 只停当前流，保留排队任务（结束后续发下一条），不写历史 |
+| `STOP_AND_CLEAR` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息（= `engine.interrupt`） |
+| `STOP_RUN` | 只停当前流，保留排队任务（结束后续发下一条），不写历史（= `engine.cancelStream`） |
 
 ---
 
@@ -245,6 +246,6 @@ sink 回调可能在任意线程上执行，实现需线程安全；回调抛出
 - [ ] 引擎：`profile(SERVER)`、`stateSource` 在工作区之外、`SandboxBootstrap.initOnce`、插件经 `Builder.extensionAdd` 在构建期挂上
 - [ ] 权限：创建会话时 `setSessionPrincipal`；`scopeResolver` 用 `byPrincipal` 并做短期缓存
 - [ ] 骨架：`engines(pool::get)`；预热用 `host.warmup`；sink 线程安全
-- [ ] 管理态：配置 `adminAuthorizer`，或在控制器上自行鉴权；按 `FacadeResult.Code` 映射状态码
+- [ ] 管理态：配置 `adminAuthorizer`，或在控制器上自行鉴权；按 `HarnessResult.Code` 映射状态码
 - [ ] 多节点：`SessionOwnership.namespaced(tenantId, impl)`；实现 `HostSink.forward` 与 `NOT_OWNER` 的网关转发
 - [ ] 删除会话：判忙 → `engine.removeSession(id)` → 移出内存 → 删除存储（见 SAAS.md §九）

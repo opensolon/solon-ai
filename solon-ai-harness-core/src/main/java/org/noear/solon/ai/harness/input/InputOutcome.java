@@ -128,8 +128,11 @@ public final class InputOutcome {
          * <li>{@code hitl_pending} —— 有待审批卡，本输入不是审批决策 / 续流 / 忙时可执行命令；</li>
          * <li>{@code busy} —— 会话忙且无处可延（没装积压能力、程序轮次、续流等不可排队的输入）；</li>
          * <li>{@code attachments_not_deferrable} —— 会话忙且输入带附件（附件不进积压）；</li>
-         * <li>{@code backlog_unavailable} —— 会话忙，积压拒收（已满 / 超长 / 已停用）。</li>
-         * <li>{@code not_owner} —— 多节点：会话由其它节点持有（detail 为持有者），由网关转发。</li>
+         * <li>{@code backlog_unavailable} —— 会话忙，积压拒收（已满 / 超长 / 已停用）；</li>
+         * <li>{@code not_owner} —— 多节点：会话由其它节点持有（detail 为持有者），由网关转发；</li>
+         * <li>{@code scope_unavailable} —— 要求作用域但本轮解析不到；</li>
+         * <li>{@code scope_not_deferrable} —— 会话忙，且显式作用域含不可保存的维度，不能排队；</li>
+         * <li>{@code engine_closed} —— 引擎已关闭，宿主持有的是过期引用。</li>
          * </ul>
          */
         REJECTED
@@ -272,22 +275,32 @@ public final class InputOutcome {
     }
 
     /**
-     * 写入受理事实（引擎在 {@code handle} 第 0 步之后调用；宿主无须使用）。
+     * 带上受理事实的副本（引擎内部使用：{@code handle} 第 0 步之后调用；宿主不要调用）。
+     *
+     * <p>返回新实例、不改写本实例：宿主即便调用，也只影响自己拿到的副本，
+     * 引擎交出去的那份（及其占位释放器）不受影响——「占位跟着请求走」的不变量不会被外部破坏。</p>
      *
      * @param besideRunning 是否在正在运行的任务旁边执行（忙时可执行命令）
      * @param dispatch      本轮所属的程序派发事务（可为 null）
      * @param discarder     放弃执行时释放受理占位的动作（可为 null）
      * @param afterRunRegistrar 登记「运行句柄注销之后」回调的动作（可为 null，见 {@link #afterRun(Runnable)}）
-     * @return 本实例
+     * @return 新实例
      * @since 4.2.0
      */
-    public InputOutcome admitted(boolean besideRunning, @Nullable RunDispatch dispatch, @Nullable Runnable discarder,
+    public InputOutcome admitted(boolean besideRunning,
+                                 @Nullable RunDispatch dispatch,
+                                 @Nullable Runnable discarder,
                                  @Nullable Consumer<Runnable> afterRunRegistrar) {
-        this.besideRunning = besideRunning;
-        this.dispatch = dispatch;
-        this.discarder = discarder;
-        this.afterRunRegistrar = afterRunRegistrar;
-        return this;
+        InputOutcome copy = new InputOutcome(kind, commandName, commandOutput, command, prompt, agentName, modelName,
+                request, hitlApplied, pendingHitl, hitlCards);
+        copy.backlogPosition = backlogPosition;
+        copy.rejectReason = rejectReason;
+        copy.rejectDetail = rejectDetail;
+        copy.besideRunning = besideRunning;
+        copy.dispatch = dispatch;
+        copy.discarder = discarder;
+        copy.afterRunRegistrar = afterRunRegistrar;
+        return copy;
     }
 
     /**
