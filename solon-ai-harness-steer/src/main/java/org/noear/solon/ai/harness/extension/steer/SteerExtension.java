@@ -183,6 +183,9 @@ public class SteerExtension extends AbsHarnessExtension {
         if (id == null || id.isEmpty() || id.length() > limits.getMaxIdLength()) {
             return SteerCancelResult.of(SteerCancelResult.Code.INVALID_STEER_ID, steerId, 0);
         }
+        if (owned(session) == false) {
+            return SteerCancelResult.of(SteerCancelResult.Code.NOT_OWNER, id, 0);
+        }
 
         SteerState state = SteerState.peek(session);
         if (state == null) {
@@ -198,6 +201,9 @@ public class SteerExtension extends AbsHarnessExtension {
      * {@link SteerCancelResult#getCanceled()}，已被消费的不算。状态恒为 {@link SteerCancelResult.Code#CANCELED}。</p>
      */
     public SteerCancelResult cancelPending(@Nullable AgentSession session, @Nullable Collection<String> steerIds) {
+        if (owned(session) == false) {
+            return SteerCancelResult.of(SteerCancelResult.Code.NOT_OWNER, null, 0);
+        }
         SteerState state = SteerState.peek(session);
         if (state == null) {
             return SteerCancelResult.canceled(null, 0, 0);
@@ -236,6 +242,10 @@ public class SteerExtension extends AbsHarnessExtension {
             // 停用后仍投递会一直积压在邮箱（消费方拦截器已停用），必须当场拒绝。
             return new SteerResult(SteerResult.Code.DISABLED, steerId, 0);
         }
+        if (owned(session) == false) {
+            // 邮箱只在持有节点内存里：在这里投递会静默落空（NOT_RUNNING），必须明确告诉宿主转发
+            return new SteerResult(SteerResult.Code.NOT_OWNER, steerId, 0);
+        }
 
         BooleanSupplier busy = busyRecheck == null ? () -> isBusy(session) : busyRecheck;
         return SteerMailbox.steer(session, runId, steerId, text,
@@ -248,6 +258,11 @@ public class SteerExtension extends AbsHarnessExtension {
      * <p>未 attach（无 engine）时视为「忙」，即放行、只依据轮次判定——纯单测 / 手工 new 的门面
      * 没有引擎可查，若视为「不忙」会把所有投递回滚成 NOT_RUNNING。</p>
      */
+    /** 写门面的归属检查（未挂载时视为持有） */
+    private boolean owned(AgentSession session) {
+        return engine == null || session == null || engine.checkOwner(session).isOwned();
+    }
+
     private boolean isBusy(AgentSession session) {
         if (engine == null || session == null) {
             return true;

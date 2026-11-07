@@ -63,7 +63,7 @@ public class GoalTalent extends AbsTalent {
         if (sessionId == null) {
             return false;
         }
-        AgentSession session = engine.getSession(sessionId);
+        AgentSession session = engine.getSessionOrNull(sessionId);
         return goalRuntime.hasGoal(session);
     }
 
@@ -240,7 +240,7 @@ public class GoalTalent extends AbsTalent {
     }
 
     private AgentSession sessionOf(String sessionId) {
-        return sessionId == null ? null : engine.getSession(sessionId);
+        return sessionId == null ? null : engine.getSessionOrNull(sessionId);
     }
 
     // ===== 辅助方法 =====

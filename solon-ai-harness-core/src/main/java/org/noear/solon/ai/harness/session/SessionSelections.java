@@ -66,6 +66,23 @@ public final class SessionSelections {
         put(session, KEY_AGENT, name);
     }
 
+    /**
+     * 会话主体（租户 / 用户；未设置为 null）。写入走 {@code HarnessEngine#setSessionPrincipal}（设置后不可改）。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public static String principalOf(@Nullable AgentSession session) {
+        if (session == null) return null;
+        Object value = session.getContext().get(HarnessAttrs.SESSION_PRINCIPAL);
+        return (value == null || value.toString().trim().isEmpty()) ? null : value.toString();
+    }
+
+    /** 引擎内部使用：宿主走 {@code HarnessEngine#setSessionPrincipal}（含不可改校验） */
+    public static void setPrincipal(@Nullable AgentSession session, @Nullable String principal) {
+        put(session, HarnessAttrs.SESSION_PRINCIPAL, principal);
+    }
+
     private static void put(@Nullable AgentSession session, String key, @Nullable String name) {
         if (session == null) return;
         if (name == null || name.trim().isEmpty()) {

@@ -16,7 +16,7 @@
 package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.lang.Nullable;
 
 /**
@@ -34,10 +34,10 @@ final class Admission {
     private final InputOutcome outcome;
     private final InputGate.Ticket ticket;
     private final boolean besideRunning;
-    private final TurnDispatch dispatch;
+    private final RunDispatch dispatch;
 
     private Admission(@Nullable InputOutcome outcome, InputGate.Ticket ticket, boolean besideRunning,
-                      @Nullable TurnDispatch dispatch) {
+                      @Nullable RunDispatch dispatch) {
         this.outcome = outcome;
         this.ticket = ticket == null ? InputGate.Ticket.NONE : ticket;
         this.besideRunning = besideRunning;
@@ -55,7 +55,7 @@ final class Admission {
     }
 
     /** 已受理：继续装配。 */
-    static Admission admitted(InputGate.Ticket ticket, boolean besideRunning, @Nullable TurnDispatch dispatch) {
+    static Admission admitted(InputGate.Ticket ticket, boolean besideRunning, @Nullable RunDispatch dispatch) {
         return new Admission(null, ticket, besideRunning, dispatch);
     }
 
@@ -73,7 +73,7 @@ final class Admission {
     }
 
     @Nullable
-    TurnDispatch getDispatch() {
+    RunDispatch getDispatch() {
         return dispatch;
     }
 }

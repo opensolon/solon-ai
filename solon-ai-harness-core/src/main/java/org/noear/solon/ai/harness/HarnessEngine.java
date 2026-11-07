@@ -15,10 +15,14 @@
  */
 package org.noear.solon.ai.harness;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.spi.OwnerCheck;
+import org.noear.solon.ai.harness.spi.NotOwnerException;
 import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
-import org.noear.solon.ai.harness.scope.TurnScope;
-import org.noear.solon.ai.harness.scope.TurnScopeResolver;
+import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -46,7 +50,6 @@ import org.noear.solon.ai.harness.hitl.BashToolStrategy;
 import org.noear.solon.ai.harness.hitl.SessionPermissions;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.spi.InputBacklog;
-import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.session.SessionStatus;
@@ -58,8 +61,10 @@ import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.mount.catalog.*;
 import org.noear.solon.ai.mount.source.MountSource;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.function.BiPredicate;
 import org.noear.solon.ai.mount.source.ClasspathMountSource;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.harness.agent.ToolName;
@@ -194,7 +199,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     @Nullable
-    public TurnScopeResolver getScopeResolver() {
+    public InputScopeResolver getScopeResolver() {
         return options.getScopeResolver();
     }
 
@@ -205,6 +210,63 @@ public class HarnessEngine {
      */
     public SessionOwnership getSessionOwnership() {
         return options.getSessionOwnership();
+    }
+
+    /**
+     * 会话归属检查（多节点单写者）：本节点持有、或首次认领成功时 {@code isOwned()} 为 true。
+     *
+     * <p>{@code handle} 第 0 步已内置本检查；其它<b>写</b>门面（queue / steer / goal / loop / interrupt）也先调它，
+     * 非持有节点不得在本地内存里改会话状态并写快照（否则两个节点同时写同一个会话）。
+     * 在没有任何节点持有的会话上调用，本节点成为持有者。单机（{@link SessionOwnership#LOCAL}）恒为持有。</p>
+     *
+     * <p>可以在取会话之前调用（只看 sessionId）：非持有节点不应把会话从共享存储加载进自己的内存。</p>
+     *
+     * @since 4.2.0
+     */
+    public OwnerCheck checkOwner(@Nullable String sessionId) {
+        return sessionControl.checkOwner(sessionId);
+    }
+
+    /** @see #checkOwner(String) */
+    public OwnerCheck checkOwner(@Nullable AgentSession session) {
+        return sessionControl.checkOwner(session == null ? null : session.getSessionId());
+    }
+
+    /**
+     * 要求本节点持有会话，否则抛 {@link NotOwnerException}（宿主按 {@code getOwner()} 转发）
+     *
+     * @since 4.2.0
+     */
+    public void requireOwner(@Nullable String sessionId) {
+        OwnerCheck check = checkOwner(sessionId);
+        if (check.isOwned() == false) {
+            throw new NotOwnerException(sessionId, check.getOwner());
+        }
+    }
+
+    /**
+     * 取已存在的会话，不存在时抛 {@link IllegalArgumentException}（不新建）。
+     *
+     * <p>管理接口拿到的是外部传入的会话 ID：用 {@link #getSession(String)} 会把不存在（或已删除）的会话建出来。</p>
+     *
+     * @since 4.2.0
+     */
+    public AgentSession requireSession(String sessionId) {
+        AgentSession session = getSessionOrNull(sessionId);
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found: " + sessionId);
+        }
+        return session;
+    }
+
+    /**
+     * 引擎是否已关闭（{@link #shutdown()} 之后）。关闭后 {@code handle} 返回
+     * {@code REJECTED} + {@code InputOutcome.REJECT_ENGINE_CLOSED}。
+     *
+     * @since 4.2.0
+     */
+    public boolean isClosed() {
+        return closed.get();
     }
 
     public CacheControl getCacheControl() {
@@ -335,6 +397,10 @@ public class HarnessEngine {
      * <p>本方法幂等：重复调用只是重复回调 onDetach（各实现应保持幂等）与重复 shutdown 执行器。</p>
      */
     public void shutdown() {
+        if (closed.compareAndSet(false, true) == false) {
+            return; // 幂等
+        }
+
         // 不判 isEnabled()：清理不得被开关阻止（与 removeExtension 同口径）
         for (HarnessExtension extension : options.getExtensions()) {
             try {
@@ -345,9 +411,26 @@ public class HarnessEngine {
             }
         }
 
-        taskTalent.shutdown();
+        quietly("taskExecutor", taskTalent::shutdown);
+        // LSP 子进程与 MCP 连接归引擎所有：引擎池回收时不关会泄漏进程与连接
+        quietly("lsp", lspManager::shutdownAll);
+        quietly("mcp", () -> {
+            for (String name : new ArrayList<>(mcpGatewayTalent.getMcpServerNames())) {
+                quietly("mcp:" + name, () -> mcpGatewayTalent.removeMcpServer(name));
+            }
+        });
         sessionControl.releaseAllOwnership();
     }
+
+    private static void quietly(String what, Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable e) {
+            LOG.warn("[Harness] shutdown step failed: {}", what, e);
+        }
+    }
+
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public CodeTalent getCodeTalent() {
         return codeTalent;
@@ -469,6 +552,14 @@ public class HarnessEngine {
     public String getSessionCwd(AgentSession session) {
         if (session == null) return getWorkspace();
         Object value = session.attrs().get(ATTR_CWD);
+        if (value == null) {
+            // 重启后内存键为空：从随快照持久的副本回填（只回填仍符合策略的）
+            Object persisted = session.getContext().get(HarnessAttrs.SESSION_CWD);
+            if (persisted instanceof String && ((String) persisted).isEmpty() == false && isCwdAllowed((String) persisted)) {
+                session.attrs().putIfAbsent(ATTR_CWD, persisted);
+                value = session.attrs().get(ATTR_CWD);
+            }
+        }
         return value == null ? getWorkspace() : String.valueOf(value);
     }
 
@@ -481,9 +572,11 @@ public class HarnessEngine {
         if (session == null) return;
         if (cwd == null || cwd.trim().isEmpty()) {
             session.attrs().remove(ATTR_CWD);
+            session.getContext().remove(HarnessAttrs.SESSION_CWD);
         } else {
             checkCwdPolicy(cwd);
             session.attrs().put(ATTR_CWD, cwd);
+            session.getContext().put(HarnessAttrs.SESSION_CWD, cwd);
         }
     }
 
@@ -491,7 +584,66 @@ public class HarnessEngine {
     public void setSessionCwdIfAbsent(AgentSession session, String cwd) {
         if (session == null || cwd == null || cwd.trim().isEmpty()) return;
         checkCwdPolicy(cwd);
-        session.attrs().putIfAbsent(ATTR_CWD, cwd);
+        if (session.attrs().putIfAbsent(ATTR_CWD, cwd) == null) {
+            session.getContext().put(HarnessAttrs.SESSION_CWD, cwd);
+        }
+    }
+
+    // ========== 会话主体（租户 / 用户） ==========
+
+    /**
+     * 会话主体（未设置为 null）。随快照持久化，是作用域解析器识别「这个会话属于谁」的唯一口径
+     * （见 {@code InputScopeResolver#byPrincipal}），不必再把租户编码进 sessionId。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getSessionPrincipal(@Nullable AgentSession session) {
+        return SessionSelections.principalOf(session);
+    }
+
+    /**
+     * 设置会话主体（创建会话时由宿主根据登录身份写入）。<b>设置后不可改</b>：再次设置相同值是空操作，
+     * 设置不同值抛 {@link SecurityException}（防止把 A 的会话交给 B 继续用）。确需迁移用 {@link #rebindSessionPrincipal}。
+     *
+     * @since 4.2.0
+     */
+    public void setSessionPrincipal(AgentSession session, String principal) {
+        Objects.requireNonNull(session, "session");
+        if (Assert.isEmpty(principal)) {
+            throw new IllegalArgumentException("principal is empty");
+        }
+        synchronized (session.attrs()) {
+            String current = SessionSelections.principalOf(session);
+            if (current == null) {
+                SessionSelections.setPrincipal(session, principal);
+            } else if (current.equals(principal) == false) {
+                throw new SecurityException("Session principal is immutable: " + session.getSessionId());
+            }
+        }
+    }
+
+    /**
+     * 管理操作：把会话改绑到另一个主体（如账号合并）。不受 {@code runtimeMutable} 约束，调用方自行鉴权。
+     *
+     * @since 4.2.0
+     */
+    public void rebindSessionPrincipal(AgentSession session, @Nullable String principal) {
+        Objects.requireNonNull(session, "session");
+        synchronized (session.attrs()) {
+            SessionSelections.setPrincipal(session, principal);
+        }
+    }
+
+    /** 会话目录是否符合 cwdPolicy（未配置时恒为 true） */
+    private boolean isCwdAllowed(String cwd) {
+        try {
+            checkCwdPolicy(cwd);
+            return true;
+        } catch (SecurityException e) {
+            LOG.warn("[Harness] persisted session cwd is out of policy, ignored: {}", cwd);
+            return false;
+        }
     }
 
     /**
@@ -511,7 +663,18 @@ public class HarnessEngine {
      */
     private void checkCwdPolicy(String cwd) {
         Predicate<String> policy = options.getCwdPolicy();
-        if (policy != null && !policy.test(cwd)) {
+        if (policy == null) {
+            return;
+        }
+        // 先规范化（防 ../）；目录存在时以真实路径为准（防符号链接逃逸，也兼容 /var → /private/var 这类系统链接）
+        String effective;
+        try {
+            Path p = Paths.get(cwd).toAbsolutePath().normalize();
+            effective = Files.exists(p) ? p.toRealPath().toString() : p.toString();
+        } catch (Exception e) {
+            throw new SecurityException("Session cwd is invalid: " + cwd);
+        }
+        if (!policy.test(effective)) {
             throw new SecurityException("Session cwd is out of policy: " + cwd);
         }
     }
@@ -854,6 +1017,7 @@ public class HarnessEngine {
      * 仅写入配置值，不抛异常 —— 与相邻的 setMemoryRelevanceCount 等保持一致的空值守卫。
      */
     public void setMemoryEnabled(Boolean memoryEnabled) {
+        assertMutable("setMemoryEnabled");
         options.setMemoryEnabled(memoryEnabled);
         if (memoryTalent != null) {
             memoryTalent.setEnabled(memoryEnabled);
@@ -942,6 +1106,7 @@ public class HarnessEngine {
      * @param subagentDefaultConcurrency 默认并发上限（0 = 未设置；负数报错）
      */
     public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
+        assertMutable("setSubagentDefaultConcurrency");
         if (subagentDefaultConcurrency != null) {
             options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
             // 推送已归一的生效值：归一（0→默认、超上界→上界）只在 options 那一层做一次，避免重复告警
@@ -988,6 +1153,7 @@ public class HarnessEngine {
     }
 
     public void setCacheControl(CacheControl cacheControl) {
+        assertMutable("setCacheControl");
         if (cacheControl != null) {
             options.setCacheControl(cacheControl);
         }
@@ -1106,6 +1272,7 @@ public class HarnessEngine {
      * <p>避免连续调用 {@link #allowToolReset} + {@link #disallowToolReset} 导致双倍重建抖动。</p>
      */
     public void toolPermissionReset(Collection<String> tools, Collection<String> disallowedTools) {
+        assertMutable("toolPermissionReset");
         options.getTools().clear();
         if (tools != null) {
             options.getTools().addAll(tools);
@@ -1489,7 +1656,7 @@ public class HarnessEngine {
         // 清单是会话级状态：经数据来源读写（默认 <workspace>/<harnessHome>/sessions/<sid>/TODO.md，与旧路径一致）
         this.todoTalent = new TodoTalent(options.getStateSource(), "sessions/");
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
-        this.taskTalent = new TaskTalent(this);
+        this.taskTalent = new TaskTalent(this, options.getTaskExecutor());
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
         this.taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());
         this.generateTalent = new GenerateTalent(this);
@@ -1556,6 +1723,11 @@ public class HarnessEngine {
         terminalTalent.setSandboxSelfBootstrap(options.isSandboxSelfBootstrap());
         //harness 状态目录（缺省在工作区内）对模型不可读写：里面是其它会话/用户的数据
         terminalTalent.setProtectedStatePaths(options.getProtectedStatePaths());
+        // cwdPolicy 同时在消费端生效：请求级 toolContext 或直接写会话属性的 __cwd 也绕不过去
+        final Predicate<String> cwdPolicy = options.getCwdPolicy();
+        if (cwdPolicy != null) {
+            terminalTalent.setWorkRootPolicy(path -> cwdPolicy.test(path.toString()));
+        }
 
         //LSP 与文件工具接线：诊断靠 write/edit 自动注入（不依赖模型主动调工具），read 后异步预热。
         //钩子内部会在总开关关闭 / 文件类型无匹配服务器 / 服务器已知启动失败时零成本短路。
@@ -1661,14 +1833,20 @@ public class HarnessEngine {
     }
 
     public ReActAgent getAgentOrMain(String agentName) {
-        if (Assert.isEmpty(agentName)) {
-            return getMainAgent();
-        } else if (agentManager.hasAgent(agentName)) {
-            AgentDefinition definition = agentManager.getAgent(agentName);
-            return getAgentBuilder(definition, null).build();
-        } else {
+        return getAgentOrMain(null, agentName);
+    }
+
+    /**
+     * 会话感知版：先查本会话的会话级子代理，再查引擎级；都没有时回落主代理。
+     *
+     * @since 4.2.0
+     */
+    public ReActAgent getAgentOrMain(@Nullable AgentSession session, String agentName) {
+        AgentDefinition definition = resolveAgent(session, agentName);
+        if (definition == null) {
             return getMainAgent();
         }
+        return getAgentBuilder(definition, null).build();
     }
 
     public ReActAgent.Builder getAgentBuilder(AgentDefinition definition) {
@@ -1680,7 +1858,16 @@ public class HarnessEngine {
     }
 
     public ReActAgent.Builder getAgentBuilderOrNil(String agentName, String sessionModel) {
-        AgentDefinition definition = agentManager.getAgentOrNil(agentName);
+        return getAgentBuilderOrNil(null, agentName, sessionModel);
+    }
+
+    /**
+     * 会话感知的子代理构建器（先查本会话的会话级子代理，再查引擎级）
+     *
+     * @since 4.2.0
+     */
+    public ReActAgent.Builder getAgentBuilderOrNil(@Nullable AgentSession session, String agentName, String sessionModel) {
+        AgentDefinition definition = resolveAgent(session, agentName);
         if (definition == null) {
             return null;
         }
@@ -1689,11 +1876,56 @@ public class HarnessEngine {
     }
 
     /**
+     * 会话感知的子代理解析：先本会话的会话级子代理（{@link SessionAgents}），再引擎级（含挂载目录）。
+     *
+     * @return 不存在时为 null
+     * @since 4.2.0
+     */
+    @Nullable
+    public AgentDefinition resolveAgent(@Nullable AgentSession session, @Nullable String agentName) {
+        if (Assert.isEmpty(agentName)) {
+            return null;
+        }
+        AgentDefinition local = SessionAgents.get(session, agentName);
+        return local != null ? local : agentManager.getAgentOrNil(agentName);
+    }
+
+    /**
+     * 是否为保留的子代理名（{@code main}、{@code general} 与内置挂载提供的代理）：不能被 {@code generate} 创建。
+     *
+     * @since 4.2.0
+     */
+    public boolean isReservedAgentName(@Nullable String agentName) {
+        if (Assert.isEmpty(agentName)) {
+            return true;
+        }
+        if (AgentDefinition.AGENT_MAIN.equals(agentName) || AgentDefinition.AGENT_GENERAL.equals(agentName)) {
+            return true;
+        }
+        for (AgentDescriptor d : agentCatalog.getAgentsByMount(BUILTIN_AGENT_MOUNT)) {
+            if (agentName.equals(d.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 全局子代理持久化策略（{@code generate(saveToFile=true)} 前判定）。缺省按 {@code runtimeMutable}：
+     * CODING 允许、SERVER 拒绝（持久化等于修改同引擎所有用户可见的全局配置）。
+     *
+     * @since 4.2.0
+     */
+    public BiPredicate<AgentSession, AgentDefinition> getAgentPersistPolicy() {
+        BiPredicate<AgentSession, AgentDefinition> policy = options.getAgentPersistPolicy();
+        return policy != null ? policy : (s, d) -> options.isRuntimeMutable();
+    }
+
+    /**
      * 弃用但不能删掉（向下兼容需要）
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest prompt(Prompt prompt) {
         return promptDo(prompt, null);
     }
@@ -1703,7 +1935,6 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest prompt(Prompt prompt, ReActAgent targetAgent) {
         return promptDo(prompt, targetAgent);
     }
@@ -1714,7 +1945,6 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest prompt(String prompt) {
         return promptDo(Prompt.of(prompt), null);
     }
@@ -1725,7 +1955,6 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest prompt(String prompt, ReActAgent targetAgent) {
         return promptDo(Prompt.of(prompt), targetAgent);
     }
@@ -1739,7 +1968,6 @@ public class HarnessEngine {
      * @since 4.2.0
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest resume() {
         return promptDo(null, null);
     }
@@ -1752,7 +1980,6 @@ public class HarnessEngine {
      * @since 4.2.0
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
-    @Deprecated
     public ReActRequest resume(ReActAgent targetAgent) {
         return promptDo(null, targetAgent);
     }
@@ -2411,11 +2638,11 @@ public class HarnessEngine {
 
         /**
          * 请求级作用域解析器：每次受理的输入（含 goal / loop / queue 的程序输入）都会解析一次，
-         * 输入已显式携带作用域时不调用。作用域只能收窄，且是强制边界（见 {@link TurnScope}）。
+         * 输入已显式携带作用域时不调用。作用域只能收窄，且是强制边界（见 {@link InputScope}）。
          *
          * @since 4.2.0
          */
-        public Builder scopeResolver(TurnScopeResolver scopeResolver) {
+        public Builder scopeResolver(InputScopeResolver scopeResolver) {
             options.setScopeResolver(scopeResolver);
             return this;
         }
@@ -2454,6 +2681,35 @@ public class HarnessEngine {
             return this;
         }
 
+        /**
+         * 全局子代理持久化策略：{@code generate(saveToFile=true)} 会把子代理写进工作区代理目录、对本引擎所有会话可见，
+         * 按本策略判定是否允许（缺省：runtimeMutable 为 true 时允许，即 CODING 允许、SERVER 拒绝）。
+         * 不持久化的（{@code saveToFile=false}）只对创建它的会话可见，不受本策略约束。
+         *
+         * <pre>{@code
+         * .agentPersistPolicy((session, def) -> admins.contains(engine.getSessionPrincipal(session)))
+         * }</pre>
+         *
+         * @since 4.2.0
+         */
+        public Builder agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition> agentPersistPolicy) {
+            options.setAgentPersistPolicy(agentPersistPolicy);
+            return this;
+        }
+
+        /**
+         * 子代理（task / multitask）执行器。缺省为引擎私有、线程上限 {@code TaskTalent.DEFAULT_MAX_THREADS}；
+         * 引擎池场景建议注入一个进程级共享的有界池，避免线程数随租户数线性增长。
+         * <b>注入的执行器生命周期归宿主</b>，引擎 {@code shutdown} 不会关闭它。执行器拒绝提交时，
+         * 已启动的 worker 继续消化剩余子任务，全部被拒时子任务按「未启动」返回给模型。
+         *
+         * @since 4.2.0
+         */
+        public Builder taskExecutor(ExecutorService taskExecutor) {
+            options.setTaskExecutor(taskExecutor);
+            return this;
+        }
+
         public HarnessEngine build() {
             Objects.requireNonNull(options.getSessionProvider(), "sessionProvider");
             options.applyProfile(profile, explicit);
@@ -2465,6 +2721,12 @@ public class HarnessEngine {
 
             for (HarnessExtension extension : options.getExtensions()) {
                 extension.onAttach(engine);
+            }
+
+            // 运行期不可改全局配置时，注册表在扩展挂载完成后封口（绕过 getter 直接注册同样被拒绝）
+            if (options.isRuntimeMutable() == false) {
+                options.commandRegistry.seal();
+                engine.agentManager.seal();
             }
 
             return engine;
@@ -2492,6 +2754,12 @@ public class HarnessEngine {
             }
             if (Assert.isNotEmpty(options.getDefaultModel()) && !options.hasModel(options.getDefaultModel())) {
                 throw new IllegalStateException("defaultModel not found: " + options.getDefaultModel());
+            }
+            SessionOwnership ownership = options.getSessionOwnership();
+            if (ownership != SessionOwnership.LOCAL && !(ownership instanceof SessionOwnership.Namespaced)) {
+                LOG.warn("[Harness] SERVER profile with a shared SessionOwnership without namespace: "
+                        + "sessions of different tenants with the same id will contend for one lease. "
+                        + "Wrap it with SessionOwnership.namespaced(tenantId, delegate)");
             }
             if (!options.isSandboxEnabled() || !options.isSandboxSystemRestrict()) {
                 LOG.warn("[Harness] SERVER profile with OS sandbox relaxed (sandboxEnabled={}, sandboxSystemRestrict={})",

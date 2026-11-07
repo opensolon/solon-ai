@@ -21,7 +21,7 @@ import org.noear.solon.ai.harness.command.CommandContextFactory;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.scope.TurnScope;
+import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -92,7 +92,11 @@ public final class HarnessInput {
     /** 本次请求显式选中的 MCP 服务名；null 表示不限制（沿用全部已注册服务） */
     private List<String> selectedMcps;
 
-    private TurnScope scope;
+    private InputScope scope;
+    /** scope 是解析器回写的（非显式） */
+    private boolean scopeResolved;
+    /** scope 是从积压还原的显式作用域 */
+    private boolean scopeRestored;
     /** 命令上下文工厂；为空时 handle 内部落为 BufferedCommandContextFactory（回执缓冲进 commandOutput） */
     private CommandContextFactory commandContextFactory;
     /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
@@ -389,17 +393,65 @@ public final class HarnessInput {
      *
      * @since 4.2.0
      */
-    public HarnessInput scope(@Nullable TurnScope scope) {
+    public HarnessInput scope(@Nullable InputScope scope) {
         this.scope = scope;
+        this.scopeResolved = false;
+        this.scopeRestored = false;
         return this;
     }
 
     /**
+     * 本轮生效的作用域：显式携带的，或受理时由解析器解析并回写的（见 {@link #isScopeExplicit()}）。
+     *
      * @since 4.2.0
      */
     @Nullable
-    public TurnScope getScope() {
+    public InputScope getScope() {
         return scope;
+    }
+
+    /**
+     * 作用域是否由调用方显式携带（含扩展在 {@code onInput} 里设置的、从积压还原的）。
+     * 解析器解析回写的不算显式：积压只保存显式作用域，解析出来的续发时重新解析（权限变更立即生效）。
+     *
+     * @since 4.2.0
+     */
+    public boolean isScopeExplicit() {
+        return scope != null && scopeResolved == false;
+    }
+
+    /**
+     * 作用域是否从积压还原（续发时与解析器最新结果取交集，只会变窄）
+     *
+     * @since 4.2.0
+     */
+    public boolean isScopeRestored() {
+        return scope != null && scopeRestored;
+    }
+
+    /**
+     * 积压实现还原输入时用：设置从积压保存的显式作用域（见 {@code InputScope#fromSpec}）。
+     * 引擎续发时会把它与解析器的最新结果取交集。
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput restoredScope(@Nullable InputScope scope) {
+        this.scope = scope;
+        this.scopeResolved = false;
+        this.scopeRestored = scope != null;
+        return this;
+    }
+
+    /**
+     * 引擎内部使用：受理时把解析器的结果回写到输入（便于宿主回读），不算显式作用域。
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput resolvedScope(@Nullable InputScope scope) {
+        this.scope = scope;
+        this.scopeResolved = scope != null;
+        this.scopeRestored = false;
+        return this;
     }
 
     /**
@@ -603,7 +655,7 @@ public final class HarnessInput {
      * 引擎二次解析时不会重复剥离（幂等，见 {@code stripMention}）。</p>
      */
     public AgentMentions.Mention parseMention(HarnessEngine engine) {
-        return AgentMentions.parse(engine, text,
+        return AgentMentions.parse(engine, session, text,
                 AgentMentions.Options.builder()
                         .prefix(engine.getAgentPrefix())
                         .explicitAgent(explicitAgent)

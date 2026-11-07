@@ -71,7 +71,7 @@ class GoalSessionRemoveTest {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine engine = engine(ext);
 
-        ext.create("s1", GoalSpec.of("目标").runNow(false));
+        ext.create(sidIn(sessions, "s1"), GoalSpec.of("目标").runNow(false));
         assertEquals(1, jobs.size(), "创建 goal 后应注册 job");
         assertTrue(ext.hasActiveGoals());
 
@@ -88,7 +88,7 @@ class GoalSessionRemoveTest {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).build();
         engine(ext);
 
-        ext.create("s1", GoalSpec.of("目标").runNow(true)); // 下一拍即到期
+        ext.create(sidIn(sessions, "s1"), GoalSpec.of("目标").runNow(true)); // 下一拍即到期
         JobHandler job = jobs.values().iterator().next();
 
         sessions.remove("s1"); // 宿主绕过 removeSession 直接删掉了会话
@@ -114,8 +114,8 @@ class GoalSessionRemoveTest {
                 .extensionAdd(b)
                 .build();
 
-        a.create("s1", GoalSpec.of("A").runNow(false));
-        b.create("s1", GoalSpec.of("B").runNow(false));
+        a.create(sidIn(sessions, "s1"), GoalSpec.of("A").runNow(false));
+        b.create(sidIn(otherSessions, "s1"), GoalSpec.of("B").runNow(false));
         String nameA = a.getGoalScheduler().tickJobName();
         String nameB = b.getGoalScheduler().tickJobName();
         assertNotEquals(nameA, nameB, "不同实例同一会话的 job 不得撞名");
@@ -142,7 +142,7 @@ class GoalSessionRemoveTest {
         Path project = java.nio.file.Files.createDirectories(workspace.resolve("other-project"));
 
         // ① 本轮工具上下文带 __cwd：以它为准
-        ext.create("s1", GoalSpec.of("lint 一下").runNow(false));
+        ext.create(sidIn(sessions, "s1"), GoalSpec.of("lint 一下").runNow(false));
         String json = ext.getGoalTalent().goal_update("complete", "s1", project.toString());
         assertTrue(json.contains("achieved"), json);
         assertEquals(Collections.singletonList(project.toString()), seen);
@@ -150,10 +150,16 @@ class GoalSessionRemoveTest {
         // ② 上下文没有 __cwd：回落到会话工作目录，而不是引擎工作区
         seen.clear();
         engine.setSessionCwd(engine.getSession("s2"), project.toString());
-        ext.create("s2", GoalSpec.of("lint 一下").runNow(false));
+        ext.create(sidIn(sessions, "s2"), GoalSpec.of("lint 一下").runNow(false));
         json = ext.getGoalTalent().goal_update("complete", "s2", null);
         assertTrue(json.contains("achieved"), json);
         assertEquals(Collections.singletonList(project.toString()), seen);
         assertNotEquals(engine.getWorkspace(), seen.get(0));
+    }
+
+    /** 门面不新建会话：先登记会话再按 id 调用 */
+    private static String sidIn(Map<String, AgentSession> store, String id) {
+        store.computeIfAbsent(id, InMemoryAgentSession::of);
+        return id;
     }
 }

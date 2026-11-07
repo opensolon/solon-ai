@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.turn;
+package org.noear.solon.ai.harness;
 
 /**
  * 已准备但尚未提交的中断（两段式中断的第二段入口）。
@@ -90,4 +90,61 @@ public interface InterruptPlan extends AutoCloseable {
      */
     @Override
     void close();
+
+    /**
+     * 本节点是否不持有该会话（多节点部署）。为 true 时第一段什么都没做（未清积压、未推进取消代数），
+     * {@link #hasActiveRun()} 为 false；宿主应按 {@link #getOwner()} 把中断请求转发给持有节点。
+     *
+     * @since 4.2.0
+     */
+    default boolean isNotOwner() {
+        return false;
+    }
+
+    /**
+     * 持有者节点标识（仅 {@link #isNotOwner()} 为 true 时有意义；未知为 null）
+     *
+     * @since 4.2.0
+     */
+    default String getOwner() {
+        return null;
+    }
+
+    /**
+     * 非持有节点上的空计划（什么都不做）
+     *
+     * @since 4.2.0
+     */
+    static InterruptPlan notOwner(String owner) {
+        return new InterruptPlan() {
+            @Override
+            public boolean hasActiveRun() {
+                return false;
+            }
+
+            @Override
+            public boolean writeCancelEarly() {
+                return false;
+            }
+
+            @Override
+            public boolean commit() {
+                return false;
+            }
+
+            @Override
+            public void close() {
+            }
+
+            @Override
+            public boolean isNotOwner() {
+                return true;
+            }
+
+            @Override
+            public String getOwner() {
+                return owner;
+            }
+        };
+    }
 }

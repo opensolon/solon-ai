@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.spi.OwnerCheck;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.intercept.HITL;
@@ -26,8 +27,7 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.spi.InputBacklog;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
-import org.noear.solon.ai.harness.turn.InterruptPlan;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.harness.agent.ToolName;
@@ -63,9 +63,31 @@ final class SessionControl {
         this.commandRegistry = commandRegistry;
     }
 
+    /**
+     * 会话归属检查（多节点单写者）：本节点持有或首次认领成功时为 owned，并登记以便 shutdown 时释放。
+     * 锁外调用——租约实现可能有网络 IO，不得持会话锁等待。
+     */
+    OwnerCheck checkOwner(String sessionId) {
+        SessionOwnership ownership = options.getSessionOwnership();
+        if (ownership == SessionOwnership.LOCAL || sessionId == null) {
+            return OwnerCheck.owned();
+        }
+        if (ownership.tryAcquire(sessionId) == false) {
+            return OwnerCheck.notOwned(ownership.ownerOf(sessionId));
+        }
+        ownedSessions.add(sessionId);
+        return OwnerCheck.owned();
+    }
+
     InterruptPlan prepareInterrupt(AgentSession session) {
         if (session == null) {
             return null;
+        }
+
+        // ⓪ 非持有节点：运行态不在本进程，什么都不做（不清积压、不推进代数），宿主按 owner 转发
+        OwnerCheck owner = checkOwner(session.getSessionId());
+        if (owner.isOwned() == false) {
+            return InterruptPlan.notOwner(owner.getOwner());
         }
 
         // ① 扩展中断参与（先于停流）：逐个隔离异常，任何扩展都不能阻止中断生效
@@ -174,19 +196,9 @@ final class SessionControl {
             return Admission.free();
         }
 
-        // 0) 会话归属（多节点单写者）：锁外判定——租约实现可能有网络 IO，不得持会话锁等待。
-        //    HITL 决策同样要求持有：挂起的 trace 与运行态都在持有节点内存里。
-        SessionOwnership ownership = options.getSessionOwnership();
-        if (ownership.tryAcquire(session.getSessionId()) == false) {
-            return Admission.outcome(InputOutcome.rejected(InputOutcome.REJECT_NOT_OWNER,
-                    ownership.ownerOf(session.getSessionId())));
-        }
-        if (ownership != SessionOwnership.LOCAL) {
-            ownedSessions.add(session.getSessionId());
-        }
-
+        // 会话归属与作用域预检已在锁外完成（见 InputPipeline#handle 的 0a / 0b 步）
         synchronized (session.attrs()) {
-            TurnDispatch dispatch = TurnDispatch.current(session);
+            RunDispatch dispatch = RunDispatch.current(session);
             boolean onDispatchThread = dispatch != null && dispatch.isOnDispatchThread();
             boolean busyCommand = isBusyRunnable(input);
             boolean hitlDecision = input.isHitlDecision();
@@ -252,6 +264,13 @@ final class SessionControl {
 
         if (Assert.isEmpty(input.getText())) {
             return InputOutcome.ignored();
+        }
+
+        // 显式作用域随积压保存（解析所得的不存，续发时重新解析）；含不可保存维度时拒绝，
+        // 不能悄悄丢掉模型 / 属性后按更宽的权限执行
+        if (input.isScopeExplicit() && input.getScope().isDeferrable() == false) {
+            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_NOT_DEFERRABLE,
+                    "当前任务正在执行，该消息带有不可保存的权限范围，请稍后再发");
         }
 
         int position;

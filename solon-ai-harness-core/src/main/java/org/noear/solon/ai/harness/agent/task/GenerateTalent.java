@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.harness.agent.task;
 
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.agent.SessionAgents;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -67,11 +69,17 @@ public class GenerateTalent extends AbsTalent {
                     "- `codesearch`，互联网代码仓库搜索\n" +
                     "- `*`，全量授权") List<String> tools,
             @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
-            @Param(name = "saveToFile", description = "是否持久化。如果是通用的、可复用的专家角色，建议设为 true；如果是临时任务助手，设为 false。", defaultValue = "false", required = false) Boolean saveToFile,
-            String __cwd
+            @Param(name = "saveToFile", description = "是否持久化。true：写入工作区代理目录，所有会话可用（通用、可复用的专家角色）；false：仅当前会话可用（临时任务助手）。", defaultValue = "false", required = false) Boolean saveToFile,
+            String __cwd,
+            String __sessionId
     ) {
         if (name == null || !name.matches("^[a-zA-Z0-9_-]+$")) {
             return "ERROR: name 标识符不合法，仅允许使用英文字符、数字、下划线或中划线。";
+        }
+
+        // 保留名（main / general / 内置代理）不可创建：同名会把所有会话的内置代理换成模型生成的提示词
+        if (engine.isReservedAgentName(name)) {
+            return "ERROR: '" + name + "' 是保留名，请换一个名字。";
         }
 
         try {
@@ -89,19 +97,44 @@ public class GenerateTalent extends AbsTalent {
             definition.getMetadata().setSkills(skills);
 
             boolean shouldSave = saveToFile != null && saveToFile;
+            AgentSession session = engine.getSessionOrNull(__sessionId);
 
             if (shouldSave) {
+                // 全局：同名不覆盖（含挂载目录与已有文件），且受持久化策略约束（SERVER 缺省拒绝）
+                if (engine.getAgentManager().hasAgent(name)) {
+                    return "ERROR: 已存在同名的全局子代理，不覆盖：" + name;
+                }
+                if (engine.getAgentPersistPolicy().test(session, definition) == false) {
+                    return "ERROR: 当前环境不允许创建全局子代理。请改用 saveToFile=false（仅本会话可用）。";
+                }
                 // 经工作区来源写入 <harnessAgents>/<name>.md（与工作区 agents 挂载同口径，不再硬编码 .soloncode、不随 cwd 漂移）
                 String agentPath = engine.getHarnessAgents() + name + ".md";
+                if (engine.getWorkspaceSource().exists(agentPath)) {
+                    return "ERROR: 代理定义文件已存在，不覆盖：" + agentPath;
+                }
+                if (engine.getAgentManager().addAgentIfAbsent(definition) == false) {
+                    return "ERROR: 已存在同名的全局子代理，不覆盖：" + name;
+                }
                 engine.getWorkspaceSource().writeString(agentPath, definition.toMarkdown());
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Agent 定义已保存到: {}", agentPath);
                 }
+            } else {
+                // 会话级：只对本会话可见（随会话快照保存，不进引擎级注册表）
+                if (session == null) {
+                    return "ERROR: 缺少会话上下文，无法创建仅本会话可用的子代理。";
+                }
+                if (engine.getAgentManager().hasAgent(name)) {
+                    return "ERROR: 与全局子代理同名：" + name + "，请换一个名字。";
+                }
+                if (SessionAgents.putIfAbsent(session, definition, SessionAgents.MAX_PER_SESSION) == false) {
+                    return "ERROR: 本会话已有同名子代理，或会话级子代理数量已达上限（"
+                            + SessionAgents.MAX_PER_SESSION + "）。";
+                }
+                session.updateSnapshot();
             }
 
-            engine.getAgentManager().addAgentIfAbsent(definition);
-
-            return "[OK] 子代理创建成功！\n\n" +
+            return "[OK] 子代理创建成功（" + (shouldSave ? "全局" : "仅本会话") + "）！\n\n" +
                     String.format("**标识**: %s\n", name) +
                     String.format("**描述**: %s\n", description) +
                     String.format("\n现在可以使用 `task(name=\"%s\", prompt=\"...\")` 来调用。", name);

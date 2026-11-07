@@ -25,7 +25,13 @@ public final class SteerCancelResult {
         /** 请求所带 runId 已不是当前轮次：旧 steerId 已无意义 */
         TURN_CHANGED,
         /** steerId 为空或超过长度上限 */
-        INVALID_STEER_ID
+        INVALID_STEER_ID,
+        /**
+         * 多节点部署：本节点不持有该会话，宿主应转发给持有节点
+         *
+         * @since 4.2.0
+         */
+        NOT_OWNER
     }
 
     private final Code code;

@@ -81,7 +81,7 @@ class GoalSchedulerTickTest {
         scheduler.setClock(now::get);
 
         for (int i = 0; i < 50; i++) {
-            ext.create("s" + i, GoalSpec.of("目标" + i).runNow(true));
+            ext.create(sid("s" + i), GoalSpec.of("目标" + i).runNow(true));
         }
         assertEquals(1, jobs.size(), "50 个活跃 goal 只占 1 个节拍 job");
 
@@ -183,5 +183,10 @@ class GoalSchedulerTickTest {
 
         n2.getGoalScheduler().unschedule("web-2");
         assertEquals(Arrays.asList("../x*y", "web-1"), n1.getGoalScheduler().readIndex());
+    }
+
+    private String sid(String id) {
+        sessions.computeIfAbsent(id, InMemoryAgentSession::of);
+        return id;
     }
 }

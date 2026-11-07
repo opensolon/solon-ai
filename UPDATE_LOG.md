@@ -1,9 +1,18 @@
 ### vNEXT
 
+* **harness：术语收敛为 input / run / step，`turn` 包取消**（4.2.0；破坏性，未发布直接改名，不留桥接）:
+  * `scope.TurnScope` → `scope.InputScope`、`scope.TurnScopeResolver` → `scope.InputScopeResolver`、`spi.TurnDispatch` → `spi.RunDispatch`
+  * `turn.SessionTurn` → 根包 `RunTicket`，`turn.InterruptPlan` → 根包 `InterruptPlan`（`turn` 包只剩两个类，并入根包）
+  * `HarnessAttrs.TURN_DISPATCH`（`session.turn.dispatch`）→ `RUN_DISPATCH`（`session.run.dispatch`，只在内存 attrs）；请求属性键 `harness.turnScope` → `harness.inputScope`
+  * 包边界守卫改为「子包不得依赖 `RunTicket` / `InterruptPlan`」，并锁定 `turn`、`run` 包不得复活
+  * 有意保留：`maxTurns`；`SteerResult.Code.TURN_CHANGED`（码值下发到前端）
+  * soloncode-cli 同版本同步；文档 README / SAAS.md / SAAS-ISSUES.md / SAAS-PLAN.md（第二版）/ queue README 按新名更新
+  * **验证**：core 665 例 32F+5E（失败集与基线一致），goal 229 / queue 94 / steer 72 / loop 100 全绿，聚合 7 例 1F（既有），soloncode-cli 1220 例 3F（既有）
+
 * **`InputOutcome#afterRun(Runnable)`：本轮运行句柄注销之后的回调**（4.2.0；纯新增）:
   * **修复**：宿主在流的 `doFinally` 里续发积压时，排队消息不会自动发出。Reactor 正常终止时下游 `doFinally` 先于上游执行，而运行句柄在 `ReActRequest` 最内层才注销，宿主 `doFinally` 里 `isOccupied` 恒为 true，`drainLoop` 直接返回，要等下一次外部触发
   * **新增**：`ReActRequest#afterRun()`（受保护钩子，`stream()` 每次订阅终止、`call()` 每次结束且句柄注销后调用，异常只记日志）；`InputOutcome#afterRun(Runnable)`（仅 TASK 有效，返回是否登记成功；未开流就 `discard` 时不执行）；`InputOutcome#admitted` 增加第 4 参 `afterRunRegistrar`
-  * **文档**：`SessionTurn` javadoc 与 queue README 4.4 的标准写法改为 `outcome.afterRun(() -> drainQueue())`，`doFinally` 只保留 `settle` 与发 done
+  * **文档**：`RunTicket` javadoc 与 queue README 4.4 的标准写法改为 `outcome.afterRun(() -> drainQueue())`，`doFinally` 只保留 `settle` 与发 done
   * **验证**：新增 `AfterRunContractTest` 6 例；core 644 例 32F+5E（失败集与基线一致），goal 229 / queue 94 / steer 72 / loop 100 全绿，聚合 7 例 1F（既有 @Deprecated 守卫）
 
 * **TerminalTalent 受保护目录跟随 harnessHome**（新增面为主）：新增 `TerminalTalent(MountManager, String harnessHome)`，harness 引擎传入自身 harnessHome；文件工具强制拒绝 `<hh>commands|agents|cache/mount`、OS 沙盒对工作区根与本轮工作根下的 `<hh>commands|agents` 加 denyWrite、物化缓存改为 `~/<hh>cache/mount`、ignoreDirs 追加 `<hh>` 首段。修复引擎缺省 `.solon/` 时模型可改写 `<ws>/.solon/agents|commands`。单参构造与 `TerminalSupport.isMandatoryDenyRelativePath(rel)` 仍按 `.soloncode/`，另增双参版本
@@ -54,13 +63,13 @@
 
 * **宿主侧接口收敛：流生命周期/受理判定/会话选择项上收，内置扩展一次装配**（4.2.1；新增面为主，旧入口保留）:
   * **背景**：`handle` + 四态 `switch` 已让「跑一轮」很轻，但超出这一层的胶水仍由宿主持有，且**同一不变量在五端重复实现**——「取消代数在订阅前捕获、取消以 complete 收尾」只活在 README，`WebSessionRunner` 的 async/sync 两条路径各抄一遍（sync 的 `doFinally` 因此漏掉 `settleTurn`）；受理判定 55 行写在 `WebChatInputHandler` 的 `synchronized (session.attrs())` 块里，而它用到的每个原语都已在 harness；会话级选择项 `CTX_MODEL_SELECTED`/`CTX_AGENT_SELECTED` 是裸常量（全仓 25 处，四种清除写法并存），而同类的 cwd 早已有门面
-  * **`SessionTurn`（新）**：`begin(session)` 在**订阅前**捕获取消代数基准与本轮派发事务，`isCancelled()` / `settle(boolean)` / `dispatch()` / `cancelGeneration()`。「须在 stream() 之前 begin」从文档义务变成 API 形状（方法名语义 + javadoc）；`settle` 幂等，无派发时回落读当前派发。Web async/sync 与桌面端全部替换，宿主侧 `SessionRuns.cancelCount` / `QueueDispatch.current` 自捕获归零。**顺带修复**：Web sync 路径原本漏收口派发事务，收归 `SessionTurn` 后两条路径同形，该类缺陷从「靠人工对称」变为「不可能写错」
+  * **`RunTicket`（新）**：`begin(session)` 在**订阅前**捕获取消代数基准与本轮派发事务，`isCancelled()` / `settle(boolean)` / `dispatch()` / `cancelGeneration()`。「须在 stream() 之前 begin」从文档义务变成 API 形状（方法名语义 + javadoc）；`settle` 幂等，无派发时回落读当前派发。Web async/sync 与桌面端全部替换，宿主侧 `SessionRuns.cancelCount` / `QueueDispatch.current` 自捕获归零。**顺带修复**：Web sync 路径原本漏收口派发事务，收归 `RunTicket` 后两条路径同形，该类缺陷从「靠人工对称」变为「不可能写错」
   * **受理判定收进引擎（已由「受理收敛为唯一执行入口 handle」取代）**：把六项判定（运行流、受理窗口、待审批卡、队列积压、派发身份、忙时可执行命令）收进引擎，判定与占位同临界区；忙态口径固定为 `isOccupied`（含 HITL 与积压），**宿主不得传自己的判定**——这正是历史漂移点。曾以独立的受理方法 + 四值决策对外提供（初版本条误记为含 `QUEUE`，实际延后值为 `DEFER`），现已删除，判定并入 `handle` 第 0 步，结局并入 `InputOutcome`（`DEFERRED` / `REJECTED`，以及 `isBesideRunning()` / `isDispatched()`）；延后时由引擎经 `InputBacklog#offer(session, HarnessInput)` 自行入积压，`reasoningEffort` / `thinkingMode` 这类宿主域概念以 `HarnessInput#attr` 原样透传、引擎不解读；`REJECTED` 只给原因码与默认文案、渲染归宿主
   * **会话选择项门面**：`getSessionModel`/`setSessionModel`/`getSessionAgent`/`setSessionAgent`（对称于既有 `getSessionCwd` 系列）+ `SessionSelections`（静态读入口，供 `TraceUtil` 这类拿不到引擎实例的工具）。四种清除写法（`put("")` / `put(null)` / `remove` / 带守卫）归一为「null 与空白都等于未设置，读回恒为 null」；`CTX_*` 常量保留但不再被宿主直接引用（25 → 0，仅剩注释）
   * **`HarnessExtensions.installDefaults(engine, goal|workspaceId)` + `Handles`（新）**：steer / queue / goal 一次装齐，顺序固定（三者 `onAttach` 都只 `register`，命令名互不冲突，顺序不承载语义，固定只为可复现），**幂等**（已挂载同类型则复用，挡住 `addExtension` 不查重导致的二次 `onAttach` 重建调度器）。宿主自有扩展（loop / manager）仍走 `addExtension` 追加，聚合入口不接管。**明确不做 builder**：queue 零旋钮零状态，加 builder 只是空壳（README 常见坑 15）；真正缺的是「三件套怎么一次装对」这个组合根职责
   * **`QueueExtension.maxQueueSize()` / `maxTextLength()`**：静态只读访问器（对称 `SteerExtension.maxTextLength()`），供宿主前端预校验，不改变内核语义、不引入 builder
   * **cwd 兜底注入**：`handle` 装配时按 `getSessionCwd(session)` 注入 request 级 `ATTR_CWD`。宿主四处注入**保留**——ACP 是协议请求级、Web 是前端上报、桌面是入参，「请求级覆盖」与「会话缺省」是两个来源
-  * **新测试 14 例**：`SessionTurnTest` 6（取消早于/晚于 begin 的归属、空会话无条件安全、幂等收口）、`HarnessExtensionsTest` 8（装齐、命令注册、幂等、复用已挂载、goal 缺席降级、null 引擎容错、宿主扩展不受扰、宿主配置不被丢弃）；`HarnessEngineAccessorTest` 补会话选择项归一断言
+  * **新测试 14 例**：`RunTicketTest` 6（取消早于/晚于 begin 的归属、空会话无条件安全、幂等收口）、`HarnessExtensionsTest` 8（装齐、命令注册、幂等、复用已挂载、goal 缺席降级、null 引擎容错、宿主扩展不受扰、宿主配置不被丢弃）；`HarnessEngineAccessorTest` 补会话选择项归一断言
   * **护栏 3 条**（`PackageBoundaryTest`）：禁 `SessionRuns.cancelCount` 与流路径自捕获 `QueueDispatch.current`；入口须经引擎受理判定（且不得回潮 `synchronized (session.attrs())` 手拼；受理收敛后改为入口只调 `handle`）；禁裸 `CTX_*`；禁逐行 `addExtension(new SteerExtension())` / `new QueueExtension()` / `addExtension(goalExtension)`。首跑即暴露 2 处真实残留，修复后 15 例全绿
   * **验证**：harness 全量 **916 例 33F+5E**、cli 全量 **1259 例 3F**，失败域与基线逐项一致（harness：ToolStrategy/Web/Write 权限域 + TaskTalent/Accessor 环境域；cli：settings/挂载域三例）；`PackageBoundaryTest` 15 例全绿
 

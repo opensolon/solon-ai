@@ -243,11 +243,15 @@ class GoalRuntime {
         return !executors.isEmpty() || defaultExecutor != null;
     }
 
-    /** 按 sessionId 解析会话（引擎未就绪或解析失败时返回 null）。 */
+    /**
+     * 按 sessionId 解析<b>已存在</b>的会话（不存在、引擎未就绪或解析失败时返回 null；不新建会话）。
+     *
+     * <p>门面拿到的是外部传入的 ID：按「不存在则新建」解析会把已删除 / 不存在的会话建出来。</p>
+     */
     public AgentSession sessionOf(String sessionId) {
         if (engine == null || sessionId == null) return null;
         try {
-            return engine.getSession(sessionId);
+            return engine.getSessionOrNull(sessionId);
         } catch (Throwable e) {
             LOG.debug("resolve session '{}' failed: {}", sessionId, e.getMessage());
             return null;
@@ -259,6 +263,10 @@ class GoalRuntime {
      *
      * <p>与 {@link #sessionOf} 不同，解析异常会向外抛出——调用方要能区分「确实不存在」与「暂时取不到」。</p>
      */
+    HarnessEngine engine() {
+        return engine;
+    }
+
     AgentSession sessionOrNull(String sessionId) {
         if (engine == null || sessionId == null) return null;
         return engine.getSessionOrNull(sessionId);

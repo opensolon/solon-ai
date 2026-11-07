@@ -17,8 +17,10 @@ package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActRequest;
-import org.noear.solon.ai.harness.scope.TurnScope;
-import org.noear.solon.ai.harness.scope.TurnScopeResolver;
+import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.ai.harness.spi.OwnerCheck;
+import org.noear.solon.ai.harness.agent.task.SessionAgentsTalent;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
@@ -88,14 +90,37 @@ final class InputPipeline {
         final AgentSession session = input.getSession();
         final Map<AgentSession, Boolean> admittedOnThread = ADMITTED_ON_THREAD.get();
 
+        if (engine.isClosed()) {
+            // 宿主持有过期引用：明确失败，而不是悄悄重新拉起 LSP / MCP 等已释放的资源
+            return InputOutcome.rejected(InputOutcome.REJECT_ENGINE_CLOSED, null);
+        }
+
         if (session == null || admittedOnThread.containsKey(session)) {
             // 无会话（如一次性摘要）或命令内部重入：不判定、不占位（afterRun 仍可用）
+            InputOutcome scopeReject = precheckScope(input);
+            if (scopeReject != null) {
+                return scopeReject;
+            }
             InputOutcome outcome = assemble(input);
             AdmittedRequest admitted = admittedOf(outcome);
             return admitted == null ? outcome : outcome.admitted(false, null, null, admitted::addAfterRun);
         }
 
-        // ========== 0. 受理判定（判定、占位、入积压同一把会话锁）==========
+        // ========== 0a. 会话归属（锁外：租约实现可能有网络 IO）==========
+        //    HITL 决策同样要求持有：挂起的 trace 与运行态都在持有节点内存里。
+        OwnerCheck owner = sessionControl.checkOwner(session.getSessionId());
+        if (owner.isOwned() == false) {
+            return InputOutcome.rejected(InputOutcome.REJECT_NOT_OWNER, owner.getOwner());
+        }
+
+        // ========== 0b. 作用域预检（锁外；归属之后，非持有节点不调解析器）==========
+        //    放在受理之前：解析不到作用域的输入不占位、不进积压（不消耗积压配额）。
+        InputOutcome scopeReject = precheckScope(input);
+        if (scopeReject != null) {
+            return scopeReject;
+        }
+
+        // ========== 0c. 受理判定（判定、占位、入积压同一把会话锁）==========
         Admission admission = sessionControl.admit(input);
         if (admission.getOutcome() != null) {
             return admission.getOutcome();
@@ -148,18 +173,9 @@ final class InputPipeline {
             }
         }
 
-        // 请求级作用域：显式携带优先，其次引擎级解析器（扩展可在 onInput 里就地设置）。
-        // 要求作用域时解析不到就拒绝（缺失不得等于不限制）；未要求时解析器异常照旧上抛。
-        final TurnScope scope;
-        try {
-            scope = resolveScope(input);
-        } catch (RuntimeException e) {
-            if (options.isScopeRequired() == false) {
-                throw e;
-            }
-            LOG.warn("[Harness] scope resolve failed, input rejected: {}", e.toString());
-            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, e.getMessage());
-        }
+        // 请求级作用域：受理前已预检（显式携带的原样、解析器的结果回写到输入）；
+        // 扩展可在 onInput 里就地覆盖（input.scope(...)），以输入上的最终值为准。
+        final InputScope scope = input.getScope();
         if (scope == null && options.isScopeRequired()) {
             return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
         }
@@ -208,7 +224,7 @@ final class InputPipeline {
 
         // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
         if (input.isCommandAware() && !attachments.hasAny()) {
-            InputOutcome commandOutcome = dispatchCommand(session, input);
+            InputOutcome commandOutcome = dispatchCommand(session, input, scope);
             if (commandOutcome != null) {
                 return commandOutcome;
             }
@@ -253,11 +269,24 @@ final class InputPipeline {
                                   @Nullable String selectedAgent,
                                   @Nullable List<String> selectedSkills,
                                   @Nullable List<String> selectedMcps,
-                                  @Nullable TurnScope scope) {
-        ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(selectedAgent));
+                                  @Nullable InputScope scope) {
+        ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(session, selectedAgent));
 
         if (session != null) {
             request.session(session);
+
+            // 本会话的会话级子代理：只在本会话的请求里列出（委派解析本身由 TaskTalent 按会话完成）
+            Collection<String> localAgents = SessionAgents.names(session);
+            if (localAgents.isEmpty() == false && options.isSubagentEnabled()) {
+                List<AgentDefinition> defs = new ArrayList<>();
+                for (String name : localAgents) {
+                    AgentDefinition def = SessionAgents.get(session, name);
+                    if (def != null) {
+                        defs.add(def);
+                    }
+                }
+                request.options(o -> o.talentAdd(new SessionAgentsTalent(defs)));
+            }
         }
 
 
@@ -275,9 +304,9 @@ final class InputPipeline {
         // 需按请求覆盖，属于真实差异，故它保留自己的那次写入）。
         // options() 是 andThen 叠加语义，宿主后写的值覆盖这里的缺省值。
         if (session != null) {
-            final String sessionCwdForTurn = engine.getSessionCwd(session);
-            if (Assert.isNotEmpty(sessionCwdForTurn)) {
-                request.options(o -> o.toolContextPut(HarnessEngine.ATTR_CWD, sessionCwdForTurn));
+            final String sessionCwdForRun = engine.getSessionCwd(session);
+            if (Assert.isNotEmpty(sessionCwdForRun)) {
+                request.options(o -> o.toolContextPut(HarnessEngine.ATTR_CWD, sessionCwdForRun));
             }
         }
 
@@ -298,22 +327,68 @@ final class InputPipeline {
     }
 
     /**
-     * 解析本轮作用域（显式携带优先，其次引擎级解析器；解析结果回写到输入上，便于宿主回读）
+     * 作用域预检（受理之前、锁外）：确定本轮作用域并写回输入；不通过时返回拒绝结局（不占位、不入积压）。
+     *
+     * <ul>
+     *     <li>显式携带（非积压还原）：原样使用，不调解析器；</li>
+     *     <li>积压还原的显式作用域：与解析器最新结果取交集（只会变窄；主体不一致拒绝）；</li>
+     *     <li>未携带：调解析器，结果以「解析所得」写回输入（积压不保存它，续发时重新解析）。</li>
+     * </ul>
+     *
+     * <p>解析器只应依赖会话与输入本身（调用时扩展的 {@code onInput} 尚未执行）。
+     * 要求作用域时解析不到就拒绝（缺失不得等于不限制）；未要求时解析器异常照旧上抛。</p>
+     *
+     * @return 拒绝结局；null 表示通过
      */
     @Nullable
-    private TurnScope resolveScope(HarnessInput input) {
-        if (input.getScope() != null) {
-            return input.getScope();
-        }
+    private InputOutcome precheckScope(HarnessInput input) {
+        final InputScopeResolver resolver = options.getScopeResolver();
+        final boolean required = options.isScopeRequired();
+        final InputScope explicit = input.isScopeExplicit() ? input.getScope() : null;
 
-        TurnScopeResolver resolver = options.getScopeResolver();
-        if (resolver == null) {
+        if (explicit != null && input.isScopeRestored() == false) {
             return null;
         }
 
-        TurnScope scope = resolver.resolve(input.getSession(), input);
-        input.scope(scope);
-        return scope;
+        if (resolver == null) {
+            if (explicit == null) {
+                input.resolvedScope(null);
+                if (required) {
+                    return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+                }
+            }
+            return null;
+        }
+
+        InputScope resolved;
+        try {
+            resolved = resolver.resolve(input.getSession(), input);
+        } catch (RuntimeException e) {
+            if (required == false) {
+                throw e;
+            }
+            LOG.warn("[Harness] scope resolve failed, input rejected: {}", e.toString());
+            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, e.getMessage());
+        }
+
+        if (explicit != null) {
+            // 积压续发：保存的显式作用域 ∩ 最新解析（撤销的权限立即生效，且不会被放宽）
+            if (resolved == null) {
+                return required ? InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null) : null;
+            }
+            InputScope narrowed = InputScope.intersect(explicit, resolved);
+            if (narrowed == null) {
+                return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, "principal mismatch");
+            }
+            input.scope(narrowed);
+            return null;
+        }
+
+        if (resolved == null && required) {
+            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+        }
+        input.resolvedScope(resolved);
+        return null;
     }
 
     /**
@@ -446,7 +521,7 @@ final class InputPipeline {
      * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
      * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
      */
-    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input) {
+    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input, @Nullable InputScope scope) {
         if (input.getText() == null || input.hasAttachments()) {
             return null;
         }
@@ -454,6 +529,13 @@ final class InputPipeline {
         ParsedCommand command = ParsedCommand.parse(input.getText(), options.getCommandPrefix());
         if (command == null) {
             return null;
+        }
+
+        // 作用域的命令名单：名单外的已注册命令不执行（与「本渠道不可用」同一结局，宿主无须新分支）
+        if (scope != null && scope.allowsCommand(command.getName()) == false
+                && options.commandRegistry.get(command.getName()) != null) {
+            return InputOutcome.unavailable(command.getName(),
+                    "命令不可用：" + options.getCommandPrefix() + command.getName(), command);
         }
 
         CommandContextFactory factory = input.getCommandContextFactory();

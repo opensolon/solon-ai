@@ -10,7 +10,7 @@ import org.noear.solon.ai.harness.spi.SessionOwnership;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
-import org.noear.solon.ai.harness.scope.TurnScope;
+import org.noear.solon.ai.harness.scope.InputScope;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -54,7 +54,7 @@ class MultiTenantContractTest {
         HarnessEngine engine = builder()
                 .scopeResolver((session, input) -> {
                     seen.add(input.isProgram() ? "program" : "user");
-                    return TurnScope.builder("tenant-a").tools("read").build();
+                    return InputScope.builder("tenant-a").tools("read").build();
                 })
                 .build();
 
@@ -82,7 +82,7 @@ class MultiTenantContractTest {
                 })
                 .build();
 
-        TurnScope explicit = TurnScope.builder("x").build();
+        InputScope explicit = InputScope.builder("x").build();
         HarnessInput in = HarnessInput.of(InMemoryAgentSession.of(), "hi").scope(explicit);
         engine.handle(in).discard();
         assertEquals(0, calls.get());
@@ -198,7 +198,7 @@ class MultiTenantContractTest {
         assertTrue(boom.isIdle(s), "拒绝后不留占位");
 
         HarnessEngine ok = builder().scopeRequired(true)
-                .scopeResolver((ss, in) -> TurnScope.builder("t").tools("read").build())
+                .scopeResolver((ss, in) -> InputScope.builder("t").tools("read").build())
                 .build();
         InputOutcome o3 = ok.handle(HarnessInput.of(InMemoryAgentSession.of(), "hi"));
         assertEquals(InputOutcome.Kind.TASK, o3.getKind());

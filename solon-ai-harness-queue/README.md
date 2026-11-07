@@ -3,7 +3,7 @@
 solon-ai-harness 的会话级排队插件。在当前任务运行时，把后续消息登记到会话队列；当前任务结束、会话空闲后，由宿主驱动领取（`claimNext` / `drainLoop`），把队列里的消息作为新任务发送。
 
 - 包名：`org.noear.solon.ai.harness.extension.queue`
-- 只依赖核心契约（`HarnessExtension` / `spi.InputBacklog` / `spi.TurnDispatch`），不依赖其它插件
+- 只依赖核心契约（`HarnessExtension` / `spi.InputBacklog` / `spi.RunDispatch`），不依赖其它插件
 - 宿主只接触一个门面类：`QueueExtension`
 
 **两种时态**（第三章总览，第四、五章分别给出完整示例）：
@@ -29,10 +29,10 @@ solon-ai-harness 的会话级排队插件。在当前任务运行时，把后续
 ### 1.2 生命周期：入队、领取、收口、代际保护
 
 1. **入队**：`enqueue(...)`（或 `/queue` 命令、引擎 `handle` 忙时经 `InputBacklog#offer` 转入）把一条 `QueueItem` 以 `PENDING` 状态追加到队尾，并随会话快照落盘。
-2. **领取**：`claimNext(...)` 在会话锁内抢占领取权，然后取出队首，置为 `RUNNING` 并记为 in-flight；生成一个 `QueueClaim`（同时登记为核心槽位 `TurnDispatch`），领取瞬间绑定当前代际快照，再交给 `QueueClaimHandler`。
+2. **领取**：`claimNext(...)` 在会话锁内抢占领取权，然后取出队首，置为 `RUNNING` 并记为 in-flight；生成一个 `QueueClaim`（同时登记为核心槽位 `RunDispatch`），领取瞬间绑定当前代际快照，再交给 `QueueClaimHandler`。
 3. **收口**：只有两条路径。
    - handler 返回 `true`（同步完成）：内核当场确认（acknowledge），从 in-flight 移除；
-   - handler 返回 `false`（异步启动）：由流终态调用核心 `SessionTurn#settle(boolean)`，内部转到 `QueueClaim#settle(boolean)`：`true` 为确认，`false` 为回滚到队首。
+   - handler 返回 `false`（异步启动）：由流终态调用核心 `RunTicket#settle(boolean)`，内部转到 `QueueClaim#settle(boolean)`：`true` 为确认，`false` 为回滚到队首。
    - handler 抛异常：视为启动失败，内核按领取时的代际快照回滚到队首，返回 `START_FAILED`。
 4. **代际保护**：`cancelPending`（以及 `engine.interrupt` 触发的 `onSessionInterrupt`）会清空待执行、移除 in-flight 记录、注销本插件的派发登记并把代际加一。此后旧 claim 的回滚因代际不匹配被拒绝，任务被丢弃，不会在用户 Stop 后“复活”。
 
@@ -57,9 +57,9 @@ sequenceDiagram
     alt 同步完成(返回 true)
         Q->>Q: acknowledge
     else 异步启动(返回 false)
-        H->>S: SessionTurn.begin + 开流
+        H->>S: RunTicket.begin + 开流
         S-->>H: 流终态
-        H->>Q: turn.settle(true/false)
+        H->>Q: ticket.settle(true/false)
         Note over Q: true=确认; false=回队首(代际已变则丢弃)
     end
     U->>H: Stop
@@ -75,7 +75,7 @@ sequenceDiagram
 | `HarnessExtension#contributeSessionStatus` | 贡献 `QueueExtension.STATUS_PENDING`（待执行数） |
 | `HarnessExtension#onSessionInterrupt` | 调用 `cancelPending`（清理类，不判开关） |
 | `HarnessExtension#onAttach` | 注册 `/queue` 命令 |
-| `spi.TurnDispatch` | `QueueClaim` 实现，领取成功即登记到核心槽位，收口即注销 |
+| `spi.RunDispatch` | `QueueClaim` 实现，领取成功即登记到核心槽位，收口即注销 |
 
 ## 二、依赖
 
@@ -229,7 +229,7 @@ public class ImQueueHost {
                 } catch (Throwable e) {
                     outcome.discard();   // 幂等；开流前失败时确保占位释放
                     if (outcome.isDispatched()) {
-                        throw new IllegalStateException("queued turn failed to start", e); // 交回派发侧回滚到队首
+                        throw new IllegalStateException("queued run failed to start", e); // 交回派发侧回滚到队首
                     }
                     reply(route, "处理失败：" + e.getMessage());
                 }
@@ -288,18 +288,18 @@ void startStreamAsync(AgentSession session, QueueItem item) {
         return;
     }
     // 必须在订阅前、领取回调内调用：此时会捕获本次 QueueClaim
-    SessionTurn turn = SessionTurn.begin(session);
+    RunTicket ticket = RunTicket.begin(session);
     // 终态后续发下一条：登记在「运行句柄注销之后」（见下方要点）
     outcome.afterRun(() -> queue.drainLoop(session, s -> !engine.status(s).isOccupied(), this::dispatch));
     executor.execute(() -> {
-        if (turn.isCancelled()) {
+        if (ticket.isCancelled()) {
             outcome.discard();
-            turn.settle(false);               // 调度窗口内被取消；若已被 cancelPending 作废则为空操作
+            ticket.settle(false);               // 调度窗口内被取消；若已被 cancelPending 作废则为空操作
             return;
         }
         outcome.getRequest().stream()
                 .doOnNext(e -> render(session, e))
-                .doFinally(s -> turn.settle(true))   // 幂等；此时会话仍算忙，不要在这里 drain
+                .doFinally(s -> ticket.settle(true))   // 幂等；此时会话仍算忙，不要在这里 drain
                 .subscribe();
     });
 }
@@ -319,7 +319,7 @@ void startStreamAsync(AgentSession session, QueueItem item) {
 1. **命令注册由插件完成**：`QueueExtension#onAttach` 已注册 `/queue`，宿主不用注册。
 2. **忙态由引擎处理，宿主不要自己拦**：所有输入直接交给 `engine.handle`。`/queue` 声明 `runnableWhenBusy`，运行中在运行任务旁边执行（`isBesideRunning() == true`，宿主不要据此改写回复路由）；其余可排队输入由引擎调 `InputBacklog#offer` 入队并返回 `DEFERRED`。宿主侧不要再为忙态调 `queue.enqueue`，否则会重复入队。
 3. **空闲时的 `/queue` 也会入队**：此时没有终态可等，必须在 `REPLY` 后立即 `drain`（示例的 `handleOutcome`），否则这条要等下一个任务结束才会被发出。
-4. **续发在同一线程回到 `handle`**：在领取回调里调用 `engine.handle(claim.getItem().toInput(session))`，引擎用 `TurnDispatch#isOnDispatchThread()` 识别派发轮次（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定；派发线程上的 `TASK` 同样占位，直到请求被订阅或 `call()` 结束。异步开流的宿主改为在领取回调里 `SessionTurn.begin(session)`，流终态 `turn.settle(ok)`（4.4）。
+4. **续发在同一线程回到 `handle`**：在领取回调里调用 `engine.handle(claim.getItem().toInput(session))`，引擎用 `RunDispatch#isOnDispatchThread()` 识别派发轮次（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定；派发线程上的 `TASK` 同样占位，直到请求被订阅或 `call()` 结束。异步开流的宿主改为在领取回调里 `RunTicket.begin(session)`，流终态 `turn.settle(ok)`（4.4）。
 5. **派发轮次的回复路由取 `outcome.getDispatch().getOrigin()`**：即当初入队时的来源，而不是触发续发的那次请求。
 6. **派发轮次启动失败要抛出**：抛给 `drainLoop` 的回调后，内核按领取时的代际回滚到队首并返回 `START_FAILED`，不会无限重试。
 7. **排队的可以是命令**：忙态下用户发 `/goal ...`、`/loop ...` 这类非忙时可执行命令时，`handle` 把它们以原文入队并返回 `DEFERRED`，续发时经同一入口按命令执行。宿主域属性（如 `attr("reasoningEffort", ...)`）随队列项保存，`toInput` 时原样带回。
@@ -611,7 +611,7 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 | `getMaxTextLength()` | `int` | — | — | 本实例的单条文本上限（缺省 `4096`） |
 | `static builder()` | `Builder` | — | 装配 | `maxSize(int)` / `maxTextLength(int)` |
 
-`QueueClaim`（`implements TurnDispatch`，由插件创建）：
+`QueueClaim`（`implements RunDispatch`，由插件创建）：
 
 | 方法 | 说明 |
 |---|---|
@@ -633,8 +633,8 @@ if (engine.interrupt(session)) {              // 先回调 onSessionInterrupt �
 4. **START_FAILED 不要立即重试**：任务已回到队首，立即重试会对同一条失败任务无限循环。
 5. **回滚遇到队列已满**：回滚允许在待执行已有 20 条时再放回 1 条；超过时回滚被拒，任务保持 in-flight，派发登记也保持，需要再次收口。
 6. **cancelPending 不停流**：它只清空队列、移除 in-flight 记录并递增代际，正在跑的流需要用 `engine.interrupt` 停止。之后该流终态的 `settle` 为空操作。
-7. **代际由 claim 持有**：不要在终态自己读代际再判断，那样拿到的总是新代际。收口一律通过 `SessionTurn#settle` 或 handler 返回值。
-8. **SessionTurn.begin 必须在领取回调内、订阅之前调用**：否则捕获不到本次 `QueueClaim`（`settle` 会退回收口会话当前的派发）。
+7. **代际由 claim 持有**：不要在终态自己读代际再判断，那样拿到的总是新代际。收口一律通过 `RunTicket#settle` 或 handler 返回值。
+8. **RunTicket.begin 必须在领取回调内、订阅之前调用**：否则捕获不到本次 `QueueClaim`（`settle` 会退回收口会话当前的派发）。
 9. **不要直接读写 `session.queue.*`**：宿主只经 `QueueExtension` 操作。`QueueStore` 为包内实现。
 10. **重启后 RUNNING 会重新执行**：如果任务不可重放，宿主需要自行做幂等处理。
 11. **装配建议用 `addExtensionIfAbsent`**：`addExtension` 不查重，重复添加会再次回调 `onAttach`。

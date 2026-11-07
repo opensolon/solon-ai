@@ -598,6 +598,7 @@ class HarnessEngineAccessorTest {
             "addExtension", "removeExtension", "setExtensionEnabled",
             "addExtensionIfAbsent", "removeSession" /* HarnessPluginContractTest */,
             "setSessionCwd", "setSessionCwdIfAbsent", "setSessionModel", "setSessionAgent",
+            "setSessionPrincipal", "rebindSessionPrincipal" /* SaasContractTest */,
             "disallowSkill", "allowSkill", "disallowSkillReset");
 
     @Test

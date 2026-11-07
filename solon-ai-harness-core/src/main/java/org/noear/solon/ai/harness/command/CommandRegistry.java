@@ -42,7 +42,30 @@ public class CommandRegistry {
      * @param dir    来源内目录（空串表示根）
      */
     public void load(MountSource source, String dir) {
+        assertNotSealed("load");
         MarkdownCommandLoader.loadFrom(source, dir, this);
+    }
+
+    private volatile boolean sealed;
+
+    /**
+     * 封口（SERVER 模式在 {@code build()} 末尾调用）：之后 {@link #register} / {@link #load} 抛
+     * {@link IllegalStateException}。命令对同引擎的所有用户可见，应在构建期决定（{@code Builder.commandAdd}）。
+     *
+     * @since 4.2.0
+     */
+    public void seal() {
+        this.sealed = true;
+    }
+
+    public boolean isSealed() {
+        return sealed;
+    }
+
+    private void assertNotSealed(String op) {
+        if (sealed) {
+            throw new IllegalStateException("CommandRegistry is sealed (runtimeMutable=false): " + op);
+        }
     }
 
     /**
@@ -51,6 +74,7 @@ public class CommandRegistry {
      * @param command 命令
      */
     public void register(Command command) {
+        assertNotSealed("register");
         Command existing = commands.putIfAbsent(command.name(), command);
 
         if (existing != null) {

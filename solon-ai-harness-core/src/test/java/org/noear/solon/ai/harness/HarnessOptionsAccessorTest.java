@@ -406,6 +406,10 @@ class HarnessOptionsAccessorTest {
         o.setSandboxSelfBootstrap(true);
         o.setRuntimeMutable(true);
         o.setCwdPolicy(c -> c.startsWith("/t"));
+        o.setAgentPersistPolicy((s, d) -> true);
+        o.setTaskExecutor(null);
+        assertNull(o.getTaskExecutor());
+        assertNotNull(o.getAgentPersistPolicy());
         o.setProtectedStatePaths(Arrays.asList("sessions"));
         assertFalse(o.isMemorySessionIsolation());
         assertTrue(o.isSandboxSelfBootstrap());
@@ -417,7 +421,7 @@ class HarnessOptionsAccessorTest {
 
         // 多租户：作用域解析器与会话归属（null 归一为 LOCAL）
         assertNull(o.getScopeResolver());
-        org.noear.solon.ai.harness.scope.TurnScopeResolver resolver = (s, in) -> null;
+        org.noear.solon.ai.harness.scope.InputScopeResolver resolver = (s, in) -> null;
         o.setScopeResolver(resolver);
         assertSame(resolver, o.getScopeResolver());
         assertSame(org.noear.solon.ai.harness.spi.SessionOwnership.LOCAL, o.getSessionOwnership());
@@ -449,7 +453,7 @@ class HarnessOptionsAccessorTest {
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
                 "setHitlInterceptor", "setMemoryProvider", "setStateSource",
                 "setMemorySessionIsolation", "setSandboxSelfBootstrap", "setRuntimeMutable",
-                "setCwdPolicy", "setProtectedStatePaths", "setScopeResolver", "setScopeRequired", "setSessionOwnership",
+                "setCwdPolicy", "setAgentPersistPolicy", "setTaskExecutor", "setProtectedStatePaths", "setScopeResolver", "setScopeRequired", "setSessionOwnership",
                 "addHttpCustomize", "addTools", "addDisallowedTools", "addModel");
 
         List<String> missing = expected.stream()

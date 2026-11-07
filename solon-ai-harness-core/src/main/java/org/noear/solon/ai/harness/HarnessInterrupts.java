@@ -22,7 +22,6 @@ import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.agent.session.SessionRuns.Claim;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
-import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.lang.Nullable;
 

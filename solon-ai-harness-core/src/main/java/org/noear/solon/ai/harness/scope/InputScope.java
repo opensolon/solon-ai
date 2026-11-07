@@ -27,7 +27,7 @@ import org.noear.solon.lang.Preview;
 import java.util.*;
 
 /**
- * 请求级作用域（一轮请求能用什么）
+ * 输入级作用域（一次输入能用什么）
  *
  * <p>只能在引擎配置的基础上<b>收窄</b>，不能放大：工具名单与引擎/代理已挂载的工具取交集，
  * 技能与 MCP 名单是<b>强制边界</b>（{@code skillread} / {@code call_tool} 也受约束），
@@ -35,7 +35,7 @@ import java.util.*;
  * 技能名单只约束技能工具，不约束文件工具与 bash 对技能挂载点的访问；需要文件级隔离时，
  * 不要把名单外的技能挂进该引擎。</p>
  *
- * <p>生效路径：{@code HarnessInput.scope(...)} 或引擎级 {@link TurnScopeResolver}（goal / loop / queue
+ * <p>生效路径：{@code HarnessInput.scope(...)} 或引擎级 {@link InputScopeResolver}（goal / loop / queue
  * 的程序输入同样经过 {@code handle}，因此自动继承）→ 请求级属性 {@link #ATTR_KEY}（不进 toolContext：
  * toolContext 会并入工具参数、经 MCP 发给第三方）→
  * 每个代理常驻的 {@link ScopeGuardInterceptor} 在工具执行前否决越界调用；委派子代理继承同一作用域。</p>
@@ -46,22 +46,25 @@ import java.util.*;
  * @since 4.2.0
  */
 @Preview("4.2.0")
-public final class TurnScope {
+public final class InputScope {
     /** 请求级属性（ReActOptions attrs）中的键 */
-    public static final String ATTR_KEY = "harness.turnScope";
+    public static final String ATTR_KEY = "harness.inputScope";
 
     private final String principal;
     private final Set<String> tools;
     private final Set<String> skills;
     private final Set<String> mcps;
+    private final Set<String> commands;
     private final ChatModel chatModel;
     private final Map<String, Object> attrs;
 
-    private TurnScope(Builder b) {
+    private InputScope(Builder b) {
         this.principal = b.principal;
-        this.tools = b.tools == null ? null : Collections.unmodifiableSet(ToolName.expandRuntime(b.tools));
+        this.tools = b.tools == null ? null : Collections.unmodifiableSet(
+                b.toolsRuntime ? new LinkedHashSet<>(b.tools) : ToolName.expandRuntime(b.tools));
         this.skills = b.skills == null ? null : Collections.unmodifiableSet(new LinkedHashSet<>(b.skills));
         this.mcps = b.mcps == null ? null : Collections.unmodifiableSet(new LinkedHashSet<>(b.mcps));
+        this.commands = b.commands == null ? null : Collections.unmodifiableSet(new LinkedHashSet<>(b.commands));
         this.chatModel = b.chatModel;
         this.attrs = Collections.unmodifiableMap(new LinkedHashMap<>(b.attrs));
     }
@@ -91,6 +94,111 @@ public final class TurnScope {
     @Nullable
     public Set<String> getMcps() {
         return mcps;
+    }
+
+    /**
+     * 允许的命令名（不含前缀；null = 不限制）。名单外的命令不执行，返回「不可用」回执。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public Set<String> getCommands() {
+        return commands;
+    }
+
+    /** 是否允许执行某条命令（命令名不含前缀） */
+    public boolean allowsCommand(@Nullable String commandName) {
+        return commands == null || (commandName != null && commands.contains(commandName));
+    }
+
+    /**
+     * 是否可以延后执行（随积压保存）：只含名单类维度时可序列化；含模型实例或任意属性时不可保存，
+     * 忙态下这类输入被拒绝（{@code REJECT_SCOPE_NOT_DEFERRABLE}），不会悄悄丢掉这些维度。
+     *
+     * @since 4.2.0
+     */
+    public boolean isDeferrable() {
+        return chatModel == null && attrs.isEmpty();
+    }
+
+    /**
+     * 序列化为可保存的规格（只含名单类维度；null 维度不写）。调用前应先判 {@link #isDeferrable()}。
+     *
+     * @since 4.2.0
+     */
+    public Map<String, Object> toSpec() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("principal", principal);
+        if (tools != null) m.put("tools", new ArrayList<>(tools));
+        if (skills != null) m.put("skills", new ArrayList<>(skills));
+        if (mcps != null) m.put("mcps", new ArrayList<>(mcps));
+        if (commands != null) m.put("commands", new ArrayList<>(commands));
+        return m;
+    }
+
+    /**
+     * 从规格还原（{@link #toSpec()} 的逆）。工具名已是运行时名，原样还原、不再展开（再展开可能放宽）。
+     *
+     * @return 规格为空或缺主体时返回 null
+     * @since 4.2.0
+     */
+    @Nullable
+    public static InputScope fromSpec(@Nullable Map<String, Object> spec) {
+        if (spec == null || !(spec.get("principal") instanceof String)) {
+            return null;
+        }
+        Builder b = builder((String) spec.get("principal"));
+        b.tools = listOf(spec.get("tools"));
+        b.toolsRuntime = true;
+        b.skills = listOf(spec.get("skills"));
+        b.mcps = listOf(spec.get("mcps"));
+        b.commands = listOf(spec.get("commands"));
+        return b.build();
+    }
+
+    private static List<String> listOf(Object v) {
+        if (!(v instanceof Collection)) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
+        for (Object o : (Collection<?>) v) {
+            if (o != null) out.add(String.valueOf(o));
+        }
+        return out;
+    }
+
+    /**
+     * 交集（只会变窄）：各名单维度 null = 不限，取两者交集；模型与属性取 {@code latest} 的。
+     * 主体不同返回 null（不得把 A 的输入按 B 的授权执行）。
+     *
+     * <p>用于积压续发：入队时显式携带的作用域 ∩ 续发时解析器的最新结果。</p>
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public static InputScope intersect(InputScope saved, InputScope latest) {
+        if (saved == null) return latest;
+        if (latest == null) return saved;
+        if (saved.principal.equals(latest.principal) == false) {
+            return null;
+        }
+        Builder b = builder(saved.principal);
+        b.tools = meet(saved.tools, latest.tools);
+        b.toolsRuntime = true;
+        b.skills = meet(saved.skills, latest.skills);
+        b.mcps = meet(saved.mcps, latest.mcps);
+        b.commands = meet(saved.commands, latest.commands);
+        b.chatModel = latest.chatModel;
+        b.attrs.putAll(latest.attrs);
+        return b.build();
+    }
+
+    private static Set<String> meet(Set<String> x, Set<String> y) {
+        if (x == null) return y;
+        if (y == null) return x;
+        Set<String> r = new LinkedHashSet<>(x);
+        r.retainAll(y);
+        return r;
     }
 
     /** 本轮使用的模型（如租户自带 Key；null = 沿用引擎解析结果）。委派子代理同样使用它 */
@@ -125,20 +233,20 @@ public final class TurnScope {
      * 从请求级属性表读取
      */
     @Nullable
-    public static TurnScope of(@Nullable Map<String, Object> attrs) {
+    public static InputScope of(@Nullable Map<String, Object> attrs) {
         if (attrs == null) {
             return null;
         }
 
         Object v = attrs.get(ATTR_KEY);
-        return v instanceof TurnScope ? (TurnScope) v : null;
+        return v instanceof InputScope ? (InputScope) v : null;
     }
 
     /**
      * 从运行轨迹读取
      */
     @Nullable
-    public static TurnScope of(@Nullable ReActTrace trace) {
+    public static InputScope of(@Nullable ReActTrace trace) {
         if (trace == null || trace.getOptions() == null) {
             return null;
         }
@@ -169,7 +277,8 @@ public final class TurnScope {
 
     @Override
     public String toString() {
-        return "TurnScope{principal=" + principal + ", tools=" + tools + ", skills=" + skills + ", mcps=" + mcps + "}";
+        return "InputScope{principal=" + principal + ", tools=" + tools + ", skills=" + skills + ", mcps=" + mcps
+                + ", commands=" + commands + "}";
     }
 
     public static final class Builder {
@@ -177,6 +286,9 @@ public final class TurnScope {
         private Collection<String> tools;
         private Collection<String> skills;
         private Collection<String> mcps;
+        private Collection<String> commands;
+        /** tools 已是运行时名（还原 / 交集时），不再展开 */
+        private boolean toolsRuntime;
         private ChatModel chatModel;
         private final Map<String, Object> attrs = new LinkedHashMap<>();
 
@@ -222,6 +334,21 @@ public final class TurnScope {
             return this;
         }
 
+        /**
+         * 允许的命令名（不含前缀，如 {@code "model"}、{@code "goal"}）。未列出的命令不执行。
+         *
+         * @since 4.2.0
+         */
+        public Builder commands(String... names) {
+            this.commands = names == null ? null : Arrays.asList(names);
+            return this;
+        }
+
+        public Builder commands(@Nullable Collection<String> names) {
+            this.commands = names;
+            return this;
+        }
+
         public Builder chatModel(@Nullable ChatModel chatModel) {
             this.chatModel = chatModel;
             return this;
@@ -232,8 +359,8 @@ public final class TurnScope {
             return this;
         }
 
-        public TurnScope build() {
-            return new TurnScope(this);
+        public InputScope build() {
+            return new InputScope(this);
         }
     }
 }

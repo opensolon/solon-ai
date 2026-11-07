@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.spi.NotOwnerException;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionStatus;
@@ -128,10 +129,13 @@ public class LoopExtension extends AbsHarnessExtension {
         return new Builder();
     }
 
+    private volatile HarnessEngine engine;
+
     // ==================== 钩子 ====================
 
     @Override
     public void onAttach(HarnessEngine engine) {
+        this.engine = engine;
         scheduler.bindEngine(engine);
         if (defaultExecutorEnabled) {
             scheduler.setDefaultExecutor(defaultExecutor(engine));
@@ -161,7 +165,19 @@ public class LoopExtension extends AbsHarnessExtension {
     /** 会话被永久删除：停止并删除该会话全部任务（清理类，不判开关；幂等）。 */
     @Override
     public void onSessionRemove(HarnessEngine engine, String sessionId) {
+        requireOwner(sessionId);
         scheduler.removeAll(sessionId);
+    }
+
+    /**
+     * 写门面的归属检查：多节点部署时非持有节点抛 {@link NotOwnerException}（宿主按持有者转发）。
+     * 未挂载时（无引擎）不检查。
+     */
+    private void requireOwner(String sessionId) {
+        HarnessEngine e = engine;
+        if (e != null && sessionId != null) {
+            e.requireOwner(sessionId);
+        }
     }
 
     /** 引擎池回收判定：存在会自动触发的任务时不静默（只剩暂停任务时可以回收）。 */
@@ -211,26 +227,31 @@ public class LoopExtension extends AbsHarnessExtension {
      * @throws IllegalStateException    任务总数已达上限（{@link Builder#maxTasks}）
      */
     public LoopTask schedule(String sessionId, LoopSpec spec) {
+        requireOwner(sessionId);
         return scheduler.schedule(sessionId, spec);
     }
 
     /** 删除任务。@return false 表示不存在 */
     public boolean remove(String sessionId, String taskId) {
+        requireOwner(sessionId);
         return scheduler.remove(sessionId, taskId);
     }
 
     /** 启用/停用切换。@return false 表示不存在 */
     public boolean toggle(String sessionId, String taskId) {
+        requireOwner(sessionId);
         return scheduler.toggle(sessionId, taskId);
     }
 
     /** 暂停（保留记录、停止调度；已暂停则不动）。@return false 表示不存在 */
     public boolean pause(String sessionId, String taskId) {
+        requireOwner(sessionId);
         return scheduler.setEnabled(sessionId, taskId, false);
     }
 
     /** 恢复调度（清零错误计数；已启用则不动）。@return false 表示不存在 */
     public boolean resume(String sessionId, String taskId) {
+        requireOwner(sessionId);
         return scheduler.setEnabled(sessionId, taskId, true);
     }
 
@@ -242,11 +263,13 @@ public class LoopExtension extends AbsHarnessExtension {
      * @throws IllegalArgumentException 补丁不合法（见 {@link LoopPatch}），此时原任务不变
      */
     public LoopTask update(String sessionId, String taskId, LoopPatch patch) {
+        requireOwner(sessionId);
         return scheduler.update(sessionId, taskId, patch);
     }
 
     /** 立即异步执行一轮（不消耗 oneShot 配额）。@return false 表示不存在 */
     public boolean trigger(String sessionId, String taskId) {
+        requireOwner(sessionId);
         return scheduler.trigger(sessionId, taskId);
     }
 

@@ -15,9 +15,13 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.agent.AgentSession;
+import java.util.concurrent.ExecutorService;
+import java.util.function.BiPredicate;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.spi.SessionOwnership;
-import org.noear.solon.ai.harness.scope.TurnScopeResolver;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.MountSource;
 import java.nio.file.Path;
@@ -117,7 +121,7 @@ class HarnessOptions implements NonSerializable {
     /** 会话工作目录的边界策略（null = 不校验） */
     private volatile Predicate<String> cwdPolicy;
     /** 请求级作用域解析器（null = 不解析） */
-    private volatile TurnScopeResolver scopeResolver;
+    private volatile InputScopeResolver scopeResolver;
     /** 是否要求每轮都有作用域（SERVER 缺省 true）：缺失时受理拒绝、守卫禁用全部工具 */
     private volatile boolean scopeRequired = false;
     /** 会话归属（多节点单写者租约；缺省本机恒成功） */
@@ -603,15 +607,37 @@ class HarnessOptions implements NonSerializable {
         return cwdPolicy;
     }
 
+    /** 全局子代理持久化策略（null = 按 runtimeMutable） */
+    private volatile BiPredicate<AgentSession, AgentDefinition> agentPersistPolicy;
+
+    /** 子代理执行器（null = 引擎私有） */
+    private volatile ExecutorService taskExecutor;
+
+    ExecutorService getTaskExecutor() {
+        return taskExecutor;
+    }
+
+    void setTaskExecutor(ExecutorService taskExecutor) {
+        this.taskExecutor = taskExecutor;
+    }
+
+    BiPredicate<AgentSession, AgentDefinition> getAgentPersistPolicy() {
+        return agentPersistPolicy;
+    }
+
+    void setAgentPersistPolicy(BiPredicate<AgentSession, AgentDefinition> agentPersistPolicy) {
+        this.agentPersistPolicy = agentPersistPolicy;
+    }
+
     void setCwdPolicy(Predicate<String> cwdPolicy) {
         this.cwdPolicy = cwdPolicy;
     }
 
-    TurnScopeResolver getScopeResolver() {
+    InputScopeResolver getScopeResolver() {
         return scopeResolver;
     }
 
-    void setScopeResolver(TurnScopeResolver scopeResolver) {
+    void setScopeResolver(InputScopeResolver scopeResolver) {
         this.scopeResolver = scopeResolver;
     }
 

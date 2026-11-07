@@ -26,7 +26,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.LlmErrorClassifier;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.harness.scope.TurnScope;
+import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -130,14 +130,33 @@ public class TaskTalent extends AbsTalent {
      * 只提交「生效上限」个 worker，线程数不超过该上限；忙完即回收，不留常驻线程。</p>
      */
     private final ExecutorService taskExecutor;
+    /** 执行器是否归本对象所有（宿主注入的共享执行器不由引擎关闭） */
+    private final boolean ownsExecutor;
+
+    /** 引擎私有执行器的线程上限（防止多会话并发 multitask 无限建线程；超出时少起 worker，由已起的 worker 消化） */
+    public static final int DEFAULT_MAX_THREADS = 64;
 
     public TaskTalent(HarnessEngine engine) {
+        this(engine, null);
+    }
+
+    /**
+     * @param sharedExecutor 宿主注入的共享执行器（如引擎池共用一个有界池）；null = 引擎私有、上限 {@link #DEFAULT_MAX_THREADS}
+     * @since 4.2.0
+     */
+    public TaskTalent(HarnessEngine engine, ExecutorService sharedExecutor) {
         this.engine = engine;
-        this.taskExecutor = new ThreadPoolExecutor(
-                0, Integer.MAX_VALUE,
-                60L, TimeUnit.SECONDS,
-                new SynchronousQueue<Runnable>(),
-                new TaskThreadFactory());
+        if (sharedExecutor != null) {
+            this.taskExecutor = sharedExecutor;
+            this.ownsExecutor = false;
+        } else {
+            this.taskExecutor = new ThreadPoolExecutor(
+                    0, DEFAULT_MAX_THREADS,
+                    60L, TimeUnit.SECONDS,
+                    new SynchronousQueue<Runnable>(),
+                    new TaskThreadFactory());
+            this.ownsExecutor = true;
+        }
     }
 
     /**
@@ -178,7 +197,9 @@ public class TaskTalent extends AbsTalent {
      * 释放执行器线程。不可恢复；线程为守护线程，常规场景无需调用。
      */
     public void shutdown() {
-        taskExecutor.shutdown();
+        if (ownsExecutor) {
+            taskExecutor.shutdown();
+        }
     }
 
     private static class TaskThreadFactory implements ThreadFactory {
@@ -237,7 +258,7 @@ public class TaskTalent extends AbsTalent {
 
         MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId,1, null, null, null);
 
-        TaskPlan plan = preparePlan(taskOp, sessionModelOf(__parentSession));
+        TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession));
 
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
         return runTask(ctx, plan, false, Utils.uuid());
@@ -269,7 +290,7 @@ public class TaskTalent extends AbsTalent {
 
         // 预解析一次并向下传递：执行时不再重走 getModelOrDef，避免「默认模型」的 fallback
         // 在并发下取到与分派时不同的实例
-        final List<TaskPlan> plans = preparePlans(tasks, sessionModel);
+        final List<TaskPlan> plans = preparePlans(__parentSession, tasks, sessionModel);
 
         // 生效上限按调用算一个数：取会话模型的 concurrency（未配置回退默认值）
         final int cap = resolveConcurrency(concurrencyOf(sessionModel), defaultConcurrency);
@@ -301,7 +322,7 @@ public class TaskTalent extends AbsTalent {
         }
     }
 
-    private List<TaskPlan> preparePlans(List<MultiTaskOp> tasks, String sessionModel) {
+    private List<TaskPlan> preparePlans(AgentSession session, List<MultiTaskOp> tasks, String sessionModel) {
         final List<TaskPlan> plans = new ArrayList<>(tasks.size());
 
         for (int i = 0; i < tasks.size(); i++) {
@@ -318,17 +339,18 @@ public class TaskTalent extends AbsTalent {
                 continue;
             }
 
-            plans.add(preparePlan(op, sessionModel));
+            plans.add(preparePlan(session, op, sessionModel));
         }
 
         return plans;
     }
 
-    private TaskPlan preparePlan(MultiTaskOp op, String sessionModel) {
+    private TaskPlan preparePlan(AgentSession session, MultiTaskOp op, String sessionModel) {
         final ReActAgent.Builder agentBuilder;
 
         try {
-            agentBuilder = engine.getAgentBuilderOrNil(op.agent_name, sessionModel);
+            // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级
+            agentBuilder = engine.getAgentBuilderOrNil(session, op.agent_name, sessionModel);
         } catch (Throwable e) {
             // 名称存在但定义加载失败：同样只废这一条
             return new TaskPlan(op, null, "ERROR: 子代理 '" + op.agent_name + "' 定义加载失败: " + e.getMessage());
@@ -467,7 +489,7 @@ public class TaskTalent extends AbsTalent {
         private final List<String> skillsSelected;
         private final List<String> mcpsSelected;
         /** 父请求的作用域（强制边界与租户模型，子代理必须继承，否则可经委派绕过） */
-        private final TurnScope scope;
+        private final InputScope scope;
 
         MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
@@ -482,7 +504,7 @@ public class TaskTalent extends AbsTalent {
             // 只解析一次，多个子任务共享同一份视野快照
             this.skillsSelected = SkillTalent.getSelected(parentTrace.getOptions().getToolContext());
             this.mcpsSelected = McpGatewayTalent.getSelected(parentTrace.getOptions().getToolContext());
-            this.scope = TurnScope.of(parentTrace);
+            this.scope = InputScope.of(parentTrace);
         }
 
         /** 把继承到的视野写进子代理的 toolContext */

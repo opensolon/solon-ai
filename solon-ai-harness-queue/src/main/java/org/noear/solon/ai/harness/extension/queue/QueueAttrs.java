@@ -8,7 +8,7 @@ package org.noear.solon.ai.harness.extension.queue;
  * queue 插件的会话属性<b>契约键</b>登记（{@code session.queue.*} 命名空间归本插件）。
  *
  * <p>原登记在核心 {@code HarnessAttrs}，随 queue 独立为插件模块迁到这里：核心不再知道队列的存在。
- * 派发事务槽位已上提为核心的 {@code HarnessAttrs.TURN_DISPATCH}（见 {@code TurnDispatch}）。</p>
+ * 派发事务槽位已上提为核心的 {@code HarnessAttrs.RUN_DISPATCH}（见 {@code RunDispatch}）。</p>
  *
  * <p><b>键值不可变</b>：{@link #QUEUE_ITEMS} 会写进 FlowContext 持久化，改值会丢失存量队列。</p>
  *

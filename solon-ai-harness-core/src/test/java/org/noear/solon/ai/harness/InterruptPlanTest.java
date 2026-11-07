@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;

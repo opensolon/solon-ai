@@ -38,7 +38,13 @@ public final class SteerResult {
         /** steerId 超过长度上限 */
         INVALID_STEER_ID,
         /** 插话能力已被关闭（扩展/拦截器 setEnabled(false)），本次未入队 */
-        DISABLED
+        DISABLED,
+        /**
+         * 多节点部署：本节点不持有该会话（运行中的轮次在持有节点内存里），宿主按 {@code engine.checkOwner} 的持有者转发
+         *
+         * @since 4.2.0
+         */
+        NOT_OWNER
     }
 
     private final Code code;

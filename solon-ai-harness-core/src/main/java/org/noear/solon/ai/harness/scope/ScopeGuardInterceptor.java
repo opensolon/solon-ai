@@ -71,7 +71,7 @@ public final class ScopeGuardInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        TurnScope scope = TurnScope.of(trace);
+        InputScope scope = InputScope.of(trace);
         for (ToolExchanger ex : toolCalls) {
             guard(scope, ex);
         }
@@ -80,10 +80,10 @@ public final class ScopeGuardInterceptor extends AbsReActInterceptor {
     @Override
     public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
         // 文本模式等不经过批 Start 的路径兜底
-        guard(TurnScope.of(trace), toolExchanger);
+        guard(InputScope.of(trace), toolExchanger);
     }
 
-    private void guard(@Nullable TurnScope scope, ToolExchanger ex) {
+    private void guard(@Nullable InputScope scope, ToolExchanger ex) {
         if (ex.getToolResult() != null) {
             return;
         }
@@ -107,7 +107,7 @@ public final class ScopeGuardInterceptor extends AbsReActInterceptor {
      * @return 拒绝时返回展示用名称；允许时返回 null
      */
     @Nullable
-    String denyReason(TurnScope scope, String toolName, @Nullable Object targetToolName) {
+    String denyReason(InputScope scope, String toolName, @Nullable Object targetToolName) {
         if (toolName == null) {
             return "unknown";
         }

@@ -27,6 +27,10 @@
 | 调优与定制 | 第七～十章（权限、配置、扩展、安全） |
 | 查结构 / 躲坑 | 第十二章（模块图）、第十三章（常见坑） |
 
+> **术语**：**input** 是一次 `handle` 的输入（`HarnessInput` / `InputOutcome` / `InputScope`）；**run** 是受理后开出的一条流
+> （`runId` / `RunTicket` / `RunDispatch` / `steerOnRun`）；**step** 是 ReAct 内部的一步推理加工具调用（`maxTurns` 沿用旧名，计的是 step）。
+> 正文里的「一轮」、「本轮」指 run。
+
 > **全文档只推荐一条取流路径**：`outcome.getRequest().stream()`（等价简写 `outcome.stream()`，
 > 仅 `Kind.TASK` 有效）。不存在「回执 + 任务合成一条流」的便捷方法，原因见 §3.4 的四端时序对照。
 > 需要一次性拿最终文本时用 `outcome.call()`，它只转发 `getRequest().call()`，不做任何时序决策。
@@ -128,10 +132,12 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（§3.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
 | 服务端 | `profile(HarnessProfile)` | `CODING` | 运行模式预设；`SERVER` 的缺省与校验见 [SAAS.md](SAAS.md) |
-| 服务端 | `scopeResolver(TurnScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 请求级作用域（只能收窄的强制边界） |
-| 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约 |
-| 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | `setSessionCwd` 的边界策略，不满足抛 `SecurityException` |
-| 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置 |
+| 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
+| 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |
+| 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | 会话工作目录的边界策略：`setSessionCwd` 与终端工具使用端都按真实路径校验，不满足抛 `SecurityException` |
+| 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置；为 `false` 时命令与子代理注册表在 `build()` 末尾封口 |
+| 服务端 | `agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition>)` | 跟随 `runtimeMutable`（CODING 允许，SERVER 拒绝） | `generate(saveToFile=true)` 是否允许创建全局子代理（§6.4） |
+| 资源 | `taskExecutor(ExecutorService)` | 引擎私有，上限 64 线程 | 子代理执行器；宿主注入的共享执行器由宿主关闭，引擎 `shutdown` 不动它 |
 | 服务端 | `memorySessionIsolation(boolean)` | `false`（SERVER 为 `true`） | 长期记忆按会话隔离 |
 | 服务端 | `sandboxSelfBootstrap(boolean)` | `true`（SERVER 为 `false`） | 是否由引擎自行初始化进程级 OS 沙盒 |
 | 服务端 | `protectedStatePaths(List<String>)` | `sessions, memory, channels, tasks.json, loop, goal` | 相对 harnessHome，模型文件工具与 bash 都不得读写 |
@@ -174,8 +180,8 @@ public InputOutcome handle(HarnessInput input);                  // 唯一入口
 
 | 步骤 | 动作 | 说明 |
 |---|---|---|
-| 0 | 受理判定 | 会话归属（`SessionOwnership`）→ HITL 挂起拦截 → 忙态放行 / 入积压 / 拒绝 → 占位；未通过时直接返回 `DEFERRED` / `REJECTED`（§3.6） |
-| 0.5 | `onInput` 钩子 + 作用域解析 | 显式 `scope(...)` 优先，其次 `scopeResolver`；`scopeRequired` 且解析不到时 `REJECTED(scope_unavailable)` |
+| 0 | 受理判定 | 引擎已关闭 → `REJECTED(engine_closed)`；会话归属（`SessionOwnership`，非持有 → `not_owner`）→ 作用域预检（锁外；显式 `scope(...)` 优先，其次 `scopeResolver`，`scopeRequired` 且解析不到 → `scope_unavailable`，不占积压名额）→ HITL 挂起拦截 → 忙态放行 / 入积压 / 拒绝 → 占位；未通过时直接返回 `DEFERRED` / `REJECTED`（§3.6） |
+| 0.5 | `onInput` 钩子 | 扩展仍可在这里设置 `input.scope(...)`，装配时以显式作用域为准；解析器看不到 `onInput` 的副作用 |
 | 1 | HITL 决策 | **优先于空输入判空**：审批请求通常不带文本。带 `resume(true)` 时同一次调用**尝试**续流，是否真的续流由引擎自检决定（见 §2.3） |
 | 2 | 续流分流 | `resume(true)` 直接装配请求，不解析文本 |
 | 3 | 空输入判空 | 无文本且无附件 → `IGNORED` |
@@ -220,7 +226,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
 | `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
-| `scope(TurnScope)` | 本轮作用域（只能收窄的强制边界，见 [SAAS.md](SAAS.md)）；不传则走引擎级 `scopeResolver` |
+| `scope(InputScope)` | 本轮作用域（只能收窄的强制边界，见 [SAAS.md](SAAS.md)）；不传则走引擎级 `scopeResolver` |
 | `attr(key, value)` / `attrs(Map)` | 宿主域属性（引擎不解读，进积压时原样保存） |
 | `HarnessInput.ofProgram(session, text, channel)` | 程序轮次（goal / loop 缺省执行器用）：不识别命令与提及，忙时 `REJECTED(busy)`、不进积压 |
  | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
@@ -308,7 +314,7 @@ switch (outcome.getKind()) {
 | `HITL` | 决策已写入但未续流；读 `isHitlApplied()` / `getPendingHitlCount()` 决定后续动作（见下） |
 | `IGNORED` | 无事可做 |
 | `DEFERRED` | 会话忙，输入已进积压（`getBacklogPosition()` 从 1 计）；等待续发（§3.6、§5.2） |
-| `REJECTED` | 未受理；按 `getRejectReason()` 分流（`busy` / `hitl_pending` / `attachments_not_deferrable` / `backlog_unavailable` / `not_owner` / `scope_unavailable`） |
+| `REJECTED` | 未受理；按 `getRejectReason()` 分流（`busy` / `hitl_pending` / `attachments_not_deferrable` / `backlog_unavailable` / `not_owner` / `scope_unavailable` / `scope_not_deferrable` / `engine_closed`） |
 
 | 成员 | 说明 |
 |---|---|
@@ -687,6 +693,7 @@ switch (outcome.getKind()) {
 | 忙 | 程序轮次 `HarnessInput.ofProgram(...)`（`isProgram()`）、续流、没装积压能力 | `REJECTED("busy")`（`InputOutcome.REJECT_BUSY`），不进积压 |
 | 忙 | 带附件 | `REJECTED("attachments_not_deferrable")`（`REJECT_ATTACHMENTS_NOT_DEFERRABLE`） |
 | 忙 | 积压拒收（满 / 超长 / 停用） | `REJECTED("backlog_unavailable")`（`REJECT_BACKLOG_UNAVAILABLE`） |
+| 忙 | 显式作用域含 `chatModel` 或自定义 `attrs`（无法随积压保存） | `REJECTED("scope_not_deferrable")`（`REJECT_SCOPE_NOT_DEFERRABLE`），不占名额 |
 
 - **占位跟着请求走**：返回 `TASK` 时会话保持占用（`engine.status(session).isAdmitting()` 为真），直到 `outcome.getRequest().stream()` 被订阅（订阅时运行流先登记、占位后释放，无空档——宿主把订阅调度到别的线程也安全）或 `call()` 结束；
 - 宿主拿到 `TASK` 决定不执行（开流前出错、本轮已被中断等）时调用 `outcome.discard()`（幂等）；
@@ -897,9 +904,9 @@ HarnessEngine.of("/data/work", ".solon/")
 | `HarnessExtension#onSessionRemove` | 钩子（广播） | 引擎 `removeSession`（宿主永久删除会话时，先于删存储调用） | loop 删该会话任务、goal 注销该会话 job |
 | `HarnessExtension#contributeSessionStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
 | `spi.InputBacklog` | 能力接口（`offer(session, HarnessInput)` / `hasPending`） | queue | 引擎 `handle` 受理判定（有无积压能力、忙时 `offer` 入积压、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
-| `spi.TurnDispatch` | 会话槽位（`session.turn.dispatch`） | queue 派发 | 引擎 `handle` 受理判定（识别派发轮次）、`SessionTurn` |
+| `spi.RunDispatch` | 会话槽位（`session.run.dispatch`） | queue 派发 | 引擎 `handle` 受理判定（识别派发轮次）、`RunTicket` |
 | `HarnessExtension#isQuiescent` | 钩子（汇集） | goal（有活跃 goal）、loop（有启用任务） | `engine.isQuiescent()` → `HarnessEnginePool` 空闲回收判定 |
-| `HarnessExtension#getToolNames` | 声明 | goal、loop（取自各自 Talent 的工具表） | 作用域守卫：已声明的工具不受 `TurnScope.tools` 名单约束 |
+| `HarnessExtension#getToolNames` | 声明 | goal、loop（取自各自 Talent 的工具表） | 作用域守卫：已声明的工具不受 `InputScope.tools` 名单约束 |
 
 **内核没有 queue**：`SessionStatus` 不含排队数，`InputOutcome` 的延后结局叫 `Kind.DEFERRED`（不是 QUEUE），程序派发判定叫 `isDispatched()`。入积压由引擎经 `InputBacklog#offer(session, HarnessInput)` 完成，宿主域属性（`HarnessInput#attr`）由实现方原样保存。内核自身依赖积压的判定（受理先进先出、空闲判定）走能力方法 `InputBacklog#hasPending`——由类型系统保证实现方提供，而不是「必须贡献某个状态键」的约定。goal 调度与宿主定时任务判断「能否注入」统一用 `engine.isIdle(session)`（不占用且无积压，同一把会话锁内读取）。
 
@@ -972,7 +979,8 @@ int pos = queue.enqueue(session, "顺便更新 README");  // 2 参，返回队�
 | 停用拦截点 | `CommandDispatcher` 判 `isEnabled()` → 直接回 `REPLY` | 门面内 `isEnabled() == false` → `-1` / `false` / `DISABLED` |
 | 来源身份 | `HarnessInput.origin(...)`，命令再按渠道兜底 | 最简重载给缺省值（`queue` 补 `channel("queue")`、`steer` 用 `NONE`、`goal` 不带） |
 | 忙碌放行 | `handle` 第 0 步按 `Command#runnableWhenBusy()` 自动放行或入积压 | 门面不经受理：`enqueue` 忙闲都可调，`steer` 自算忙态 |
-| 会话归属 / 作用域 | 受 `SessionOwnership`、`TurnScope` 约束 | **不受约束**，多节点 / 多租户下由宿主先校验（见 [SAAS.md](SAAS.md) §6） |
+| 会话归属 | 受 `SessionOwnership` 约束（非持有节点 `REJECTED(not_owner)`） | 写门面同样先查归属：`queue.enqueue` 返回 `NOT_OWNER`（-2）、queue 的布尔门面返回 false、steer 返回 `Code.NOT_OWNER`、goal / loop 抛 `NotOwnerException`、`interrupt` 返回 false（`prepareInterrupt` 的 `isNotOwner()` 可区分） |
+| 作用域 | 受 `InputScope` 约束 | **不受约束**，多租户管理接口由宿主先鉴权（见 [SAAS.md](SAAS.md) §6） |
 | 需要 `.terminal(true)` 吗 | 不需要（这四个命令都不是 `terminalOnly`） | 不适用 |
 
 四个能力的最简门面形态（① 内部最终都落到这里，与命令走同一条写路径；§5.4 还给出了“运行中干预”与“停下来重排”两个互斥场景）：
@@ -998,7 +1006,7 @@ engine.interrupt(session);                       // 1 参，true = 确实停了
 三条由此推出的边界：
 
 - **这三个命令的 `Kind` 恒为 `REPLY`**：它们只改会话状态、不声明 Agent 任务意图，所以命令路径下不会出现 `TASK`。`/goal` 虽然会自己起持续轮次，但那是调度器驱动的、不在本次 `handle` 的返回里——别等 `getRequest()`。
-- **忙碌放行只在文本路径上自动发生**：①② 经 `handle` 第 0 步，`runnableWhenBusy` 的命令忙时旁路执行（`isBesideRunning()`），其余输入入积压或拒绝（§3.6）；③ 是门面直调，不经受理判定，也不经会话归属与作用域。
+- **忙碌放行只在文本路径上自动发生**：①② 经 `handle` 第 0 步，`runnableWhenBusy` 的命令忙时旁路执行（`isBesideRunning()`），其余输入入积压或拒绝（§3.6）；③ 是门面直调，不经受理判定，也不经作用域（会话归属仍会检查）。
 - **不要两条路都走**：宿主若已用门面完成了动作，就不要再把同样的文本拼成 `/queue …` 交给 `handle`，那会入队两次（命令路径没有幂等保护，`id` 去重只对带 `id` 的 `enqueue` 生效）。
 
 除了 `create`（失败时抛 `IllegalStateException`），其余三个入口都**用返回值报告失败、不抛异常**，宿主应按返回值分流（命令路径的每种失败文案就是据此产生的）：
@@ -1255,7 +1263,7 @@ QueueClaimStatus status = queue.claimNext(session, claim -> {
 });
 if (status == QueueClaimStatus.STARTED) {
     // 终态时（任意线程、任意时刻），从会话取回派发事务并收口：
-    //   SessionTurn.settle(...) 或 TurnDispatch.current(session).settle(true/false)
+    //   RunTicket.settle(...) 或 RunDispatch.current(session).settle(true/false)
 }
 ```
 
@@ -1271,7 +1279,7 @@ queue.drainLoop(session, s -> !SessionActivity.isBusy(s), claim -> {
     QueueItem item = claim.getItem();
     startTurnAsync(session, item);
     // 同步完成的命令（如 /status）可当场收口：
-    if (!SessionActivity.isBusy(session)) TurnDispatch.current(session).settle(true);
+    if (!SessionActivity.isBusy(session)) RunDispatch.current(session).settle(true);
 });
 ```
 
@@ -1279,12 +1287,12 @@ queue.drainLoop(session, s -> !SessionActivity.isBusy(s), claim -> {
 
 > 谓词在**领取权的同一把会话锁内**求值（`claimNext(session, canAccept, handler)`）。因此宿主不需要再写 `synchronized (session.attrs())` 包住派发、也不需要领完再复核一次忙态——那种写法两次判定之间必然有窗口。
 
-#### 派发事务：`QueueClaim` 即 `TurnDispatch`（宿主零 attrs 的关键）
+#### 派发事务：`QueueClaim` 即 `RunDispatch`（宿主零 attrs 的关键）
 
-一次领取就是一个 `QueueClaim`，它实现核心 `spi.TurnDispatch`，收口只有一个动作 `settle(boolean started)`（true = 确认，false = 回队首；幂等）。宿主的收口路径只有两条：
+一次领取就是一个 `QueueClaim`，它实现核心 `spi.RunDispatch`，收口只有一个动作 `settle(boolean started)`（true = 确认，false = 回队首；幂等）。宿主的收口路径只有两条：
 
 1. **同步任务**：领取回调返回 `true`，内核当场收口（启动异常同样由内核回滚到队首）；
-2. **异步任务**：流终态调 `SessionTurn.settle(...)`（它会收口会话当前的派发事务）。没有持有 turn 时兜底用 `TurnDispatch.current(session).settle(...)`。
+2. **异步任务**：流终态调 `RunTicket.settle(...)`（它会收口会话当前的派发事务）。没有持有凭据时兜底用 `RunDispatch.current(session).settle(...)`。
 
 | 方法 | 作用 |
 |---|---|
@@ -1383,7 +1391,7 @@ int imported = queue.importItems(session, legacyRows);   // rows 为 Map 列表�
 | `session.queue.generation` | 清空代际（`cancelPending` 递增） |
 | `session.queue.claim` | 领取权（同一时刻仅一个运行者，`claimNext` 调用栈内存活） |
 | `session.queue.inFlight` | 当前运行中的任务 |
-| `session.queue.dispatch` | **跨线程存活的派发事务**（`QueueClaim`，实现 `TurnDispatch`），到流终态收口才清 |
+| `session.queue.dispatch` | **跨线程存活的派发事务**（`QueueClaim`，实现 `RunDispatch`），到流终态收口才清 |
 
 > 宿主**不应直接读写**上表任何一个键——它们登记出来是为了「改键名时有据可查」，日常一律走 `QueueExtension` 门面。尤其是 `session.queue.dispatch`：它的两个判定（`isOnDispatchThread` / `isCurrent`）语义不同，自己实现极易混淆。
 
@@ -1809,6 +1817,16 @@ outcome.getRequest().stream().blockLast();
 
 ### 6.4 运行时创建子代理
 
+面向模型的 `generate` 工具按是否持久化分两级：
+
+| `saveToFile` | 可见范围 | 存放位置 | 约束 |
+|---|---|---|---|
+| `false`（缺省） | 只有创建它的会话 | 会话上下文（`session.agents`），随会话快照保存，重启后仍可调用 | 每会话最多 16 个；不得与全局子代理同名 |
+| `true` | 本引擎所有会话 | 工作区代理目录 `<harnessAgents>/<name>.md` | 受 `agentPersistPolicy` 约束（CODING 缺省允许、SERVER 缺省拒绝）；同名文件或同名代理已存在时拒绝，不覆盖 |
+
+两级都不允许使用保留名（`main`、`general` 及内置挂载提供的代理名，见 `engine.isReservedAgentName`）。会话级代理在 `task` / `multitask`、`@` 提及、
+`explicitAgent` 里都能解析到（统一入口 `engine.resolveAgent(session, name)`：先会话级，再引擎级）。
+
 ```java
 // 一行式：复用 general 定义改写（面向 LLM 的 generate 工具走的就是这条）
 engine.getGenerateTalent().generate(
@@ -1817,8 +1835,9 @@ engine.getGenerateTalent().generate(
         "你是一位严格的代码审查专家，只指出真实缺陷。",   // systemPrompt
         Arrays.asList("read", "grep", "code"),  // tools（严禁全选）
         null,                                   // skills
-        false,                                  // saveToFile
-        engine.getWorkspace());                 // __cwd（saveToFile 为 true 时落盘到 <cwd>/.soloncode/agents/）
+        false,                                  // saveToFile：false = 仅本会话；true = 全局持久化
+        engine.getWorkspace(),                  // __cwd
+        session.getSessionId());                // __sessionId（会话级代理必需）
 
 // Builder 式（toolsAdd 收 List<String> 或 String...，不收 ToolName）
 AgentDefinition definition = AgentDefinition.builder()
@@ -2066,7 +2085,7 @@ public interface HarnessExtension extends AiSwitchable {
     /** ⑨ 静默判定：engine.isQuiescent() 时收集（还有后台工作就返回 false，引擎池不会回收） */
     default boolean isQuiescent(HarnessEngine engine) { return true; }
 
-    /** ⑩ 工具声明：作用域守卫据此放行本扩展自带的工具（不受 TurnScope.tools 名单约束） */
+    /** ⑩ 工具声明：作用域守卫据此放行本扩展自带的工具（不受 InputScope.tools 名单约束） */
     default Collection<String> getToolNames() { return Collections.emptyList(); }
 }
 ```
@@ -2214,7 +2233,7 @@ engine.getHitlInterceptor()
 
 ### 10.3 服务端安全底线
 
-多租户部署时，除 HITL 外还有三道引擎级防线：请求级作用域（`TurnScope`，工具执行前否决越界调用）、
+多租户部署时，除 HITL 外还有三道引擎级防线：请求级作用域（`InputScope`，工具执行前否决越界调用）、
 受保护状态路径（`protectedStatePaths`，文件工具与 OS 沙盒同时拒绝）、会话工作目录策略（`cwdPolicy`）。
 配置与取舍见 [SAAS.md](SAAS.md)。
 
@@ -2282,14 +2301,14 @@ org.noear.solon.ai.harness
 ├── HarnessProfile                运行模式预设（CODING / SERVER）
 ├── HarnessOptions                运行时配置（包私有）
 ├── HarnessExtension / AbsHarnessExtension   扩展 SPI
+├── RunTicket / InterruptPlan     一条流（run）的生命周期凭据、两段式中断计划
 ├── InputPipeline / SessionControl / InputGate / Admission / AdmittedRequest   受理与装配（包内）
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、AgentMentions
 ├── command/                      命令框架：Command / CommandContext / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
 ├── agent/                        代理层：AgentDefinition / AgentFactory / AgentManager / ToolName；task/（TaskTalent / GenerateTalent）
-├── scope/                        请求级作用域：TurnScope / TurnScopeResolver / ScopeGuardInterceptor
-├── spi/                          插件与宿主 SPI：InputBacklog / TurnDispatch / SessionOwnership
-├── turn/                         轮次：SessionTurn / InterruptPlan
+├── scope/                        输入级作用域：InputScope / InputScopeResolver / ScopeGuardInterceptor
+├── spi/                          插件与宿主 SPI：InputBacklog / RunDispatch / SessionOwnership / OwnerCheck / NotOwnerException
 ├── session/                      会话事实：SessionStatus / HarnessAttrs / SessionSelections
 ├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、会话级「总是允许」
 ├── permission/                   权限引擎（Rule / Context / Decision）
@@ -2343,8 +2362,9 @@ org.noear.solon.ai.harness
 24. **goal 对外只有只读快照**——`GoalTask` 没有修改方法，一切状态转移经门面；运行态是包内实现。
 25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是位置 `int`（`-1` = 失败）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
 26. **`steer` 取消了也可能已经生效**——`cancelOnRun(session, runId, steerId)` 返回 `NOT_PENDING` 不代表出错，只代表那条已被推理线程取走（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。
-27. **门面不经受理**——`queue.enqueue`、`steer.steer`、`goal.create/update`、`loop.schedule`、`engine.interrupt` 不校验会话归属与作用域；多节点 / 多租户的管理接口先自行校验（[SAAS.md](SAAS.md) §6）。
-28. **外部传入的会话 ID 先用 `getSessionOrNull` 校验**——`engine.getSession(id)` 不存在就新建；goal 门面内部也按 `getSession` 解析，直接拿请求参数调用会凭空建出会话。
+27. **门面不经受理、不经作用域**——`queue.enqueue`、`steer.steer`、`goal.create/update`、`loop.schedule`、`engine.interrupt` 会先查会话归属（非持有节点各自返回 `NOT_OWNER` 或抛 `NotOwnerException`，宿主按 `getOwner()` 转发），但不校验作用域；多租户的管理接口先自行鉴权（[SAAS.md](SAAS.md) §6）。
+28. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`engine.getSession(id)` 不存在就新建；`engine.requireSession(id)` 不存在时抛 `IllegalArgumentException`。goal 门面已改为不新建会话。
+29. **引擎 `shutdown()` 之后不要再用旧引用**——`shutdown` 幂等，会关闭 LSP 进程与 MCP 连接；之后的 `handle` 返回 `REJECTED(engine_closed)`，引擎池模式下重新 `pool.get(key)` 即可。
 29. **显式 `HarnessInput.scope(...)` 不随积压保存**——忙时进积压的输入续发时重新解析作用域；服务端请用引擎级 `scopeResolver`（从会话属性读租户），不要只靠显式传入。`selectedSkill` / `selectedMcp` 同样不随积压保存。
 
 ---

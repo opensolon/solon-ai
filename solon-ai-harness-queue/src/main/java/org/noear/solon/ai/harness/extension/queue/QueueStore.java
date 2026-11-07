@@ -6,7 +6,7 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.flow.FlowContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -140,6 +140,15 @@ final class QueueStore {
                        String id, String model, String reasoningEffort,
                        String thinkingMode, String selectedAgent, boolean hasFiles,
                        Map<String, String> attrs, int maxSize, int maxTextLength) {
+        return enqueue(session, text, origin, id, model, reasoningEffort, thinkingMode, selectedAgent, hasFiles,
+                attrs, null, maxSize, maxTextLength);
+    }
+
+    /** 完整入队（按实例上限，含输入快照）。 */
+    static int enqueue(AgentSession session, String text, InputOrigin origin,
+                       String id, String model, String reasoningEffort,
+                       String thinkingMode, String selectedAgent, boolean hasFiles,
+                       Map<String, String> attrs, Map<String, Object> snapshot, int maxSize, int maxTextLength) {
         if (session == null || text == null) return -1;
         String normalized = text.trim();
         if (normalized.isEmpty() || normalized.length() > maxTextLength) return -1;
@@ -154,6 +163,7 @@ final class QueueStore {
             QueueItem item = new QueueItem(id, normalized,
                     origin, System.currentTimeMillis(), "PENDING", model, reasoningEffort,
                     thinkingMode, selectedAgent, hasFiles, attrs);
+            item.setInputSnapshot(snapshot);
             q.offerLast(item);
             saveLocked(session, q);
             return q.size();
@@ -277,9 +287,9 @@ final class QueueStore {
             // 注销放在这里而不是 acknowledge 里：代际已递增，本会话所有在途 claim 均已失效，
             // 无需再看某个具体 claim。
             // 只清自己登记的派发：槽位已上提为核心事实，别的插件的派发不归队列作废。
-            TurnDispatch current = TurnDispatch.current(session);
+            RunDispatch current = RunDispatch.current(session);
             if (current instanceof QueueClaim) {
-                TurnDispatch.unbind(session, current);
+                RunDispatch.unbind(session, current);
             }
             // 无队列变更（本就空）时不写快照：interrupt 空队列会话不应触发落盘。
             if (hadItems) saveLocked(session, q);
@@ -390,7 +400,7 @@ final class QueueStore {
      *
      * <p>收口契约由 handler 返回值表达（见 {@link QueueClaimHandler}）：返回 true = 同步完成，
      * 内核当场 acknowledge；ack 被拒（期间被 cancelPending）则回滚丢弃并返回 START_FAILED。
-     * 返回 false = 异步启动，claim 由流终态的 {@code SessionTurn#settle} 收口。
+     * 返回 false = 异步启动，claim 由流终态的 {@code RunTicket#settle} 收口。
      * handler 抛异常等价启动失败，由内核用领取时快照的代际回滚。</p>
      *
      * @return STARTED / NO_TASK / START_FAILED
@@ -407,7 +417,7 @@ final class QueueStore {
      * 领取前后自建 synchronized 块与忙态复核。</p>
      *
      * <p>领取成功后把 claim 登记为跨线程存活的派发事务：handler 返回 false（异步启动）
-     * 时<b>不</b>注销——任务还在跑，终态由流终态的 {@code SessionTurn#settle} 收口；
+     * 时<b>不</b>注销——任务还在跑，终态由流终态的 {@code RunTicket#settle} 收口；
      * handler 返回 true（同步完成）时内核当场 acknowledge 收口；handler 抛异常视为启动失败，
      * 注销登记并用领取瞬间的代际快照回滚到队首。</p>
      *
@@ -426,7 +436,7 @@ final class QueueStore {
         try {
             boolean done = handler.run(claim);
             if (!done) {
-                // 异步启动：claim 留给流终态（SessionTurn.settle）收口
+                // 异步启动：claim 留给流终态（RunTicket.settle）收口
                 return QueueClaimStatus.STARTED;
             }
             // 同步完成：内核当场收口。ack 被拒（期间被 Stop）必须转为回滚丢弃 + START_FAILED——
@@ -437,7 +447,7 @@ final class QueueStore {
             }
             return QueueClaimStatus.STARTED;
         } catch (Throwable e) {
-            TurnDispatch.unbind(session, claim);
+            RunDispatch.unbind(session, claim);
             claim.rollback();
             return QueueClaimStatus.START_FAILED;
         } finally {
@@ -447,7 +457,7 @@ final class QueueStore {
 
     /** 登记派发事务（覆盖式：同一会话同一时刻只允许一个未收口派发）。 */
     private static void registerDispatch(AgentSession session, QueueClaim claim) {
-        TurnDispatch previous = TurnDispatch.bind(session, claim);
+        RunDispatch previous = RunDispatch.bind(session, claim);
         if (previous != null) {
             // 「上一轮未收口就派发下一轮」按设计不可能发生（任一派发期间会话必为占用），
             // 但真的发生时旧事务会永久 OPEN 且无任何痕迹——留一条告警以便发现。

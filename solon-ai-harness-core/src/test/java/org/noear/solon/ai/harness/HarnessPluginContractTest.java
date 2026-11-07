@@ -26,8 +26,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.SessionStatus;
-import org.noear.solon.ai.harness.turn.SessionTurn;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import reactor.core.Disposable;
 
 import java.nio.charset.StandardCharsets;
@@ -51,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *   <li>钩子 {@link HarnessExtension#contributeSessionStatus}：扩展事实经开放槽位贡献、按键合并、异常隔离、不判开关；</li>
  *   <li>能力接口 {@link InputBacklog}：{@code getExtension(接口)} 可查、
  *       {@code admit} 忙态有积压能力 → QUEUE，没有 → REJECT(busy)；</li>
- *   <li>会话槽位 {@link TurnDispatch}：admit / SessionTurn 只认接口；</li>
+ *   <li>会话槽位 {@link RunDispatch}：admit / RunTicket 只认接口；</li>
  *   <li>装配 {@link HarnessEngine#addExtensionIfAbsent}：按类型幂等；</li>
  *   <li>守卫：核心 main 源码不得 import 任何插件包。</li>
  * </ol>
@@ -131,7 +130,7 @@ class HarnessPluginContractTest {
     }
 
     /** 派发事务桩。 */
-    static class StubDispatch implements TurnDispatch {
+    static class StubDispatch implements RunDispatch {
         final Thread thread = Thread.currentThread();
         final AgentSession session;
         Boolean settled;
@@ -152,13 +151,13 @@ class HarnessPluginContractTest {
 
         @Override
         public boolean isCurrent() {
-            return TurnDispatch.current(session) == this;
+            return RunDispatch.current(session) == this;
         }
 
         @Override
         public boolean settle(boolean started) {
             settled = started;
-            return TurnDispatch.unbind(session, this);
+            return RunDispatch.unbind(session, this);
         }
     }
 
@@ -195,7 +194,7 @@ class HarnessPluginContractTest {
 
         backlog.offer(session, "排队二");
         busy(session);
-        try (org.noear.solon.ai.harness.turn.InterruptPlan plan = engine.prepareInterrupt(session)) {
+        try (org.noear.solon.ai.harness.InterruptPlan plan = engine.prepareInterrupt(session)) {
             assertEquals(2, backlog.interrupts, "两段式的第一段就回调");
             assertEquals(0, backlog.offered.size());
             assertTrue(plan.hasActiveRun());
@@ -486,17 +485,17 @@ class HarnessPluginContractTest {
                 "有积压时空闲也要排队（先进先出）");
     }
 
-    // ==================== 槽位：TurnDispatch ====================
+    // ==================== 槽位：RunDispatch ====================
 
     @Test
-    void turnDispatchSlotDrivesAdmitAndSessionTurn() {
+    void runDispatchSlotDrivesAdmitAndRunTicket() {
         HarnessEngine engine = engine();
         engine.addExtension(new StubBacklog());
         AgentSession session = InMemoryAgentSession.of();
 
         StubDispatch dispatch = new StubDispatch(session);
-        assertNull(TurnDispatch.bind(session, dispatch));
-        assertSame(dispatch, session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNull(RunDispatch.bind(session, dispatch));
+        assertSame(dispatch, session.attrs().get(HarnessAttrs.RUN_DISPATCH));
 
         InputOutcome admit = engine.handle(HarnessInput.of(session, "派发的一轮"));
         assertEquals(InputOutcome.Kind.TASK, admit.getKind(), "程序派发的一轮天然空闲");
@@ -506,11 +505,11 @@ class HarnessPluginContractTest {
         admit.discard();
         assertFalse(engine.status(session).isAdmitting());
 
-        SessionTurn turn = SessionTurn.begin(session);
-        assertSame(dispatch, turn.dispatch());
-        assertTrue(turn.settle(true));
+        RunTicket ticket = RunTicket.begin(session);
+        assertSame(dispatch, ticket.dispatch());
+        assertTrue(ticket.settle(true));
         assertEquals(Boolean.TRUE, dispatch.settled);
-        assertNull(TurnDispatch.current(session), "收口后注销");
+        assertNull(RunDispatch.current(session), "收口后注销");
     }
 
     @Test
@@ -518,13 +517,13 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         StubDispatch mine = new StubDispatch(session);
         StubDispatch other = new StubDispatch(session);
-        TurnDispatch.bind(session, mine);
+        RunDispatch.bind(session, mine);
 
-        assertFalse(TurnDispatch.unbind(session, other), "不得抹掉别人的登记");
-        assertSame(mine, TurnDispatch.current(session));
-        assertSame(mine, TurnDispatch.bind(session, other), "覆盖返回旧值供登记方告警");
-        assertTrue(TurnDispatch.unbind(session, null), "null = 无条件清除");
-        assertNull(TurnDispatch.current(session));
+        assertFalse(RunDispatch.unbind(session, other), "不得抹掉别人的登记");
+        assertSame(mine, RunDispatch.current(session));
+        assertSame(mine, RunDispatch.bind(session, other), "覆盖返回旧值供登记方告警");
+        assertTrue(RunDispatch.unbind(session, null), "null = 无条件清除");
+        assertNull(RunDispatch.current(session));
     }
 
     // ==================== 装配：addExtensionIfAbsent ====================
@@ -581,7 +580,7 @@ class HarnessPluginContractTest {
     @Test
     void corePublicApiHasNoQueueVocabulary() {
         Class<?>[] types = {SessionStatus.class, SessionStatus.Builder.class, SessionStatus.Key.class,
-                InputOutcome.class, InputOutcome.Kind.class, InputBacklog.class, TurnDispatch.class,
+                InputOutcome.class, InputOutcome.Kind.class, InputBacklog.class, RunDispatch.class,
                 HarnessExtension.class, HarnessAttrs.class};
         List<String> violations = new ArrayList<>();
         for (Class<?> type : types) {

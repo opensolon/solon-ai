@@ -41,7 +41,7 @@ class ScopeGuardInterceptorTest {
 
     @Test
     void nullDimensionMeansUnlimited() {
-        TurnScope scope = TurnScope.builder("t1").build();
+        InputScope scope = InputScope.builder("t1").build();
         assertNull(guard.denyReason(scope, "bash", null));
         assertNull(guard.denyReason(scope, "weather_now", null));
         assertNull(guard.denyReason(scope, "call_tool", "crm_query"));
@@ -49,7 +49,7 @@ class ScopeGuardInterceptorTest {
 
     @Test
     void toolAllowlistDeniesOthers() {
-        TurnScope scope = TurnScope.builder("t1").tools("read", "skill").build();
+        InputScope scope = InputScope.builder("t1").tools("read", "skill").build();
         assertNull(guard.denyReason(scope, "read", null));
         assertNull(guard.denyReason(scope, "skillread", null));
         assertNull(guard.denyReason(scope, "now", null), "时钟工具恒允许");
@@ -58,14 +58,14 @@ class ScopeGuardInterceptorTest {
         assertEquals("task", guard.denyReason(scope, "task", null));
         assertNull(guard.denyReason(scope, "goal_update", null), "已声明的扩展工具不受名单约束（否则 goal 无法完成）");
         assertEquals("host_write", guard.denyReason(scope, "host_write", null), "未声明的宿主工具按名单判断");
-        TurnScope withHost = TurnScope.builder("t1").tools("read", "host_write").build();
+        InputScope withHost = InputScope.builder("t1").tools("read", "host_write").build();
         assertNull(guard.denyReason(withHost, "host_write", null), "写进名单即可放行");
         assertEquals("weather_now", guard.denyReason(scope, "weather_now", null), "未授权 mcp 时直连工具拒绝");
     }
 
     @Test
     void mcpBoundaryAppliesToDirectAndRelayTools() {
-        TurnScope scope = TurnScope.builder("t1").tools("mcp").mcps("weather").build();
+        InputScope scope = InputScope.builder("t1").tools("mcp").mcps("weather").build();
 
         // 直连
         assertNull(guard.denyReason(scope, "weather_now", null));
@@ -78,14 +78,14 @@ class ScopeGuardInterceptorTest {
         assertEquals("unknown_x", guard.denyReason(scope, "call_tool", "unknown_x"), "无归属的目标按越界处理");
 
         // 空名单 = 全部禁止
-        TurnScope none = TurnScope.builder("t1").mcps(Collections.emptyList()).build();
+        InputScope none = InputScope.builder("t1").mcps(Collections.emptyList()).build();
         assertEquals("weather_now", guard.denyReason(none, "weather_now", null));
     }
 
     @Test
     void builtinNameIsNotShadowedByMcpTool() {
         ScopeGuardInterceptor shadow = new ScopeGuardInterceptor(name -> "evil", name -> false, () -> false);
-        TurnScope scope = TurnScope.builder("t1").tools("read").mcps("weather").build();
+        InputScope scope = InputScope.builder("t1").tools("read").mcps("weather").build();
         assertNull(shadow.denyReason(scope, "read", null), "内置名优先，同名 MCP 工具不改变判定");
         assertEquals("bash", shadow.denyReason(scope, "bash", null));
     }
@@ -93,7 +93,7 @@ class ScopeGuardInterceptorTest {
     @Test
     void scopeIsImmutableSnapshot() {
         List<String> skills = new ArrayList<>(Arrays.asList("a"));
-        TurnScope scope = TurnScope.builder("t1").skills(skills).build();
+        InputScope scope = InputScope.builder("t1").skills(skills).build();
         skills.add("b");
         assertEquals(Collections.singleton("a"), scope.getSkills());
         assertThrows(UnsupportedOperationException.class, () -> scope.getSkills().add("c"));
@@ -121,7 +121,7 @@ class ScopeGuardInterceptorTest {
     void prefilledResultIsLeftUntouched() {
         ToolExchanger ex = new ToolExchanger("c1", "bash", new HashMap<>());
         ex.setResult("prefilled");
-        TurnScope scope = TurnScope.builder("t1").tools("read").build();
+        InputScope scope = InputScope.builder("t1").tools("read").build();
         // 经公共入口无法直接注入 trace 属性，这里只验证判定函数与预填约定
         assertEquals("bash", guard.denyReason(scope, ex.getToolName(), null));
         assertEquals("prefilled", ex.getResult());

@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness.input;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.HitlCard;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -47,8 +47,8 @@ import java.util.function.Consumer;
  * ACP 需要 {@code takeWhile} 取消判定。任何替宿主拼好的流都得被拆开重拼，
  * 反而遮住了这些必须由宿主掌握的时序。</p>
  *
- * <p>命名沿用本产品既有的 {@code *Outcome} 家族（{@code RunOutcome}、{@code TurnOutcome}、
- * {@code PollOutcome}）：都是「一次处理后归入几类结局」的同一类问题。{@code TASK} 表示
+ * <p>命名沿用本产品既有的 {@code *Outcome} 家族（{@code RunOutcome}、{@code PollOutcome}）：
+ * 都是「一次处理后归入几类结局」的同一类问题。{@code TASK} 表示
  * 「处置决定是交给你执行」、尚未执行 —— 所以不是 {@code Result}（后者在本产品专指 HTTP 响应包装）。</p>
  *
  * <p><b>kind 只回答「宿主该做什么」，不回答「输入是什么」。</b>
@@ -155,6 +155,18 @@ public final class InputOutcome {
      * @since 4.2.0
      */
     public static final String REJECT_SCOPE_UNAVAILABLE = "scope_unavailable";
+    /**
+     * 会话忙，且输入显式携带的作用域含不可保存的维度（模型实例 / 任意属性），不能排队
+     *
+     * @since 4.2.0
+     */
+    public static final String REJECT_SCOPE_NOT_DEFERRABLE = "scope_not_deferrable";
+    /**
+     * 引擎已关闭（{@code shutdown} 之后）：宿主持有的是过期引用，应重新从引擎池取
+     *
+     * @since 4.2.0
+     */
+    public static final String REJECT_ENGINE_CLOSED = "engine_closed";
 
     /** 宿主动作路由值（六值互斥穷尽，语义见 {@link Kind}） */
     private final Kind kind;
@@ -186,7 +198,7 @@ public final class InputOutcome {
     /** 本条（忙时可执行命令）是否在正在运行的任务旁边执行 */
     private boolean besideRunning;
     /** 本轮所属的程序派发事务（如积压续发）；非派发为 null */
-    private TurnDispatch dispatch;
+    private RunDispatch dispatch;
     /** 放弃执行时释放受理占位（仅 TASK 且占到了位时非空；幂等） */
     private Runnable discarder;
     /** 登记「本轮运行句柄注销之后」的回调（仅 TASK 且请求由引擎装配时非空） */
@@ -269,7 +281,7 @@ public final class InputOutcome {
      * @return 本实例
      * @since 4.2.0
      */
-    public InputOutcome admitted(boolean besideRunning, @Nullable TurnDispatch dispatch, @Nullable Runnable discarder,
+    public InputOutcome admitted(boolean besideRunning, @Nullable RunDispatch dispatch, @Nullable Runnable discarder,
                                  @Nullable Consumer<Runnable> afterRunRegistrar) {
         this.besideRunning = besideRunning;
         this.dispatch = dispatch;
@@ -571,12 +583,12 @@ public final class InputOutcome {
     }
 
     /**
-     * 本轮所属的程序派发事务（非派发为 null）。宿主据此取回复路由来源（{@link TurnDispatch#getOrigin()}）。
+     * 本轮所属的程序派发事务（非派发为 null）。宿主据此取回复路由来源（{@link RunDispatch#getOrigin()}）。
      *
      * @since 4.2.0
      */
     @Nullable
-    public TurnDispatch getDispatch() {
+    public RunDispatch getDispatch() {
         return dispatch;
     }
 

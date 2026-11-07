@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.mount.source.MountEntry;
 import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
@@ -46,7 +47,8 @@ import java.util.function.LongSupplier;
  * 静默沿用旧 job；同一进程可能有多个扩展实例（多引擎 / 重建引擎）。不要改成时间戳（同毫秒创建会重复）。
  * 节拍 job 在第一个会话登记时注册、最后一个会话注销时移除，空闲引擎不占定时任务。</p>
  *
- * <p>多节点：轮次经 {@code handle} 受理，非持有节点被 {@code not_owner} 拒绝后按「未受理」跳过。</p>
+ * <p>多节点：派发前（加载会话之前）先查会话归属，非持有节点不加载会话、不调用执行器，
+ * 按租约探测间隔退避；持有节点释放或宕机后自然接管。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -76,6 +78,15 @@ class GoalScheduler {
     private volatile boolean tickRegistered;
     private volatile ExecutorService roundPool;
     private volatile LongSupplier clock = System::currentTimeMillis;
+    /** 非持有节点的租约探测间隔（缺省 15 秒；建议不超过租约有效期的一半） */
+    private volatile long ownerProbeIntervalMs = DEFAULT_OWNER_PROBE_INTERVAL_MS;
+
+    /** 缺省租约探测间隔 */
+    static final long DEFAULT_OWNER_PROBE_INTERVAL_MS = 15_000L;
+
+    void setOwnerProbeIntervalMs(long ownerProbeIntervalMs) {
+        this.ownerProbeIntervalMs = Math.max(TICK_MS, ownerProbeIntervalMs);
+    }
 
     /** 活跃 goal 索引目录（重启恢复用；null = 不持久化） */
     private volatile MountSource indexSource;
@@ -279,6 +290,15 @@ class GoalScheduler {
     }
 
     private void dispatchIfReady(String sessionId) {
+        // 多节点：先查归属、后加载会话——非持有节点不得把会话从共享存储加载进自己的内存，
+        // 也不得调用宿主自定义执行器（否则多个节点同时推进同一个 goal）。拿不到租约时按探测间隔退避，
+        // 避免 N 节点 × M goal 每拍打一次租约存储；持有节点宕机、租约过期后下一次探测即可接管。
+        HarnessEngine engine = goalRuntime.engine();
+        if (engine != null && engine.checkOwner(sessionId).isOwned() == false) {
+            dueAt.computeIfPresent(sessionId, (k, v) -> v == Long.MAX_VALUE ? v : clock.getAsLong() + ownerProbeIntervalMs);
+            return;
+        }
+
         // 只取已存在的会话：会话已被删（含宿主没走 removeSession）就注销，不重建会话
         AgentSession session = goalRuntime.sessionOrNull(sessionId);
         if (session == null) {

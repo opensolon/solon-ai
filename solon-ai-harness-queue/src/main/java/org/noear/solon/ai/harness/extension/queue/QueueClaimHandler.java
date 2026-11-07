@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness.extension.queue;
  *       {@code acknowledge()} 收口；若确认被拒（期间被 Stop），内核改走回滚丢弃
  *       并返回 {@link QueueClaimStatus#START_FAILED}，循环自然终止；</li>
  *   <li>{@code false}：任务只是<b>异步启动</b>（如 Agent 流），终态由宿主在流终态
- *       调核心的 {@code SessionTurn#settle(boolean)} 收口（它在 begin 时已捕获本次领取）。</li>
+ *       调核心的 {@code RunTicket#settle(boolean)} 收口（它在 begin 时已捕获本次领取）。</li>
  * </ul>
  *
  * <p>异步返回 {@code true}（谎报完成）会让任务在流失败后无法回滚重试；同步返回
@@ -33,7 +33,7 @@ package org.noear.solon.ai.harness.extension.queue;
 public interface QueueClaimHandler {
     /**
      * @return true = 回调返回前任务已同步完成（内核当场收口）；
-     *         false = 异步启动，终态由流终态的 {@code SessionTurn#settle} 收口
+     *         false = 异步启动，终态由流终态的 {@code RunTicket#settle} 收口
      */
     boolean run(QueueClaim claim) throws Exception;
 }

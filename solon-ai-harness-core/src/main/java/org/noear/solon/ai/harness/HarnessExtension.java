@@ -66,7 +66,7 @@ import java.util.Collections;
  *         {@link org.noear.solon.ai.harness.spi.InputBacklog}）。不要把领域能力做成本接口的
  *         default 方法——那会让每个扩展都继承与自己无关的语义。</li>
  *     <li><b>需要在会话锁内或无引擎场景读取的会话事实 → 用核心持有的 attrs 槽位</b>
- *         （如 {@link org.noear.solon.ai.harness.spi.TurnDispatch}）。</li>
+ *         （如 {@link org.noear.solon.ai.harness.spi.RunDispatch}）。</li>
  *     <li><b>核心的静态 API 只读核心事实</b>；扩展贡献的事实一律经引擎读取
  *         （插件事实只在 {@code engine.status(session)} 里，不在 {@code SessionStatus.of(session)} 里）。</li>
  *     <li><b>内核不定义插件事实键</b>：事实键由拥有它的插件定义。内核自己的判定若要依赖插件，
@@ -358,7 +358,7 @@ public interface HarnessExtension extends AiSwitchable {
     /**
      * 本扩展给模型挂的工具名（声明）
      *
-     * <p><b>调用点</b>：作用域守卫。已声明的工具不受 {@code TurnScope.tools} 名单约束（跟随扩展是否挂载），
+     * <p><b>调用点</b>：作用域守卫。已声明的工具不受 {@code InputScope.tools} 名单约束（跟随扩展是否挂载），
      * 否则 goal 会因名单里没写 {@code goal_update} 而永远无法完成；未声明的非内置、非 MCP 工具
      * （如宿主自注册的工具）与内置工具同口径，必须在名单内。</p>
      *

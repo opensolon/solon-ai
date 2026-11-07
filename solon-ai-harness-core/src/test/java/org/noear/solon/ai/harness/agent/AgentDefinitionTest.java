@@ -200,7 +200,7 @@ class AgentDefinitionTest {
 
         // addAgentIfAbsent 不覆盖既有
         AgentDefinition a2 = AgentDefinition.builder().name("a").description("new").build();
-        mgr.addAgentIfAbsent(a2);
+        assertFalse(mgr.addAgentIfAbsent(a2), "同名时返回 false");
         assertNull(mgr.getAgent("a").getDescription());
 
         // addAgent 覆盖

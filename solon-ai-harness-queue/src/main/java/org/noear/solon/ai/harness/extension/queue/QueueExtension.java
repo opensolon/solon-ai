@@ -40,7 +40,7 @@ import java.util.Map;
  * <p><b>与核心的协作</b>（核心不认识队列，只认契约）：实现能力接口 {@link InputBacklog}
  * （引擎忙态受理与先进先出、空闲判定、steer 残留转排队都经它）；覆写 {@link #contributeSessionStatus} 贡献
  * 自有事实键 {@link #STATUS_PENDING}；
- * 覆写 {@link #onSessionInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code TurnDispatch}。
+ * 覆写 {@link #onSessionInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code RunDispatch}。
  * 队列存在会话属性里，随会话一起消失，无需覆写 {@code onSessionRemove}。</p>
  *
  * @author noear
@@ -129,9 +129,25 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
     }
 
+    /**
+     * 写门面在非持有节点上的返回值（多节点部署：本节点不持有该会话，宿主按 {@code engine.checkOwner} 的持有者转发）
+     *
+     * @since 4.2.0
+     */
+    public static final int NOT_OWNER = -2;
+
+    private volatile HarnessEngine engine;
+
     @Override
     public void onAttach(HarnessEngine engine) {
+        this.engine = engine;
         engine.getCommandRegistry().register(queueCommand);
+    }
+
+    /** 写门面的归属检查（未挂载时视为持有：单测与无引擎场景） */
+    private boolean owned(AgentSession session) {
+        HarnessEngine e = engine;
+        return session == null || e == null || e.checkOwner(session).isOwned();
     }
 
     @Override
@@ -162,8 +178,10 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             return -1;
         }
         String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
+        // 输入快照：技能 / MCP 视野、终端标记与显式作用域随积压保存，续发时还原（解析所得的作用域不存，续发时重新解析）
         return QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
-                null, null, agent, false, input.getAttrs(), limits.maxSize, limits.maxTextLength);
+                null, null, agent, false, input.getAttrs(), QueueItem.snapshotOf(input),
+                limits.maxSize, limits.maxTextLength);
     }
 
     /**
@@ -196,10 +214,20 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     // ==================== 操作门面（中转静态实现） ====================
 
-    /** 入队（携带来源身份）。@return 队列位置（从 1 计）；-1 表示失败（满/超长/参数空/扩展已停用） */
+    /**
+     * 入队（携带来源身份）。
+     *
+     * <p>注意：门面入队不经 {@code handle} 受理，因此不做作用域预检；作用域在续发时由解析器解析
+     * （{@code scopeRequired} 下解析不到即被拒绝）。</p>
+     *
+     * @return 队列位置（从 1 计）；-1 表示失败（满/超长/参数空/扩展已停用）；{@link #NOT_OWNER} 表示本节点不持有该会话
+     */
     public int enqueue(AgentSession session, String text, InputOrigin origin) {
         if (isEnabled() == false) {
             return -1;
+        }
+        if (owned(session) == false) {
+            return NOT_OWNER;
         }
         return QueueStore.enqueue(session, text, origin, null, null, null, null, null, false, null,
                 limits.maxSize, limits.maxTextLength);
@@ -223,6 +251,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
                        String thinkingMode, String selectedAgent, boolean hasFiles) {
         if (isEnabled() == false) {
             return -1;
+        }
+        if (owned(session) == false) {
+            return NOT_OWNER;
         }
         return QueueStore.enqueue(session, text, origin, id, model, reasoningEffort,
                 thinkingMode, selectedAgent, hasFiles, null, limits.maxSize, limits.maxTextLength);
@@ -262,14 +293,14 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * 领取并执行队首一条（一次领取 = 一个 {@link QueueClaim}）。
      *
      * <p>handler 拿到 claim 后直接取 {@code claim.getItem()} 拿任务本体；收口由 handler 返回值
-     * （同步完成）或流终态的 {@code SessionTurn#settle}（异步启动）完成——不需要往会话 attrs 里塞
+     * （同步完成）或流终态的 {@code RunTicket#settle}（异步启动）完成——不需要往会话 attrs 里塞
      * QueueItem，也不需要在终态现取代际。</p>
      *
      * @see QueueStore#claimNext(AgentSession, QueueClaimHandler)
      * @since 4.2.0
      */
     public QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
-        if (isEnabled() == false) {
+        if (isEnabled() == false || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
         }
         return QueueStore.claimNext(session, handler);
@@ -287,7 +318,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     public QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
                                 QueueClaimHandler handler) {
-        if (isEnabled() == false) {
+        if (isEnabled() == false || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
         }
         return QueueStore.claimNext(session, canAccept, handler);
@@ -322,7 +353,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     public QueueClaimStatus drainLoop(AgentSession session, java.util.function.Predicate<AgentSession> canDrain,
                                 QueueClaimHandler handler) {
-        if (isEnabled() == false || session == null || handler == null) {
+        if (isEnabled() == false || session == null || handler == null || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
         }
 
@@ -351,21 +382,24 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     /** 取消单条待执行任务。 */
     public boolean cancelItem(AgentSession session, String itemId) {
-        return QueueStore.cancelItem(session, itemId);
+        return owned(session) && QueueStore.cancelItem(session, itemId);
     }
 
     /** 置顶单条待执行任务。 */
     public boolean promote(AgentSession session, String itemId) {
-        return QueueStore.promote(session, itemId);
+        return owned(session) && QueueStore.promote(session, itemId);
     }
 
     /** 清空待执行并递增代际（in-flight 不受影响；旧代际 requeue 被拒）。 */
     public boolean cancelPending(AgentSession session) {
-        return QueueStore.cancelPending(session);
+        return owned(session) && QueueStore.cancelPending(session);
     }
 
     /** 旧版 queue-tasks.json 的一次性迁移入口。@return 实际导入条数 */
     public int importItems(AgentSession session, List<Map<String, Object>> rows) {
+        if (owned(session) == false) {
+            return NOT_OWNER;
+        }
         return QueueStore.importItems(session, rows, limits.maxSize);
     }
 }

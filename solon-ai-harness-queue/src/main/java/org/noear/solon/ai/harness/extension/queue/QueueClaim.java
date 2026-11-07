@@ -6,18 +6,18 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.lang.Nullable;
 
 /**
- * 一次队列领取（领取事务，同时是核心的程序派发 {@link TurnDispatch}）。
+ * 一次队列领取（领取事务，同时是核心的程序派发 {@link RunDispatch}）。
  *
  * <p>把「领取」提升为一等对象，宿主原本必须自己保管的东西都收进 harness：</p>
  * <ol>
  *   <li><b>领取到的任务</b>：{@link #getItem()}，无需再往会话 attrs 里塞一份再强转取回；</li>
  *   <li><b>领取时刻的代际快照</b>：宿主不再需要在终态现取代际——那会让代际防线恒真（详见下文）；</li>
- *   <li><b>派发登记</b>：领取成功即登记到核心槽位（{@code TurnDispatch.bind}），收口即注销，
- *       引擎的受理判定与 {@code SessionTurn} 只认接口，不认识队列；</li>
+ *   <li><b>派发登记</b>：领取成功即登记到核心槽位（{@code RunDispatch.bind}），收口即注销，
+ *       引擎的受理判定与 {@code RunTicket} 只认接口，不认识队列；</li>
  *   <li><b>终态收口</b>：唯一入口 {@link #settle(boolean)}（成功确认 / 失败回滚到队首），
  *       身份与代际校验由 harness 内部完成，幂等。</li>
  * </ol>
@@ -25,7 +25,7 @@ import org.noear.solon.lang.Nullable;
  * <p><b>收口路径只有两条</b>（宿主不需要、也不应该自己找 claim 收口）：</p>
  * <ul>
  *   <li>同步任务：{@link QueueClaimHandler} 返回 {@code true}，内核当场收口；</li>
- *   <li>异步任务：流终态调核心的 {@code SessionTurn#settle(boolean)}（它在 {@code begin} 时已捕获本派发）。</li>
+ *   <li>异步任务：流终态调核心的 {@code RunTicket#settle(boolean)}（它在 {@code begin} 时已捕获本派发）。</li>
  * </ul>
  *
  * <p><b>为什么必须有代际快照</b>：{@code cancelPending}（清空待执行）会递增代际并移除
@@ -41,7 +41,7 @@ import org.noear.solon.lang.Nullable;
  * @author noear
  * @since 4.2.0
  */
-public final class QueueClaim implements TurnDispatch {
+public final class QueueClaim implements RunDispatch {
     private enum State {
         /** 已领取、尚未收口 */
         OPEN,
@@ -69,7 +69,7 @@ public final class QueueClaim implements TurnDispatch {
      */
     @Nullable
     public static QueueClaim current(@Nullable AgentSession session) {
-        TurnDispatch value = TurnDispatch.current(session);
+        RunDispatch value = RunDispatch.current(session);
         return value instanceof QueueClaim ? (QueueClaim) value : null;
     }
 
@@ -94,7 +94,7 @@ public final class QueueClaim implements TurnDispatch {
     /** 本领取是否仍是会话当前的派发事务（跨线程可判，不看线程）。 */
     @Override
     public boolean isCurrent() {
-        return TurnDispatch.current(session) == this;
+        return RunDispatch.current(session) == this;
     }
 
     /** 是否已收口（成功或回滚）。 */
@@ -139,7 +139,7 @@ public final class QueueClaim implements TurnDispatch {
             return false;
         }
         state = State.ACKNOWLEDGED;
-        TurnDispatch.unbind(session, this);
+        RunDispatch.unbind(session, this);
         return true;
     }
 
@@ -154,7 +154,7 @@ public final class QueueClaim implements TurnDispatch {
         }
         if (QueueStore.requeueFront(session, item, generation)) {
             state = State.ROLLED_BACK;
-            TurnDispatch.unbind(session, this);
+            RunDispatch.unbind(session, this);
             return true;
         }
         // 回写被拒只有两种原因，处理方式相反：
@@ -163,7 +163,7 @@ public final class QueueClaim implements TurnDispatch {
         if (!isValid()) {
             QueueStore.acknowledge(session, item.getId());
             state = State.ROLLED_BACK;
-            TurnDispatch.unbind(session, this);
+            RunDispatch.unbind(session, this);
         }
         // 回写被拒且代际仍有效（队列满）：任务保持 in-flight，派发登记也保持——
         // 它不是「已收口」，后续仍要有人对它收口，这里注销会让任务永久无主。

@@ -40,11 +40,43 @@ public class AgentManager {
         this.agentCatalog = agentCatalog;
     }
 
-    public void addAgentIfAbsent(AgentDefinition agentDefinition) {
-        agentMap.putIfAbsent(agentDefinition.getName(), agentDefinition);
+    private volatile boolean sealed;
+
+    /**
+     * 封口（SERVER 模式在 {@code build()} 末尾调用）：之后 {@link #addAgent} 与 {@link #clear} 抛
+     * {@link IllegalStateException}。{@link #addAgentIfAbsent} 不受封口影响：它永不覆盖、也不遮蔽已有定义，
+     * 运行期新增全局子代理由调用方的策略把关（如 {@code agentPersistPolicy}）。
+     *
+     * @since 4.2.0
+     */
+    public void seal() {
+        this.sealed = true;
+    }
+
+    public boolean isSealed() {
+        return sealed;
+    }
+
+    private void assertNotSealed(String op) {
+        if (sealed) {
+            throw new IllegalStateException("AgentManager is sealed (runtimeMutable=false): " + op);
+        }
+    }
+
+    /**
+     * 仅在不存在同名定义时注册（含挂载目录里的：运行时注册表优先于目录，同名注册会遮蔽内置 / 工作区代理）。
+     *
+     * @return true = 已注册；false = 已有同名定义（未做任何修改）
+     */
+    public synchronized boolean addAgentIfAbsent(AgentDefinition agentDefinition) {
+        if (hasAgent(agentDefinition.getName())) {
+            return false;
+        }
+        return agentMap.putIfAbsent(agentDefinition.getName(), agentDefinition) == null;
     }
 
     public void addAgent(AgentDefinition agentDefinition) {
+        assertNotSealed("addAgent");
         agentMap.put(agentDefinition.getName(), agentDefinition);
     }
 
@@ -133,6 +165,7 @@ public class AgentManager {
      * 清除所有代理
      */
     public void clear() {
+        assertNotSealed("clear");
         agentMap.clear();
     }
 

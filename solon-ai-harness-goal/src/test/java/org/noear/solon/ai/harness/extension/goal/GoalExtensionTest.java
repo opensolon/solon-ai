@@ -53,6 +53,12 @@ class GoalExtensionTest {
         return sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k));
     }
 
+    /** 门面不新建会话：先登记会话再按 id 调用 */
+    private String sid(String id) {
+        session(id);
+        return id;
+    }
+
     // ==================== 装配 ====================
 
     @Test
@@ -76,7 +82,7 @@ class GoalExtensionTest {
                 .build();
         engineBuilder().extensionAdd(ext).build();
 
-        ext.create("s-l", GoalSpec.of("目标"));
+        ext.create(sid("s-l"), GoalSpec.of("目标"));
         assertEquals(1, received.size(), "builder 预注册的 listener 应收到创建通知");
         assertEquals("目标", received.get(0).getObjective());
     }
@@ -100,7 +106,7 @@ class GoalExtensionTest {
         GoalExtension ext = attached();
         session("s1");
 
-        GoalTask t = ext.create("s1", GoalSpec.of("让测试全绿").maxTokens(100).maxIterations(5));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("让测试全绿").maxTokens(100).maxIterations(5));
         assertEquals("让测试全绿", t.getObjective());
         assertEquals(GoalTask.Status.PURSUING, t.getStatus());
         assertEquals(100L, t.getMaxTokens());
@@ -116,8 +122,8 @@ class GoalExtensionTest {
     @Test
     void createRejectsSecondActiveGoal() {
         GoalExtension ext = attached();
-        ext.create("s1", GoalSpec.of("目标一"));
-        assertThrows(IllegalStateException.class, () -> ext.create("s1", GoalSpec.of("目标二")), "单槽");
+        ext.create(sid("s1"), GoalSpec.of("目标一"));
+        assertThrows(IllegalStateException.class, () -> ext.create(sid("s1"), GoalSpec.of("目标二")), "单槽");
     }
 
     /** 展示正文与执行正文分离：一次落盘、一次广播，列表不会看到附件全文的中间态。 */
@@ -130,13 +136,13 @@ class GoalExtensionTest {
                 .build();
         engineBuilder().extensionAdd(ext).build();
 
-        GoalTask t = ext.create("s-display", GoalSpec.of("执行正文（含附件全文）").displayObjective("展示正文").runNow(false));
+        GoalTask t = ext.create(sid("s-display"), GoalSpec.of("执行正文（含附件全文）").displayObjective("展示正文").runNow(false));
         assertEquals("展示正文", t.getObjective());
         assertEquals(Collections.singletonList("展示正文"), objectives, "只能广播一次");
 
-        GoalTask same = ext.create("s-same", GoalSpec.of("同一个目标").displayObjective("同一个目标"));
+        GoalTask same = ext.create(sid("s-same"), GoalSpec.of("同一个目标").displayObjective("同一个目标"));
         assertEquals("同一个目标", same.getObjective());
-        GoalTask none = ext.create("s-none", GoalSpec.of("另一个目标").displayObjective(null));
+        GoalTask none = ext.create(sid("s-none"), GoalSpec.of("另一个目标").displayObjective(null));
         assertEquals("另一个目标", none.getObjective(), "null 展示正文不得覆写");
     }
 
@@ -144,7 +150,7 @@ class GoalExtensionTest {
     @Test
     void snapshotIsDetachedFromRuntime() {
         GoalExtension ext = attached();
-        GoalTask before = ext.create("s1", GoalSpec.of("目标"));
+        GoalTask before = ext.create(sid("s1"), GoalSpec.of("目标"));
         assertTrue(ext.pause("s1", before.getId()));
         assertEquals(GoalTask.Status.PURSUING, before.getStatus(), "旧快照不随运行态变化");
         assertEquals(GoalTask.Status.PAUSED, ext.get("s1").getStatus());
@@ -153,7 +159,7 @@ class GoalExtensionTest {
     @Test
     void toMapIsTheStandardView() {
         GoalExtension ext = attached();
-        GoalTask t = ext.create("s1", GoalSpec.of("目标").maxTokens(50));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("目标").maxTokens(50));
         Map<String, Object> view = t.toMap();
 
         assertEquals(t.getId(), view.get("id"));
@@ -173,7 +179,7 @@ class GoalExtensionTest {
     @Test
     void pauseResumeRemoveBySessionAndTaskId() {
         GoalExtension ext = attached();
-        GoalTask t = ext.create("s-str", GoalSpec.of("目标"));
+        GoalTask t = ext.create(sid("s-str"), GoalSpec.of("目标"));
 
         assertFalse(ext.pause("s-str", "not-a-goal-id"), "taskId 不匹配不得误伤");
         assertTrue(ext.pause("s-str", t.getId()));
@@ -197,7 +203,7 @@ class GoalExtensionTest {
     @Test
     void triggerOnlyForActiveGoal() {
         GoalExtension ext = attached();
-        GoalTask t = ext.create("s1", GoalSpec.of("目标"));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("目标"));
         ext.pause("s1", t.getId());
         assertFalse(ext.trigger("s1", t.getId()), "非活跃态不能触发");
     }
@@ -207,7 +213,7 @@ class GoalExtensionTest {
     @Test
     void updateKeepsUnsetFieldsAndDoesNotChangeStatusWhenPaused() {
         GoalExtension ext = attached();
-        GoalTask t = ext.create("s1", GoalSpec.of("旧目标").maxTokens(100L).maxDurationMs(5000L).maxIterations(7));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("旧目标").maxTokens(100L).maxDurationMs(5000L).maxIterations(7));
         ext.pause("s1", t.getId());
 
         AtomicInteger stops = new AtomicInteger();
@@ -234,7 +240,7 @@ class GoalExtensionTest {
                 .listener((sid, task, removed) -> order.add(task.getStatus().name()))
                 .build();
         engineBuilder().extensionAdd(ext).build();
-        GoalTask t = ext.create("s1", GoalSpec.of("目标"));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("目标"));
         order.clear();
 
         GoalTask after = ext.update("s1", t.getId(), GoalPatch.create().objective("新目标"), () -> order.add("stop"));
@@ -248,7 +254,7 @@ class GoalExtensionTest {
     @Test
     void updateTerminalGoalIsRejected() {
         GoalExtension ext = attached();
-        GoalTask t = ext.create("s1", GoalSpec.of("目标"));
+        GoalTask t = ext.create(sid("s1"), GoalSpec.of("目标"));
         AgentSession s = session("s1");
         GoalState gs = ext.getGoalRuntime().state(s);
         gs.achieve();
@@ -327,7 +333,7 @@ class GoalExtensionTest {
 
         assertNull(engine.status(session).get(GoalExtension.STATUS_GOAL), "无 goal 时为 null");
 
-        GoalTask t = ext.create("s-status", GoalSpec.of("目标"));
+        GoalTask t = ext.create(sid("s-status"), GoalSpec.of("目标"));
         assertEquals(GoalTask.Status.PURSUING, engine.status(session).get(GoalExtension.STATUS_GOAL));
 
         ext.pause("s-status", t.getId());
@@ -345,7 +351,7 @@ class GoalExtensionTest {
         assertEquals("session.goal", GoalAttrs.GOAL);
         GoalExtension ext = attached();
         AgentSession session = session("s-attrs");
-        ext.create("s-attrs", GoalSpec.of("目标"));
+        ext.create(sid("s-attrs"), GoalSpec.of("目标"));
 
         assertTrue(session.getContext().data().get(GoalAttrs.GOAL) instanceof Map, "投影落在 GoalAttrs.GOAL");
         assertTrue(session.attrs().get(GoalAttrs.GOAL_STATE) instanceof GoalState, "运行态落在 GoalAttrs.GOAL_STATE");

@@ -7,8 +7,12 @@ package org.noear.solon.ai.harness.extension.queue;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.scope.InputScope;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -33,6 +37,11 @@ public final class QueueItem {
     private boolean hasFiles;
     /** 宿主域属性（引擎积压入口带入的 {@code HarnessInput#getAttrs()}；原样保存，不解读） */
     private final Map<String, String> attrs;
+    /** 输入快照（技能 / MCP 视野、终端标记、显式作用域规格；版本见 {@link #SNAPSHOT_VERSION}） */
+    private Map<String, Object> snapshot = Collections.emptyMap();
+
+    /** 输入快照格式版本 */
+    static final int SNAPSHOT_VERSION = 1;
 
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
         this(id, text, origin, createdAt, status, null, null, null, null, false);
@@ -95,7 +104,50 @@ public final class QueueItem {
                 .attrs(attrs);
         if (reasoningEffort != null) input.attr("reasoningEffort", reasoningEffort);
         if (thinkingMode != null) input.attr("thinkingMode", thinkingMode);
+        applySnapshot(input);
         return input;
+    }
+
+    /** 输入快照（只读；旧格式条目为空表） */
+    public Map<String, Object> getInputSnapshot() { return snapshot; }
+
+    void setInputSnapshot(Map<String, Object> snapshot) {
+        this.snapshot = snapshot == null || snapshot.isEmpty()
+                ? Collections.<String, Object>emptyMap()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(snapshot));
+    }
+
+    /**
+     * 从输入采集快照：技能 / MCP 视野、终端标记，以及显式作用域（解析器解析所得的不存，续发时重新解析）。
+     * 调用方已保证显式作用域可保存（{@code InputScope#isDeferrable}）。
+     */
+    static Map<String, Object> snapshotOf(HarnessInput input) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        if (input.hasSkillSelection()) m.put("skills", new ArrayList<>(input.getSelectedSkills()));
+        if (input.hasMcpSelection()) m.put("mcps", new ArrayList<>(input.getSelectedMcps()));
+        if (input.isTerminal()) m.put("terminal", true);
+        if (input.isScopeExplicit() && input.getScope().isDeferrable()) m.put("scope", input.getScope().toSpec());
+        if (m.isEmpty()) return m;
+        m.put("v", SNAPSHOT_VERSION);
+        return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applySnapshot(HarnessInput input) {
+        if (snapshot.isEmpty()) return;
+        Object skills = snapshot.get("skills");
+        if (skills instanceof Collection) input.selectedSkill(toArray((Collection<?>) skills));
+        Object mcps = snapshot.get("mcps");
+        if (mcps instanceof Collection) input.selectedMcp(toArray((Collection<?>) mcps));
+        if (Boolean.TRUE.equals(snapshot.get("terminal"))) input.terminal(true);
+        Object scope = snapshot.get("scope");
+        if (scope instanceof Map) input.restoredScope(InputScope.fromSpec((Map<String, Object>) scope));
+    }
+
+    private static String[] toArray(Collection<?> c) {
+        List<String> out = new ArrayList<>();
+        for (Object o : c) if (o != null) out.add(String.valueOf(o));
+        return out.toArray(new String[0]);
     }
     public String getSelectedAgent() { return selectedAgent; }
     public boolean hasFiles() { return hasFiles; }
@@ -162,6 +214,7 @@ public final class QueueItem {
         if (selectedAgent != null && !selectedAgent.isEmpty()) map.put("selectedAgent", selectedAgent);
         if (hasFiles) map.put("hasFiles", true);
         if (!attrs.isEmpty()) map.put("attrs", new LinkedHashMap<>(attrs));
+        if (!snapshot.isEmpty()) map.put("input", new LinkedHashMap<>(snapshot));
         return map;
     }
 
@@ -176,6 +229,11 @@ public final class QueueItem {
                 value(map.get("model")), value(map.get("reasoningEffort")), value(map.get("thinkingMode")),
                 value(map.get("selectedAgent")), Boolean.TRUE.equals(map.get("hasFiles")), attrs(map.get("attrs")));
         item.setClaimedAt(numberObject(map.get("claimedAt")));
+        if (map.get("input") instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> snap = (Map<String, Object>) map.get("input");
+            item.setInputSnapshot(snap);
+        }
         return item;
     }
 

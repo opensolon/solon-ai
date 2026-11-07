@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.spi;
 
+import java.util.Objects;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -59,6 +60,76 @@ public interface SessionOwnership {
      * 主动释放（会话删除、引擎关闭时；可能对未持有的会话调用，实现应忽略）
      */
     void release(String sessionId);
+
+    /**
+     * 加命名空间的装饰器：租约键变为 {@code ns + ":" + sessionId}。
+     *
+     * <p>引擎池里多个租户共用一个租约实现（如同一个 Redis）时，会话 ID 并不全局唯一（CLI 的会话就叫
+     * {@code cli}），不加前缀会让不同租户的同名会话互相拒绝。按租户建引擎时包一层：</p>
+     *
+     * <pre>{@code
+     * .sessionOwnership(SessionOwnership.namespaced(tenantId, redisOwnership))
+     * }</pre>
+     *
+     * <p>已包装过的不重复包装（前缀叠加）；{@link #LOCAL} 原样返回。</p>
+     *
+     * @param ns       命名空间（如租户 ID，非空）
+     * @param delegate 共用的租约实现
+     * @since 4.2.0
+     */
+    static SessionOwnership namespaced(String ns, SessionOwnership delegate) {
+        if (ns == null || ns.isEmpty()) {
+            throw new IllegalArgumentException("namespace is empty");
+        }
+        Objects.requireNonNull(delegate, "delegate");
+        if (delegate == LOCAL || delegate instanceof Namespaced) {
+            return delegate;
+        }
+        return new Namespaced(ns, delegate);
+    }
+
+    /**
+     * 命名空间装饰器（见 {@link #namespaced}）
+     *
+     * @since 4.2.0
+     */
+    final class Namespaced implements SessionOwnership {
+        private final String ns;
+        private final SessionOwnership delegate;
+
+        private Namespaced(String ns, SessionOwnership delegate) {
+            this.ns = ns;
+            this.delegate = delegate;
+        }
+
+        public String getNamespace() {
+            return ns;
+        }
+
+        private String key(String sessionId) {
+            return ns + ":" + sessionId;
+        }
+
+        @Override
+        public boolean tryAcquire(String sessionId) {
+            return delegate.tryAcquire(key(sessionId));
+        }
+
+        @Override
+        public String ownerOf(String sessionId) {
+            return delegate.ownerOf(key(sessionId));
+        }
+
+        @Override
+        public void release(String sessionId) {
+            delegate.release(key(sessionId));
+        }
+
+        @Override
+        public String toString() {
+            return "SessionOwnership.namespaced(" + ns + ", " + delegate + ")";
+        }
+    }
 
     /**
      * 单机：永远持有

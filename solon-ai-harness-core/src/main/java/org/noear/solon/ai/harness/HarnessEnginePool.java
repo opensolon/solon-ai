@@ -29,23 +29,27 @@ import java.util.function.LongSupplier;
  * 引擎池（「每个租户 / 工作区一个引擎」模式）
  *
  * <p>引擎与工作区一一绑定，租户之间需要文件系统隔离时按键各建一个引擎；同一工作区内不同用户 / 角色的差异
- * 用 {@code TurnScope}。池负责：按键懒建（同一键并发只建一次）、空闲超时且 {@link HarnessEngine#isQuiescent()}
+ * 用 {@code InputScope}。池负责：按键懒建（同一键并发只建一次）、空闲超时且 {@link HarnessEngine#isQuiescent()}
  * 时回收并 {@link HarnessEngine#shutdown()}、关闭时统一释放。</p>
  *
  * <pre>{@code
  * HarnessEnginePool pool = HarnessEnginePool.builder(tenantId -> HarnessEngine.of(...).build())
  *         .idleTtl(Duration.ofMinutes(30))
  *         .build();
- * HarnessEngine engine = pool.acquire(tenantId);
+ * HarnessEngine engine = pool.get(tenantId);
  * }</pre>
  *
  * <p>注意：有活跃 goal / 定时任务的引擎不会被回收（扩展经 {@link HarnessExtension#isQuiescent} 声明），
  * 否则后台工作会随引擎一起消失。进程级 OS 沙盒由宿主启动时统一初始化（SERVER 模式）。</p>
  *
- * <p>并发约定：同一个键的创建、刷新、回收（含 {@code shutdown}）都在该键的 {@code compute} 里串行完成——
- * 旧引擎关完（含释放会话租约）之后才会为同一个键建新引擎，旧引擎不会误释放新引擎认领的租约。
- * 因此工厂函数与扩展的 {@code onDetach} 里不得再调用本池（会抛 Recursive update），也不宜做长时间阻塞的事
- * （会卡住落在同一哈希桶里的其它键）。{@code maxEngines} 是软上限，并发创建时可能短暂超出。</p>
+ * <p>并发约定：刷新与回收（含 {@code shutdown}）在该键的 {@code compute} 里串行完成；<b>构建在锁外</b>——
+ * {@code compute} 里只放一个占位 future，由放占位的线程在锁外调用工厂函数，同一个键的其它调用方等这个 future，
+ * 慢构建不会卡住其它键。回收只针对已构建完成的条目，且在键锁内关闭旧引擎：旧引擎关完（含释放会话租约）之后，
+ * 同一个键才可能放下新的占位，旧引擎不会误释放新引擎认领的租约。构建失败时移除占位，下一次调用重试。
+ * 扩展的 {@code onDetach} 里不得再调用本池（会抛 Recursive update）。{@code maxEngines} 是软上限，并发创建时可能短暂超出。</p>
+ *
+ * <p>重启恢复：池是懒建的，没人访问的租户其 goal / loop 不会自动恢复。宿主启动时用 {@link #warmup} 预热
+ * 有后台工作的键（键的来源由宿主维护，例如租户表里「有活跃 goal」的标记）。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -57,18 +61,24 @@ public final class HarnessEnginePool implements AutoCloseable {
     private final Function<String, HarnessEngine> factory;
     private final long idleTtlMs;
     private final int maxEngines;
+    private final WhenFull whenFull;
+    private final long fullWaitMs;
     private final LongSupplier clock;
     private final ConcurrentHashMap<String, Entry> engines = new ConcurrentHashMap<>();
     private final ScheduledExecutorService reaper;
     private volatile boolean closed;
 
     private static final class Entry {
-        final HarnessEngine engine;
+        final CompletableFuture<HarnessEngine> future = new CompletableFuture<>();
         volatile long lastUsed;
 
-        Entry(HarnessEngine engine, long now) {
-            this.engine = engine;
+        Entry(long now) {
             this.lastUsed = now;
+        }
+
+        /** 已构建完成的引擎（构建中或失败时为 null） */
+        HarnessEngine engineOrNull() {
+            return future.isDone() && future.isCompletedExceptionally() == false ? future.getNow(null) : null;
         }
     }
 
@@ -76,6 +86,8 @@ public final class HarnessEnginePool implements AutoCloseable {
         this.factory = b.factory;
         this.idleTtlMs = b.idleTtl.toMillis();
         this.maxEngines = b.maxEngines;
+        this.whenFull = b.whenFull;
+        this.fullWaitMs = b.fullWait.toMillis();
         this.clock = b.clock;
 
         if (b.reapInterval.isZero() || b.reapInterval.isNegative()) {
@@ -107,28 +119,103 @@ public final class HarnessEnginePool implements AutoCloseable {
         }
 
         if (engines.containsKey(key) == false && maxEngines > 0 && engines.size() >= maxEngines) {
-            evictLeastRecentlyUsed();
-            if (engines.size() >= maxEngines) {
-                throw new IllegalStateException("HarnessEnginePool is full: " + maxEngines);
-            }
+            awaitCapacity();
         }
 
         // 刷新使用时间与回收判定（tryEvict）都在同一个键的 compute 里完成，二者互斥：
-        // 要么先被回收、这里新建；要么这里先刷新、回收看到新时间放弃
-        return engines.compute(key, (k, old) -> {
+        // 要么先被回收、这里新放占位；要么这里先刷新、回收看到新时间放弃
+        final Entry[] created = new Entry[1];
+        Entry entry = engines.compute(key, (k, old) -> {
             long now = clock.getAsLong();
             if (old != null) {
                 old.lastUsed = now;
                 return old;
             }
-            return new Entry(Objects.requireNonNull(factory.apply(k), "engine"), now);
-        }).engine;
+            created[0] = new Entry(now);
+            return created[0];
+        });
+
+        if (created[0] != null) {
+            // 放占位的线程负责构建（锁外）
+            try {
+                entry.future.complete(Objects.requireNonNull(factory.apply(key), "engine"));
+            } catch (Throwable e) {
+                entry.future.completeExceptionally(e);
+                engines.remove(key, entry); // 不留失败占位，下一次重试
+            }
+        }
+
+        if (closed && created[0] != null) {
+            // 构建期间池被关闭：close 只回收已构建的条目，这里补收
+            tryEvict(key, -1L, -1L);
+            throw new IllegalStateException("HarnessEnginePool is closed");
+        }
+
+        try {
+            return entry.future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new IllegalStateException("HarnessEnginePool build failed: " + key, cause);
+        }
+    }
+
+    /**
+     * 预热：逐个 {@link #get} 这些键（用于重启后恢复有后台工作的租户）。单个键构建失败只记日志，不影响其它键。
+     *
+     * @return 成功预热的数量
+     * @since 4.2.0
+     */
+    public int warmup(Collection<String> keys) {
+        int ok = 0;
+        if (keys == null) {
+            return ok;
+        }
+        for (String key : keys) {
+            if (key == null) {
+                continue;
+            }
+            try {
+                get(key);
+                ok++;
+            } catch (Throwable e) {
+                LOG.warn("HarnessEnginePool warmup failed: {}", key, e);
+            }
+        }
+        return ok;
+    }
+
+    /**
+     * 等引擎静默（无在途请求、无活跃后台工作）后移除，超时则放弃（如租户下线前等任务跑完）。
+     *
+     * @return true = 已移除（或本来就不存在）；false = 超时仍不静默
+     * @since 4.2.0
+     */
+    public boolean removeWhenQuiescent(String key, Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + Objects.requireNonNull(timeout, "timeout").toNanos();
+        while (true) {
+            if (engines.containsKey(key) == false) {
+                return true;
+            }
+            if (tryEvict(key, 0L, -1L)) {
+                return true;
+            }
+            if (System.nanoTime() >= deadline) {
+                return false;
+            }
+            Thread.sleep(Math.min(200L, Math.max(1L, timeout.toMillis())));
+        }
     }
 
     /** 只取不建（不存在返回 null，不刷新使用时间） */
     public HarnessEngine getIfPresent(String key) {
         Entry e = engines.get(key);
-        return e == null ? null : e.engine;
+        return e == null ? null : e.engineOrNull();
     }
 
     /** 当前池内的键 */
@@ -162,13 +249,49 @@ public final class HarnessEnginePool implements AutoCloseable {
         return count;
     }
 
+    /** 满额：先回收最久未用且静默的引擎；仍满时按 {@link WhenFull} 拒绝或等待 */
+    private void awaitCapacity() {
+        long deadline = System.currentTimeMillis() + (whenFull == WhenFull.WAIT ? fullWaitMs : 0L);
+        while (true) {
+            evictLeastRecentlyUsed();
+            if (engines.size() < maxEngines) {
+                return;
+            }
+            if (whenFull == WhenFull.REJECT || System.currentTimeMillis() >= deadline) {
+                throw new IllegalStateException("HarnessEnginePool is full: " + maxEngines);
+            }
+            try {
+                Thread.sleep(50L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("HarnessEnginePool wait interrupted", e);
+            }
+            if (closed) {
+                throw new IllegalStateException("HarnessEnginePool is closed");
+            }
+        }
+    }
+
+    /**
+     * 满额策略（{@code maxEngines} 达到上限且没有可回收的静默引擎时）
+     *
+     * @since 4.2.0
+     */
+    public enum WhenFull {
+        /** 立即拒绝（缺省） */
+        REJECT,
+        /** 等待其它引擎静默可回收，超过 {@code fullWait} 仍满则拒绝 */
+        WAIT
+    }
+
     /** 满额时腾一个位置：最久未用且静默的那个（不看空闲时长） */
     private void evictLeastRecentlyUsed() {
         String victimKey = null;
         long victimUsed = Long.MAX_VALUE;
         for (Map.Entry<String, Entry> kv : engines.entrySet()) {
             Entry e = kv.getValue();
-            if (e.lastUsed < victimUsed && e.engine.isQuiescent()) {
+            HarnessEngine engine = e.engineOrNull();
+            if (engine != null && e.lastUsed < victimUsed && engine.isQuiescent()) {
                 victimKey = kv.getKey();
                 victimUsed = e.lastUsed;
             }
@@ -189,15 +312,20 @@ public final class HarnessEnginePool implements AutoCloseable {
     private boolean tryEvict(String key, long minIdleMs, long expectedUsed) {
         boolean[] removed = new boolean[1];
         engines.computeIfPresent(key, (k, e) -> {
+            HarnessEngine engine = e.engineOrNull();
+            if (engine == null) {
+                // 构建中：不回收（构建失败的占位由构建线程自己移除）
+                return e;
+            }
             if (minIdleMs >= 0) {
                 if (expectedUsed >= 0 && e.lastUsed != expectedUsed) {
                     return e;
                 }
-                if (clock.getAsLong() - e.lastUsed < minIdleMs || e.engine.isQuiescent() == false) {
+                if (clock.getAsLong() - e.lastUsed < minIdleMs || engine.isQuiescent() == false) {
                     return e;
                 }
             }
-            shutdownQuietly(k, e.engine);
+            shutdownQuietly(k, engine);
             removed[0] = true;
             return null;
         });
@@ -237,6 +365,8 @@ public final class HarnessEnginePool implements AutoCloseable {
         private Duration idleTtl = Duration.ofMinutes(30);
         private Duration reapInterval = Duration.ofMinutes(1);
         private int maxEngines;
+        private WhenFull whenFull = WhenFull.REJECT;
+        private Duration fullWait = Duration.ofSeconds(10);
         private LongSupplier clock = System::currentTimeMillis;
 
         private Builder(Function<String, HarnessEngine> factory) {
@@ -261,6 +391,17 @@ public final class HarnessEnginePool implements AutoCloseable {
                 throw new IllegalArgumentException("maxEngines must be >= 0");
             }
             this.maxEngines = maxEngines;
+            return this;
+        }
+
+        /**
+         * 满额策略（缺省 {@link WhenFull#REJECT}）；{@link WhenFull#WAIT} 时最多等 {@code fullWait}（缺省 10 秒）
+         *
+         * @since 4.2.0
+         */
+        public Builder whenFull(WhenFull whenFull, Duration fullWait) {
+            this.whenFull = Objects.requireNonNull(whenFull, "whenFull");
+            this.fullWait = Objects.requireNonNull(fullWait, "fullWait");
             return this;
         }
 

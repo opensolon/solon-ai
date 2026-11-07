@@ -47,15 +47,15 @@ public final class HarnessAttrs {
      */
 
     /**
-     * 程序派发的一轮（值为 {@link org.noear.solon.ai.harness.spi.TurnDispatch}，transient，未持久化）。
+     * 程序派发的一条流（值为 {@link org.noear.solon.ai.harness.spi.RunDispatch}，transient，未持久化）。
      *
      * <p>随异步任务一直保留到流终态收口，是「本轮是否程序派发」「该用哪个事务收口」的唯一来源。
-     * 宿主与插件不要直接读写本键：读用 {@link org.noear.solon.ai.harness.spi.TurnDispatch#current}，登记/注销用
-     * {@link org.noear.solon.ai.harness.spi.TurnDispatch#bind} / {@link org.noear.solon.ai.harness.spi.TurnDispatch#unbind}。</p>
+     * 宿主与插件不要直接读写本键：读用 {@link org.noear.solon.ai.harness.spi.RunDispatch#current}，登记/注销用
+     * {@link org.noear.solon.ai.harness.spi.RunDispatch#bind} / {@link org.noear.solon.ai.harness.spi.RunDispatch#unbind}。</p>
      *
      * @since 4.2.0
      */
-    public static final String TURN_DISPATCH = "session.turn.dispatch";
+    public static final String RUN_DISPATCH = "session.run.dispatch";
 
     /**
      * 本轮实际生效的子代理名（含 {@code @子代理} 解析结果），主代理归一为 {@code "main"}。
@@ -75,6 +75,29 @@ public final class HarnessAttrs {
      * @since 4.2.0
      */
     public static final String INPUT_ADMITTING = "session.input.admitting";
+
+    /**
+     * 会话主体（租户 / 用户标识；会话上下文，随快照持久化）。读写走
+     * {@code HarnessEngine#getSessionPrincipal} / {@code setSessionPrincipal}，设置后不可改。
+     *
+     * @since 4.2.0
+     */
+    public static final String SESSION_PRINCIPAL = "session.principal";
+
+    /**
+     * 会话工作目录的持久副本（会话上下文，随快照持久化；重启后由 {@code getSessionCwd} 回填到内存键）。
+     *
+     * @since 4.2.0
+     */
+    public static final String SESSION_CWD = "session.cwd";
+
+    /**
+     * 会话级子代理（{@code generate(saveToFile=false)} 的产物；会话上下文，name → markdown）。
+     * 读写走 {@code SessionAgents}。
+     *
+     * @since 4.2.0
+     */
+    public static final String SESSION_AGENTS = "session.agents";
 
     // ========== 历史例外键（早于 session.* 规约，已落盘/已发布，键值不可改）==========
 

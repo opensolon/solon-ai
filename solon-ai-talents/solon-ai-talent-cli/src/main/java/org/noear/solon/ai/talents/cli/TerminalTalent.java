@@ -47,6 +47,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -1872,7 +1873,38 @@ public class TerminalTalent extends AbsTalent {
     private Path getWorkPath(String __cwd) {
         String path = (__cwd != null) ? __cwd : mountManager.getWorkDir();
         if (path == null) throw new IllegalStateException("Working directory is not set.");
-        return Paths.get(path).toAbsolutePath().normalize();
+        Path p = Paths.get(path).toAbsolutePath().normalize();
+
+        // 工作根策略在消费端校验：__cwd 可能来自请求级 toolContext 或被直接写进会话属性，
+        // 只在 setSessionCwd 校验挡不住这些路径。工作区根本身可信，不校验。
+        Predicate<Path> policy = workRootPolicy;
+        if (policy != null && __cwd != null) {
+            Path real = p;
+            if (Files.exists(p)) {
+                try {
+                    real = p.toRealPath(); // 防符号链接逃逸
+                } catch (IOException e) {
+                    throw new SecurityException("Working directory is invalid: " + p);
+                }
+            }
+            if (policy.test(real) == false) {
+                throw new SecurityException("Working directory is out of policy: " + p);
+            }
+            return real;
+        }
+        return p;
+    }
+
+    private volatile Predicate<Path> workRootPolicy;
+
+    /**
+     * 工作根策略：工具与 {@link #exec} 使用本轮 {@code __cwd} 之前校验（规范化 + 真实路径），不通过时拒绝执行。
+     * null = 不限制。harness 按引擎的 {@code cwdPolicy} 设置。
+     *
+     * @since 4.2.0
+     */
+    public void setWorkRootPolicy(@Nullable Predicate<Path> workRootPolicy) {
+        this.workRootPolicy = workRootPolicy;
     }
 
     /**

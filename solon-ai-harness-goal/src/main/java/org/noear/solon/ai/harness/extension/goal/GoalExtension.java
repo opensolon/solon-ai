@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.spi.NotOwnerException;
 import org.noear.solon.ai.harness.HarnessProfile;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
@@ -98,6 +99,7 @@ public class GoalExtension extends AbsHarnessExtension {
     private final IJobManager jobManager;
     private final GoalListener listener;
     private final int roundConcurrency;
+    private final long ownerProbeIntervalMs;
 
     private HarnessEngine engine;
     private GoalRuntime goalRuntime;
@@ -115,6 +117,7 @@ public class GoalExtension extends AbsHarnessExtension {
         this.validatorTimeoutMs = b.validatorTimeoutMs;
         this.listener = b.listener;
         this.roundConcurrency = b.roundConcurrency;
+        this.ownerProbeIntervalMs = b.ownerProbeIntervalMs;
 
         IJobManager jm = b.jobManagerSet ? b.jobManager : resolveJobManager();
         if (jm == null && !b.jobManagerSet) {
@@ -166,6 +169,7 @@ public class GoalExtension extends AbsHarnessExtension {
         if (jobManager != null) {
             goalScheduler = new GoalScheduler(goalRuntime, jobManager, roundConcurrency);
             goalScheduler.setIndex(engine.getStateSource(), INDEX_PATH);
+            goalScheduler.setOwnerProbeIntervalMs(ownerProbeIntervalMs);
         }
 
         goalCommand = new GoalCommand(this);
@@ -306,10 +310,12 @@ public class GoalExtension extends AbsHarnessExtension {
      * 创建本会话的 goal 并挂上调度（{@link GoalSpec#runNow} 决定是否立即跑首轮）。
      *
      * @return 新 goal 的快照（{@code getId()} 即 taskId）
-     * @throws IllegalArgumentException 会话不存在
+     * @throws IllegalArgumentException 会话不存在（门面不新建会话）
      * @throws IllegalStateException    本会话已有非终态 goal（单槽）
+     * @throws NotOwnerException        多节点部署时本节点不持有该会话
      */
     public GoalTask create(String sessionId, GoalSpec spec) {
+        requireOwner(sessionId);
         return create(requireSession(sessionId), spec);
     }
 
@@ -337,6 +343,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * @throws IllegalStateException goal 已是终态，或旧轮次未能及时停稳（此时 goal 保持暂停，可重试）
      */
     public GoalTask update(String sessionId, String taskId, GoalPatch patch, Runnable stopper) {
+        requireOwner(sessionId);
         AgentSession session = sessionOf(sessionId);
         GoalState gs = locate(session, taskId);
         if (gs == null) {
@@ -381,12 +388,14 @@ public class GoalExtension extends AbsHarnessExtension {
 
     /** 暂停（PURSUING → PAUSED）并摘调度。@return false 表示不存在或当前状态不可暂停 */
     public boolean pause(String sessionId, String taskId) {
+        requireOwner(sessionId);
         AgentSession session = sessionOf(sessionId);
         return locate(session, taskId) != null && pause(session);
     }
 
     /** 恢复（PAUSED/BLOCKED → PURSUING）并挂调度、立即跑一轮。@return false 表示不存在或当前状态不可恢复 */
     public boolean resume(String sessionId, String taskId) {
+        requireOwner(sessionId);
         AgentSession session = sessionOf(sessionId);
         return locate(session, taskId) != null && resume(session);
     }
@@ -397,6 +406,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * @return false 表示不存在或不处于活跃态
      */
     public boolean trigger(String sessionId, String taskId) {
+        requireOwner(sessionId);
         AgentSession session = sessionOf(sessionId);
         GoalState gs = locate(session, taskId);
         if (gs == null || gs.getStatus().isActive() == false || isEnabled() == false) {
@@ -409,6 +419,7 @@ public class GoalExtension extends AbsHarnessExtension {
 
     /** 清除 goal（先摘调度再清状态，避免清除瞬间被 job 捞起）。@return false 表示不存在 */
     public boolean remove(String sessionId, String taskId) {
+        requireOwner(sessionId);
         AgentSession session = sessionOf(sessionId);
         return locate(session, taskId) != null && remove(session);
     }
@@ -550,6 +561,15 @@ public class GoalExtension extends AbsHarnessExtension {
         return requireAttached().sessionOf(sessionId);
     }
 
+    /**
+     * 写门面的归属检查：多节点部署时非持有节点抛 {@link NotOwnerException}（宿主按持有者转发），
+     * 不在本地内存里改 goal 状态、写快照（否则两个节点同时写一个会话）。
+     */
+    private void requireOwner(String sessionId) {
+        requireAttached();
+        engine.requireOwner(sessionId);
+    }
+
     private AgentSession requireSession(String sessionId) {
         AgentSession session = sessionOf(sessionId);
         if (session == null) {
@@ -588,6 +608,7 @@ public class GoalExtension extends AbsHarnessExtension {
         private boolean jobManagerSet;
         private GoalListener listener;
         private int roundConcurrency = GoalScheduler.DEFAULT_ROUND_CONCURRENCY;
+        private long ownerProbeIntervalMs = GoalScheduler.DEFAULT_OWNER_PROBE_INTERVAL_MS;
 
         private Builder() {
         }
@@ -672,6 +693,17 @@ public class GoalExtension extends AbsHarnessExtension {
         }
 
         /** 预注册生命周期观察者。 */
+        /**
+         * 多节点部署：非持有节点探测租约的间隔（缺省 15000 毫秒，下限 1 个节拍）。
+         * 持有节点宕机后，其它节点最迟在「租约过期 + 本间隔」后接管；建议不超过租约有效期的一半。
+         *
+         * @since 4.2.0
+         */
+        public Builder ownerProbeIntervalMs(long ownerProbeIntervalMs) {
+            this.ownerProbeIntervalMs = ownerProbeIntervalMs;
+            return this;
+        }
+
         public Builder listener(GoalListener l) {
             this.listener = l;
             return this;

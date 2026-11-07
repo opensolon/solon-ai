@@ -10,8 +10,8 @@ import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.spi.InputBacklog;
-import org.noear.solon.ai.harness.spi.TurnDispatch;
-import org.noear.solon.ai.harness.turn.InterruptPlan;
+import org.noear.solon.ai.harness.spi.RunDispatch;
+import org.noear.solon.ai.harness.InterruptPlan;
 import reactor.core.Disposable;
 
 import java.nio.file.Path;
@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <ol>
  *   <li>{@code onSessionInterrupt}：{@code engine.interrupt} / {@code prepareInterrupt} 先清队列再停流，无流也清；</li>
  *   <li>{@code InputBacklog}：引擎按能力接口找到本插件，{@code status} 带出自有键 {@code STATUS_PENDING}、有积压时 {@code isIdle} 为假、忙态 {@code handle} 由引擎自己入队并给 DEFERRED（附件、选择、宿主属性原样保存）；</li>
- *   <li>{@code TurnDispatch}：派发登记在核心槽位，{@code handle} 识别为派发轮次（不占位、带回派发事务）；</li>
+ *   <li>{@code RunDispatch}：派发登记在核心槽位，{@code handle} 识别为派发轮次（不占位、带回派发事务）；</li>
  *   <li>{@code /queue} 命令经引擎全链路。</li>
  * </ol>
  */
@@ -213,7 +213,7 @@ class QueueEngineIntegrationTest {
         assertTrue(queue.hasPending(session), "hasPending 同为事实口径");
     }
 
-    // ---------- TurnDispatch ----------
+    // ---------- RunDispatch ----------
 
     @Test
     void dispatchIsRegisteredInCoreSlotAndRecognizedByAdmit() {
@@ -224,7 +224,7 @@ class QueueEngineIntegrationTest {
 
         AtomicInteger checked = new AtomicInteger();
         queue.claimNext(session, claim -> {
-            TurnDispatch current = TurnDispatch.current(session);
+            RunDispatch current = RunDispatch.current(session);
             assertTrue(current instanceof QueueClaim);
             InputOutcome admit = engine.handle(claim.getItem().toInput(session));
             assertEquals(InputOutcome.Kind.TASK, admit.getKind());
@@ -237,7 +237,7 @@ class QueueEngineIntegrationTest {
         });
 
         assertEquals(1, checked.get());
-        assertNull(TurnDispatch.current(session), "同步完成后注销");
+        assertNull(RunDispatch.current(session), "同步完成后注销");
     }
 
     // ---------- /queue 命令链路 ----------

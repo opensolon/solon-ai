@@ -28,12 +28,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <pre>
  * input   → (根包)                 纯输入值对象，只依赖 command 的工厂/解析类型
  * hitl    → agent, permission
- * session → input, hitl            只放会话事实，不得依赖 turn / command
- * turn    → input, session         受理、派发、轮次生命周期、中断计划
- * command → input, session, util（不得依赖 turn）
+ * session → input, hitl            只放会话事实，不得依赖 command
+ * command → input, session, util
  * </pre>
  *
- * <p>另外锁定已退役的包不得复活：{@code runtime}、{@code session.interrupt}。纯文本扫描 import，不引入 ArchUnit。</p>
+ * <p>一条流（run）的生命周期类型 {@code RunTicket}、{@code InterruptPlan} 在根包，任何子包都不得依赖它们（见
+ * {@link #subPackagesDoNotDependOnRunLifecycle()}）。</p>
+ *
+ * <p>另外锁定已退役的包不得复活：{@code runtime}、{@code session.interrupt}、{@code turn}、{@code run}。纯文本扫描 import，不引入 ArchUnit。</p>
  */
 class HarnessPackageBoundaryTest {
     private static final Path ROOT = Paths.get("src/main/java/org/noear/solon/ai/harness");
@@ -43,13 +45,11 @@ class HarnessPackageBoundaryTest {
     private static final Map<String, Set<String>> FORBIDDEN = new HashMap<>();
 
     static {
-        FORBIDDEN.put("input", set("session", "turn", "agent", "util"));
-        FORBIDDEN.put("session", set("turn", "command", "agent"));
-        FORBIDDEN.put("turn", set("command", "agent", "hitl"));
-        FORBIDDEN.put("command", set("turn"));
-        FORBIDDEN.put("hitl", set("input", "session", "turn", "command"));
-        FORBIDDEN.put("permission", set("input", "session", "turn", "command", "hitl", "agent"));
-        FORBIDDEN.put("util", set("input", "turn", "command", "hitl", "agent"));
+        FORBIDDEN.put("input", set("session", "agent", "util"));
+        FORBIDDEN.put("session", set("command", "agent"));
+        FORBIDDEN.put("hitl", set("input", "session", "command"));
+        FORBIDDEN.put("permission", set("input", "session", "command", "hitl", "agent"));
+        FORBIDDEN.put("util", set("input", "command", "hitl", "agent"));
     }
 
     private static Set<String> set(String... s) {
@@ -78,7 +78,27 @@ class HarnessPackageBoundaryTest {
     @Test
     void retiredPackagesStayRetired() {
         assertFalse(Files.exists(ROOT.resolve("runtime")), "runtime 包已退役（RoundResult→goal，ErrorClassifier→util）");
-        assertFalse(Files.exists(ROOT.resolve("session/interrupt")), "session.interrupt 已退役（InterruptPlan→turn，InterruptCommand→command.builtin）");
+        assertFalse(Files.exists(ROOT.resolve("session/interrupt")), "session.interrupt 已退役（InterruptPlan→根包，InterruptCommand→command.builtin）");
+        assertFalse(Files.exists(ROOT.resolve("turn")), "turn 包已退役（SessionTurn→根包 RunTicket，InterruptPlan→根包）");
+        assertFalse(Files.exists(ROOT.resolve("run")), "run 包已并入根包（只有 RunTicket、InterruptPlan 两个类）");
+    }
+
+    /** 子包不得依赖流生命周期类型（原 turn/run 包的约束，并入根包后保留；javadoc 里的全类名链接不算依赖）。 */
+    @Test
+    void subPackagesDoNotDependOnRunLifecycle() throws IOException {
+        Pattern lifecycleImport = Pattern.compile("^import\\s+org\\.noear\\.solon\\.ai\\.harness\\.(RunTicket|InterruptPlan)\\s*;", Pattern.MULTILINE);
+        List<String> violations = new ArrayList<>();
+        for (Path file : javaFiles(ROOT)) {
+            if (file.getParent().equals(ROOT)) {
+                continue;
+            }
+            String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            Matcher m = lifecycleImport.matcher(content);
+            if (m.find()) {
+                violations.add(ROOT.relativize(file) + " -> " + m.group(1));
+            }
+        }
+        assertTrue(violations.isEmpty(), "子包不得依赖流生命周期类型：" + violations);
     }
 
     @Test

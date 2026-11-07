@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.input;
 
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.lang.Nullable;
 
@@ -159,10 +160,19 @@ public final class AgentMentions {
      * 按策略解析输入开头的提及（前缀取自引擎配置）
      */
     public static Mention parse(HarnessEngine engine, String input, Options options) {
+        return parse(engine, null, input, options);
+    }
+
+    /**
+     * 会话感知版：本会话的会话级子代理（{@code generate(saveToFile=false)}）也能被 {@code @提及}
+     *
+     * @since 4.2.0
+     */
+    public static Mention parse(HarnessEngine engine, @Nullable AgentSession session, String input, Options options) {
         if (options == null) {
             options = Options.builder();
         }
-        return parse(engine.getAgentManager()::hasAgent, input, options.prefix(engine.getAgentPrefix()));
+        return parse(name -> engine.resolveAgent(session, name) != null, input, options.prefix(engine.getAgentPrefix()));
     }
 
     /**

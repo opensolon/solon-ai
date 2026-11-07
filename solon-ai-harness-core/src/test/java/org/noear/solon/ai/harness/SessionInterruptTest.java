@@ -15,7 +15,6 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.harness.turn.InterruptPlan;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
@@ -50,7 +49,7 @@ class SessionInterruptTest {
 
     /** 核心一步式中断（= 认领 + 提交，不含插件参与；引擎入口另有 onSessionInterrupt 回调） */
     private static boolean interrupt(AgentSession session) {
-        org.noear.solon.ai.harness.turn.InterruptPlan plan = HarnessInterrupts.claim(session);
+        org.noear.solon.ai.harness.InterruptPlan plan = HarnessInterrupts.claim(session);
         return plan != null && plan.commit();
     }
 

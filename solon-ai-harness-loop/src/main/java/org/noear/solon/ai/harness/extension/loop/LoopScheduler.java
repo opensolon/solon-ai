@@ -490,6 +490,12 @@ final class LoopScheduler {
 
     /** 包内可见：供测试直接驱动一轮（不经并行调度）。 */
     void doTrigger(String sessionId, LoopTask task, boolean fromSchedule) {
+        // 多节点：先查归属、后加载会话——非持有节点不加载会话、不调用执行器（否则多个节点同时执行同一任务）
+        HarnessEngine owningEngine = engine;
+        if (owningEngine != null && owningEngine.checkOwner(sessionId).isOwned() == false) {
+            LOG.debug("[Loop] skip task '{}': session '{}' is owned by another node", task.getId(), sessionId);
+            return;
+        }
         if (!checkGuardConditions(sessionId, task)) {
             return;
         }

@@ -62,7 +62,9 @@ class GoalSpecTest {
 
     /** 新会话 id（经 sessionProvider 登记，门面按 id 可解析）。 */
     private String newSession() {
-        return "s-" + (++seq);
+        String id = "s-" + (++seq);
+        sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k));
+        return id;
     }
 
     @Test

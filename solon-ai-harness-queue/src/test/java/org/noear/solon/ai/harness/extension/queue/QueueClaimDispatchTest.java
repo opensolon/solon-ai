@@ -50,7 +50,7 @@ class QueueClaimDispatchTest {
         assertTrue(dispatch.isCurrent());
         // handler 返回后仍未注销：异步任务还要靠它收口
         assertSame(dispatch, QueueClaim.current(session));
-        assertNotNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNotNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH));
     }
 
     /**
@@ -74,7 +74,7 @@ class QueueClaimDispatchTest {
         assertTrue(ref.get().acknowledge(), "直接确认应成功");
         assertNull(QueueClaim.current(session),
                 "claim 收口必须连带注销派发登记，否则登记永久泄漏");
-        assertNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH));
         assertEquals(0, QueueStore.pendingSize(session));
     }
 
@@ -130,7 +130,7 @@ class QueueClaimDispatchTest {
         assertTrue(ref.get().settle(true));
         assertEquals(0, QueueStore.size(session));
         assertNull(QueueClaim.current(session));
-        assertNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH));
         assertFalse(ref.get().settle(true), "重复收口返回 false");
     }
 
@@ -172,7 +172,7 @@ class QueueClaimDispatchTest {
         QueueStore.cancelPending(session);
 
         ref.get().settle(true);
-        assertNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH),
+        assertNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH),
                 "Stop 之后成功收口也不得留下派发登记，否则队列会被自己的残留挡死续发");
     }
 
@@ -190,7 +190,7 @@ class QueueClaimDispatchTest {
 
         assertFalse(ref.get().settle(false), "Stop 之后回滚必须被拒");
         assertEquals(0, QueueStore.size(session), "被取消的任务不得复活");
-        assertNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH));
     }
 
     @Test
@@ -223,7 +223,7 @@ class QueueClaimDispatchTest {
         assertEquals(0, calls.get());
         assertEquals(1, QueueStore.pendingSize(session), "队列项必须原样保留");
         assertNull(QueueClaim.current(session));
-        assertNull(session.attrs().get(HarnessAttrs.TURN_DISPATCH));
+        assertNull(session.attrs().get(HarnessAttrs.RUN_DISPATCH));
 
         // 领取权未被占：放行后能立即领到
         AtomicReference<QueueClaim> ref = new AtomicReference<>();

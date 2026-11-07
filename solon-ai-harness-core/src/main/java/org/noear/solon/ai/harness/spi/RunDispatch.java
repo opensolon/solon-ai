@@ -22,14 +22,14 @@ import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
 /**
- * 程序派发的一轮（跨线程存活的派发事务）。
+ * 程序派发的一条流（跨线程存活的派发事务）。
  *
- * <p>这是核心持有的<b>会话事实槽位</b>（attrs 键 {@link HarnessAttrs#TURN_DISPATCH}）：
- * 由插件在「程序代替用户发起一轮」时登记（当前实现是 queue 插件的 {@code QueueDispatch}），
- * 引擎 {@code handle(...)} 的受理判定与 {@link org.noear.solon.ai.harness.turn.SessionTurn} 只经本接口读取，不认识具体实现。</p>
+ * <p>这是核心持有的<b>会话事实槽位</b>（attrs 键 {@link HarnessAttrs#RUN_DISPATCH}）：
+ * 由插件在「程序代替用户发起一条流」时登记（当前实现是 queue 插件的 {@code QueueDispatch}），
+ * 引擎 {@code handle(...)} 的受理判定与 {@link org.noear.solon.ai.harness.RunTicket} 只经本接口读取，不认识具体实现。</p>
  *
  * <p><b>为什么是槽位而不是扩展钩子</b>：读取方要在 {@code synchronized (session.attrs())} 内、
- * 甚至没有引擎引用的地方（{@link org.noear.solon.ai.harness.turn.SessionTurn#begin}）判定，读一次 attrs 最便宜，
+ * 甚至没有引擎引用的地方（{@link org.noear.solon.ai.harness.RunTicket#begin}）判定，读一次 attrs 最便宜，
  * 也不必在锁内遍历扩展。</p>
  *
  * <p><b>单占约定</b>：同一会话同一时刻最多一个未收口的程序派发。{@link #bind} 遇到已有登记时
@@ -44,7 +44,7 @@ import org.noear.solon.lang.Preview;
  * @since 4.2.0
  */
 @Preview("4.2")
-public interface TurnDispatch {
+public interface RunDispatch {
     /** 回复路由来源（无来源时为 {@link InputOrigin#NONE}）。 */
     InputOrigin getOrigin();
 
@@ -57,7 +57,7 @@ public interface TurnDispatch {
     /**
      * 收口（幂等）：成功确认 / 失败回滚，并注销登记。
      *
-     * @param started true = 本轮已正常跑起来；false = 启动失败
+     * @param started true = 这条流已正常跑起来；false = 启动失败
      * @return true = 本次调用完成了收口
      */
     boolean settle(boolean started);
@@ -66,13 +66,13 @@ public interface TurnDispatch {
      * 会话当前未收口的派发事务（无则 null）。
      */
     @Nullable
-    static TurnDispatch current(@Nullable AgentSession session) {
+    static RunDispatch current(@Nullable AgentSession session) {
         if (session == null) {
             return null;
         }
         synchronized (session.attrs()) {
-            Object value = session.attrs().get(HarnessAttrs.TURN_DISPATCH);
-            return value instanceof TurnDispatch ? (TurnDispatch) value : null;
+            Object value = session.attrs().get(HarnessAttrs.RUN_DISPATCH);
+            return value instanceof RunDispatch ? (RunDispatch) value : null;
         }
     }
 
@@ -82,10 +82,10 @@ public interface TurnDispatch {
      * @return 被覆盖的旧登记（正常应为 null；非空时登记方应告警）
      */
     @Nullable
-    static TurnDispatch bind(AgentSession session, TurnDispatch dispatch) {
+    static RunDispatch bind(AgentSession session, RunDispatch dispatch) {
         synchronized (session.attrs()) {
-            Object previous = session.attrs().put(HarnessAttrs.TURN_DISPATCH, dispatch);
-            return previous instanceof TurnDispatch ? (TurnDispatch) previous : null;
+            Object previous = session.attrs().put(HarnessAttrs.RUN_DISPATCH, dispatch);
+            return previous instanceof RunDispatch ? (RunDispatch) previous : null;
         }
     }
 
@@ -95,16 +95,16 @@ public interface TurnDispatch {
      * @param dispatch 要注销的事务；null 表示无条件清除槽位（如用户 Stop 作废全部在途派发）
      * @return true = 确实注销了
      */
-    static boolean unbind(@Nullable AgentSession session, @Nullable TurnDispatch dispatch) {
+    static boolean unbind(@Nullable AgentSession session, @Nullable RunDispatch dispatch) {
         if (session == null) {
             return false;
         }
         synchronized (session.attrs()) {
-            Object value = session.attrs().get(HarnessAttrs.TURN_DISPATCH);
+            Object value = session.attrs().get(HarnessAttrs.RUN_DISPATCH);
             if (value == null || (dispatch != null && value != dispatch)) {
                 return false;
             }
-            session.attrs().remove(HarnessAttrs.TURN_DISPATCH);
+            session.attrs().remove(HarnessAttrs.RUN_DISPATCH);
             return true;
         }
     }
