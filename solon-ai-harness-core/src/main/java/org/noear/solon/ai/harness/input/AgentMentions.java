@@ -172,7 +172,7 @@ public final class AgentMentions {
         if (options == null) {
             options = Options.builder();
         }
-        return parse(name -> engine.resolveAgent(session, name) != null, input, options.prefix(engine.getAgentPrefix()));
+        return parse(name -> engine.resolveAgent(session, name) != null, input, options.prefix(engine.getSettings().getAgentPrefix()));
     }
 
     /**

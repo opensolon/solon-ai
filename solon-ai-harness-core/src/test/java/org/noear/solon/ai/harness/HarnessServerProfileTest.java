@@ -45,11 +45,11 @@ class HarnessServerProfileTest {
     void serverDefaultsAreConservative() throws Exception {
         HarnessEngine engine = server().build();
         assertEquals(HarnessProfile.SERVER, engine.getProfile());
-        assertTrue(engine.getTerminalTalent().isSandboxEnabled());
-        assertTrue(engine.getTerminalTalent().isSandboxSystemRestrict());
-        assertFalse(engine.getTerminalTalent().isSandboxSelfBootstrap(), "进程级沙盒由宿主统一引导");
-        assertFalse(engine.getTerminalTalent().isBashAsyncEnabled());
-        assertTrue(engine.getTerminalTalent().getProtectedStatePaths().contains(".solon/sessions"));
+        assertTrue(engine.getTalents().getTerminal().isSandboxEnabled());
+        assertTrue(engine.getTalents().getTerminal().isSandboxSystemRestrict());
+        assertFalse(engine.getTalents().getTerminal().isSandboxSelfBootstrap(), "进程级沙盒由宿主统一引导");
+        assertFalse(engine.getTalents().getTerminal().isBashAsyncEnabled());
+        assertTrue(engine.getTalents().getTerminal().getProtectedStatePaths().contains(".solon/sessions"));
     }
 
     @Test
@@ -65,9 +65,9 @@ class HarnessServerProfileTest {
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
                 .build();
-        assertFalse(before.getTerminalTalent().isSandboxEnabled(), "显式值 > 预设值");
+        assertFalse(before.getTalents().getTerminal().isSandboxEnabled(), "显式值 > 预设值");
         assertFalse(before.isScopeRequired());
-        assertTrue(before.getTerminalTalent().isSandboxSystemRestrict(), "未显式设置的仍取预设");
+        assertTrue(before.getTalents().getTerminal().isSandboxSystemRestrict(), "未显式设置的仍取预设");
 
         // 后写的 profile 生效，前一个不留痕迹
         HarnessEngine last = HarnessEngine.of(tmp.resolve("w-last").toString(), ".solon/")
@@ -76,7 +76,7 @@ class HarnessServerProfileTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         assertEquals(HarnessProfile.CODING, last.getProfile());
-        assertTrue(last.getTerminalTalent().isSandboxSelfBootstrap());
+        assertTrue(last.getTalents().getTerminal().isSandboxSelfBootstrap());
         assertFalse(last.isScopeRequired());
 
         assertTrue(server().build().isScopeRequired(), "SERVER 缺省要求作用域");
@@ -88,10 +88,10 @@ class HarnessServerProfileTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
         assertEquals(HarnessProfile.CODING, engine.getProfile());
-        assertTrue(engine.getTerminalTalent().isSandboxSelfBootstrap());
+        assertTrue(engine.getTalents().getTerminal().isSandboxSelfBootstrap());
         engine.allowTool("bash"); // 运行期修改仍允许
         // 状态目录保护在所有模式下都开启
-        assertTrue(engine.getTerminalTalent().getProtectedStatePaths().contains(".solon/memory"));
+        assertTrue(engine.getTalents().getTerminal().getProtectedStatePaths().contains(".solon/memory"));
     }
 
     @Test
@@ -128,13 +128,13 @@ class HarnessServerProfileTest {
     void serverLocksEngineWideMutations() throws Exception {
         HarnessEngine engine = server().build();
         assertThrows(IllegalStateException.class, () -> engine.allowTool("bash"));
-        assertThrows(IllegalStateException.class, () -> engine.setSandboxEnabled(false));
-        assertThrows(IllegalStateException.class, () -> engine.setHitlEnabled(true));
+        assertThrows(IllegalStateException.class, () -> engine.getSettings().setSandboxEnabled(false));
+        assertThrows(IllegalStateException.class, () -> engine.getSettings().setHitlEnabled(true));
         assertThrows(IllegalStateException.class, () -> engine.addModel(model()));
         assertThrows(IllegalStateException.class, () -> engine.disallowToolReset(Collections.<String>emptyList()));
 
         // 调优类参数不锁
-        engine.setMaxTurns(10);
+        engine.getSettings().setMaxTurns(10);
 
         // 显式放开
         HarnessEngine mutable = server().runtimeMutable(true).build();

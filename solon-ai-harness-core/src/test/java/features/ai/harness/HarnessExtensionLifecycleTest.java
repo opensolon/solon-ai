@@ -36,12 +36,12 @@ class HarnessExtensionLifecycleTest {
                 throw new IllegalStateException("boom");
             }
             // 此刻引擎必须已装配完毕：这里调用最重的几个引擎方法做验证
-            assertNotNull(engine.getTerminalTalent());
+            assertNotNull(engine.getTalents().getTerminal());
             assertNotNull(engine.getSkillCatalog());
             assertNotNull(engine.getAgentCatalog());
             assertNotNull(engine.getAgentManager());
-            assertNotNull(engine.getMcpGatewayTalent());
-            assertNotNull(engine.getLspTalent());
+            assertNotNull(engine.getTalents().getMcpGateway());
+            assertNotNull(engine.getTalents().getLsp());
             assertNotNull(engine.getMount("@harness-agents"));
         }
 

@@ -1,5 +1,6 @@
 package org.noear.solon.ai.harness.extension.steer;
 
+import org.noear.solon.ai.harness.HarnessResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
@@ -103,10 +104,10 @@ class SteerExtensionTest {
         AgentSession session = runningSession("run-1");
 
         ext.setEnabled(false);
-        SteerResult r = ext.steer(session, "补充", null);
-        assertEquals(SteerResult.Code.DISABLED, r.getCode());
-        assertEquals(0, r.getPendingCount());
-        assertEquals(SteerResult.Code.DISABLED, ext.steerOnRun(session, "run-1", null, "补充").getCode());
+        HarnessResult<SteerReceipt> r = ext.steer(session, "补充", null);
+        assertEquals("DISABLED", r.getReasonOrCode());
+        assertNull(r.getValue(), "失败结局没有回执");
+        assertEquals("DISABLED", ext.steerOnRun(session, "run-1", null, "补充").getReasonOrCode());
     }
 
     @Test
@@ -114,14 +115,14 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = InMemoryAgentSession.of();
 
-        assertEquals(SteerResult.Code.NOT_RUNNING, ext.steer(session, "补充").getCode());
-        assertEquals(SteerResult.Code.NOT_RUNNING, ext.steer(null, "补充").getCode());
+        assertEquals("NOT_RUNNING", ext.steer(session, "补充").getReasonOrCode());
+        assertEquals("NOT_RUNNING", ext.steer(null, "补充").getReasonOrCode());
 
         SteerState.of(session).open("run-1");
-        SteerResult ok = ext.steer(session, "补充内容");
-        assertTrue(ok.isSteered());
-        assertEquals(1, ok.getPendingCount());
-        assertNotNull(ok.getSteerId(), "steerId 应由框架生成");
+        HarnessResult<SteerReceipt> ok = ext.steer(session, "补充内容");
+        assertTrue(ok.isOk());
+        assertEquals(1, ok.getValue().getPending());
+        assertNotNull(ok.getValue().getSteerId(), "steerId 应由框架生成");
     }
 
     @Test
@@ -129,8 +130,8 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        assertEquals(SteerResult.Code.EMPTY_TEXT, ext.steer(session, "   ").getCode());
-        assertTrue(ext.steer(session, "补充", null).isSteered(), "null 来源应回落 InputOrigin.NONE 而非报错");
+        assertEquals("EMPTY_TEXT", ext.steer(session, "   ").getReasonOrCode());
+        assertTrue(ext.steer(session, "补充", null).isOk(), "null 来源应回落 InputOrigin.NONE 而非报错");
     }
 
     /** 引擎缺省忙判定：attach 过引擎且会话无活跃流 → 投递被回滚为 NOT_RUNNING。 */
@@ -142,8 +143,8 @@ class SteerExtensionTest {
 
         AgentSession session = runningSession("run-1");
 
-        SteerResult r = ext.steer(session, "补充", null);
-        assertEquals(SteerResult.Code.NOT_RUNNING, r.getCode(), "无活跃流时应被回滚");
+        HarnessResult<SteerReceipt> r = ext.steer(session, "补充", null);
+        assertEquals("NOT_RUNNING", r.getReasonOrCode(), "无活跃流时应被回滚");
         assertTrue(ext.pending(session).isEmpty(), "回滚后邮箱不得残留");
     }
 
@@ -151,7 +152,7 @@ class SteerExtensionTest {
     @Test
     void detachedExtensionDoesNotBlockSteer() {
         SteerExtension ext = new SteerExtension();
-        assertTrue(ext.steer(runningSession("run-1"), "补充").isSteered(), "无引擎即无忙概念，应放行");
+        assertTrue(ext.steer(runningSession("run-1"), "补充").isOk(), "无引擎即无忙概念，应放行");
     }
 
     /** steerOnRun 的 runId 必填：空即 RUN_CHANGED，不生成 steerId、不碰邮箱。 */
@@ -160,13 +161,13 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        SteerResult blank = ext.steerOnRun(session, "  ", null, "补充");
-        assertEquals(SteerResult.Code.RUN_CHANGED, blank.getCode());
-        assertNull(blank.getSteerId(), "被拒绝的投递不得生成 steerId");
+        HarnessResult<SteerReceipt> blank = ext.steerOnRun(session, "  ", null, "补充");
+        assertEquals("RUN_CHANGED", blank.getReasonOrCode());
+        assertNull(blank.getValue(), "被拒绝的投递不得生成 steerId");
         assertTrue(ext.pending(session).isEmpty());
 
-        assertEquals(SteerResult.Code.RUN_CHANGED, ext.steerOnRun(session, null, null, "补充").getCode());
-        assertTrue(ext.steer(session, "补充").isSteered(), "非严格形态允许省略 runId");
+        assertEquals("RUN_CHANGED", ext.steerOnRun(session, null, null, "补充").getReasonOrCode());
+        assertTrue(ext.steer(session, "补充").isOk(), "非严格形态允许省略 runId");
     }
 
     @Test
@@ -174,10 +175,10 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        assertEquals(SteerResult.Code.RUN_CHANGED, ext.steerOnRun(session, "run-2", null, "补充").getCode());
-        SteerResult ok = ext.steerOnRun(session, "run-1", "web-1", "补充");
-        assertTrue(ok.isSteered());
-        assertEquals("web-1", ok.getSteerId(), "前端生成的 steerId 原样使用");
+        assertEquals("RUN_CHANGED", ext.steerOnRun(session, "run-2", null, "补充").getReasonOrCode());
+        HarnessResult<SteerReceipt> ok = ext.steerOnRun(session, "run-1", "web-1", "补充");
+        assertTrue(ok.isOk());
+        assertEquals("web-1", ok.getValue().getSteerId(), "前端生成的 steerId 原样使用");
     }
 
     // ==================== 撤销 ====================
@@ -186,26 +187,25 @@ class SteerExtensionTest {
     void cancelOnRunValidatesIdAndTurn() {
         SteerExtension ext = SteerExtension.builder().maxIdLength(4).build();
         AgentSession session = runningSession("run-1");
-        SteerResult a = ext.steerOnRun(session, "run-1", "a", "第一条");
+        HarnessResult<SteerReceipt> a = ext.steerOnRun(session, "run-1", "a", "第一条");
         ext.steerOnRun(session, "run-1", "b", "第二条");
 
-        assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", " ").getCode());
-        assertEquals(SteerCancelResult.Code.INVALID_STEER_ID, ext.cancelOnRun(session, "run-1", "12345").getCode(),
+        assertEquals("INVALID_STEER_ID", ext.cancelOnRun(session, "run-1", " ").getReasonOrCode());
+        assertEquals("INVALID_STEER_ID", ext.cancelOnRun(session, "run-1", "12345").getReasonOrCode(),
                 "超长按实例上限判定");
-        assertEquals(SteerCancelResult.Code.RUN_CHANGED, ext.cancelOnRun(session, "run-2", "a").getCode());
-        assertEquals(SteerCancelResult.Code.RUN_CHANGED, ext.cancelOnRun(session, null, "a").getCode());
+        assertEquals("RUN_CHANGED", ext.cancelOnRun(session, "run-2", "a").getReasonOrCode());
+        assertEquals("RUN_CHANGED", ext.cancelOnRun(session, null, "a").getReasonOrCode());
 
-        SteerCancelResult ok = ext.cancelOnRun(session, "run-1", " " + a.getSteerId() + " ");
-        assertTrue(ok.isCanceled());
-        assertEquals("a", ok.getSteerId());
-        assertEquals(1, ok.getCanceled());
-        assertEquals(1, ok.getRemaining(), "带出剩余条数，宿主无需再查 pending");
+        HarnessResult<SteerReceipt> ok = ext.cancelOnRun(session, "run-1", " " + a.getValue().getSteerId() + " ");
+        assertTrue(ok.isOk());
+        assertEquals("a", ok.getValue().getSteerId());
+        assertEquals(1, ok.getValue().getCanceled());
+        assertEquals(1, ok.getValue().getPending(), "带出剩余条数，宿主无需再查 pending");
 
-        assertEquals(SteerCancelResult.Code.NOT_PENDING, ext.cancelOnRun(session, "run-1", "a").getCode(),
+        assertEquals("NOT_PENDING", ext.cancelOnRun(session, "run-1", "a").getReasonOrCode(),
                 "已不在待生效列表不得宣称撤销成功");
-        assertEquals(SteerCancelResult.Code.NOT_PENDING,
-                ext.cancelOnRun(InMemoryAgentSession.of(), "run-1", "a").getCode(), "无状态的会话");
-        assertEquals(SteerCancelResult.Code.NOT_PENDING, ext.cancelOnRun(null, "run-1", "a").getCode());
+        assertEquals("NOT_PENDING", ext.cancelOnRun(InMemoryAgentSession.of(), "run-1", "a").getReasonOrCode(), "无状态的会话");
+        assertEquals("NOT_PENDING", ext.cancelOnRun(null, "run-1", "a").getReasonOrCode());
     }
 
     @Test
@@ -213,24 +213,24 @@ class SteerExtensionTest {
         SteerExtension ext = new SteerExtension();
         AgentSession session = runningSession("run-1");
 
-        SteerResult a = ext.steer(session, "第一条");
-        SteerResult b = ext.steer(session, "第二条");
+        HarnessResult<SteerReceipt> a = ext.steer(session, "第一条");
+        HarnessResult<SteerReceipt> b = ext.steer(session, "第二条");
         ext.steer(session, "第三条");
         // 模拟消费线程已取走 a
         SteerState.of(session).drainFor("run-1");
         ext.steer(session, "第四条");
 
-        SteerCancelResult r = ext.cancelPending(session, Arrays.asList(a.getSteerId(), b.getSteerId(), " "));
-        assertEquals(SteerCancelResult.Code.CANCELED, r.getCode());
-        assertEquals(0, r.getCanceled(), "已被消费的不应计入");
-        assertEquals(1, r.getRemaining());
+        HarnessResult<SteerReceipt> r = ext.cancelPending(session, Arrays.asList(a.getValue().getSteerId(), b.getValue().getSteerId(), " "));
+        assertEquals("OK", r.getReasonOrCode());
+        assertEquals(0, r.getValue().getCanceled(), "已被消费的不应计入");
+        assertEquals(1, r.getValue().getPending());
 
-        SteerCancelResult all = ext.cancelPending(session, null);
-        assertEquals(1, all.getCanceled());
-        assertEquals(0, all.getRemaining());
+        HarnessResult<SteerReceipt> all = ext.cancelPending(session, null);
+        assertEquals(1, all.getValue().getCanceled());
+        assertEquals(0, all.getValue().getPending());
         assertTrue(ext.pending(session).isEmpty());
 
-        assertEquals(0, ext.cancelPending(InMemoryAgentSession.of(), null).getCanceled(), "无状态零行为");
+        assertEquals(0, ext.cancelPending(InMemoryAgentSession.of(), null).getValue().getCanceled(), "无状态零行为");
     }
 
     // ==================== 查询 ====================
@@ -244,12 +244,12 @@ class SteerExtensionTest {
         assertTrue(ext.pending(null).isEmpty());
 
         SteerState.of(session).open("run-1");
-        SteerResult a = ext.steer(session, "第一条");
+        HarnessResult<SteerReceipt> a = ext.steer(session, "第一条");
         ext.steer(session, "第二条");
 
         List<SteerMessage> snapshot = ext.pending(session);
         assertEquals(2, snapshot.size());
-        assertEquals(a.getSteerId(), snapshot.get(0).getId());
+        assertEquals(a.getValue().getSteerId(), snapshot.get(0).getId());
         assertEquals("第二条", snapshot.get(1).getText());
 
         ext.cancelPending(session, null);
@@ -279,11 +279,11 @@ class SteerExtensionTest {
 
         AgentSession session = runningSession("run-1");
 
-        assertTrue(ext.steer(session, "a").isSteered());
-        assertTrue(ext.steer(session, "b").isSteered());
-        assertTrue(ext.steer(session, "c").isBoxFull(), "超过 builder 上限应 BOX_FULL");
+        assertTrue(ext.steer(session, "a").isOk());
+        assertTrue(ext.steer(session, "b").isOk());
+        assertTrue(ext.steer(session, "c").hasReason(SteerExtension.REASON_BOX_FULL), "超过 builder 上限应 BOX_FULL");
 
-        assertEquals(SteerResult.Code.TEXT_TOO_LONG, ext.steer(session, "123456789").getCode(),
+        assertEquals("TEXT_TOO_LONG", ext.steer(session, "123456789").getReasonOrCode(),
                 "超过 builder 文本上限应 TEXT_TOO_LONG");
     }
 
@@ -331,8 +331,8 @@ class SteerExtensionTest {
         AgentSession session = runningSession("run-1");
         // 已挂引擎时忙判定走 engine.status：登记一条活跃运行流，否则投递会回滚为 NOT_RUNNING
         org.noear.solon.ai.agent.session.SessionRuns.attach(session, reactor.core.Disposables.single());
-        assertTrue(ext.steer(session, "a").isSteered());
-        assertTrue(ext.steer(session, "b").isSteered());
+        assertTrue(ext.steer(session, "a").isOk());
+        assertTrue(ext.steer(session, "b").isOk());
         assertEquals(2, (int) engine.status(session).get(SteerExtension.STATUS_PENDING));
 
         ext.setEnabled(false);

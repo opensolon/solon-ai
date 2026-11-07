@@ -137,12 +137,12 @@ class MultiTenantContractTest {
         HarnessEngine engine = builder().sessionOwnership(new FakeOwnership("node-a", held)).build();
         InputOutcome o = engine.handle(HarnessInput.of(s, "hello"));
         assertEquals(InputOutcome.Kind.REJECTED, o.getKind());
-        assertEquals(InputOutcome.REJECT_NOT_OWNER, o.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.NOT_OWNER, o.getRejectReason());
         assertEquals("node-b", o.getRejectDetail());
 
         // 程序输入（goal / loop）同样被拒：执行器按「未受理」跳过
         InputOutcome p = engine.handle(HarnessInput.ofProgram(s, "round", "loop"));
-        assertEquals(InputOutcome.REJECT_NOT_OWNER, p.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.NOT_OWNER, p.getRejectReason());
 
         // 不在内存里留下任何运行痕迹：之后由持有者处理
         assertTrue(engine.isIdle(s));
@@ -186,14 +186,14 @@ class MultiTenantContractTest {
         HarnessEngine none = builder().scopeRequired(true).build();
         InputOutcome o1 = none.handle(HarnessInput.of(InMemoryAgentSession.of(), "hi"));
         assertEquals(InputOutcome.Kind.REJECTED, o1.getKind(), "未配解析器：缺失即拒绝");
-        assertEquals(InputOutcome.REJECT_SCOPE_UNAVAILABLE, o1.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, o1.getRejectReason());
 
         HarnessEngine boom = builder().scopeRequired(true)
                 .scopeResolver((s, in) -> { throw new IllegalStateException("tenant db down"); })
                 .build();
         AgentSession s = InMemoryAgentSession.of();
         InputOutcome o2 = boom.handle(HarnessInput.of(s, "hi"));
-        assertEquals(InputOutcome.REJECT_SCOPE_UNAVAILABLE, o2.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, o2.getRejectReason());
         assertEquals("tenant db down", o2.getRejectDetail());
         assertTrue(boom.isIdle(s), "拒绝后不留占位");
 

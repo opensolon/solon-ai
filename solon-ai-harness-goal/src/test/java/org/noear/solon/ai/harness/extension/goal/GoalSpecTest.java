@@ -154,7 +154,7 @@ class GoalSpecTest {
         ext.create(session, GoalSpec.of("第一个目标"));
 
         // 每会话最多一个 goal：参数对象入口不得放宽既有约束
-        assertEquals(HarnessResult.Code.INVALID, ext.create(session, GoalSpec.of("第二个目标")).getCode());
+        assertEquals(HarnessResult.Code.CONFLICT, ext.create(session, GoalSpec.of("第二个目标")).getCode());
     }
 
     @Test

@@ -7,6 +7,7 @@ package org.noear.solon.ai.harness.host;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.session.NotOwnerException;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.lang.Nullable;
@@ -34,7 +35,7 @@ import java.util.function.BiFunction;
  *     return queue.enqueue(s, text, InputOrigin.channel("console"));   // 插件门面直接返回 HarnessResult
  * });
  *
- * admin.stop(sid, StopMode.STOP_AND_CLEAR);
+ * admin.interrupt(sid, InterruptMode.INTERRUPT);
  * }</pre>
  *
  * @author noear
@@ -90,8 +91,10 @@ public final class AdminGateway {
             r = action.apply(ext, session);
         } catch (NotOwnerException e) {
             return HarnessResult.notOwner(e.getOwner());
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            return HarnessResult.fail(HarnessResult.Code.INVALID, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return HarnessResult.invalid(e.getMessage());
+        } catch (IllegalStateException e) {
+            return HarnessResult.conflict(e.getMessage());
         }
         if (r == null) {
             r = HarnessResult.ok(null);
@@ -102,12 +105,12 @@ public final class AdminGateway {
         return r;
     }
 
-    /** 停止（见 {@link StopMode}；鉴权操作名为 {@code "stop"}）。值为「确有运行中的流被停掉」 */
-    public HarnessResult<Boolean> stop(String sessionId, StopMode mode) {
-        if (allowed(sessionId, "stop") == false) {
+    /** 中断（见 {@link InterruptMode}；鉴权操作名为 {@code "interrupt"}）。值为「确有运行中的流被停掉」 */
+    public HarnessResult<Boolean> interrupt(String sessionId, InterruptMode mode) {
+        if (allowed(sessionId, "interrupt") == false) {
             return forbidden();
         }
-        return host.stop(tenant, sessionId, mode);
+        return host.interrupt(tenant, sessionId, mode);
     }
 
     private boolean allowed(String sessionId, String operation) {

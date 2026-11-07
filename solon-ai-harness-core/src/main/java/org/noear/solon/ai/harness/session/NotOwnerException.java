@@ -21,7 +21,7 @@ import org.noear.solon.lang.Preview;
 /**
  * 本节点不持有会话（多节点部署时写门面在非持有节点上被调用）
  *
- * <p>返回值本身能表达失败的门面（如 {@code SteerResult.Code.NOT_OWNER}、队列的 {@code NOT_OWNER}）不抛本异常；
+ * <p>返回值本身能表达失败的门面（如各插件门面返回的 {@code HarnessResult.Code.NOT_OWNER}）不抛本异常；
  * 返回快照或布尔的写门面（goal / loop 的 create / update / pause ...）抛本异常，宿主按 {@link #getOwner()} 转发。</p>
  *
  * @author noear

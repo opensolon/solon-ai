@@ -12,8 +12,8 @@ package org.noear.solon.ai.harness.extension.steer;
  * {@link SteerExtension#builder()} 注入，内核逻辑只读实例字段。</p>
  *
  * <p>宿主的入参校验<b>不需要</b>再读这些值：投递内核会以同一份约束返回
- * {@link SteerResult.Code#TEXT_TOO_LONG} / {@link SteerResult.Code#INVALID_STEER_ID} /
- * {@link SteerResult.Code#BOX_FULL}，宿主只需映射应答码（见 {@link SteerResult}）。</p>
+ * {@link SteerExtension#REASON_TEXT_TOO_LONG} / {@link SteerExtension#REASON_INVALID_STEER_ID} /
+ * {@link SteerExtension#REASON_BOX_FULL}，宿主只需映射应答码。</p>
  *
  * @author noear
  * @since 4.2.0

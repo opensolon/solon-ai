@@ -20,7 +20,7 @@ package org.noear.solon.ai.harness.extension.goal;
  *
  * <p>宿主把请求参数原样传入即可，不必先读旧值再合并：</p>
  * <pre>{@code
- * goal.update(sid, taskId, GoalPatch.create().objective(prompt).maxTokens(maxTokens), stopper);
+ * goal.update(sid, GoalPatch.create().objective(prompt).maxTokens(maxTokens), stopper);
  * }</pre>
  *
  * <p>空白正文视为未设置；预算负数按 0（不限制）处理。</p>

@@ -24,7 +24,7 @@ import org.noear.solon.lang.Preview;
  *
  * <p>会话的运行态（流句柄、受理占位、插话邮箱、队列锁）都在本进程内存里，因此同一时刻只能由一个节点执行
  * 某个会话。引擎在受理（{@code handle} 第 0 步）前调用 {@link #tryAcquire}：拿不到时返回
- * {@code REJECTED} + {@code InputOutcome.REJECT_NOT_OWNER}，{@code getRejectDetail()} 为持有者节点标识，
+ * {@code REJECTED} + {@code RejectReason.NOT_OWNER}，{@code getRejectDetail()} 为持有者节点标识，
  * 由网关转发；goal / loop 的程序轮次同样经过 {@code handle}，冷会话由先触发的节点自然认领、其余节点跳过。</p>
  *
  * <p>租约生命周期：从首次 {@link #tryAcquire} 成功起，到 {@link #release} 为止（引擎在

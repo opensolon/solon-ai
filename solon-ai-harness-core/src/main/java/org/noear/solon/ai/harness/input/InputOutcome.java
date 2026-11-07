@@ -24,6 +24,7 @@ import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.talents.cli.SkillTalent;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 import reactor.core.publisher.Flux;
 
@@ -123,53 +124,54 @@ public final class InputOutcome {
          */
         DEFERRED,
         /**
-         * 未受理：宿主渲染 {@link #getRejectDetail()} 后收尾。原因码读 {@link #getRejectReason()}：
-         * <ul>
-         * <li>{@code hitl_pending} —— 有待审批卡，本输入不是审批决策 / 续流 / 忙时可执行命令；</li>
-         * <li>{@code busy} —— 会话忙且无处可延（没装积压能力、程序轮次、续流等不可排队的输入）；</li>
-         * <li>{@code attachments_not_deferrable} —— 会话忙且输入带附件（附件不进积压）；</li>
-         * <li>{@code backlog_unavailable} —— 会话忙，积压拒收（已满 / 超长 / 已停用）；</li>
-         * <li>{@code not_owner} —— 多节点：会话由其它节点持有（detail 为持有者），由网关转发；</li>
-         * <li>{@code scope_unavailable} —— 要求作用域但本轮解析不到；</li>
-         * <li>{@code scope_not_deferrable} —— 会话忙，且显式作用域含不可保存的维度，不能排队；</li>
-         * <li>{@code engine_closed} —— 引擎已关闭，宿主持有的是过期引用。</li>
-         * </ul>
+         * 未受理：宿主渲染 {@link #getRejectDetail()} 后收尾。原因读 {@link #getRejectReason()}（见 {@link RejectReason}）。
          */
         REJECTED
     }
 
-    /** 拒绝原因：有待审批卡 */
-    public static final String REJECT_HITL_PENDING = "hitl_pending";
-    /** 拒绝原因：会话忙且无处可延 */
-    public static final String REJECT_BUSY = "busy";
-    /** 拒绝原因：会话忙且输入带附件 */
-    public static final String REJECT_ATTACHMENTS_NOT_DEFERRABLE = "attachments_not_deferrable";
-    /** 拒绝原因：会话忙，积压拒收 */
-    public static final String REJECT_BACKLOG_UNAVAILABLE = "backlog_unavailable";
     /**
-     * 多节点部署：本节点不持有该会话（{@code getRejectDetail()} 为持有者节点标识，可空），由网关转发
+     * 拒绝原因（仅 {@link Kind#REJECTED}）
+     *
+     * <p>{@link #code()} 是线上协议值（小写下划线，宿主透传给前端即可）；宿主分支一律按枚举比较。</p>
      *
      * @since 4.2.0
      */
-    public static final String REJECT_NOT_OWNER = "not_owner";
-    /**
-     * 要求作用域（{@code scopeRequired}）但本轮解析不到（解析器返回 null 或抛异常）
-     *
-     * @since 4.2.0
-     */
-    public static final String REJECT_SCOPE_UNAVAILABLE = "scope_unavailable";
-    /**
-     * 会话忙，且输入显式携带的作用域含不可保存的维度（模型实例 / 任意属性），不能排队
-     *
-     * @since 4.2.0
-     */
-    public static final String REJECT_SCOPE_NOT_DEFERRABLE = "scope_not_deferrable";
-    /**
-     * 引擎已关闭（{@code shutdown} 之后）：宿主持有的是过期引用，应重新从引擎池取
-     *
-     * @since 4.2.0
-     */
-    public static final String REJECT_ENGINE_CLOSED = "engine_closed";
+    public enum RejectReason {
+        /** 有待审批卡，本输入不是审批决策 / 续流 / 忙时可执行命令 */
+        HITL_PENDING("hitl_pending"),
+        /** 会话忙且无处可延（没装积压能力、程序轮次、续流等不可排队的输入） */
+        BUSY("busy"),
+        /** 会话忙且输入带附件（附件不进积压） */
+        ATTACHMENTS_NOT_DEFERRABLE("attachments_not_deferrable"),
+        /** 会话忙，积压拒收（已满 / 超长 / 已停用） */
+        BACKLOG_UNAVAILABLE("backlog_unavailable"),
+        /** 多节点：会话由其它节点持有（{@code getRejectDetail()} 为持有者节点标识，可空），由网关转发 */
+        NOT_OWNER("not_owner"),
+        /** 要求作用域（{@code scopeRequired}）但本轮解析不到（解析器返回 null 或抛异常） */
+        SCOPE_UNAVAILABLE("scope_unavailable"),
+        /** 会话忙，且输入显式携带的作用域含不可保存的维度（模型实例 / 任意属性），不能排队 */
+        SCOPE_NOT_DEFERRABLE("scope_not_deferrable"),
+        /** 引擎已关闭（{@code shutdown} 之后）：宿主持有的是过期引用，应重新从引擎池取 */
+        ENGINE_CLOSED("engine_closed"),
+        /**
+         * 会话不存在。
+         *
+         * <p>引擎的 {@code handle} 不会给出（它总是带着会话来）；由宿主层在「只查不建」取会话失败时使用
+         * （如 {@code HarnessHost}），放在同一张码表里，宿主只需一处映射。</p>
+         */
+        SESSION_NOT_FOUND("session_not_found");
+
+        private final String code;
+
+        RejectReason(String code) {
+            this.code = code;
+        }
+
+        /** 线上协议值（小写下划线） */
+        public String code() {
+            return code;
+        }
+    }
 
     /** 宿主动作路由值（六值互斥穷尽，语义见 {@link Kind}） */
     private final Kind kind;
@@ -195,8 +197,8 @@ public final class InputOutcome {
     private final List<HitlCard> hitlCards;
     /** 积压位置（仅 {@link Kind#DEFERRED}，从 1 计；其余为 0） */
     private int backlogPosition;
-    /** 拒绝原因码与展示文字（仅 {@link Kind#REJECTED}） */
-    private String rejectReason;
+    /** 拒绝原因与展示文字（仅 {@link Kind#REJECTED}） */
+    private RejectReason rejectReason;
     private String rejectDetail;
     /** 本条（忙时可执行命令）是否在正在运行的任务旁边执行 */
     private boolean besideRunning;
@@ -224,11 +226,12 @@ public final class InputOutcome {
         this.hitlCards = hitlCards == null ? Collections.emptyList() : hitlCards;
     }
 
-    // ========== 工厂 ==========
+    // ========== 工厂（@Internal：只由引擎与命令分发器构造，宿主只读不建） ==========
 
     /**
      * 有可执行的任务（普通消息或续流）：宿主执行装配好的请求
      */
+    @Internal
     public static InputOutcome task(Prompt prompt, String agentName, String modelName, ReActRequest request) {
         return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request, null, 0, null);
     }
@@ -238,12 +241,14 @@ public final class InputOutcome {
      * <p>
      * 能续流即意味着本批已齐备，故 {@code pendingHitl} 恒为 0（非“未统计”）。
      */
+    @Internal
     public static InputOutcome task(Prompt prompt, String agentName, String modelName, ReActRequest request,
                                    boolean hitlApplied) {
         return new InputOutcome(Kind.TASK, null, null, null, prompt, agentName, modelName, request,
                 hitlApplied, 0, null);
     }
 
+    @Internal
     public static InputOutcome ignored() {
         return new InputOutcome(Kind.IGNORED, null, null, null, null, null, null, null, null, 0, null);
     }
@@ -254,6 +259,7 @@ public final class InputOutcome {
      * @param position 积压位置（从 1 计）
      * @since 4.2.0
      */
+    @Internal
     public static InputOutcome deferred(int position) {
         InputOutcome outcome = new InputOutcome(Kind.DEFERRED, null, null, null, null, null, null, null, null, 0, null);
         outcome.backlogPosition = position;
@@ -263,11 +269,12 @@ public final class InputOutcome {
     /**
      * 未受理
      *
-     * @param reason 原因码（见 {@link Kind#REJECTED}）
+     * @param reason 原因
      * @param detail 可展示的文字
      * @since 4.2.0
      */
-    public static InputOutcome rejected(String reason, @Nullable String detail) {
+    @Internal
+    public static InputOutcome rejected(RejectReason reason, @Nullable String detail) {
         InputOutcome outcome = new InputOutcome(Kind.REJECTED, null, null, null, null, null, null, null, null, 0, null);
         outcome.rejectReason = reason;
         outcome.rejectDetail = detail;
@@ -287,6 +294,7 @@ public final class InputOutcome {
      * @return 新实例
      * @since 4.2.0
      */
+    @Internal
     public InputOutcome admitted(boolean besideRunning,
                                  @Nullable RunDispatch dispatch,
                                  @Nullable Runnable discarder,
@@ -309,6 +317,7 @@ public final class InputOutcome {
      * @param hitlApplied  决策是否真的写入（false = 无匹配的挂起任务，如过期审批卡）
      * @param pendingHitl  仍待审批的挂起项数量（0 表示本批已齐备）
      */
+    @Internal
     public static InputOutcome hitl(String agentName, String modelName, boolean hitlApplied, int pendingHitl) {
         return hitl(agentName, modelName, hitlApplied, pendingHitl, null);
     }
@@ -318,6 +327,7 @@ public final class InputOutcome {
      *
      * @param hitlCards 本批挂起卡（含已决策项）；null 视为空集合
      */
+    @Internal
     public static InputOutcome hitl(String agentName, String modelName, boolean hitlApplied, int pendingHitl,
                                     List<HitlCard> hitlCards) {
         return new InputOutcome(Kind.HITL, null, null, null, null, agentName, modelName, null,
@@ -327,6 +337,7 @@ public final class InputOutcome {
     /**
      * 命令在此渠道不可用（未执行），只有回执
      */
+    @Internal
     public static InputOutcome unavailable(String commandName, String output, ParsedCommand command) {
         return new InputOutcome(Kind.REPLY, commandName, output, command, null, null, null, null, null, 0, null);
     }
@@ -340,6 +351,7 @@ public final class InputOutcome {
      *
      * @param nested 二段装配结果（仅 {@link Kind#TASK} 会被采纳）
      */
+    @Internal
     public static InputOutcome command(String commandName, String output,
                                       ParsedCommand command, @Nullable InputOutcome nested) {
         if (nested != null && nested.kind == Kind.TASK) {
@@ -556,12 +568,12 @@ public final class InputOutcome {
     }
 
     /**
-     * 拒绝原因码（仅 {@link Kind#REJECTED}，见 {@code REJECT_*} 常量；其余为 null）
+     * 拒绝原因（仅 {@link Kind#REJECTED}；其余为 null）。线上协议值读 {@code getRejectReason().code()}。
      *
      * @since 4.2.0
      */
     @Nullable
-    public String getRejectReason() {
+    public RejectReason getRejectReason() {
         return rejectReason;
     }
 

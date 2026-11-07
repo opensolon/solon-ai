@@ -91,7 +91,7 @@ stateDiagram-v2
 |---|---|---|
 | 1 | goal 处于 `PURSUING` | `GOAL_NOT_ACTIVE` |
 | 2 | 执行证据（提示性）：目标含执行型关键词且「上一轮已写入的证据」为 false 时提前拦截。由于每轮执行前证据会被置空，轮内通常放行 | `ACTION_EVIDENCE_REQUIRED` |
-| 3 | TODO 联动：经 `engine.getTodoTalent().readTodo(cwd, sessionId)` 读取清单（cwd 为本轮会话工作目录），存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
+| 3 | TODO 联动：经 `engine.getTalents().getTodo().readTodo(cwd, sessionId)` 读取清单（cwd 为本轮会话工作目录），存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
 | 4 | 验证器（`validatorEnabled = true` 时）：按目标文本匹配验证器链，在本轮会话工作目录下执行 | `VALIDATION_FAILED` |
 
 全部通过后状态转 `ACHIEVED`。**权威复核在轮末**：目标为执行型且本轮 `GoalOutcome.hasToolCalls() == false` 时，`ACHIEVED` 被退回 `PURSUING`，`lastResult` 记为「完成声明被拒绝：本轮没有实际工具执行证据……」。
@@ -424,9 +424,9 @@ public class ImGoalHost {
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
 4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
 5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）由 `handle` 入积压并返回 `DEFERRED`。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
-6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
-7. **单槽冲突在回执里**：已有非终态 goal 时命令只回执 `WARN`；管理态 `create` 返回 `HarnessResult.Code.INVALID`。
-8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED("hitl_pending")`；续流完成后 goal 才继续。
+6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
+7. **单槽冲突在回执里**：已有非终态 goal 时命令只回执 `WARN`；管理态 `create` 返回 `HarnessResult.Code.CONFLICT`。
+8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；续流完成后 goal 才继续。
 
 ---
 
@@ -439,11 +439,11 @@ public class ImGoalHost {
 | 界面动作 | 门面调用 | 成功返回 | 失败时（建议的 HTTP 映射） |
 |---|---|---|---|
 | 查看当前目标 | `goal.get(sid)` | `GoalSnapshot`，用 `toMap()` 渲染 | 会话或目标不存在返回 null |
-| 新建目标 | `goal.create(sid, GoalSpec...)` | `OK`，值为 `GoalSnapshot` | `NOT_FOUND`（会话不存在）→ 404；`INVALID`（已有非终态 goal、规格不合法）→ 409 / 400 |
-| 编辑目标与预算 | `goal.update(sid, GoalPatch..., stopper)` | `OK`，值为修改后的快照 | `NOT_FOUND` → 404；`INVALID`（终态、停稳超时，可重试）→ 409 |
-| 暂停 | `goal.pause(sid)` | `OK` | `NOT_FOUND`：无 goal；`INVALID`：状态不是 `PURSUING` |
-| 恢复 | `goal.resume(sid)` | `OK`（并立即跑一轮） | `NOT_FOUND`；`INVALID`：状态不是 `PAUSED` / `BLOCKED` |
-| 立即执行一轮 | `goal.trigger(sid)` | `OK` | `NOT_FOUND`；`INVALID`：非活跃；`DISABLED`：扩展已停用 |
+| 新建目标 | `goal.create(sid, GoalSpec...)` | `OK`，值为 `GoalSnapshot` | `NOT_FOUND`（会话不存在）→ 404；`CONFLICT`（已有非终态 goal）→ 409；`INVALID`（规格不合法）→ 400 |
+| 编辑目标与预算 | `goal.update(sid, GoalPatch..., stopper)` | `OK`，值为修改后的快照 | `NOT_FOUND` → 404；`CONFLICT`（终态、停稳超时，后者可重试）→ 409；`INVALID`（补丁不合法）→ 400 |
+| 暂停 | `goal.pause(sid)` | `OK` | `NOT_FOUND`：无 goal；`CONFLICT`：状态不是 `PURSUING` |
+| 恢复 | `goal.resume(sid)` | `OK`（并立即跑一轮） | `NOT_FOUND`；`CONFLICT`：状态不是 `PAUSED` / `BLOCKED` |
+| 立即执行一轮 | `goal.trigger(sid)` | `OK` | `NOT_FOUND`；`CONFLICT`：非活跃；`DISABLED`：扩展已停用 |
 | 清除 | `goal.remove(sid)` | `OK` | `NOT_FOUND`：无 goal |
 
 每个会话永远只有一个 goal，门面一律按 `sessionId` 定位，不需要任务 id。写方法统一返回 `HarnessResult<T>`（core 的 `org.noear.solon.ai.harness.HarnessResult`），业务失败只用结果码表达、不抛异常；多节点部署时非持有节点返回 `NOT_OWNER`（`getOwner()` 为持有者）。门面只取已有会话（`getSessionOrNull`），不会把不存在的会话建出来。
@@ -479,7 +479,7 @@ public class GoalAdminController {
             case OK:        return Result.succeed();
             case NOT_FOUND: return Result.failure(404, r.getDetail());
             case DISABLED:  return Result.failure(503, r.getDetail());
-            default:        return Result.failure(409, r.getDetail()); // INVALID / NOT_OWNER 等
+            default:        return Result.failure(409, r.getDetail()); // CONFLICT / NOT_OWNER 等（INVALID 可单独映射 400）
         }
     }
 
@@ -517,7 +517,7 @@ public class GoalAdminController {
                         .maxTokens(maxTokens)
                         .maxDurationMs(maxDurationMs)
                         .maxIterations(maxIterations),
-                null);                                   // null = engine.cancelStream；流式前端可传自己的停流动作
+                null);                                   // null = InterruptMode.CANCEL_STREAM；流式前端可传自己的停流动作
         return r.isOk() ? Result.succeed(r.getValue().toMap()) : toHttp(r);
     }
 
@@ -549,18 +549,18 @@ public class GoalAdminController {
 
 ### 5.3 编辑：update 与停流时序
 
-goal 为 `PURSUING` 时，`update` 的固定时序：暂停并摘调度 → 执行 `stopper`（null 时用 `engine.cancelStream(session)`；`stopper` 抛异常只记日志）→ 最多等 2 秒让旧轮次停稳 → 改写（一次落盘、一次广播）→ 恢复并重挂调度、立即跑一轮。goal 为 `PAUSED` / `BLOCKED` 时只改写、不改状态、不调用 `stopper`。补丁为空时直接返回当前快照。
+goal 为 `PURSUING` 时，`update` 的固定时序：暂停并摘调度 → 执行 `stopper`（null 时用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`；`stopper` 抛异常只记日志）→ 最多等 2 秒让旧轮次停稳 → 改写（一次落盘、一次广播）→ 恢复并重挂调度、立即跑一轮。goal 为 `PAUSED` / `BLOCKED` 时只改写、不改状态、不调用 `stopper`。补丁为空时直接返回当前快照。
 
 流式前端需要在停流时推一个终态帧，就传自己的 `stopper`：
 
 ```java
 goal.update(sid, GoalPatch.create().objective(newPrompt), () -> {
-    engine.cancelStream(engine.getSessionOrNull(sid)); // 停掉在跑轮次
+    engine.interrupt(engine.getSessionOrNull(sid), InterruptMode.CANCEL_STREAM); // 停掉在跑轮次
     pushFinalFrame(sid);                              // 渠道侧收尾（宿主自有）
 });
 ```
 
-`stopper` 里不要用 `engine.interrupt`：它会回调各扩展的 `onSessionInterrupt`，顺带清空 queue 里用户排队的消息。
+`stopper` 里不要用 `InterruptMode.INTERRUPT`：它会回调各扩展的 `onSessionInterrupt`，顺带清空 queue 里用户排队的消息。
 
 ### 5.4 状态推送：监听器
 
@@ -644,7 +644,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 1. **会话只取不建**：门面按 sessionId 经 `engine.getSessionOrNull` 取会话，不存在时 `get` 返回 null、写方法返回 `NOT_FOUND`，不会把外部传入的 ID 建成新会话；宿主仍需做自己的用户归属校验。
 2. **不需要判忙**：管理接口随时可调。会话忙时 `create` 照常建目标，首轮由调度器等到会话空闲再跑；`update` 自己负责停流与等待。
-3. **立即停下当前一轮**：`pause` 只阻止下一轮。界面上的「停止」按钮应先调宿主的停止入口（如 `engine.interrupt(session)`），再 `goal.pause(sid)`。
+3. **立即停下当前一轮**：`pause` 只阻止下一轮。界面上的「停止」按钮应先调宿主的停止入口（如 `engine.interrupt(session, InterruptMode.INTERRUPT)`），再 `goal.pause(sid)`。
 4. **终态只能清除**：`ACHIEVED` / `BUDGET_LIMITED` / `ITERATION_LIMITED` 不能 `update`、不能恢复，想扩大预算只能清除后重建；界面上对终态行只保留「清除」按钮。
 5. **列表与 loop 混排**：`GoalSnapshot.toMap()` 只输出 goal 自己的字段（`id`、`type = "GOAL"`、`prompt`、`running`、`currentIteration`、预算与 `goal` 子对象），不再带 loop 的 `enabled` / `intervalMinutes` / `runNow` / `cancelled`；混排列表需要这些列时由宿主补齐。分流时用 `goal.get(sid)` 取快照，比较行 id 是否等于 `getId()`，是则走 goal 门面，否则走 loop。
 6. **删除会话先调 `engine.removeSession`**：它回调 `onSessionRemove` 注销该会话的 job；调度轮次只用 `getSessionOrNull`，会话不存在时 job 自行注销，不会把会话重新建出来。
@@ -707,7 +707,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `BUDGET_LIMITED` | Token 或时长预算耗尽 | 否 | 是 | 否 |
 | `ITERATION_LIMITED` | 轮次预算耗尽 | 否 | 是 | 否 |
 
-单槽判定：已有**非终态** goal 时 `create` 返回 `INVALID`（detail 为「当前会话已有进行中的 Goal，请先清除后再创建」）；已是终态时可直接覆盖创建。
+单槽判定：已有**非终态** goal 时 `create` 返回 `CONFLICT`（detail 为「当前会话已有进行中的 Goal，请先清除后再创建」）；已是终态时可直接覆盖创建。
 
 ### 6.5 GoalSnapshot.toMap 字段
 
@@ -820,11 +820,11 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `addExecutor(channel, claim, executor)` | `GoalExtension` | 装配 | 挂接后调用；`channel` 为空抛 `IllegalArgumentException`；`executor` 为 null 忽略 |
 | `addListener(listener)` | `GoalExtension` | 装配 | 挂接后调用 |
 | `registerValidator(matcher, validator)` | `GoalExtension` | 装配 | 挂接后调用；AND 语义 |
-| `create(sessionId, spec)` | `HarnessResult<GoalSnapshot>` | 管理（`/goal <目标>` 同路径） | 建并挂调度；会话不存在 `NOT_FOUND`；单槽冲突或规格非法 `INVALID` |
+| `create(sessionId, spec)` | `HarnessResult<GoalSnapshot>` | 管理（`/goal <目标>` 同路径） | 建并挂调度；会话不存在 `NOT_FOUND`；单槽冲突 `CONFLICT`；规格非法 `INVALID` |
 | `get(sessionId)` | `GoalSnapshot` | 管理 | 当前 goal，无则 null（不新建会话） |
-| `update(sessionId, patch, stopper)` | `HarnessResult<GoalSnapshot>` | 管理 | `NOT_FOUND`；终态或停稳超时 `INVALID` |
-| `pause(sessionId)` | `HarnessResult<Void>` | 管理（`/goal pause` 同路径） | 仅 `PURSUING`，否则 `INVALID` |
-| `resume(sessionId)` | `HarnessResult<Void>` | 管理（`/goal resume` 同路径） | `PAUSED` / `BLOCKED`，否则 `INVALID` |
+| `update(sessionId, patch, stopper)` | `HarnessResult<GoalSnapshot>` | 管理 | `NOT_FOUND`；终态或停稳超时 `CONFLICT`；补丁非法 `INVALID` |
+| `pause(sessionId)` | `HarnessResult<Void>` | 管理（`/goal pause` 同路径） | 仅 `PURSUING`，否则 `CONFLICT` |
+| `resume(sessionId)` | `HarnessResult<Void>` | 管理（`/goal resume` 同路径） | `PAUSED` / `BLOCKED`，否则 `CONFLICT` |
 | `trigger(sessionId)` | `HarnessResult<Void>` | 管理 | 仅活跃态；扩展停用 `DISABLED` |
 | `remove(sessionId)` | `HarnessResult<Void>` | 管理（`/goal clear` 同路径） | 先摘调度再清除；无 goal `NOT_FOUND` |
 | `recover(sessionIds, statusReader)` | `int` | 运维 | 实际挂上调度的会话数 |

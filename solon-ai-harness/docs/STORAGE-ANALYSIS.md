@@ -28,7 +28,7 @@
 | 是否随 `__cwd` 变化 | 否 | 否（根固定为 workspace）；TaskTalent 在 cwd 不等于 workspace 时会改用 `FileMountSource.of(cwd)` |
 | 宿主 soloncode-cli 的取值 | `~/.soloncode/workspaces/<key>/`（`WorkspaceDataUtil.dataDir`），与会话目录同处 | 缺省值，即 `<workspace>` |
 
-`harnessHome` 默认是 `.solon/`，soloncode-cli 传入 `.soloncode/`。`getHarnessSessions/Skills/Agents/Commands/Memory/Channels()` 只是拼出 `harnessHome + "xxx/"` 这样的**相对路径字符串**。引擎本身只用到 `getHarnessHome()`（CodeTalent）和 `getHarnessAgents()`（GenerateTalent），其余由宿主自己选根目录去拼。
+`harnessHome` 默认是 `.solon/`，soloncode-cli 传入 `.soloncode/`。`getHarnessSessions/Skills/Agents/Commands/Memory/Channels()`（宿主经 `engine.getSettings()` 读取）只是拼出 `harnessHome + "xxx/"` 这样的**相对路径字符串**。引擎本身只用到 `getHarnessHome()`（CodeTalent）和 `getHarnessAgents()`（GenerateTalent），其余由宿主自己选根目录去拼。
 
 ## 3. 总表：谁读写什么、根目录是什么
 

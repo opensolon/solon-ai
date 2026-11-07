@@ -129,7 +129,7 @@ flowchart LR
 | 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)`（运行中在运行任务旁边执行，`isBesideRunning() == true`） | 宿主自己的接口，直接调门面 |
 | 轮次绑定 | 不比对：投给"当前正在跑的那一轮" | 严格比对：带上前端看到的 `runId`，换轮了就返回 `RUN_CHANGED` |
 | 幂等 | 无（同一内容输两次投两次） | 前端生成 `steerId`，重试返回 `DUPLICATE_STEER_ID` |
-| 结果怎么返回 | 回执文本 `outcome.getCommandOutput()` | `SteerResult` / `SteerCancelResult` 状态码，映射成 HTTP 应答 |
+| 结果怎么返回 | 回执文本 `outcome.getCommandOutput()` | `HarnessResult<SteerReceipt>`（与其它插件门面同一结果类型），粗码映射 HTTP 状态、细分码作应答码 |
 | 只有这一态能做的 | IM / CLI 等只有文本输入的渠道也能插话 | 撤销、批量撤销、刷新后重建待生效列表 |
 
 两种时态投进的是**同一个邮箱**：`/steer` 投递的插话会出现在 `pending(session)` 里，界面上也能撤销；生效与转排队都通过同一组事件通知（3.3）。
@@ -171,12 +171,12 @@ outcome.getRequest().stream().doOnNext(e -> {
 | 结果 | 回执文案 |
 |---|---|
 | 无参数 | `用法：/steer <补充内容>（在任务执行中向当前任务插入实时补充）` |
-| `STEERED` | `已插话，将在下一步注入当前任务（待生效 N 条）` |
+| `OK` | `已插话，将在下一步注入当前任务（待生效 N 条）` |
 | `BOX_FULL` | `插话邮箱已满（上限 N 条），可用 /queue 排队` |
 | `NOT_RUNNING` / `RUN_CHANGED` | `当前无正在执行的任务可插话，可直接发送或用 /queue 排队` |
 | `TEXT_TOO_LONG` | `插话内容过长（上限 N 字符）` |
 | `DISABLED` | `插话能力已停用，可直接发送或使用 /queue 排队` |
-| 其它 | `插话未生效：<状态码>` |
+| 其它 | `插话未生效：<getReasonOrCode()>` |
 | 扩展已停用（命令层拦截） | `/steer 已停用。发送 /help 查看可用命令。` |
 
 插件**只做投递，不做降级**：任何失败都如实回执，不会代为排队或直接发送。
@@ -243,7 +243,7 @@ public class ImInputHandler {
                 reply(origin, "已排队（第 " + outcome.getBacklogPosition() + " 位）");
                 drain(session);
                 break;
-            case REJECTED:   // "hitl_pending"：有待审批卡；"busy"：引擎没装 queue 无处可延；等
+            case REJECTED:   // RejectReason.HITL_PENDING：有待审批卡；BUSY：引擎没装 queue 无处可延；等
                 reply(origin, outcome.getRejectDetail());
                 break;
             case HITL:
@@ -270,9 +270,9 @@ public class ImInputHandler {
 
 ```java
 if (engine.status(session).isBusy() && !text.startsWith("/")) {
-    SteerResult r = steer.steer(session, text, origin);   // origin 随插话保存，转排队后回复路由不丢
-    if (r.isSteered()) {
-        reply(origin, "已插话（待生效 " + r.getPendingCount() + " 条）");
+    HarnessResult<SteerReceipt> r = steer.steer(session, text, origin);   // origin 随插话保存，转排队后回复路由不丢
+    if (r.isOk()) {
+        reply(origin, "已插话（待生效 " + r.getValue().getPending() + " 条）");
         return;
     }
     // 邮箱满、刚好换轮等：继续交给 handle，由引擎决定排队或直接执行
@@ -284,13 +284,13 @@ onMessage(session, text, origin);
 
 ```java
 // 场景 A：任务还在跑，改主意了 —— 插话（不打断）
-SteerResult r = steer.steer(session, "先别改了，回到上一个方案");
-if (r.isNotRunning() || r.isRunChanged()) {
+HarnessResult<SteerReceipt> r = steer.steer(session, "先别改了，回到上一个方案");
+if (r.hasReason(SteerExtension.REASON_NOT_RUNNING) || r.hasReason(SteerExtension.REASON_RUN_CHANGED)) {
     queue.enqueue(session, "回到上一个方案");        // 宿主自己决定降级为排队
 }
 
 // 场景 B：必须停下来重来 —— 中断后排队（不要再 steer）
-if (engine.interrupt(session)) {
+if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getValue())) {
     queue.enqueue(session, "回到上一个方案");
 }
 ```
@@ -303,7 +303,7 @@ if (engine.interrupt(session)) {
 2. **忙态放行由 `handle` 完成**：`SteerCommand` 声明 `runnableWhenBusy`，任务运行中输入 `/steer ...`，`handle` 第 0 步放行并在运行任务旁边执行（`isBesideRunning() == true`）。宿主不要在 `handle` 之前自己拦忙，否则 `/steer` 会被挡住或排进队列，变成"任务结束后才插话"，永远是 `NOT_RUNNING`。
 3. **空闲时也能受理**：此时命令照常执行（`REPLY`，`isBesideRunning() == false`）并回复"当前无正在执行的任务可插话……"，不会被当成普通消息发给模型。
 4. **在运行任务旁边执行的命令不改回复路由**：运行中任务的回复目标属于那个任务；`/steer` 的回执直接回给本条消息的来源。
-5. **审批挂起期间**：`handle` 对普通输入返回 `REJECTED("hitl_pending")`；`/steer`、`/queue` 等声明了 `runnableWhenBusy` 的命令、审批决策与续流由引擎按输入本身豁免，宿主无需传谓词。
+5. **审批挂起期间**：`handle` 对普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；`/steer`、`/queue` 等声明了 `runnableWhenBusy` 的命令、审批决策与续流由引擎按输入本身豁免，宿主无需传谓词。
 6. **回执怎么落地**：缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `getCommandOutput()` 一次取回；CLI 想实时写终端，再给 `HarnessInput` 配 `commandContextFactory(...)`。
 7. **不要两条路都走**：已经用门面 `steer.steer(...)` 投递过的内容，不要再拼成 `/steer ...` 交给 `handle`，会投递两次。
 
@@ -318,9 +318,9 @@ Web / 桌面界面通常有专门的插话输入框和"待生效"气泡列表。
 | 界面动作 | 门面调用 | 结果 |
 |---|---|---|
 | 打开 / 刷新页面时恢复状态 | `steer.activeRunId(session)`、`steer.pending(session)` | 当前轮次（无则 null）；待生效列表（本轮邮箱在前、orphans 在后） |
-| 提交插话 | `steer.steerOnRun(session, runId, steerId, text, origin)` | `SteerResult`（9 种状态码，5.4 给出 HTTP 映射） |
-| 撤销一条 | `steer.cancelOnRun(session, runId, steerId)` | `SteerCancelResult`：`CANCELED` / `NOT_PENDING` / `RUN_CHANGED` / `INVALID_STEER_ID` |
-| 全部撤销 | `steer.cancelPending(session, null)`（或传 id 列表） | `SteerCancelResult`，`getCanceled()` 为实际移除条数 |
+| 提交插话 | `steer.steerOnRun(session, runId, steerId, text, origin)` | `HarnessResult<SteerReceipt>`（5.4 给出 HTTP 映射） |
+| 撤销一条 | `steer.cancelOnRun(session, runId, steerId)` | `HarnessResult<SteerReceipt>`：OK / `NOT_PENDING` / `RUN_CHANGED` / `INVALID_STEER_ID` |
+| 全部撤销 | `steer.cancelPending(session, null)`（或传 id 列表） | `HarnessResult<SteerReceipt>`，`getValue().getCanceled()` 为实际移除条数 |
 | 徽章计数 | `engine.status(session).get(SteerExtension.STATUS_PENDING)` | 待生效条数 |
 
 ### 5.2 完整示例：管理接口
@@ -328,10 +328,10 @@ Web / 桌面界面通常有专门的插话输入框和"待生效"气泡列表。
 ```java
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.extension.steer.SteerCancelResult;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerMessage;
-import org.noear.solon.ai.harness.extension.steer.SteerResult;
+import org.noear.solon.ai.harness.extension.steer.SteerReceipt;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.annotation.*;
 import org.noear.solon.core.handle.Result;
@@ -383,23 +383,8 @@ public class SteerAdminController {
         AgentSession session = engine.getSessionOrNull(sessionId);
         if (session == null) return Result.failure(409, "NOT_RUNNING");
 
-        SteerResult r = steer.steerOnRun(session, runId, steerId, text, InputOrigin.channel("web"));
-        switch (r.getCode()) {
-            case STEERED: {
-                Map<String, Object> data = new LinkedHashMap<>();
-                data.put("steerId", r.getSteerId());                  // 未传时由后端生成 "s_" + UUID
-                data.put("pending", r.getPendingCount());
-                return Result.succeed(data);
-            }
-            case EMPTY_TEXT:
-            case TEXT_TOO_LONG:
-            case INVALID_STEER_ID:
-                return Result.failure(400, r.getCode().name());          // 参数非法：前端提示后不再重试
-            default:
-                // NOT_RUNNING / RUN_CHANGED：前端改为普通发送或排队；BOX_FULL：建议改排队；
-                // DUPLICATE_STEER_ID：重试命中，按已投递处理；DISABLED：能力已停用
-                return Result.failure(409, r.getCode().name());
-        }
+        // steerId 未传时由后端生成 "s_" + UUID，经回执 getSteerId() 返回
+        return toResult(steer.steerOnRun(session, runId, steerId, text, InputOrigin.channel("web")), "STEERED");
     }
 
     @Post
@@ -409,7 +394,7 @@ public class SteerAdminController {
                                               @Param("steerId") String steerId) {
         SteerExtension steer = steer();
         if (steer == null) return Result.failure(503, "STEER_UNAVAILABLE");
-        return toResult(steer.cancelOnRun(engine.getSessionOrNull(sessionId), runId, steerId));
+        return toResult(steer.cancelOnRun(engine.getSessionOrNull(sessionId), runId, steerId), "CANCELED");
     }
 
     @Post
@@ -420,18 +405,27 @@ public class SteerAdminController {
         if (steer == null) return Result.failure(503, "STEER_UNAVAILABLE");
         List<String> ids = (steerIds == null || steerIds.trim().isEmpty())
                 ? null : Arrays.asList(steerIds.split(","));          // null = 清空全部（不比对轮次）
-        return toResult(steer.cancelPending(engine.getSessionOrNull(sessionId), ids));
+        return toResult(steer.cancelPending(engine.getSessionOrNull(sessionId), ids), "CANCELED");
     }
 
-    private static Result<Map<String, Object>> toResult(SteerCancelResult r) {
-        if (r.isCanceled()) {
+    /** 投递与撤销共用一套映射：粗码决定 HTTP 状态，细分码原样作应答码 */
+    private static Result<Map<String, Object>> toResult(HarnessResult<SteerReceipt> r, String okStatus) {
+        if (r.isOk()) {
+            SteerReceipt receipt = r.getValue();
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("canceled", r.getCanceled());
-            data.put("pending", r.getRemaining());                    // 直接回填剩余条数，不必再查一次
+            data.put("status", okStatus);
+            if (receipt.getSteerId() != null) {
+                data.put("steerId", receipt.getSteerId());
+            } else {
+                data.put("canceled", receipt.getCanceled());          // 批量撤销：实际移除条数
+            }
+            data.put("queued", receipt.getPending());                 // 操作后仍待生效条数，不必再查一次
             return Result.succeed(data);
         }
+        // INVALID（EMPTY_TEXT / TEXT_TOO_LONG / INVALID_STEER_ID）：前端提示后不再重试；
+        // 其余（NOT_RUNNING / RUN_CHANGED / BOX_FULL / DUPLICATE_STEER_ID / NOT_PENDING / DISABLED / NOT_OWNER）→ 409。
         // NOT_PENDING：已被注入或已转排队，终态以 applied / dropped 事件为准，不能宣称撤销成功
-        return Result.failure(r.getCode() == SteerCancelResult.Code.INVALID_STEER_ID ? 400 : 409, r.getCode().name());
+        return Result.failure(r.getCode() == HarnessResult.Code.INVALID ? 400 : 409, r.getReasonOrCode());
     }
 }
 ```
@@ -445,9 +439,9 @@ public class SteerAdminController {
 
 ### 5.4 状态码与界面处理
 
-| `steerOnRun` 结果 | 原因 | 建议的界面处理 |
+| `steerOnRun` 结果（`getReasonOrCode()`） | 原因 | 建议的界面处理 |
 |---|---|---|
-| `STEERED` | 已进邮箱，下一个推理边界注入 | 显示"待生效"气泡，等 `SteerAppliedEvent` / `SteerDroppedEvent` |
+| `OK` | 已进邮箱，下一个推理边界注入 | 显示"待生效"气泡，等 `SteerAppliedEvent` / `SteerDroppedEvent` |
 | `NOT_RUNNING` | 当前没有运行中的轮次 | 回落为普通发送 |
 | `RUN_CHANGED` | `runId` 为空、已不是当前轮次，或当前无轮次 | 转为排队（或提示刷新） |
 | `BOX_FULL` | 本轮邮箱已满 | 提示"可改为排队" |
@@ -470,7 +464,7 @@ engine.setExtensionEnabled(steer, true);
 2. **降级由界面决定**：插件不代为排队或直接发送。`NOT_RUNNING` 一般回落为普通发送，`RUN_CHANGED` / `BOX_FULL` 一般转排队（调 queue 的管理接口）。
 3. **撤销以返回值为准**：`pending` 只是快照，读到的下一刻就可能被推理线程消费；`cancelOnRun` 返回 `NOT_PENDING` 时不能把气泡删掉，要等 applied / dropped 事件给出终态。
 4. **orphans 不比对轮次**：转排队失败的残留与轮次无关，任务结束后也能撤；批量撤销（`cancelPending`）同样不比对轮次。
-5. **"停止"按钮不是插话**：要停下当前任务用宿主的停止入口 `engine.interrupt(session)`，之后只能排队，不能再插话。
+5. **"停止"按钮不是插话**：要停下当前任务用宿主的停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT)`，之后只能排队，不能再插话。
 6. **能力缺失与状态不允许分开报**：扩展没装配时返回 503（示例的 `STEER_UNAVAILABLE`），不要和 409 的状态码混在一起，前端才能区分"隐藏入口"和"这次没投进去"。
 
 ---
@@ -487,21 +481,33 @@ engine.setExtensionEnabled(steer, true);
 
 三个值都必须为正数，否则 `build()` 抛 `IllegalArgumentException("steer limits must be positive")`。`new SteerExtension()` 等价于 `builder().build()`（`SteerLimits.DEFAULT`）。
 
-### 6.2 SteerResult.Code（投递）
+### 6.2 结果码与细分码
 
-| 值 | 含义 |
+所有插件门面统一返回 `HarnessResult`：steer 的投递（`steer` / `steerOnRun`）与撤销（`cancelOnRun` / `cancelPending`）都返回 `HarnessResult<SteerReceipt>`。结果分两层：粗码 `getCode()` 决定处置（HTTP 状态），细分码 `getReason()` 取值即应答码，常量在 `SteerExtension.REASON_*`（值为常量名去掉 `REASON_`，如 `REASON_BOX_FULL = "BOX_FULL"`）。成功判定用 `r.isOk()`，细分判定用 `r.hasReason(SteerExtension.REASON_X)`，透传前端用 `r.getReasonOrCode()`。
+
+| 粗码 | 细分码（`SteerExtension` 常量） | 含义 | 适用 |
+|---|---|---|---|
+| `OK` | — | 投递：已进入本轮邮箱，将在下一个推理边界注入；撤销：已从待生效列表移除（批量撤销在持有节点上恒为 OK，看 `getCanceled()`） | 全部 |
+| `CONFLICT` | `NOT_RUNNING`（`REASON_NOT_RUNNING`） | 当前没有运行中的轮次（`runId` 为 null 的投递；`session` 为 null 也返回它） | 投递 |
+| `CONFLICT` | `RUN_CHANGED`（`REASON_RUN_CHANGED`） | 请求所带 `runId` 为空（仅 `steerOnRun`）、已不是当前轮次，或当前无轮次；撤销时只针对本轮邮箱（orphans 不比对轮次） | 投递 / `cancelOnRun` |
+| `CONFLICT` | `DUPLICATE_STEER_ID`（`REASON_DUPLICATE_STEER_ID`） | 同一 steerId 已在邮箱中（重试幂等） | 投递 |
+| `CONFLICT` | `NOT_PENDING`（`REASON_NOT_PENDING`） | 不在待生效列表（已注入或已转排队） | `cancelOnRun` |
+| `FULL` | `BOX_FULL`（`REASON_BOX_FULL`） | 本轮邮箱已满 | 投递 |
+| `INVALID` | `EMPTY_TEXT`（`REASON_EMPTY_TEXT`） | 正文为空或全空白 | 投递 |
+| `INVALID` | `TEXT_TOO_LONG`（`REASON_TEXT_TOO_LONG`） | 正文超长 | 投递 |
+| `INVALID` | `INVALID_STEER_ID`（`REASON_INVALID_STEER_ID`） | steerId 超过长度上限；撤销时为空或超长 | 投递 / `cancelOnRun` |
+| `DISABLED` | — | 扩展已停用，本次未入邮箱（撤销不受开关控制） | 投递 |
+| `NOT_OWNER` | — | 多节点：会话由其它节点持有，`getOwner()` 为持有者 | 全部 |
+
+HTTP 映射建议（与 5.2 示例一致）：`INVALID` → 400，其余失败 → 409，应答码取 `getReasonOrCode()`（无细分码时为粗码名，如 `DISABLED`）。
+
+`SteerReceipt`（OK 时的 `getValue()`，不可变）访问器：
+
+| 方法 | 说明 |
 |---|---|
-| `STEERED` | 已进入本轮邮箱，将在下一个推理边界注入 |
-| `NOT_RUNNING` | 当前没有运行中的轮次（`runId` 为 null 的投递；`session` 为 null 也返回它） |
-| `RUN_CHANGED` | 请求所带 `runId` 为空（仅 `steerOnRun`）、已不是当前轮次，或当前无轮次 |
-| `BOX_FULL` | 本轮邮箱已满 |
-| `DUPLICATE_STEER_ID` | 同一 steerId 已在邮箱中（重试幂等） |
-| `EMPTY_TEXT` | 正文为空或全空白 |
-| `TEXT_TOO_LONG` | 正文超长 |
-| `INVALID_STEER_ID` | steerId 超过长度上限 |
-| `DISABLED` | 扩展已停用，本次未入邮箱 |
-
-`SteerResult` 访问器：`getCode()`、`getSteerId()`、`getPendingCount()`（投递后本轮邮箱条数）、`isSteered()`、`isBoxFull()`、`isNotRunning()`、`isRunChanged()`。
+| `getSteerId()` | 插话标识（投递与单条撤销时为目标 steerId；批量撤销为 null） |
+| `getCanceled()` | 实际撤销条数（投递为 0；已被消费的不计入） |
+| `getPending()` | 操作后仍待生效的条数（本轮邮箱 + orphans） |
 
 `steerOnRun` 的入参情形：
 
@@ -512,20 +518,9 @@ engine.setExtensionEnabled(steer, true);
 | 同一 `steerId` 已在邮箱 | `DUPLICATE_STEER_ID`（先判重再判容量，满邮箱中的重试也能拿到准确结果） |
 | `steerId` 为 null | 由后端生成 `"s_" + UUID` |
 
-投递后的复查：入邮箱后会在锁外复查会话是否仍忙（`engine.status(session)` 的 busy 或 admitting），并比对轮次代际。不忙或已换轮时尝试回滚：回滚成功报 `NOT_RUNNING`（同轮）/ `RUN_CHANGED`（换轮）；回滚失败（已被注入或已转排队）一律报 `STEERED`，防止调用方降级后重复执行。
+投递后的复查：入邮箱后会在锁外复查会话是否仍忙（`engine.status(session)` 的 busy 或 admitting），并比对轮次代际。不忙或已换轮时尝试回滚：回滚成功报 `NOT_RUNNING`（同轮）/ `RUN_CHANGED`（换轮）；回滚失败（已被注入或已转排队）一律报 `OK`，防止调用方降级后重复执行。
 
-### 6.3 SteerCancelResult.Code（撤销）
-
-| 值 | 含义 |
-|---|---|
-| `CANCELED` | 已从待生效列表移除（批量撤销恒为此值，看 `getCanceled()`） |
-| `NOT_PENDING` | 不在待生效列表（已注入或已转排队） |
-| `RUN_CHANGED` | `runId` 为空或不是当前轮次（只针对本轮邮箱；orphans 不比对轮次） |
-| `INVALID_STEER_ID` | steerId 为空或超长 |
-
-访问器：`getCode()`、`getSteerId()`（批量为 null）、`getCanceled()`、`getRemaining()`、`isCanceled()`。
-
-### 6.4 事件
+### 6.3 事件
 
 | 事件 | 时机 | 主要方法 |
 |---|---|---|
@@ -539,7 +534,7 @@ engine.setExtensionEnabled(steer, true);
 
 `SteerMessage`：`getId()`、`getText()`、`getOrigin()`（永不为 null）。
 
-### 6.5 常量与键
+### 6.4 常量与键
 
 | 常量 | 值 | 说明 |
 |---|---|---|
@@ -554,12 +549,12 @@ engine.setExtensionEnabled(steer, true);
 | 方法 | 返回 | 受开关控制 | 时态 | 说明 |
 |---|---|---|---|---|
 | `new SteerExtension()` / `builder()…build()` | — | — | 装配 | 装配 |
-| `steer(session, text)` | `SteerResult` | 是 | 使用 | 投给当前活跃轮次，来源 `NONE` |
-| `steer(session, text, origin)` | `SteerResult` | 是 | 使用（`/steer` 同路径） | 同上，携带来源 |
-| `steerOnRun(session, runId, steerId, text)` | `SteerResult` | 是 | 管理 | 严格轮次绑定 |
-| `steerOnRun(session, runId, steerId, text, origin)` | `SteerResult` | 是 | 管理 | 同上，携带来源 |
-| `cancelOnRun(session, runId, steerId)` | `SteerCancelResult` | 否 | 管理 | 撤销一条 |
-| `cancelPending(session, ids)` | `SteerCancelResult` | 否 | 管理 | 批量撤销，null = 全部 |
+| `steer(session, text)` | `HarnessResult<SteerReceipt>` | 是 | 使用 | 投给当前活跃轮次，来源 `NONE` |
+| `steer(session, text, origin)` | `HarnessResult<SteerReceipt>` | 是 | 使用（`/steer` 同路径） | 同上，携带来源 |
+| `steerOnRun(session, runId, steerId, text)` | `HarnessResult<SteerReceipt>` | 是 | 管理 | 严格轮次绑定 |
+| `steerOnRun(session, runId, steerId, text, origin)` | `HarnessResult<SteerReceipt>` | 是 | 管理 | 同上，携带来源 |
+| `cancelOnRun(session, runId, steerId)` | `HarnessResult<SteerReceipt>` | 否 | 管理 | 撤销一条 |
+| `cancelPending(session, ids)` | `HarnessResult<SteerReceipt>` | 否 | 管理 | 批量撤销，null = 全部 |
 | `pending(session)` | `List<SteerMessage>` | 否 | 管理 | 待生效快照（副本） |
 | `activeRunId(session)` | `String` | 否 | 管理 | 当前轮次，无则 null |
 | `getLimits()` | `SteerLimits` | — | — | 生效的容量约束 |

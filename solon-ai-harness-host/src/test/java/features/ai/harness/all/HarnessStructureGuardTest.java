@@ -9,7 +9,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -196,6 +198,29 @@ class HarnessStructureGuardTest {
             "HarnessEngine.java#public ReActRequest prompt(",
             "HarnessEngine.java#public ReActRequest resume(");
 
+    /**
+     * 白名单：4.1.x 已发布、4.2.0 收进视图（{@code getTalents()} / {@code getSettings()}）的引擎方法，
+     * 保留一个版本的委托桥接（4.3.0 删除）。只列方法名：同名重载（如 setHttpProxy）一并放行。
+     */
+    private static final Set<String> ENGINE_MOVED_TO_VIEWS = new HashSet<>(Arrays.asList((
+            "getTerminalTalent getSkillTalent getTodoTalent getTaskTalent getCodeTalent getMemoryTalent "
+                    + "getGenerateTalent getCodeSearchTalent getClockTalent getWebsearchTalent getWebfetchTalent "
+                    + "getMcpGatewayTalent getOpenApiGatewayTalent getLspTalent "
+                    + "getHarnessHome getHarnessSessions getHarnessSkills getHarnessAgents getHarnessCommands "
+                    + "getHarnessMemory getHarnessChannels getUserDir getUserHome getUserAgent getCacheControl "
+                    + "getSystemPrompt getMaxTurns isAutoRethink getSessionWindowSize getCompressionMaxMessages "
+                    + "getCompressionMaxContextRatio getCompressionDefaultContextLength isMemoryEnabled "
+                    + "isSandboxEnabled isHitlEnabled isSubagentEnabled isBashAsyncEnabled getCommandPrefix "
+                    + "getAgentPrefix getApiRetries getMcpRetries getModelRetries setMaxTurns setModelRetries "
+                    + "setMcpRetries setApiRetries setMemoryEnabled setMemoryRelevanceCount setMemoryPriorityCount "
+                    + "setMemorySummaryLength setSandboxEnabled setSandboxAllowUserHome isSandboxSystemRestrict "
+                    + "setSandboxSystemRestrict setHitlEnabled setSubagentEnabled getSubagentDefaultConcurrency "
+                    + "setSubagentDefaultConcurrency setBashAsyncEnabled setSessionWindowSize "
+                    + "setCompressionThreshold setCompressionDefaultContextLength setSystemPrompt setCacheControl "
+                    + "setHttpProxy getHttpProxy addHttpCustomize setHttpCustomize getHttpCustomize").split(" ")));
+
+    private static final Pattern PUBLIC_METHOD = Pattern.compile("public [\\w<>?,. \\[\\]]+? (\\w+)\\(");
+
     @Test
     void noDeprecatedInMainCode() throws IOException {
         List<String> violations = new ArrayList<>();
@@ -220,6 +245,12 @@ class HarnessStructureGuardTest {
         for (int j = from + 1; j < lines.length; j++) {
             String t = lines[j].trim();
             if (t.startsWith("public ") || t.startsWith("protected ")) {
+                if ("HarnessEngine.java".equals(fileName)) {
+                    Matcher m = PUBLIC_METHOD.matcher(t);
+                    if (m.lookingAt() && ENGINE_MOVED_TO_VIEWS.contains(m.group(1))) {
+                        return true;
+                    }
+                }
                 for (String allowed : DEPRECATED_ALLOWED) {
                     int sep = allowed.indexOf('#');
                     if (allowed.substring(0, sep).equals(fileName) && t.startsWith(allowed.substring(sep + 1))) {

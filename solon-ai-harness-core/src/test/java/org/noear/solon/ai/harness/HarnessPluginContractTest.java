@@ -173,7 +173,7 @@ class HarnessPluginContractTest {
         backlog.offer(session, "排队一");
         AtomicInteger disposed = busy(session);
 
-        assertTrue(engine.interrupt(session));
+        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT).getValue());
         assertEquals(1, backlog.interrupts);
         assertTrue(backlog.busyAtInterrupt, "必须先清积压再停流（回调时流仍在）");
         assertEquals(1, disposed.get());
@@ -189,7 +189,7 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         backlog.offer(session, "排队一");
 
-        assertFalse(engine.interrupt(session), "无运行流时返回 false");
+        assertFalse(engine.interrupt(session, InterruptMode.INTERRUPT).getValue(), "无运行流时返回 false");
         assertEquals(1, backlog.interrupts, "没有流也要清积压");
 
         backlog.offer(session, "排队二");
@@ -216,7 +216,7 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         AtomicInteger disposed = busy(session);
 
-        assertTrue(engine.interrupt(session), "单个扩展异常不得阻止中断生效");
+        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT).getValue(), "单个扩展异常不得阻止中断生效");
         assertEquals(1, disposed.get());
         assertEquals(1, backlog.interrupts, "后续扩展仍被回调");
     }
@@ -229,9 +229,9 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
 
         busy(session);
-        engine.cancelStream(session);
+        engine.interrupt(session, InterruptMode.CANCEL_STREAM);
         busy(session);
-        engine.preemptStream(session);
+        engine.interrupt(session, InterruptMode.PREEMPT_STREAM);
 
         assertEquals(0, backlog.interrupts, "只停流是程序行为，不通知插件");
         assertTrue(session.getMessages().isEmpty());
@@ -239,7 +239,7 @@ class HarnessPluginContractTest {
 
     @Test
     void interruptWithNullSessionIsSafe() {
-        assertFalse(engine().interrupt(null));
+        assertFalse(engine().interrupt(null, InterruptMode.INTERRUPT).getValue());
         assertNull(engine().prepareInterrupt(null));
     }
 
@@ -463,7 +463,8 @@ class HarnessPluginContractTest {
 
         InputOutcome noBacklog = engine.handle(HarnessInput.of(session, "hello"));
         assertEquals(InputOutcome.Kind.REJECTED, noBacklog.getKind(), "没装积压能力时无处可延");
-        assertEquals("busy", noBacklog.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.BUSY, noBacklog.getRejectReason());
+        assertEquals("busy", noBacklog.getRejectReason().code(), "线上协议值保持小写");
 
         StubBacklog backlog = new StubBacklog();
         engine.addExtension(backlog);

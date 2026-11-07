@@ -46,7 +46,7 @@ solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终�
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
-import org.noear.solon.ai.harness.host.StopMode;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.Submitted;
 
 HarnessHost host = HarnessHost.builder()
@@ -62,7 +62,7 @@ HarnessHost host = HarnessHost.builder()
 
 Submitted r = host.submit(tenant, sid, text, origin);                 // 使用态
 host.decide(tenant, sid, callId, HITLAction.APPROVE, null, origin);  // 审批
-host.stop(tenant, sid, StopMode.STOP_AND_CLEAR);                      // 停止
+host.interrupt(tenant, sid, InterruptMode.INTERRUPT);                      // 停止
 host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
         (loop, s) -> HarnessResult.ok(loop.list(sid)));               // 管理态
 ```
@@ -71,12 +71,12 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 
 | 类型 | 作用 |
 |---|---|
-| `HarnessHost` | 骨架本体：`engine` / `warmup` / `submit` / `decide` / `stop` / `drain` / `admin` |
+| `HarnessHost` | 骨架本体：`engine` / `warmup` / `submit` / `decide` / `interrupt` / `drain` / `admin` |
 | `HostSink` | 输出通道：`reply`、`event` 必须实现；`runStarted`、`runFinished`、`hitl`、`forward` 有缺省实现 |
 | `HostRun` | 一条运行流的只读描述：租户、会话、来源、代理名、是否队列派发、是否后台轮次、后台轮次的最终文本 |
 | `Submitted` | `submit` / `decide` 的结果，只用于映射状态码（内容已经经 sink 发出） |
-| `StopMode` | `STOP_AND_CLEAR` / `STOP_RUN` |
-| `AdminGateway` | 管理入口：`call(sid, op, 扩展类型, 操作)` 与 `stop(sid, mode)` |
+| `InterruptMode` | `INTERRUPT` / `CANCEL_STREAM` |
+| `AdminGateway` | 管理入口：`call(sid, op, 扩展类型, 操作)` 与 `interrupt(sid, mode)` |
 | `AdminAuthorizer` | 管理入口的统一鉴权钩子 |
 
 结果类型 `HarnessResult` 在 core（`org.noear.solon.ai.harness.HarnessResult`），插件的写门面直接返回它，所以管理入口不用做任何翻译。
@@ -101,7 +101,7 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 | `warmup(tenants)` | `int` | 预热有后台工作的租户（单个失败只记日志），返回成功数。不要绕过本类直接 `pool.warmup`，否则后台轮次不经 sink、结束后也不续发 |
 | `submit(tenant, sid, text, origin[, customizer])` | `Submitted` | 提交用户输入（含斜杠命令）；`customizer` 补充附件、显式模型 / 子代理、`attr(...)` |
 | `decide(tenant, sid, callId, action, note, origin)` | `Submitted` | 提交审批决策；本批齐备时直接续流（`STARTED`） |
-| `stop(tenant, sid, mode)` | `HarnessResult<Boolean>` | 值为「确有运行中的流被停掉」；`NOT_FOUND` / `NOT_OWNER` |
+| `interrupt(tenant, sid, mode)` | `HarnessResult<Boolean>` | 值为「确有运行中的流被停掉」；`NOT_FOUND` / `NOT_OWNER` |
 | `drain(tenant, sid)` | `void` | 立即尝试续发积压（忙时什么都不做）；`submit`、运行终态、`AdminGateway` 已自动调用 |
 | `admin(tenant[, principal])` | `AdminGateway` | 管理入口 |
 
@@ -112,20 +112,23 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 | `STARTED` | 已开流 | 200 |
 | `REPLY` | 命令已执行，只有回执 | 200 |
 | `DEFERRED` | 会话忙，已排队（`getBacklogPosition()`），空闲后自动续发 | 202 |
-| `REJECTED` | 未受理（`getRejectReason()`） | 404（`session_not_found`）/ 307（`not_owner`）/ 403（`scope_unavailable`）/ 503（`engine_closed`）/ 409（其余） |
+| `REJECTED` | 未受理（`getRejectReason()`，`RejectReason` 枚举） | 404（`SESSION_NOT_FOUND`）/ 307（`NOT_OWNER`）/ 403（`SCOPE_UNAVAILABLE`）/ 503（`ENGINE_CLOSED`）/ 409（其余） |
 | `HITL` | 审批已记录但本批未齐备，或卡已失效 | 200 |
 | `IGNORED` | 空输入 | 200 |
 
-`Kind` 与 core 的 `InputOutcome.Kind` 一一对应，只有 `TASK` 在骨架层叫 `STARTED`（骨架已经替你开了流）。拒绝原因码除 `Submitted.REJECT_SESSION_NOT_FOUND` 外都是 `InputOutcome.REJECT_*`。
+`Kind` 与 core 的 `InputOutcome.Kind` 一一对应，只有 `TASK` 在骨架层叫 `STARTED`（骨架已经替你开了流）。拒绝原因统一为 `InputOutcome.RejectReason` 枚举（`Submitted.getRejectReason()` 与 core 同一类型），其中 `SESSION_NOT_FOUND` 只由宿主层给出；分流写 `switch (r.getRejectReason()) { case NOT_OWNER: ... }`，线上值（如 `busy`、`not_owner`、`session_not_found`）用 `getRejectReason().code()`。文案由 `HostSink.rejectText(RejectReason reason, String detail)` 定制。
 
-### 4.4 StopMode
+### 4.4 InterruptMode
 
-| 值 | 行为 | 对应引擎入口 |
-|---|---|---|
-| `STOP_AND_CLEAR` | 用户点「停止」：清空排队、停当前流、在历史里补写取消消息 | `engine.interrupt` |
-| `STOP_RUN` | 只停当前流，保留排队（结束后续发下一条），不写历史 | `engine.cancelStream` |
+`host.interrupt` / `admin.interrupt` 直接使用 core 的 `InterruptMode`，与 `engine.interrupt(session, mode)` 同一枚举、同一语义：
 
-引擎上的其余停流形态（`preemptStream`、两段式 `prepareInterrupt`）属于 L1，骨架不暴露。
+| 值 | 行为 |
+|---|---|
+| `INTERRUPT` | 用户点「停止」：清空排队、停当前流、在历史里补写取消消息 |
+| `CANCEL_STREAM` | 只停当前流，保留排队（结束后续发下一条），不写历史 |
+| `PREEMPT_STREAM` | 为新一轮腾位：只停流，不推进取消代数（骨架宿主一般用不到） |
+
+两段式 `prepareInterrupt`（自定义终态时序）属于 L1，骨架不暴露。
 
 ### 4.5 AdminGateway
 
@@ -138,7 +141,7 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 5. 会话不存在 → `NOT_FOUND`（只查不建）
 6. 执行 `action(扩展, 会话)`，返回它给出的 `HarnessResult`；action 返回 null 视为 `OK`
 
-`OK` 之后自动续发积压（入队、置顶后会话空闲就立即执行）。action 里抛出的 `NotOwnerException` 译为 `NOT_OWNER`，`IllegalArgumentException` / `IllegalStateException` 译为 `INVALID`——这只是给宿主自己的扩展兜底，goal / loop / queue 的写门面本身不抛业务异常。
+`OK` 之后自动续发积压（入队、置顶后会话空闲就立即执行）。action 里抛出的 `NotOwnerException` 译为 `NOT_OWNER`，`IllegalArgumentException` 译为 `INVALID`、`IllegalStateException` 译为 `CONFLICT`——这只是给宿主自己的扩展兜底，goal / loop / queue / steer 的写门面本身不抛业务异常。
 
 ```java
 AdminGateway admin = host.admin(tenant, principal);
@@ -149,16 +152,14 @@ HarnessResult<Integer> pos = admin.call(sid, "queue.enqueue", QueueExtension.cla
 HarnessResult<Void> paused = admin.call(sid, "goal.pause", GoalExtension.class,
         (goal, s) -> goal.pause(sid));
 
-admin.stop(sid, StopMode.STOP_RUN);   // 鉴权操作名固定为 "stop"
+admin.interrupt(sid, InterruptMode.CANCEL_STREAM);   // 鉴权操作名固定为 "interrupt"
 ```
 
-steer 的门面返回自己的 `SteerResult`（码值直接下发前端），在 `call` 里按需包一层即可：
+所有插件门面统一返回 `HarnessResult`，steer 也不例外（`HarnessResult<SteerReceipt>`，细分码见 `SteerExtension.REASON_*`），可以直接交出去：
 
 ```java
 admin.call(sid, "steer.cancel", SteerExtension.class, (steer, s) -> {
-    SteerCancelResult r = steer.cancelPending(s, null);
-    return r.getCode() == SteerCancelResult.Code.CANCELED
-            ? HarnessResult.ok(r.getCanceled()) : HarnessResult.invalid(r.getCode().name());
+    return steer.cancelPending(s, null);   // OK 时 getValue().getCanceled() / getPending()
 });
 ```
 

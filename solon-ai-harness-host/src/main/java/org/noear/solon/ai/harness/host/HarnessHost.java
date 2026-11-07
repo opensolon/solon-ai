@@ -10,6 +10,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.RunTicket;
 import org.noear.solon.ai.harness.extension.goal.GoalExecutor;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
@@ -23,6 +24,7 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 
@@ -56,7 +58,7 @@ import java.util.function.UnaryOperator;
  *
  * Submitted r = host.submit(tenant, sessionId, text, origin);   // 使用态
  * host.decide(tenant, sessionId, callId, HITLAction.APPROVE, null, origin);   // 审批
- * host.stop(tenant, sessionId, StopMode.STOP_AND_CLEAR);                  // 停止
+ * host.interrupt(tenant, sessionId, InterruptMode.INTERRUPT);             // 停止
  * host.admin(tenant, principal).call(sessionId, "loop.list", LoopExtension.class,
  *         (loop, s) -> HarnessResult.ok(loop.list(sessionId)));  // 管理态（任意扩展同一写法）
  * }</pre>
@@ -194,13 +196,15 @@ public final class HarnessHost {
     }
 
     /**
-     * 停止会话的运行。
+     * 中断会话的运行（方式见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT}，
+     * 只停当前运行、保留排队用 {@code CANCEL_STREAM}）。
      *
      * @return OK（值为「确有运行中的流被停掉」）、NOT_FOUND、NOT_OWNER
      */
-    public HarnessResult<Boolean> stop(String tenant, String sessionId, StopMode mode) {
+    public HarnessResult<Boolean> interrupt(String tenant, String sessionId, InterruptMode mode) {
         Objects.requireNonNull(mode, "mode");
         HarnessEngine engine = engine(tenant);
+        // 先查归属再加载会话：非持有节点不把会话装进内存
         OwnerCheck owner = engine.checkOwner(sessionId);
         if (owner.isOwned() == false) {
             return HarnessResult.notOwner(owner.getOwner());
@@ -209,11 +213,7 @@ public final class HarnessHost {
         if (session == null) {
             return HarnessResult.fail(HarnessResult.Code.NOT_FOUND, "session not found");
         }
-        if (mode == StopMode.STOP_AND_CLEAR) {
-            return HarnessResult.ok(engine.interrupt(session));
-        } else {
-            return HarnessResult.ok(engine.cancelStream(session));
-        }
+        return engine.interrupt(session, mode);
     }
 
     /**
@@ -259,19 +259,19 @@ public final class HarnessHost {
             OwnerCheck owner = engine.checkOwner(sessionId);
             if (owner.isOwned() == false) {
                 safe(() -> sink.forward(origin, owner.getOwner()));
-                return Submitted.rejected(InputOutcome.REJECT_NOT_OWNER);
+                return Submitted.rejected(RejectReason.NOT_OWNER);
             }
 
             // 只查不建：getSession 会凭空新建会话
             AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) {
-                reply(origin, sink.rejectText(Submitted.REJECT_SESSION_NOT_FOUND, null));
-                return Submitted.rejected(Submitted.REJECT_SESSION_NOT_FOUND);
+                reply(origin, sink.rejectText(RejectReason.SESSION_NOT_FOUND, null));
+                return Submitted.rejected(RejectReason.SESSION_NOT_FOUND);
             }
 
             InputOutcome outcome = engine.handle(inputOf.apply(session));
             if (attempt == 0 && outcome.getKind() == InputOutcome.Kind.REJECTED
-                    && InputOutcome.REJECT_ENGINE_CLOSED.equals(outcome.getRejectReason())) {
+                    && outcome.getRejectReason() == RejectReason.ENGINE_CLOSED) {
                 // 引擎刚被池回收：持有的是过期引用，换新引擎重试一次
                 continue;
             }
@@ -306,8 +306,8 @@ public final class HarnessHost {
                 drainUnless(c, inClaim);
                 return Submitted.deferred(outcome.getBacklogPosition());
             case REJECTED: {
-                String reason = outcome.getRejectReason();
-                if (InputOutcome.REJECT_NOT_OWNER.equals(reason)) {
+                RejectReason reason = outcome.getRejectReason();
+                if (reason == RejectReason.NOT_OWNER) {
                     final InputOrigin r = route;
                     safe(() -> sink.forward(r, outcome.getRejectDetail()));
                 } else {
@@ -482,7 +482,7 @@ public final class HarnessHost {
         if (outcome.getKind() != InputOutcome.Kind.TASK) {
             // 忙 / 待审批等未受理结局：本轮跳过，不计失败
             return ProgramResult.skip(outcome.getRejectReason() != null
-                    ? outcome.getRejectReason() : "input not admitted: " + outcome.getKind());
+                    ? outcome.getRejectReason().code() : "input not admitted: " + outcome.getKind());
         }
 
         // 同线程同步执行，没有调度窗口，不需要 RunTicket

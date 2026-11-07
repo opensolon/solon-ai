@@ -63,15 +63,15 @@ public class AgentFactory {
         ReActAgent.Builder builder = ReActAgent.of(chatModel);
 
         builder.name(agentDefinition.getName());
-        builder.retryConfig(engine.getModelRetries(), 1000L);
-        builder.maxTurns(engine.getMaxTurns());
-        builder.autoRethink(engine.isAutoRethink());
-        builder.sessionWindowSize(engine.getSessionWindowSize());
+        builder.retryConfig(engine.getSettings().getModelRetries(), 1000L);
+        builder.maxTurns(engine.getSettings().getMaxTurns());
+        builder.autoRethink(engine.getSettings().isAutoRethink());
+        builder.sessionWindowSize(engine.getSettings().getSessionWindowSize());
         builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
         builder.defaultInterceptorAdd(9, engine.getStopLoopInterceptor());
         // 作用域守卫：主/子代理都常驻且最先执行（早于 HITL）
         builder.defaultInterceptorAdd(ScopeGuardInterceptor.INDEX, new ScopeGuardInterceptor(t -> {
-            McpGatewayTalent mcp = engine.getMcpGatewayTalent();
+            McpGatewayTalent mcp = engine.getTalents().getMcpGateway();
             return mcp == null ? null : mcp.getServerOfTool(t);
         }, t -> engine.getExtensions().stream().anyMatch(e -> e.getToolNames().contains(t)), engine::isScopeRequired));
 
@@ -85,7 +85,7 @@ public class AgentFactory {
 
         if (Assert.isNotEmpty(metadata.getTools())) {
             //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
-            TerminalTalentProxy terminalTalentProxy = new TerminalTalentProxy(engine.getTerminalTalent());
+            TerminalTalentProxy terminalTalentProxy = new TerminalTalentProxy(engine.getTalents().getTerminal());
 
             for (String toolName : metadata.getTools()) {
                 for (String t1 : ToolName.expand(toolName)) {
@@ -97,7 +97,7 @@ public class AgentFactory {
                 builder.defaultTalentAdd(terminalTalentProxy);
             }
 
-            builder.defaultTalentAdd(engine.getClockTalent());
+            builder.defaultTalentAdd(engine.getTalents().getClock());
         }
 
         // 无条件回调：扩展自己在 setEnabled 里把开关传播给子组件（Talent/Interceptor/Command），
@@ -114,21 +114,21 @@ public class AgentFactory {
         }
 
         builder.modelOptions(o -> {
-            if (engine.getCacheControl() != null) {
-                o.cacheControl(engine.getCacheControl());
+            if (engine.getSettings().getCacheControl() != null) {
+                o.cacheControl(engine.getSettings().getCacheControl());
             }
 
             o.httpCustomizeAdd(http -> {
-                if (Assert.isNotEmpty(engine.getUserAgent())) {
-                    http.userAgent(engine.getUserAgent());
+                if (Assert.isNotEmpty(engine.getSettings().getUserAgent())) {
+                    http.userAgent(engine.getSettings().getUserAgent());
                 }
 
-                if (engine.getHttpProxy() != null) {
-                    http.proxy(engine.getHttpProxy());
+                if (engine.getSettings().getHttpProxy() != null) {
+                    http.proxy(engine.getSettings().getHttpProxy());
                 }
 
-                if (engine.getHttpCustomize() != null) {
-                    engine.getHttpCustomize().accept(http);
+                if (engine.getSettings().getHttpCustomize() != null) {
+                    engine.getSettings().getHttpCustomize().accept(http);
                 }
             });
         });
@@ -173,32 +173,32 @@ public class AgentFactory {
                 break;
             }
             case "webfetch": {
-                builder.defaultTalentAdd(engine.getWebfetchTalent());
+                builder.defaultTalentAdd(engine.getTalents().getWebfetch());
                 break;
             }
             case "websearch": {
-                builder.defaultTalentAdd(engine.getWebsearchTalent());
+                builder.defaultTalentAdd(engine.getTalents().getWebsearch());
                 break;
             }
             case "codesearch": {
-                builder.defaultTalentAdd(engine.getCodeSearchTalent());
+                builder.defaultTalentAdd(engine.getTalents().getCodeSearch());
                 break;
             }
             case "skill": {
-                builder.defaultTalentAdd(engine.getSkillTalent());
+                builder.defaultTalentAdd(engine.getTalents().getSkill());
                 break;
             }
             case "subagent":
             case "task": {
-                engine.getTaskTalent().setEnabled(engine.isSubagentEnabled());
+                engine.getTalents().getTask().setEnabled(engine.getSettings().isSubagentEnabled());
 
-                builder.defaultTalentAdd(engine.getTaskTalent());
+                builder.defaultTalentAdd(engine.getTalents().getTask());
                 break;
             }
             case "generate": {
-                engine.getGenerateTalent().setEnabled(engine.isSubagentEnabled());
+                engine.getTalents().getGenerate().setEnabled(engine.getSettings().isSubagentEnabled());
 
-                builder.defaultTalentAdd(engine.getGenerateTalent());
+                builder.defaultTalentAdd(engine.getTalents().getGenerate());
                 break;
             }
 
@@ -206,24 +206,24 @@ public class AgentFactory {
 
 
             case "memory": {
-                builder.defaultTalentAdd(engine.getMemoryTalent());
+                builder.defaultTalentAdd(engine.getTalents().getMemory());
                 break;
             }
             case "code": {
-                builder.defaultTalentAdd(engine.getCodeTalent());
+                builder.defaultTalentAdd(engine.getTalents().getCode());
                 break;
             }
             case "mcp": {
-                builder.defaultTalentAdd(engine.getMcpGatewayTalent());
+                builder.defaultTalentAdd(engine.getTalents().getMcpGateway());
                 break;
             }
             case "restapi": //兼容旧的代号
             case "openapi": {
-                builder.defaultTalentAdd(engine.getOpenApiGatewayTalent());
+                builder.defaultTalentAdd(engine.getTalents().getOpenApiGateway());
                 break;
             }
             case "lsp": {
-                builder.defaultTalentAdd(engine.getLspTalent());
+                builder.defaultTalentAdd(engine.getTalents().getLsp());
                 break;
             }
             case "hitl": {
@@ -235,7 +235,7 @@ public class AgentFactory {
                     return;
                 }
 
-                engine.getHitlInterceptor().setEnabled(engine.isHitlEnabled());
+                engine.getHitlInterceptor().setEnabled(engine.getSettings().isHitlEnabled());
 
                 builder.defaultInterceptorAdd(engine.getHitlInterceptor());
                 break;
@@ -246,7 +246,7 @@ public class AgentFactory {
     private static void todoToolAddDo(AgentDefinition.Metadata metadata, ReActAgent.Builder builder, HarnessEngine engine) {
         if (metadata.isPrimary()) {
             //主代理，用文件模式
-            builder.defaultTalentAdd(engine.getTodoTalent());
+            builder.defaultTalentAdd(engine.getTalents().getTodo());
         } else {
             //次代理，用内存模式
             builder.planningMode(true);

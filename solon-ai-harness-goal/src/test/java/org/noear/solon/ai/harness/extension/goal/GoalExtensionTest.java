@@ -122,7 +122,7 @@ class GoalExtensionTest {
         GoalExtension ext = attached();
         assertTrue(ext.create(sid("s1"), GoalSpec.of("目标一")).isOk());
         HarnessResult<GoalSnapshot> second = ext.create(sid("s1"), GoalSpec.of("目标二"));
-        assertEquals(HarnessResult.Code.INVALID, second.getCode(), "单槽");
+        assertEquals(HarnessResult.Code.CONFLICT, second.getCode(), "单槽");
         assertEquals(HarnessResult.Code.NOT_FOUND, ext.create("no-such-session", GoalSpec.of("x")).getCode(),
                 "门面不新建会话");
     }
@@ -182,12 +182,12 @@ class GoalExtensionTest {
         ext.create(sid("s-str"), GoalSpec.of("目标"));
 
         assertTrue(ext.pause("s-str").isOk());
-        assertEquals(HarnessResult.Code.INVALID, ext.pause("s-str").getCode(), "已暂停不可再暂停");
+        assertEquals(HarnessResult.Code.CONFLICT, ext.pause("s-str").getCode(), "已暂停不可再暂停");
         assertEquals(GoalSnapshot.Status.PAUSED, ext.get("s-str").getStatus());
 
         assertTrue(ext.resume("s-str").isOk());
         assertEquals(GoalSnapshot.Status.PURSUING, ext.get("s-str").getStatus());
-        assertEquals(HarnessResult.Code.INVALID, ext.resume("s-str").getCode(), "活跃态不可恢复");
+        assertEquals(HarnessResult.Code.CONFLICT, ext.resume("s-str").getCode(), "活跃态不可恢复");
 
         assertTrue(ext.remove("s-str").isOk());
         assertNull(ext.get("s-str"));
@@ -204,7 +204,7 @@ class GoalExtensionTest {
         GoalExtension ext = attached();
         GoalSnapshot t = ext.create(sid("s1"), GoalSpec.of("目标")).getValue();
         ext.pause("s1");
-        assertEquals(HarnessResult.Code.INVALID, ext.trigger("s1").getCode(), "非活跃态不能触发");
+        assertEquals(HarnessResult.Code.CONFLICT, ext.trigger("s1").getCode(), "非活跃态不能触发");
     }
 
     // ==================== update ====================
@@ -259,7 +259,7 @@ class GoalExtensionTest {
         gs.achieve();
         ext.getGoalRuntime().commit(s, gs);
 
-        assertEquals(HarnessResult.Code.INVALID, ext.update("s1", GoalPatch.create().objective("x"), null).getCode());
+        assertEquals(HarnessResult.Code.CONFLICT, ext.update("s1", GoalPatch.create().objective("x"), null).getCode());
     }
 
     // ==================== 停等（update 的内部依赖） ====================

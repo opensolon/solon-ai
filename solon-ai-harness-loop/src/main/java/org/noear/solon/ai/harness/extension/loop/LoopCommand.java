@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -44,7 +45,7 @@ import java.util.List;
  * （{@code list}/{@code clear} 独占整行、{@code remove/pause/resume} 后恰好一个 id），
  * 「list the files every hour」这类自然语言照常作为提示词。</p>
  *
- * <p>停止任务只在该任务<b>正在执行</b>时才停流，且用程序级取消（{@code engine.cancelStream}）：
+ * <p>停止任务只在该任务<b>正在执行</b>时才停流，且用程序级取消（{@code InterruptMode.CANCEL_STREAM}）：
  * 定时轮次是程序发起的，不应清空用户的排队，也不应在历史里留下「用户已取消」。</p>
  *
  * @author noear
@@ -107,7 +108,7 @@ final class LoopCommand extends AbsCommand {
             tasks.removeAll(sessionId);
             if (anyRunning) {
                 // 程序级取消：不清用户的排队、不写「用户已取消」消息
-                engine.cancelStream(ctx.getSession());
+                engine.interrupt(ctx.getSession(), InterruptMode.CANCEL_STREAM);
             }
             ctx.println(ctx.color(GREEN + "All loop tasks removed." + RESET));
         } else if (argc == 2 && ("pause".equals(sub) || "resume".equals(sub))) {
@@ -127,7 +128,7 @@ final class LoopCommand extends AbsCommand {
         tasks.remove(sessionId, taskId);
         if (wasRunning) {
             // 只停正在执行的那一轮（程序级取消：不清用户的排队、不写「用户已取消」消息）
-            engine.cancelStream(ctx.getSession());
+            engine.interrupt(ctx.getSession(), InterruptMode.CANCEL_STREAM);
         }
         ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' removed." + RESET));
     }

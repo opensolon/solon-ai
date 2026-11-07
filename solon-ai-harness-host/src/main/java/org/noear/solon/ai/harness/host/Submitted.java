@@ -4,7 +4,7 @@
  */
 package org.noear.solon.ai.harness.host;
 
-import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -19,9 +19,6 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.2.0")
 public final class Submitted {
-    /** 拒绝原因：会话不存在（宿主层补充的原因码，其余见 {@code InputOutcome.REJECT_*}） */
-    public static final String REJECT_SESSION_NOT_FOUND = "session_not_found";
-
     /** 结果类型 */
     public enum Kind {
         /** 已开流（结果经 {@link HostSink#event} / {@link HostSink#runFinished} 推送） */
@@ -39,10 +36,10 @@ public final class Submitted {
     }
 
     private final Kind kind;
-    private final String rejectReason;
+    private final RejectReason rejectReason;
     private final int backlogPosition;
 
-    private Submitted(Kind kind, @Nullable String rejectReason, int backlogPosition) {
+    private Submitted(Kind kind, @Nullable RejectReason rejectReason, int backlogPosition) {
         this.kind = kind;
         this.rejectReason = rejectReason;
         this.backlogPosition = backlogPosition;
@@ -56,7 +53,7 @@ public final class Submitted {
         return new Submitted(Kind.DEFERRED, null, position);
     }
 
-    static Submitted rejected(String reason) {
+    static Submitted rejected(RejectReason reason) {
         return new Submitted(Kind.REJECTED, reason, 0);
     }
 
@@ -64,9 +61,9 @@ public final class Submitted {
         return kind;
     }
 
-    /** 拒绝原因码（仅 REJECTED）：{@code InputOutcome.REJECT_*} 或 {@link #REJECT_SESSION_NOT_FOUND} */
+    /** 拒绝原因（仅 REJECTED；与引擎同一张码表，会话不存在为 {@code SESSION_NOT_FOUND}） */
     @Nullable
-    public String getRejectReason() {
+    public RejectReason getRejectReason() {
         return rejectReason;
     }
 
@@ -84,11 +81,19 @@ public final class Submitted {
             case DEFERRED:
                 return 202;
             case REJECTED:
-                if (REJECT_SESSION_NOT_FOUND.equals(rejectReason)) return 404;
-                if (InputOutcome.REJECT_NOT_OWNER.equals(rejectReason)) return 307;
-                if (InputOutcome.REJECT_SCOPE_UNAVAILABLE.equals(rejectReason)) return 403;
-                if (InputOutcome.REJECT_ENGINE_CLOSED.equals(rejectReason)) return 503;
-                return 409;
+                if (rejectReason == null) return 409;
+                switch (rejectReason) {
+                    case SESSION_NOT_FOUND:
+                        return 404;
+                    case NOT_OWNER:
+                        return 307;
+                    case SCOPE_UNAVAILABLE:
+                        return 403;
+                    case ENGINE_CLOSED:
+                        return 503;
+                    default:
+                        return 409;
+                }
             default:
                 return 200;
         }

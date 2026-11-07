@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.extension.steer;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -111,27 +112,21 @@ class SteerCommand extends AbsCommand {
 
         SteerExtension steer = facade(engine);
         SteerLimits limits = steer.getLimits();
-        SteerResult result = steer.steer(session, text, resolved);
+        HarnessResult<SteerReceipt> result = steer.steer(session, text, resolved);
 
-        switch (result.getCode()) {
-            case STEERED:
-                ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getPendingCount() + " 条）");
-                break;
-            case BOX_FULL:
-                ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
-                break;
-            case NOT_RUNNING:
-            case RUN_CHANGED:
-                ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
-                break;
-            case TEXT_TOO_LONG:
-                ctx.println("插话内容过长（上限 " + limits.getMaxTextLength() + " 字符）");
-                break;
-            case DISABLED:
-                ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
-                break;
-            default:
-                ctx.println("插话未生效：" + result.getCode().name());
+        if (result.isOk()) {
+            ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getValue().getPending() + " 条）");
+        } else if (result.getCode() == HarnessResult.Code.DISABLED) {
+            ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
+        } else if (result.hasReason(SteerExtension.REASON_BOX_FULL)) {
+            ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
+        } else if (result.hasReason(SteerExtension.REASON_NOT_RUNNING)
+                || result.hasReason(SteerExtension.REASON_RUN_CHANGED)) {
+            ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
+        } else if (result.hasReason(SteerExtension.REASON_TEXT_TOO_LONG)) {
+            ctx.println("插话内容过长（上限 " + limits.getMaxTextLength() + " 字符）");
+        } else {
+            ctx.println("插话未生效：" + result.getReasonOrCode());
         }
     }
 }

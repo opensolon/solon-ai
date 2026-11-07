@@ -145,7 +145,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome second = engine.handle(HarnessInput.of(session, "second"));
         assertEquals(InputOutcome.Kind.REJECTED, second.getKind());
-        assertEquals(InputOutcome.REJECT_BUSY, second.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.BUSY, second.getRejectReason());
 
         first.discard();
         assertFalse(engine.status(session).isAdmitting(), "discard 立即恢复可受理");
@@ -227,7 +227,7 @@ class HandleAdmissionContractTest {
         InputOutcome outcome = engine.handle(HarnessInput.of(session, "hello"));
         assertTrue(engine.status(session).isAdmitting());
 
-        engine.interrupt(session);
+        engine.interrupt(session, InterruptMode.INTERRUPT);
         assertFalse(engine.status(session).isAdmitting(), "用户中断兜底清除占位（宿主看到已取消就不再订阅）");
         outcome.discard();
     }
@@ -247,7 +247,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome plain = engine.handle(HarnessInput.of(session, "新的问题"));
         assertEquals(InputOutcome.Kind.REJECTED, plain.getKind());
-        assertEquals(InputOutcome.REJECT_HITL_PENDING, plain.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.HITL_PENDING, plain.getRejectReason());
         assertTrue(plain.getRejectDetail().contains("bash"));
 
         InputOutcome decision = engine.handle(HarnessInput.of(session, null).hitl(HITLAction.APPROVE, "call-1"));
@@ -311,7 +311,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, "goal 的一轮", "goal"));
         assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
-        assertEquals(InputOutcome.REJECT_BUSY, outcome.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.BUSY, outcome.getRejectReason());
         assertTrue(backlog.offered.isEmpty(), "程序轮次不进积压");
         assertTrue(HarnessInput.ofProgram(session, "x", "loop").isProgram());
     }
@@ -387,5 +387,54 @@ class HandleAdmissionContractTest {
         outcome.discard();
         assertNull(err.get());
         assertFalse(engine.status(session).isAdmitting());
+    }
+
+    /** 对外判定与受理判定同一份口径：terminalOnly 的忙时命令仅终端输入算（此前对外入口一律排除） */
+    @Test
+    void runnableWhenBusyMatchesAdmissionForTerminalOnlyCommand() {
+        HarnessEngine engine = engine();
+        engine.getCommandRegistry().register(new Command() {
+            @Override
+            public String name() {
+                return "tty";
+            }
+
+            @Override
+            public String description() {
+                return "tty";
+            }
+
+            @Override
+            public String[] examples() {
+                return new String[0];
+            }
+
+            @Override
+            public boolean terminalOnly() {
+                return true;
+            }
+
+            @Override
+            public boolean runnableWhenBusy() {
+                return true;
+            }
+
+            @Override
+            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+            }
+        });
+        AgentSession session = InMemoryAgentSession.of();
+        busy(session);
+
+        HarnessInput web = HarnessInput.of(session, "/tty");
+        HarnessInput tty = HarnessInput.of(session, "/tty").terminal(true);
+        assertFalse(engine.isRunnableWhenBusy(web), "非终端来源：terminalOnly 命令不算忙时可执行");
+        assertTrue(engine.isRunnableWhenBusy(tty), "终端来源：与受理判定一致，放行");
+        assertFalse(engine.isRunnableWhenBusy(HarnessInput.of(session, "/tty").commandAware(false)));
+        assertFalse(engine.isRunnableWhenBusy(null));
+
+        InputOutcome ttyOutcome = engine.handle(HarnessInput.of(session, "/tty").terminal(true));
+        assertTrue(ttyOutcome.isBesideRunning(), "受理判定同口径：终端来源的 terminalOnly 忙时命令旁路执行");
+        ttyOutcome.discard();
     }
 }

@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.HarnessProfile;
@@ -60,7 +61,7 @@ import java.util.function.Predicate;
  * Map<String, Object> view = goal.get(sid).toMap();
  * }</pre>
  *
- * <p><b>单槽</b>：每个会话永远只有一个 goal；已有非终态 goal 时 {@code create} 返回 INVALID。
+ * <p><b>单槽</b>：每个会话永远只有一个 goal；已有非终态 goal 时 {@code create} 返回 CONFLICT。
  * 状态以投影存放于会话快照，随对话持久化；对外只交只读快照 {@link GoalSnapshot}。</p>
  *
  * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器
@@ -264,7 +265,7 @@ public class GoalExtension extends AbsHarnessExtension {
             if (outcome.getKind() != InputOutcome.Kind.TASK) {
                 // 忙 / 待审批（REJECTED）等未受理结局：本轮跳过，不计失败（goal 自己有重试节奏）
                 return GoalOutcome.skip(outcome.getRejectReason() != null
-                        ? outcome.getRejectReason() : "input not admitted: " + outcome.getKind());
+                        ? outcome.getRejectReason().code() : "input not admitted: " + outcome.getKind());
             }
             ReActResponse response;
             try {
@@ -310,13 +311,13 @@ public class GoalExtension extends AbsHarnessExtension {
     // ==================== 运行期门面 ====================
     //
     // 每个会话永远只有一个 goal：一律按 sessionId 定位，不需要任务 id。
-    // 写操作统一返回 HarnessResult（NOT_OWNER / NOT_FOUND / INVALID / DISABLED），不抛业务异常。
+    // 写操作统一返回 HarnessResult（NOT_OWNER / NOT_FOUND / INVALID / CONFLICT / DISABLED），不抛业务异常。
 
     /**
      * 创建本会话的 goal 并挂上调度（{@link GoalSpec#runNow} 决定是否立即跑首轮）。
      *
      * @return OK 时值为新 goal 的快照；NOT_FOUND（会话不存在，门面不新建会话）/
-     *         INVALID（本会话已有非终态 goal，或规格不合法）/ NOT_OWNER（多节点部署时本节点不持有该会话）
+     *         INVALID（规格不合法）/ CONFLICT（本会话已有非终态 goal）/ NOT_OWNER（多节点部署时本节点不持有该会话）
      */
     public HarnessResult<GoalSnapshot> create(String sessionId, GoalSpec spec) {
         HarnessResult<GoalSnapshot> denied = checkWritable(sessionId);
@@ -329,8 +330,10 @@ public class GoalExtension extends AbsHarnessExtension {
         }
         try {
             return HarnessResult.ok(create(session, spec));
-        } catch (IllegalArgumentException | IllegalStateException e) {
+        } catch (IllegalArgumentException e) {
             return HarnessResult.invalid(e.getMessage());
+        } catch (IllegalStateException e) {
+            return HarnessResult.conflict(e.getMessage());
         }
     }
 
@@ -346,9 +349,9 @@ public class GoalExtension extends AbsHarnessExtension {
      * <p>goal 活跃时按固定时序完成：暂停并摘调度 → 停流 → 等旧轮次停稳 → 改写 → 恢复并立即跑一轮；
      * 非活跃（PAUSED/BLOCKED）时只改写、不改状态。</p>
      *
-     * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧）；null = {@code engine.cancelStream}。
-     *                不要传 {@code engine.interrupt}：那会清空用户的排队
-     * @return OK 时值为修改后的快照；NOT_FOUND（无 goal）/ INVALID（已是终态，或旧轮次未能及时停稳——此时 goal 保持暂停，可重试）
+     * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧）；null = {@code InterruptMode.CANCEL_STREAM}。
+     *                不要用 {@code InterruptMode.INTERRUPT}：那会清空用户的排队
+     * @return OK 时值为修改后的快照；NOT_FOUND（无 goal）/ INVALID（补丁不合法）/ CONFLICT（已是终态，或旧轮次未能及时停稳——此时 goal 保持暂停，可重试）
      */
     public HarnessResult<GoalSnapshot> update(String sessionId, GoalPatch patch, Runnable stopper) {
         HarnessResult<GoalSnapshot> denied = checkWritable(sessionId);
@@ -361,7 +364,7 @@ public class GoalExtension extends AbsHarnessExtension {
             return HarnessResult.notFound("goal not found");
         }
         if (gs.getStatus().isTerminal()) {
-            return HarnessResult.invalid("已完成的 Goal 不能编辑，请先清除");
+            return HarnessResult.conflict("已完成的 Goal 不能编辑，请先清除");
         }
         if (patch == null || patch.isEmpty()) {
             return HarnessResult.ok(goalRuntime.snapshot(session));
@@ -375,17 +378,17 @@ public class GoalExtension extends AbsHarnessExtension {
                 if (stopper != null) {
                     stopper.run();
                 } else {
-                    engine.cancelStream(session);
+                    engine.interrupt(session, InterruptMode.CANCEL_STREAM);
                 }
             } catch (Throwable e) {
                 // 停流失败不阻断停等：轮次可能已在收尾，交给超时判定
                 LOG.debug("Goal stopper failed for session '{}': {}", sessionId, e.getMessage());
             }
             if (goalRuntime.awaitRoundStopped(session, UPDATE_STOP_TIMEOUT_MS) == false) {
-                return HarnessResult.invalid("Goal is still stopping; please retry");
+                return HarnessResult.conflict("Goal is still stopping; please retry");
             }
             if (gs.getStatus() != GoalSnapshot.Status.PAUSED) {
-                return HarnessResult.invalid("Goal state changed before settings could be applied");
+                return HarnessResult.conflict("Goal state changed before settings could be applied");
             }
         }
 
@@ -401,12 +404,12 @@ public class GoalExtension extends AbsHarnessExtension {
         return HarnessResult.ok(goalRuntime.snapshot(session));
     }
 
-    /** 暂停（PURSUING → PAUSED）并摘调度。NOT_FOUND = 无 goal；INVALID = 当前状态不可暂停 */
+    /** 暂停（PURSUING → PAUSED）并摘调度。NOT_FOUND = 无 goal；CONFLICT = 当前状态不可暂停 */
     public HarnessResult<Void> pause(String sessionId) {
         return transition(sessionId, "goal is not pursuing", this::pause);
     }
 
-    /** 恢复（PAUSED/BLOCKED → PURSUING）并挂调度、立即跑一轮。NOT_FOUND = 无 goal；INVALID = 当前状态不可恢复 */
+    /** 恢复（PAUSED/BLOCKED → PURSUING）并挂调度、立即跑一轮。NOT_FOUND = 无 goal；CONFLICT = 当前状态不可恢复 */
     public HarnessResult<Void> resume(String sessionId) {
         return transition(sessionId, "goal is not paused or blocked", this::resume);
     }
@@ -414,7 +417,7 @@ public class GoalExtension extends AbsHarnessExtension {
     /**
      * 立即异步跑一轮（只对活跃 goal；同一会话的轮次不会并发）。
      *
-     * @return NOT_FOUND = 无 goal；INVALID = 不处于活跃态；DISABLED = 扩展已停用
+     * @return NOT_FOUND = 无 goal；CONFLICT = 不处于活跃态；DISABLED = 扩展已停用
      */
     public HarnessResult<Void> trigger(String sessionId) {
         HarnessResult<Void> denied = checkWritable(sessionId);
@@ -430,7 +433,7 @@ public class GoalExtension extends AbsHarnessExtension {
             return HarnessResult.notFound("goal not found");
         }
         if (gs.getStatus().isActive() == false) {
-            return HarnessResult.invalid("goal is not pursuing");
+            return HarnessResult.conflict("goal is not pursuing");
         }
         schedule(sessionId, false);
         RunUtil.async(() -> goalRuntime.runRound(session));
@@ -442,7 +445,7 @@ public class GoalExtension extends AbsHarnessExtension {
         return transition(sessionId, "goal not found", this::remove);
     }
 
-    /** 状态迁移类写操作的共同骨架：归属 → 会话与 goal 存在 → 执行（false 时给出 INVALID） */
+    /** 状态迁移类写操作的共同骨架：归属 → 会话与 goal 存在 → 执行（false 时给出 CONFLICT） */
     private HarnessResult<Void> transition(String sessionId, String invalidDetail, Predicate<AgentSession> action) {
         HarnessResult<Void> denied = checkWritable(sessionId);
         if (denied != null) {
@@ -452,7 +455,7 @@ public class GoalExtension extends AbsHarnessExtension {
         if (session == null || goalRuntime.state(session) == null) {
             return HarnessResult.notFound("goal not found");
         }
-        return action.test(session) ? HarnessResult.<Void>ok() : HarnessResult.<Void>invalid(invalidDetail);
+        return action.test(session) ? HarnessResult.<Void>ok() : HarnessResult.<Void>conflict(invalidDetail);
     }
 
     /**

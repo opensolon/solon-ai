@@ -236,7 +236,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * 与技能 / MCP 视野原样保存，续发经 {@link QueueItem#toInput} 原样带回。
      *
      * @param input 输入（会话取自 {@code input.getSession()}；附件不进队列）
-     * @param id    条目 id（HTTP 重试幂等用；null = 自动生成）。重复时为 INVALID
+     * @param id    条目 id（HTTP 重试幂等用；null = 自动生成）。重复时为 CONFLICT
      * @since 4.2.0
      */
     public HarnessResult<Integer> enqueue(HarnessInput input, String id) {
@@ -261,7 +261,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             case QueueStore.ENQUEUE_FULL:
                 return HarnessResult.full("队列已满，上限 " + limits.maxSize + " 条");
             case QueueStore.ENQUEUE_DUPLICATE:
-                return HarnessResult.invalid("duplicate queue item id: " + id);
+                return HarnessResult.conflict("duplicate queue item id: " + id);
             default:
                 return HarnessResult.invalid("text is empty or longer than " + limits.maxTextLength);
         }

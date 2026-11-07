@@ -90,29 +90,29 @@ class HarnessEngineBuilderTest {
                 .agentPrefix("#")
                 .build();
 
-        assertEquals("sys", e.getSystemPrompt());
-        assertEquals("ua", e.getUserAgent());
-        assertEquals(7, e.getMaxTurns());
-        assertFalse(e.isAutoRethink());
-        assertEquals(3, e.getSessionWindowSize());
-        assertEquals(20, e.getCompressionMaxMessages());
-        assertEquals(0.4d, e.getCompressionMaxContextRatio(), 1e-9);
-        assertEquals(9_000L, e.getCompressionDefaultContextLength());
-        assertNotNull(e.getCacheControl());
-        assertFalse(e.isMemoryEnabled());
-        assertFalse(e.isSandboxEnabled());
-        assertTrue(e.isSandboxSystemRestrict());
-        assertTrue(e.isHitlEnabled());
-        assertFalse(e.isSubagentEnabled());
-        assertTrue(e.isBashAsyncEnabled());
-        assertEquals(1, e.getApiRetries());
-        assertEquals(2, e.getMcpRetries());
-        assertEquals(3, e.getModelRetries());
-        assertEquals(4, e.getSubagentDefaultConcurrency());
+        assertEquals("sys", e.getSettings().getSystemPrompt());
+        assertEquals("ua", e.getSettings().getUserAgent());
+        assertEquals(7, e.getSettings().getMaxTurns());
+        assertFalse(e.getSettings().isAutoRethink());
+        assertEquals(3, e.getSettings().getSessionWindowSize());
+        assertEquals(20, e.getSettings().getCompressionMaxMessages());
+        assertEquals(0.4d, e.getSettings().getCompressionMaxContextRatio(), 1e-9);
+        assertEquals(9_000L, e.getSettings().getCompressionDefaultContextLength());
+        assertNotNull(e.getSettings().getCacheControl());
+        assertFalse(e.getSettings().isMemoryEnabled());
+        assertFalse(e.getSettings().isSandboxEnabled());
+        assertTrue(e.getSettings().isSandboxSystemRestrict());
+        assertTrue(e.getSettings().isHitlEnabled());
+        assertFalse(e.getSettings().isSubagentEnabled());
+        assertTrue(e.getSettings().isBashAsyncEnabled());
+        assertEquals(1, e.getSettings().getApiRetries());
+        assertEquals(2, e.getSettings().getMcpRetries());
+        assertEquals(3, e.getSettings().getModelRetries());
+        assertEquals(4, e.getSettings().getSubagentDefaultConcurrency());
         // Builder 只写 options，构造函数必须把它推送到执行者
-        assertEquals(4, e.getTaskTalent().getDefaultConcurrency());
-        assertEquals("::", e.getCommandPrefix());
-        assertEquals("#", e.getAgentPrefix());
+        assertEquals(4, e.getTalents().getTask().getDefaultConcurrency());
+        assertEquals("::", e.getSettings().getCommandPrefix());
+        assertEquals("#", e.getSettings().getAgentPrefix());
     }
 
     @Test
@@ -137,21 +137,21 @@ class HarnessEngineBuilderTest {
     @Test
     void httpProxyBothOverloads() {
         HarnessEngine e = builder().httpProxy("127.0.0.1", 8888).build();
-        assertNotNull(e.getHttpProxy());
+        assertNotNull(e.getSettings().getHttpProxy());
 
         Proxy direct = Proxy.NO_PROXY;
         HarnessEngine e2 = builder().httpProxy(direct).build();
-        assertSame(direct, e2.getHttpProxy());
+        assertSame(direct, e2.getSettings().getHttpProxy());
 
         AtomicBoolean hit = new AtomicBoolean();
         HarnessEngine e3 = builder()
                 .httpCustomizeAdd(u -> hit.set(true))
                 .build();
-        e3.getHttpCustomize().accept(null);
+        e3.getSettings().getHttpCustomize().accept(null);
         assertTrue(hit.get());
 
         HarnessEngine e4 = builder().httpCustomizeSet(u -> hit.set(false)).build();
-        e4.getHttpCustomize().accept(null);
+        e4.getSettings().getHttpCustomize().accept(null);
         assertFalse(hit.get());
     }
 

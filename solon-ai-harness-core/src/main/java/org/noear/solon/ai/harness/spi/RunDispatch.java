@@ -25,7 +25,7 @@ import org.noear.solon.lang.Preview;
  * 程序派发的一条流（跨线程存活的派发事务）。
  *
  * <p>这是核心持有的<b>会话事实槽位</b>（attrs 键 {@link HarnessAttrs#RUN_DISPATCH}）：
- * 由插件在「程序代替用户发起一条流」时登记（当前实现是 queue 插件的 {@code QueueDispatch}），
+ * 由插件在「程序代替用户发起一条流」时登记（当前实现是 queue 插件的 {@code QueueClaim}），
  * 引擎 {@code handle(...)} 的受理判定与 {@link org.noear.solon.ai.harness.RunTicket} 只经本接口读取，不认识具体实现。</p>
  *
  * <p><b>为什么是槽位而不是扩展钩子</b>：读取方要在 {@code synchronized (session.attrs())} 内、

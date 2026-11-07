@@ -21,7 +21,7 @@ import org.noear.solon.ai.harness.host.AdminGateway;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
-import org.noear.solon.ai.harness.host.StopMode;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.Submitted;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
@@ -182,7 +182,7 @@ class HarnessHostContractTest {
             Submitted r = host.submit("t", "nope", "hello", InputOrigin.channel("web"));
 
             assertEquals(Submitted.Kind.REJECTED, r.getKind());
-            assertEquals(Submitted.REJECT_SESSION_NOT_FOUND, r.getRejectReason());
+            assertEquals(InputOutcome.RejectReason.SESSION_NOT_FOUND, r.getRejectReason());
             assertEquals(404, r.httpStatus());
             assertEquals(1, sink.replies.size(), "提示已经经 sink 发出");
             assertNull(engine.getSessionOrNull("nope"), "只查不建：不得凭空新建会话");
@@ -271,7 +271,7 @@ class HarnessHostContractTest {
             assertEquals(Submitted.Kind.STARTED, host.submit("t", "s1", "hello", null).getKind());
 
             // 开流前被停止
-            assertTrue(host.stop("t", "s1", StopMode.STOP_RUN).isOk());
+            assertTrue(host.interrupt("t", "s1", InterruptMode.CANCEL_STREAM).isOk());
             assertTrue(executor.runNext(5_000));
 
             assertEquals(1, sink.finished.size(), "被取消的一轮同样恰好收尾一次");
@@ -327,7 +327,7 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
         try {
             Submitted r = host.submit("t", "s1", "hello", null);
-            assertEquals(InputOutcome.REJECT_NOT_OWNER, r.getRejectReason());
+            assertEquals(InputOutcome.RejectReason.NOT_OWNER, r.getRejectReason());
             assertEquals(307, r.httpStatus());
             assertEquals("node-b", sink.forwards.get(0));
             assertFalse(sessions.containsKey("s1"), "非持有节点不加载（更不新建）会话");
@@ -371,7 +371,7 @@ class HarnessHostContractTest {
                 .sink(sink).build();
         try {
             Submitted r = host.submit("t", "s1", "hello", null);
-            assertNotEquals(InputOutcome.REJECT_ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
+            assertNotEquals(InputOutcome.RejectReason.ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
             assertEquals(Submitted.Kind.STARTED, r.getKind());
             await(() -> sink.finished.size() == 1, "新引擎上的一轮正常收尾");
         } finally {
@@ -418,11 +418,11 @@ class HarnessHostContractTest {
                     admin.call("s1", "x", QueueExtension.class, (q, s) -> {
                         throw new IllegalArgumentException("bad");
                     }).getCode(), "扩展抛参数异常译为 INVALID");
-            assertEquals(HarnessResult.Code.NOT_FOUND, admin.stop("ghost", StopMode.STOP_AND_CLEAR).getCode());
+            assertEquals(HarnessResult.Code.NOT_FOUND, admin.interrupt("ghost", InterruptMode.INTERRUPT).getCode());
             assertTrue(admin.call("s1", "queue.list", QueueExtension.class, (q, s) -> HarnessResult.ok(q.list(s))).isOk());
 
             assertEquals(HarnessResult.Code.FORBIDDEN, enqueue(host.admin("t", "guest"), "s1", "x", null).getCode());
-            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("t", "guest").stop("s1", StopMode.STOP_AND_CLEAR).getCode());
+            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("t", "guest").interrupt("s1", InterruptMode.INTERRUPT).getCode());
         } finally {
             engine.shutdown();
         }

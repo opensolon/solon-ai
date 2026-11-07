@@ -105,7 +105,7 @@ class HarnessPackageBoundaryTest {
     void interruptCoreIsPackagePrivate() throws Exception {
         Class<?> c = Class.forName("org.noear.solon.ai.harness.HarnessInterrupts");
         assertFalse(java.lang.reflect.Modifier.isPublic(c.getModifiers()),
-                "中断核心实现必须包内可见：宿主一律经 engine.interrupt / prepareInterrupt");
+                "中断核心实现必须包内可见：宿主一律经 engine.interrupt(session, mode) / prepareInterrupt");
     }
 
     private static List<Path> javaFiles(Path dir) throws IOException {

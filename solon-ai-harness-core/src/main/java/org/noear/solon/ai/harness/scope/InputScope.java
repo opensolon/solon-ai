@@ -113,7 +113,7 @@ public final class InputScope {
 
     /**
      * 是否可以延后执行（随积压保存）：只含名单类维度时可序列化；含模型实例或任意属性时不可保存，
-     * 忙态下这类输入被拒绝（{@code REJECT_SCOPE_NOT_DEFERRABLE}），不会悄悄丢掉这些维度。
+     * 忙态下这类输入被拒绝（{@code RejectReason.SCOPE_NOT_DEFERRABLE}），不会悄悄丢掉这些维度。
      *
      * @since 4.2.0
      */

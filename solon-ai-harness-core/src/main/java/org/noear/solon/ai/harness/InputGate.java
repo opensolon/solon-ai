@@ -99,12 +99,9 @@ final class InputGate {
         }
     }
 
-    /** 登记值是否表示有效占位（与 {@code SessionStatus} 同口径）。 */
+    /** 登记值是否表示有效占位（委托 {@link SessionStatus#isAdmissionMark}：只有一份实现）。 */
     static boolean isValidMark(@Nullable Object value) {
-        if (value instanceof BooleanSupplier) {
-            return ((BooleanSupplier) value).getAsBoolean();
-        }
-        return Boolean.TRUE.equals(value);
+        return SessionStatus.isAdmissionMark(value);
     }
 
     /**

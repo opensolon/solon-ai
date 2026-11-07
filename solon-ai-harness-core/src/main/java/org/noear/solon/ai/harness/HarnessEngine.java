@@ -127,7 +127,7 @@ public class HarnessEngine {
 
     private final ReentrantLock agentLock = new ReentrantLock();
 
-    private final HarnessOptions options;
+    protected final HarnessOptions options;
 
     /** 引擎自建的默认技能目录（订阅挂载变更、持有技能禁用列表）。 */
     private final DefaultSkillCatalog skillCatalog;
@@ -174,6 +174,27 @@ public class HarnessEngine {
 
     public AgentManager getAgentManager() {
         return agentManager;
+    }
+
+    private final HarnessTalents talents = new HarnessTalents(this);
+    private final HarnessSettings settings = new HarnessSettings(this);
+
+    /**
+     * 内置能力（Talent）实例视图
+     *
+     * @since 4.2.0
+     */
+    public HarnessTalents getTalents() {
+        return talents;
+    }
+
+    /**
+     * 引擎配置视图（目录布局只读；运行期可调项读写）
+     *
+     * @since 4.2.0
+     */
+    public HarnessSettings getSettings() {
+        return settings;
     }
 
     public ContextCompressionInterceptor getCompressionInterceptor() {
@@ -261,7 +282,7 @@ public class HarnessEngine {
 
     /**
      * 引擎是否已关闭（{@link #shutdown()} 之后）。关闭后 {@code handle} 返回
-     * {@code REJECTED} + {@code InputOutcome.REJECT_ENGINE_CLOSED}。
+     * {@code REJECTED} + {@code RejectReason.ENGINE_CLOSED}。
      *
      * @since 4.2.0
      */
@@ -269,6 +290,10 @@ public class HarnessEngine {
         return closed.get();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getCacheControl()}
+     */
+    @Deprecated
     public CacheControl getCacheControl() {
         return options.getCacheControl();
     }
@@ -307,10 +332,18 @@ public class HarnessEngine {
         return options.getHitlInterceptor();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getTerminal()}
+     */
+    @Deprecated
     public TerminalTalent getTerminalTalent() {
         return terminalTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getSkill()}
+     */
+    @Deprecated
     public SkillTalent getSkillTalent() {
         return skillTalent;
     }
@@ -336,10 +369,18 @@ public class HarnessEngine {
         return options.mountManager.getWorkspaceSource();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getTodo()}
+     */
+    @Deprecated
     public TodoTalent getTodoTalent() {
         return todoTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getTask()}
+     */
+    @Deprecated
     public TaskTalent getTaskTalent() {
         return taskTalent;
     }
@@ -432,42 +473,82 @@ public class HarnessEngine {
 
     private final AtomicBoolean closed = new AtomicBoolean();
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getCode()}
+     */
+    @Deprecated
     public CodeTalent getCodeTalent() {
         return codeTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getMemory()}
+     */
+    @Deprecated
     public MemoryTalent getMemoryTalent() {
         return memoryTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getGenerate()}
+     */
+    @Deprecated
     public GenerateTalent getGenerateTalent() {
         return generateTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getCodeSearch()}
+     */
+    @Deprecated
     public CodeSearchTalent getCodeSearchTalent() {
         return codeSearchTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getClock()}
+     */
+    @Deprecated
     public ClockTalent getClockTalent() {
         return clockTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getWebsearch()}
+     */
+    @Deprecated
     public WebsearchTalent getWebsearchTalent() {
         return websearchTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getWebfetch()}
+     */
+    @Deprecated
     public WebfetchTalent getWebfetchTalent() {
         return webfetchTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getMcpGateway()}
+     */
+    @Deprecated
     public McpGatewayTalent getMcpGatewayTalent() {
         return mcpGatewayTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getOpenApiGateway()}
+     */
+    @Deprecated
     public OpenApiGatewayTalent getOpenApiGatewayTalent() {
         return openApiGatewayTalent;
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getTalents().getLsp()}
+     */
+    @Deprecated
     public LspTalent getLspTalent() {
         return lspTalent;
     }
@@ -490,48 +571,86 @@ public class HarnessEngine {
 
     // ========== 配置读取（代理到 options） ==========
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessHome()}
+     */
+    @Deprecated
     public String getHarnessHome() {
         return options.getHarnessHome();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessSessions()}
+     */
+    @Deprecated
     public String getHarnessSessions() {
         return options.getHarnessSessions();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessSkills()}
+     */
+    @Deprecated
     public String getHarnessSkills() {
         return options.getHarnessSkills();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessAgents()}
+     */
+    @Deprecated
     public String getHarnessAgents() {
         return options.getHarnessAgents();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessCommands()}
+     */
+    @Deprecated
     public String getHarnessCommands() {
         return options.getHarnessCommands();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessMemory()}
+     */
+    @Deprecated
     public String getHarnessMemory() {
         return options.getHarnessMemory();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHarnessChannels()}
+     */
+    @Deprecated
     public String getHarnessChannels() {
         return options.getHarnessChannels();
     }
 
     /**
      * 当前目录
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().getUserDir()}
      */
+    @Deprecated
     public String getUserDir() {
         return System.getProperty("user.dir");
     }
 
     /**
      * 用户主目录
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().getUserHome()}
      */
+    @Deprecated
     public String getUserHome() {
         return System.getProperty("user.home");
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getUserAgent()}
+     */
+    @Deprecated
     public String getUserAgent() {
         return options.getUserAgent();
     }
@@ -747,76 +866,142 @@ public class HarnessEngine {
         SessionSelections.setAgent(session, name);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getSystemPrompt()}
+     */
+    @Deprecated
     public String getSystemPrompt() {
         return options.getSystemPrompt();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getMaxTurns()}
+     */
+    @Deprecated
     public int getMaxTurns() {
         return options.getMaxTurns();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isAutoRethink()}
+     */
+    @Deprecated
     public boolean isAutoRethink() {
         return options.isAutoRethink();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getSessionWindowSize()}
+     */
+    @Deprecated
     public int getSessionWindowSize() {
         return options.getSessionWindowSize();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getCompressionMaxMessages()}
+     */
+    @Deprecated
     public int getCompressionMaxMessages() {
         return options.getCompressionMaxMessages();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getCompressionMaxContextRatio()}
+     */
+    @Deprecated
     public double getCompressionMaxContextRatio() {
         return options.getCompressionMaxContextRatio();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getCompressionDefaultContextLength()}
+     */
+    @Deprecated
     public long getCompressionDefaultContextLength() {
         return options.getCompressionDefaultContextLength();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isMemoryEnabled()}
+     */
+    @Deprecated
     public boolean isMemoryEnabled() {
         return options.isMemoryEnabled();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isSandboxEnabled()}
+     */
+    @Deprecated
     public boolean isSandboxEnabled() {
         return options.isSandboxEnabled();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isHitlEnabled()}
+     */
+    @Deprecated
     public boolean isHitlEnabled() {
         return options.isHitlEnabled();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isSubagentEnabled()}
+     */
+    @Deprecated
     public boolean isSubagentEnabled() {
         return options.isSubagentEnabled();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isBashAsyncEnabled()}
+     */
+    @Deprecated
     public boolean isBashAsyncEnabled() {
         return options.isBashAsyncEnabled();
     }
 
     /**
      * 命令前缀（默认 "/"）
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().getCommandPrefix()}
      */
+    @Deprecated
     public String getCommandPrefix() {
         return options.getCommandPrefix();
     }
 
     /**
      * 子代理提及前缀（默认 "@"）
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().getAgentPrefix()}
      */
+    @Deprecated
     public String getAgentPrefix() {
         return options.getAgentPrefix();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getApiRetries()}
+     */
+    @Deprecated
     public int getApiRetries() {
         return options.getApiRetries();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getMcpRetries()}
+     */
+    @Deprecated
     public int getMcpRetries() {
         return options.getMcpRetries();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getModelRetries()}
+     */
+    @Deprecated
     public int getModelRetries() {
         return options.getModelRetries();
     }
@@ -992,18 +1177,30 @@ public class HarnessEngine {
 
     // ========== 运行时动态修改 ==========
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setMaxTurns(...)}
+     */
+    @Deprecated
     public void setMaxTurns(Integer maxTurns) {
         if (maxTurns != null) {
             options.setMaxTurns(maxTurns);
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setModelRetries(...)}
+     */
+    @Deprecated
     public void setModelRetries(Integer modelRetries) {
         if (modelRetries != null) {
             options.setModelRetries(modelRetries);
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setMcpRetries(...)}
+     */
+    @Deprecated
     public void setMcpRetries(Integer mcpRetries) {
         if (mcpRetries != null) {
             options.setMcpRetries(mcpRetries);
@@ -1011,6 +1208,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setApiRetries(...)}
+     */
+    @Deprecated
     public void setApiRetries(Integer apiRetries) {
         if (apiRetries != null) {
             options.setApiRetries(apiRetries);
@@ -1023,7 +1224,10 @@ public class HarnessEngine {
      * <p>
      * 未注入 {@code memoryProvider} 时没有 memory talent 可开关（构建期显式置 null），
      * 仅写入配置值，不抛异常 —— 与相邻的 setMemoryRelevanceCount 等保持一致的空值守卫。
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().setMemoryEnabled(...)}
      */
+    @Deprecated
     public void setMemoryEnabled(Boolean memoryEnabled) {
         assertMutable("setMemoryEnabled");
         options.setMemoryEnabled(memoryEnabled);
@@ -1032,6 +1236,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setMemoryRelevanceCount(...)}
+     */
+    @Deprecated
     public void setMemoryRelevanceCount(int n) {
         options.setMemoryRelevanceCount(n);
         if (memoryTalent != null) {
@@ -1039,6 +1247,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setMemoryPriorityCount(...)}
+     */
+    @Deprecated
     public void setMemoryPriorityCount(int n) {
         options.setMemoryPriorityCount(n);
         if (memoryTalent != null) {
@@ -1046,6 +1258,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setMemorySummaryLength(...)}
+     */
+    @Deprecated
     public void setMemorySummaryLength(int n) {
         options.setMemorySummaryLength(n);
         if (memoryTalent != null) {
@@ -1053,28 +1269,48 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSandboxEnabled(...)}
+     */
+    @Deprecated
     public void setSandboxEnabled(Boolean sandboxEnabled) {
         assertMutable("setSandboxEnabled");
         options.setSandboxEnabled(sandboxEnabled);
         terminalTalent.setSandboxEnabled(sandboxEnabled);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSandboxAllowUserHome(...)}
+     */
+    @Deprecated
     public void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
         assertMutable("setSandboxAllowUserHome");
         options.setSandboxAllowUserHome(sandboxAllowUserHome);
         terminalTalent.setSandboxAllowUserHome(sandboxAllowUserHome);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().isSandboxSystemRestrict()}
+     */
+    @Deprecated
     public boolean isSandboxSystemRestrict() {
         return options.isSandboxSystemRestrict();
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSandboxSystemRestrict(...)}
+     */
+    @Deprecated
     public void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
         assertMutable("setSandboxSystemRestrict");
         options.setSandboxSystemRestrict(sandboxSystemRestrict);
         terminalTalent.setSandboxSystemRestrict(sandboxSystemRestrict);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setHitlEnabled(...)}
+     */
+    @Deprecated
     public void setHitlEnabled(Boolean hitlEnabled) {
         assertMutable("setHitlEnabled");
         options.setHitlEnabled(hitlEnabled);
@@ -1084,6 +1320,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSubagentEnabled(...)}
+     */
+    @Deprecated
     public void setSubagentEnabled(Boolean subagentEnabled) {
         assertMutable("setSubagentEnabled");
         options.setSubagentEnabled(subagentEnabled);
@@ -1097,7 +1337,10 @@ public class HarnessEngine {
      *
      * <p>恒为有限正整数，不存在「不限制」；归一规则见
      * {@link TaskTalent#normalizeDefaultConcurrency(int)}。</p>
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().getSubagentDefaultConcurrency()}
      */
+    @Deprecated
     public int getSubagentDefaultConcurrency() {
         return options.getSubagentDefaultConcurrency();
     }
@@ -1112,7 +1355,10 @@ public class HarnessEngine {
      * {@code AiConfig#concurrency}。</p>
      *
      * @param subagentDefaultConcurrency 默认并发上限（0 = 未设置；负数报错）
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().setSubagentDefaultConcurrency(...)}
      */
+    @Deprecated
     public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
         assertMutable("setSubagentDefaultConcurrency");
         if (subagentDefaultConcurrency != null) {
@@ -1122,6 +1368,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setBashAsyncEnabled(...)}
+     */
+    @Deprecated
     public void setBashAsyncEnabled(Boolean bashAsyncEnabled) {
         assertMutable("setBashAsyncEnabled");
         options.setBashAsyncEnabled(bashAsyncEnabled);
@@ -1129,10 +1379,18 @@ public class HarnessEngine {
         terminalTalent.setBashAsyncEnabled(bashAsyncEnabled);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSessionWindowSize(...)}
+     */
+    @Deprecated
     public void setSessionWindowSize(Integer sessionWindowSize) {
         options.setSessionWindowSize(sessionWindowSize);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setCompressionThreshold(...)}
+     */
+    @Deprecated
     public void setCompressionThreshold(Integer maxMessages, Double maxContextRatio) {
         if (maxMessages != null) {
             options.setCompressionMaxMessages(maxMessages);
@@ -1145,6 +1403,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setCompressionDefaultContextLength(...)}
+     */
+    @Deprecated
     public void setCompressionDefaultContextLength(Long defaultContextLength) {
         if (defaultContextLength != null) {
             options.setCompressionDefaultContextLength(defaultContextLength);
@@ -1153,6 +1415,10 @@ public class HarnessEngine {
     }
 
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setSystemPrompt(...)}
+     */
+    @Deprecated
     public void setSystemPrompt(String systemPrompt) {
         assertMutable("setSystemPrompt");
         if (Assert.isNotEmpty(systemPrompt)) {
@@ -1160,6 +1426,10 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setCacheControl(...)}
+     */
+    @Deprecated
     public void setCacheControl(CacheControl cacheControl) {
         assertMutable("setCacheControl");
         if (cacheControl != null) {
@@ -1173,7 +1443,10 @@ public class HarnessEngine {
      * 动态切换引擎级代理（host/port 形式）。O(1) 生效，无需重建 Agent/模型。
      *
      * @since 4.0.5
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().setHttpProxy(...)}
      */
+    @Deprecated
     public void setHttpProxy(String host, int port) {
         assertMutable("setHttpProxy");
         options.setHttpProxy(new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port)));
@@ -1183,12 +1456,19 @@ public class HarnessEngine {
      * 动态切换引擎级代理（java.net.Proxy 形式）；传 null 恢复直连。
      *
      * @since 4.0.5
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().setHttpProxy(...)}
      */
+    @Deprecated
     public void setHttpProxy(Proxy proxy) {
         assertMutable("setHttpProxy");
         options.setHttpProxy(proxy);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHttpProxy()}
+     */
+    @Deprecated
     public Proxy getHttpProxy() {
         return options.getHttpProxy();
     }
@@ -1197,17 +1477,28 @@ public class HarnessEngine {
      * 动态设置引擎级 http 定制钩子（每次 LLM 请求创建 HttpUtils 后执行）。
      *
      * @since 4.0.5
+     *
+     * @deprecated 4.2.0 改用 {@code getSettings().addHttpCustomize(...)}
      */
+    @Deprecated
     public void addHttpCustomize(Consumer<HttpUtils> httpCustomize) {
         assertMutable("addHttpCustomize");
         options.addHttpCustomize(httpCustomize);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().setHttpCustomize(...)}
+     */
+    @Deprecated
     public void setHttpCustomize(Consumer<HttpUtils> httpCustomize) {
         assertMutable("setHttpCustomize");
         options.setHttpCustomize(httpCustomize);
     }
 
+    /**
+     * @deprecated 4.2.0 改用 {@code getSettings().getHttpCustomize()}
+     */
+    @Deprecated
     public Consumer<HttpUtils> getHttpCustomize() {
         return options.getHttpCustomize();
     }
@@ -1950,6 +2241,7 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest prompt(Prompt prompt) {
         return promptDo(prompt, null);
     }
@@ -1959,6 +2251,7 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest prompt(Prompt prompt, ReActAgent targetAgent) {
         return promptDo(prompt, targetAgent);
     }
@@ -1969,6 +2262,7 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest prompt(String prompt) {
         return promptDo(Prompt.of(prompt), null);
     }
@@ -1979,6 +2273,7 @@ public class HarnessEngine {
      *
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest prompt(String prompt, ReActAgent targetAgent) {
         return promptDo(Prompt.of(prompt), targetAgent);
     }
@@ -1992,6 +2287,7 @@ public class HarnessEngine {
      * @since 4.2.0
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest resume() {
         return promptDo(null, null);
     }
@@ -2004,6 +2300,7 @@ public class HarnessEngine {
      * @since 4.2.0
      * @deprecated 4.2.0 {@link #handle(HarnessInput)}
      */
+    @Deprecated
     public ReActRequest resume(ReActAgent targetAgent) {
         return promptDo(null, targetAgent);
     }
@@ -2086,7 +2383,7 @@ public class HarnessEngine {
      *         ackQueued(outcome.getBacklogPosition());
      *         break;
      *     case REJECTED: // 未受理（待审批 / 忙且无处可延 / 附件不能排队）
-     *         renderError(outcome.getRejectReason(), outcome.getRejectDetail());
+     *         renderError(outcome.getRejectReason().code(), outcome.getRejectDetail());
      *         break;
      *     case HITL:   // 决策已写入但未续流（未传 resume），是否恢复流由宿主决定
      *     default:     // IGNORED：无事可做
@@ -2107,26 +2404,37 @@ public class HarnessEngine {
 
 
     /**
-     * 中断会话当前正在执行的任务（程序化 /interrupt）。
+     * 中断会话当前的运行（唯一的一步式停流入口；三种方式见 {@link InterruptMode}）。
      *
-     * <p>收敛此前只存在于 {@code /interrupt} 命令里的内部细节：回调扩展的中断参与（如积压插件清待执行项）、
-     * 释放运行流句柄、补写取消消息（带 runId 元数据）与快照。
-     * {@code /interrupt} 命令也走本方法，不存在第二套中断逻辑。</p>
+     * <ul>
+     *   <li>{@link InterruptMode#INTERRUPT}：用户停止。回调扩展的中断参与（如积压插件清待执行项）、
+     *       释放运行流句柄、补写取消消息（带 runId 元数据）与快照。{@code /interrupt} 命令也走这里，
+     *       不存在第二套中断逻辑；等价于 {@link #prepareInterrupt} + {@link InterruptPlan#commit()}。</li>
+     *   <li>{@link InterruptMode#CANCEL_STREAM}：程序取消。只停流并推进取消代数，不清积压、不写历史。</li>
+     *   <li>{@link InterruptMode#PREEMPT_STREAM}：为新一轮腾位。只停流，不推进取消代数。</li>
+     * </ul>
      *
-     * <p><b>先清积压再停流</b>：{@link HarnessExtension#onSessionInterrupt} 保证在认领/停流之前回调。
+     * <p><b>先清积压再停流</b>（INTERRUPT）：{@link HarnessExtension#onSessionInterrupt} 保证在认领/停流之前回调。
      * 停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务重新推起来。</p>
      *
+     * <p>三种方式都先做归属检查：非持有节点什么都不做（不清积压、不推进代数），返回 {@code NOT_OWNER}，
+     * 宿主按 {@link HarnessResult#getOwner()} 转发。</p>
+     *
+     * <p>值为 false 不代表什么都没发生：INTERRUPT / CANCEL_STREAM 的取消代数依然推进，
+     * 「已创建、尚未订阅」的流也会被随后拦住。</p>
+     *
      * <pre>{@code
-     * if (engine.interrupt(session)) {
+     * if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getValue())) {
      *     engine.handle(HarnessInput.of(session, "改用 PostgreSQL 方言重写迁移脚本"));
      * }
      * }</pre>
      *
-     * @return true = 已中断；false = 当前无正在执行的任务（会话为 null 时也返回 false）
+     * @param mode 中断方式（不能为 null）
+     * @return OK（值为「确有运行中的流被停掉」；会话为 null 时为 false）或 NOT_OWNER
+     * @since 4.2.0
      */
-    public boolean interrupt(@Nullable AgentSession session) {
-        InterruptPlan plan = prepareInterrupt(session);
-        return plan != null && plan.commit();
+    public HarnessResult<Boolean> interrupt(@Nullable AgentSession session, InterruptMode mode) {
+        return sessionControl.interrupt(session, mode);
     }
 
     /**
@@ -2134,7 +2442,9 @@ public class HarnessEngine {
      *
      * <p>给需要自定义终态时序的宿主（如 Web 的「先落库 → error → done → 最后停流」）留出
      * 编排窗口；编排完调用 {@link InterruptPlan#commit()} 提交。不需要自定义时序的宿主
-     * 继续用 {@link #interrupt(AgentSession)} 即可（等价于 prepare + commit）。</p>
+     * 用 {@code interrupt(session, InterruptMode.INTERRUPT)} 即可（等价于 prepare + commit）。</p>
+     *
+     * <p>非持有节点返回 {@link InterruptPlan#isNotOwner()} 为 true 的空计划。</p>
      *
      * <p>计划必须闭合：用 try-with-resources 持有，或确保任何路径上都调
      * {@link InterruptPlan#close()}（与 commit 等价且幂等）——忘记闭合会留下一条
@@ -2158,39 +2468,6 @@ public class HarnessEngine {
         return sessionControl.prepareInterrupt(session);
     }
 
-    /**
-     * 程序级取消：只停当前运行流并推进取消代数，不补取消消息、不清积压。
-     *
-     * <p>三个停流入口：{@link #interrupt(AgentSession)}（用户停止：扩展参与 + 写取消消息 + 停流）、
-     * 本方法（程序取消：停流 + 推进代数）、{@link #preemptStream(AgentSession)}（腾位：只停流，不推进代数）。</p>
-     *
-     * <p>与 {@link #interrupt(AgentSession)} 的差别仅在于<b>不写历史</b>：适合轮次由程序接管、
-     * 后续会重新发起新一轮的场景（如自动循环的上一轮被新目标顶掉）。这类场景若补写取消消息，
-     * 会在会话历史里留下「用户已取消」的假象，与真实的用户取消混淆。</p>
-     *
-     * <p>返回 {@code false} 同样不代表什么都没发生：取消代数依然推进（见
-     * {@link HarnessInterrupts#cancelStream(AgentSession)}）。</p>
-     *
-     * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流
-     * @since 4.2.0
-     */
-    public boolean cancelStream(@Nullable AgentSession session) {
-        return HarnessInterrupts.cancelStream(session);
-    }
-
-    /**
-     * 为新一轮腾位：只停当前运行流，不推进取消代数（新轮次顶掉旧轮次用）。
-     *
-     * <p>与 {@link #cancelStream(AgentSession)} 的差别在于「这次停流算不算取消」：
-     * 推进代数后，被顶掉的旧流能据此判定自己是被取消的、不再发终态帧（适合 Stop）；
-     * 不推进代数则适合「新一轮腾位」——旧流本该自然结束，若当成被取消会把新一轮收尾牵连进去。</p>
-     *
-     * @return true = 确有活跃流被停掉
-     * @since 4.2.0
-     */
-    public boolean preemptStream(@Nullable AgentSession session) {
-        return HarnessInterrupts.preemptStream(session);
-    }
 
     /**
      * 读取会话运行态快照（核心事实 + 各扩展贡献的事实，一次读全）
@@ -2226,15 +2503,17 @@ public class HarnessEngine {
 
 
     /**
-     * 输入是否为「忙碌可穿透」的斜杠命令。
+     * 输入是否为「忙碌可穿透」的斜杠命令（与 {@link #handle} 第 0 步的受理判定是同一份实现）。
      *
      * <p>宿主的受理控制需要回答「这条输入能不能在任务运行中被受理」。答案不该由宿主
      * 复刻「解析命令名 → 查注册表 → 读 terminalOnly/runnableWhenBusy」这条链——
      * 三处口径任一漂移（前缀、大小写、参数切分），忙态旁路就会静默失效。
      * 本方法把该判定收归引擎，宿主只需一个布尔。</p>
      *
-     * <p>判定口径：输入以引擎命令前缀开头、能解析出命令名、且该命令已注册、
-     * 非 {@link Command#terminalOnly()} 且声明 {@link Command#runnableWhenBusy()}。</p>
+     * <p>判定口径：输入识别命令（{@link HarnessInput#isCommandAware()}）、不带附件、不是审批决策或续流；
+     * 文本以引擎命令前缀开头、能解析出已注册且启用的命令、该命令声明 {@link Command#runnableWhenBusy()}；
+     * {@link Command#terminalOnly()} 的命令仅在 {@link HarnessInput#isTerminal()} 时算。
+     * Web / IM 宿主传 {@code HarnessInput.of(session, text)}（非终端）即可。</p>
      *
      * <p><b>注意</b>：本方法只回答「忙态是否放行」，不回答「空闲时能否启动任务」。
      * 后者（如 {@code /steer}）仍由宿主按自己的占位闩语义处理。</p>
@@ -2242,7 +2521,7 @@ public class HarnessEngine {
      * @see Command#runnableWhenBusy()
      * @since 4.2.0
      */
-    public boolean isRunnableWhenBusy(@Nullable String input) {
+    public boolean isRunnableWhenBusy(@Nullable HarnessInput input) {
         return sessionControl.isRunnableWhenBusy(input);
     }
 
@@ -2676,7 +2955,7 @@ public class HarnessEngine {
 
         /**
          * 是否要求每轮都有作用域（SERVER 缺省 true）。开启后：解析器返回 null 或抛异常时
-         * {@code handle} 返回 {@code REJECTED} + {@code InputOutcome.REJECT_SCOPE_UNAVAILABLE}；
+         * {@code handle} 返回 {@code REJECTED} + {@code RejectReason.SCOPE_UNAVAILABLE}；
          * 绕过受理的请求（如已废弃的 {@code prompt(...)}）由守卫禁用全部工具（时钟除外）。
          *
          * @since 4.2.0
@@ -2688,7 +2967,7 @@ public class HarnessEngine {
 
         /**
          * 会话归属（多节点部署的单写者租约；缺省 {@link SessionOwnership#LOCAL}）。
-         * 非持有节点上的受理返回 {@code REJECTED} + {@code InputOutcome.REJECT_NOT_OWNER}。
+         * 非持有节点上的受理返回 {@code REJECTED} + {@code RejectReason.NOT_OWNER}。
          *
          * @since 4.2.0
          */

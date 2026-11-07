@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -28,7 +29,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * 但在 IM 渠道（微信/飞书/钉钉）中缺少中断途径。此命令为 IM 场景提供
  * 统一的中断能力，也适用于所有终端。</p>
  *
- * <p>实现退化为 {@code engine.interrupt(session)} 的薄壳：中断语义只有一处实现，
+ * <p>实现退化为 {@code engine.interrupt(session, InterruptMode.INTERRUPT)} 的薄壳：中断语义只有一处实现，
  * 插件参与（如清队列）也由引擎统一回调。</p>
  *
  * @author noear
@@ -66,7 +67,7 @@ public class InterruptCommand extends AbsCommand {
         }
 
         // 必须经引擎：插件的中断参与（先清积压再停流）只在引擎入口回调，不存在绕开引擎的第二套中断。
-        if (engine.interrupt(session)) {
+        if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getValue())) {
             ctx.println("用户已取消任务（或中断）");
         } else {
             ctx.println("当前没有正在执行的任务");

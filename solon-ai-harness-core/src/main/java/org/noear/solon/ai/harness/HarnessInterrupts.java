@@ -33,15 +33,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>此前中断逻辑只存在于 {@code /interrupt} 命令里，程序宿主想中断只能拼命令文本，
  * 或自己复刻 {@code attrs().remove("disposable") + dispose()} 这套内部约定。
- * 本类把它收敛为一处，由 {@code HarnessEngine#interrupt(AgentSession)} 调用。</p>
+ * 本类把它收敛为一处，由 {@code HarnessEngine#interrupt(AgentSession, InterruptMode)} 调用。</p>
  *
  * <p><b>只管核心语义</b>：本类不认识任何插件。用户级中断的插件参与（如 queue 清积压）由引擎在调用本类
  * <b>之前</b>回调 {@code HarnessExtension#onSessionInterrupt}，以此维持「先清积压再停流」的顺序。
- * 因此宿主<b>必须</b>经引擎中断（{@code engine.interrupt} / {@code engine.prepareInterrupt}）；
+ * 因此宿主<b>必须</b>经引擎中断（{@code engine.interrupt(session, mode)} / {@code engine.prepareInterrupt}）；
  * 本类的 {@link #claim} 只是引擎内部的核心认领步骤，只停流、不会清积压。</p>
  *
- * <p>包内可见（原 {@code session.interrupt.InterruptHelper}）：对外只有 {@link InterruptPlan} 与引擎的
- * {@code interrupt / prepareInterrupt / cancelStream / preemptStream}。</p>
+ * <p>包内可见（原 {@code session.interrupt.InterruptHelper}）：对外只有 {@link InterruptPlan}、{@link InterruptMode}
+ * 与引擎的 {@code interrupt(session, mode) / prepareInterrupt}。归属检查在引擎侧（{@code SessionControl}）完成。</p>
  *
  * @author noear
  * @since 4.2
@@ -79,7 +79,7 @@ final class HarnessInterrupts {
      * 只停当前运行流：不清队列，也不补取消消息。
      *
      * <p>对应「这一轮的停止是程序行为，不是用户取消」的场景：轮次由程序接管、随后会重新发起
-     * 新一轮（如自动循环的上一轮被新目标顶掉）。此时若照 {@code engine.interrupt} 的完整语义补写
+     * 新一轮（如自动循环的上一轮被新目标顶掉）。此时若照 {@link InterruptMode#INTERRUPT} 的完整语义补写
      * 取消消息，会话历史里就会出现「用户已取消」的假象，与真实的用户取消混为一谈；
      * 若顺带清队列，宿主刚排好的下一批任务也会被一并抹掉。</p>
      *

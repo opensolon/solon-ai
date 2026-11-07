@@ -131,7 +131,7 @@ public String decide(String tenant, String sid, String callId, String action, Co
 @Post 
 @Mapping("/chat/{tenant}/{sid}/stop")
 public Result stop(String tenant, String sid) {
-    HarnessResult<Boolean> r = host.stop(tenant, sid, StopMode.STOP_AND_CLEAR);
+    HarnessResult<Boolean> r = host.interrupt(tenant, sid, InterruptMode.INTERRUPT);
     return r.isOk() ? Result.succeed(r.getValue()) : Result.failure(r.getCode().name());
 }
 ```
@@ -154,7 +154,7 @@ engine.setSessionPrincipal(engine.getSession(newSessionId), tenant + "/" + userI
 | `STARTED` | 已开流 | `runStarted` →（命令回执）→ `event`* → `hitl`（若挂起）→ `runFinished` | 200 |
 | `REPLY` | 命令已执行，只有回执 | `reply` | 200 |
 | `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `reply(deferredText)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
-| `REJECTED` | 未受理，原因见 `getRejectReason()` | `reply(rejectText)`；`not_owner` 时为 `forward` | 404 / 307 / 403 / 503 / 409 |
+| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `reply(rejectText)`；`NOT_OWNER` 时为 `forward` | 404 / 307 / 403 / 503 / 409 |
 | `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `reply(hitlExpiredText)` | 200 |
 | `IGNORED` | 空输入 | — | 200 |
 
@@ -189,15 +189,16 @@ switch (r.getCode()) {
     case NOT_OWNER: return Result.failure(307, r.getOwner());     // 网关转发
     case NOT_FOUND: return Result.failure(404, r.getDetail());
     case FORBIDDEN: return Result.failure(403, r.getDetail());
+    case CONFLICT:  return Result.failure(409, r.getDetail());   // 参数合法但状态不允许（如 id 重复）
     default:        return Result.failure(400, r.getDetail());   // DISABLED / FULL / INVALID
 }
 
-admin.stop(sid, StopMode.STOP_AND_CLEAR);
+admin.interrupt(sid, InterruptMode.INTERRUPT);
 ```
 
 `call` 按同一顺序检查：鉴权（`AdminAuthorizer`，未配置时不鉴权；操作名由你自定）→ 扩展是否装配（`DISABLED`）→
 会话归属（`NOT_OWNER`）→ 会话是否存在（`NOT_FOUND`，只查不建）→ 执行。扩展抛的 `NotOwnerException` 译为 `NOT_OWNER`，
-`IllegalArgumentException` / `IllegalStateException` 译为 `INVALID`。成功之后自动续发积压（入队、置顶后会话空闲就立即执行）。
+`IllegalArgumentException` 译为 `INVALID`，`IllegalStateException` 译为 `CONFLICT`。成功之后自动续发积压（入队、置顶后会话空闲就立即执行）。
 
 | Code | 含义 |
 |---|---|
@@ -206,17 +207,21 @@ admin.stop(sid, StopMode.STOP_AND_CLEAR);
 | `NOT_OWNER` | 会话由其它节点持有，`getOwner()` 为持有者 |
 | `DISABLED` | 插件未装配或已停用 |
 | `FULL` | 队列满、loop 任务数或会话配额达上限 |
-| `INVALID` | 参数或状态不允许，`getDetail()` 为原因 |
+| `INVALID` | 参数不合法（重试同样的请求不会成功），`getDetail()` 为原因 |
+| `CONFLICT` | 参数合法但当前状态不允许（goal 已是终态、轮次已切换、ID 重复等） |
 | `FORBIDDEN` | `AdminAuthorizer` 拒绝（授权服务抛异常时同样拒绝） |
+
+以上是粗码，决定怎么处置；失败时还可能带细分码 `getReason()`（可空，大写下划线，如 steer 的 `BOX_FULL`），判定用 `hasReason(...)`；透传给前端的应答码用 `getReasonOrCode()`（有细分码返回细分码，否则粗码名）。
 
 ---
 
-## 六、停止：`StopMode`
+## 六、停止：`InterruptMode`
 
-| StopMode | 行为 |
+| InterruptMode | 行为 |
 |---|---|
-| `STOP_AND_CLEAR` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息（= `engine.interrupt`） |
-| `STOP_RUN` | 只停当前流，保留排队任务（结束后续发下一条），不写历史（= `engine.cancelStream`） |
+| `INTERRUPT` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息 |
+| `CANCEL_STREAM` | 只停当前流，保留排队任务（结束后续发下一条），不写历史 |
+| `PREEMPT_STREAM` | 为新一轮腾位：只停流，不推进取消代数（一般用不到） |
 
 ---
 

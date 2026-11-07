@@ -6,6 +6,7 @@ package org.noear.solon.ai.harness.extension.steer;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.spi.InputBacklog;
@@ -56,6 +57,16 @@ final class SteerMailbox {
 
     private SteerMailbox() { }
 
+    /** 状态不允许（细分码见 {@link SteerExtension} 的 {@code REASON_*}） */
+    static HarnessResult<SteerReceipt> conflict(String reason) {
+        return HarnessResult.fail(HarnessResult.Code.CONFLICT, reason, null);
+    }
+
+    /** 参数不合法（细分码见 {@link SteerExtension} 的 {@code REASON_*}） */
+    static HarnessResult<SteerReceipt> invalid(String reason) {
+        return HarnessResult.fail(HarnessResult.Code.INVALID, reason, null);
+    }
+
     /**
      * 插话入队的唯一实现（Web / IM / 命令共用）。
      *
@@ -67,27 +78,27 @@ final class SteerMailbox {
      * @param origin       来源身份（可空，空同 {@link InputOrigin#NONE}）
      * @param busyRecheck  入邮箱后复查会话是否仍繁忙的回调，可为 null（为 null 时仅依据轮次判定）
      * @param limits       容量 / 长度约束
-     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerResult.Code#RUN_CHANGED}，且不生成 steerId
-     * @return 入队结果（status 与 /web/chat/steer 的应答码同名）
+     * @param requireRunId 为 true 时 runId 必填：空即 {@link SteerExtension#REASON_RUN_CHANGED}，且不生成 steerId
+     * @return 入队结果（细分码与 /web/chat/steer 的应答码同名）
      */
-    static SteerResult steer(AgentSession session, String runId, String steerId, String text,
+    static HarnessResult<SteerReceipt> steer(AgentSession session, String runId, String steerId, String text,
                              InputOrigin origin, BooleanSupplier busyRecheck,
                              SteerLimits limits, boolean requireRunId) {
         if (session == null) {
-            return new SteerResult(SteerResult.Code.NOT_RUNNING, null, 0);
+            return conflict(SteerExtension.REASON_NOT_RUNNING);
         }
         if (text == null || text.trim().isEmpty()) {
-            return new SteerResult(SteerResult.Code.EMPTY_TEXT, null, 0);
+            return invalid(SteerExtension.REASON_EMPTY_TEXT);
         }
 
         text = text.trim();
         if (text.length() > limits.getMaxTextLength()) {
-            return new SteerResult(SteerResult.Code.TEXT_TOO_LONG, null, 0);
+            return invalid(SteerExtension.REASON_TEXT_TOO_LONG);
         }
 
         if (requireRunId && (runId == null || runId.trim().isEmpty())) {
             // 严格轮次绑定：先于 id 生成拒绝，避免调用方拿到一个无意义的 steerId
-            return new SteerResult(SteerResult.Code.RUN_CHANGED, null, 0);
+            return conflict(SteerExtension.REASON_RUN_CHANGED);
         }
 
         if (steerId == null || steerId.trim().isEmpty()) {
@@ -95,7 +106,7 @@ final class SteerMailbox {
         } else {
             steerId = steerId.trim();
             if (steerId.length() > limits.getMaxIdLength()) {
-                return new SteerResult(SteerResult.Code.INVALID_STEER_ID, null, 0);
+                return invalid(SteerExtension.REASON_INVALID_STEER_ID);
             }
         }
 
@@ -106,18 +117,18 @@ final class SteerMailbox {
             if (state.runId == null) {
                 // 任务尚未开轮或已结束：Web 端有明确 runId 时按 RUN_CHANGED 由前端决策；
                 // IM 端（runId==null）按 NOT_RUNNING 由调用方如实告知用户，不代为降级。
-                return new SteerResult(runId != null ? SteerResult.Code.RUN_CHANGED : SteerResult.Code.NOT_RUNNING, steerId, 0);
+                return conflict(runId != null ? SteerExtension.REASON_RUN_CHANGED : SteerExtension.REASON_NOT_RUNNING);
             }
             if (runId != null && runId.equals(state.runId) == false) {
-                return new SteerResult(SteerResult.Code.RUN_CHANGED, steerId, 0);
+                return conflict(SteerExtension.REASON_RUN_CHANGED);
             }
             // 先判重再判容量：满邮箱中的同 ID 重试仍应返回准确的重复结果，
             // 不能误报 BOX_FULL 后被前端降级为普通任务而造成重复执行。
             if (state.containsId(steerId)) {
-                return new SteerResult(SteerResult.Code.DUPLICATE_STEER_ID, steerId, state.inbox.size());
+                return conflict(SteerExtension.REASON_DUPLICATE_STEER_ID);
             }
             if (state.inbox.size() >= limits.getMaxBoxSize()) {
-                return new SteerResult(SteerResult.Code.BOX_FULL, steerId, state.inbox.size());
+                return HarnessResult.fail(HarnessResult.Code.FULL, SteerExtension.REASON_BOX_FULL, null);
             }
             state.inbox.addLast(steer);
             epoch = state.epoch;
@@ -128,15 +139,15 @@ final class SteerMailbox {
         synchronized (state) {
             boolean sameRun = state.epoch == epoch;
             if (busyAfterOffer && sameRun) {
-                return new SteerResult(SteerResult.Code.STEERED, steerId, state.inbox.size());
+                return HarnessResult.ok(new SteerReceipt(steerId, 0, state.inbox.size()));
             }
             if (state.inbox.remove(steer)) {
-                return new SteerResult(sameRun ? SteerResult.Code.NOT_RUNNING : SteerResult.Code.RUN_CHANGED, steerId, 0);
+                return conflict(sameRun ? SteerExtension.REASON_NOT_RUNNING : SteerExtension.REASON_RUN_CHANGED);
             }
         }
 
         // 已被注入或已随收轮转排队，无法回滚：必须报成功，否则调用方降级排队会把同一文本执行第二次
-        return new SteerResult(SteerResult.Code.STEERED, steerId, 0);
+        return HarnessResult.ok(new SteerReceipt(steerId, 0, 0));
     }
 
     /**
@@ -145,27 +156,25 @@ final class SteerMailbox {
      * <p>orphans（转排队失败的暂存项）与轮次无关，任务结束后用户仍可撤掉；
      * 本轮邮箱中的项必须带当前 runId 才能撤销。</p>
      */
-    static SteerCancelResult cancel(SteerState state, String runId, String steerId) {
+    static HarnessResult<SteerReceipt> cancel(SteerState state, String runId, String steerId) {
         synchronized (state) {
             if (SteerState.removeById(state.orphans, steerId)) {
-                return SteerCancelResult.canceled(steerId, 1, state.inbox.size() + state.orphans.size());
+                return HarnessResult.ok(new SteerReceipt(steerId, 1, state.inbox.size() + state.orphans.size()));
             }
             if (runId == null || runId.equals(state.runId) == false) {
-                return SteerCancelResult.of(SteerCancelResult.Code.RUN_CHANGED, steerId,
-                        state.inbox.size() + state.orphans.size());
+                return conflict(SteerExtension.REASON_RUN_CHANGED);
             }
             if (SteerState.removeById(state.inbox, steerId)) {
-                return SteerCancelResult.canceled(steerId, 1, state.inbox.size() + state.orphans.size());
+                return HarnessResult.ok(new SteerReceipt(steerId, 1, state.inbox.size() + state.orphans.size()));
             }
-            return SteerCancelResult.of(SteerCancelResult.Code.NOT_PENDING, steerId,
-                    state.inbox.size() + state.orphans.size());
+            return conflict(SteerExtension.REASON_NOT_PENDING);
         }
     }
 
     /**
      * 批量撤销（steerIds 为 null 或空表示清空全部；不比对轮次——「清空」本就跨轮生效）。
      */
-    static SteerCancelResult cancelAll(SteerState state, Collection<String> steerIds) {
+    static HarnessResult<SteerReceipt> cancelAll(SteerState state, Collection<String> steerIds) {
         synchronized (state) {
             int before = state.inbox.size() + state.orphans.size();
             if (steerIds == null || steerIds.isEmpty()) {
@@ -183,7 +192,7 @@ final class SteerMailbox {
                 }
             }
             int after = state.inbox.size() + state.orphans.size();
-            return SteerCancelResult.canceled(null, before - after, after);
+            return HarnessResult.ok(new SteerReceipt(null, before - after, after));
         }
     }
 

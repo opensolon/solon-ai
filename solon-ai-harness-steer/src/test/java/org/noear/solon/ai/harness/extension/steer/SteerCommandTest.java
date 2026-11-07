@@ -57,7 +57,7 @@ class SteerCommandTest {
         withActiveRun(session, "run-1");
         SteerExtension ext = new SteerExtension();
         for (int i = 0; i < SteerMailbox.MAX_BOX_SIZE; i++) {
-            assertEquals(SteerResult.Code.STEERED, ext.steer(session, "seed-" + i).getCode());
+            assertEquals("OK", ext.steer(session, "seed-" + i).getReasonOrCode());
         }
         command.execute(null, ctx, Fakes.StubContext.imOrigin());
         assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerMailbox.MAX_BOX_SIZE + " 条），可用 /queue 排队"));

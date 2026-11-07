@@ -29,8 +29,9 @@ import java.util.Collections;
 /**
  * Harness 扩展接口
  *
- * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断、会话状态、会话删除」切成 8 个回调点，
- * 扩展只需覆写自己要用的那几个。按发生顺序排列：</p>
+ * <p>把「引擎生命周期、代理装配、输入入口、请求装配、会话中断、会话状态、会话删除」切成若干回调点，
+ * 另有两个声明类方法（{@link #isQuiescent}、{@link #getToolNames}）。扩展只需覆写自己要用的那几个。
+ * 回调点按发生顺序排列（清单由 {@code HarnessExtensionHooksDocTest} 守住）：</p>
  *
  * <pre>
  * build()/addExtension ──onAttach────────────────&gt; [引擎就绪，可注册命令/资源]
@@ -77,7 +78,7 @@ import java.util.Collections;
  * 核心 {@code HarnessAttrs} 只登记引擎自己的键与核心持有的槽位。</p>
  * <p>核心模块不得 import 任何插件包；插件之间也不互相 import，只经核心契约协作。</p>
  *
- * <h3>开关（{@link #isEnabled()}）语义：六个不看，两个看</h3>
+ * <h3>开关（{@link #isEnabled()}）语义：只有纯运行期钩子看</h3>
  * <table border="1">
  *     <caption>各钩子是否受 {@link #isEnabled()} 控制</caption>
  *     <tr><th>钩子</th><th>是否判 {@code isEnabled()}</th><th>原因</th></tr>
@@ -96,11 +97,15 @@ import java.util.Collections;
  *         <td>事实类：停用不代表已有的事实消失（停用前已入队的任务仍在队列里）</td></tr>
  *     <tr><td>{@link #onInput}</td><td>是</td><td>纯运行期钩子，停用即不参与本次输入</td></tr>
  *     <tr><td>{@link #onRequestAssemble}</td><td>是</td><td>纯运行期钩子，停用即不参与本次请求</td></tr>
+ *     <tr><td>{@link #isQuiescent}</td><td><b>否</b></td>
+ *         <td>事实类：停用前建的定时任务仍然存在</td></tr>
+ *     <tr><td>{@link #getToolNames}</td><td><b>否</b></td>
+ *         <td>声明类：工具是否可用跟随扩展是否挂载</td></tr>
  * </table>
  *
  * <h3>实现约定</h3>
  * <ul>
- *     <li>八个钩子<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
+ *     <li>本接口的方法<b>全部 default</b>：只覆写自己需要的那几个，不必实现空方法。</li>
  *     <li>需要运行期开关能力时继承 {@link AbsHarnessExtension}（已实现 {@link #isEnabled()}/
  *         {@link #setEnabled(Boolean)}）；直接 {@code implements} 时 {@link AiSwitchable} 的默认实现是
  *         {@code isEnabled() = true} 且 {@code setEnabled} 空操作——即恒启用且无法关闭，
@@ -269,9 +274,9 @@ public interface HarnessExtension extends AiSwitchable {
     /**
      * 用户级会话中断（中断参与）
      *
-     * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session)} / {@code prepareInterrupt(session)}
+     * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session, InterruptMode.INTERRUPT)} / {@code prepareInterrupt(session)}
      * （{@code /interrupt} 命令也经此）。仅用户级完整中断会回调；只停流的程序行为
-     * （{@code cancelStream} / {@code preemptStream}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
+     * （{@code CANCEL_STREAM} / {@code PREEMPT_STREAM}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
      *
      * <p><b>时序保证</b>：引擎在认领并停止运行流<b>之前</b>回调。停流后宿主常在终态回调里续发积压，
      * 若等到那时才清理，会把刚被停掉的任务重新推起来（「先清积压再停流」）。</p>

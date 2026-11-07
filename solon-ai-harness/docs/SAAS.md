@@ -183,7 +183,7 @@ public class Authz {
 
 - **扩展自带的工具不受 `tools` 名单约束**（经 `HarnessExtension#getToolNames()` 声明，如 `goal_get` / `goal_update`、`loop_*`），否则 goal 会因名单里没写 `goal_update` 而永远无法完成。不希望某类用户使用某扩展时，不要给对应引擎挂该扩展。
 - **显式优先**：输入带了 `HarnessInput.scope(...)` 时不调用解析器；扩展在 `onInput` 里设置的作用域同样按显式处理。
-- **`scopeRequired=true`**（SERVER 缺省）：解析器返回 `null` 或抛异常时，`handle` 返回 `REJECTED` + `REJECT_SCOPE_UNAVAILABLE`（不 fail-open）。
+- **`scopeRequired=true`**（SERVER 缺省）：解析器返回 `null` 或抛异常时，`handle` 返回 `REJECTED` + `RejectReason.SCOPE_UNAVAILABLE`（不 fail-open）。
 
 ### 3.3 解析时机与积压
 
@@ -226,14 +226,14 @@ public class RedisOwnership implements SessionOwnership {
 
 - **租约键带租户前缀**：会话 ID 不保证全局唯一（CLI 的会话就叫 `cli`）。引擎池里多个租户共用一个实现时，用 `SessionOwnership.namespaced(tenantId, delegate)` 包一层（幂等，同一命名空间不会重复包装）。
 - 引擎的统一检查入口是 `engine.checkOwner(sessionId)`（返回 `OwnerCheck`：`isOwned()` / `getOwner()`）与 `engine.requireOwner(sessionId)`（不持有抛 `NotOwnerException`）。在没有任何节点持有的会话上调用，本节点成为持有者。
-- `handle` 第 0 步检查归属，拿不到返回 `REJECTED` + `REJECT_NOT_OWNER`，`getRejectDetail()` 为持有者标识，由网关转发。
+- `handle` 第 0 步检查归属，拿不到返回 `REJECTED` + `RejectReason.NOT_OWNER`，`getRejectDetail()` 为持有者标识，由网关转发。
 - **写门面同样先查归属**，非持有节点上：
 
 | 门面 | 失败方式 |
 |---|---|
 | queue / goal / loop 的全部写门面（`enqueue`、`cancelItem`、`create`、`pause`、`schedule` 等） | 返回 `HarnessResult` 的 `NOT_OWNER`（`getOwner()` 为持有者；与「不存在」的 `NOT_FOUND` 可区分） |
-| `steer.steer` / `steerOnRun` / `cancelOnRun` | `SteerResult.Code.NOT_OWNER` / `SteerCancelResult.Code.NOT_OWNER` |
-| `engine.interrupt` | 返回 false；`engine.prepareInterrupt(session).isNotOwner()` 可与「没有在跑」区分 |
+| `steer.steer` / `steerOnRun` / `cancelOnRun` / `cancelPending` | 同样返回 `HarnessResult` 的 `NOT_OWNER`（所有插件门面统一返回 `HarnessResult`，不带细分码） |
+| `InterruptMode.INTERRUPT` | 返回 false；`engine.prepareInterrupt(session).isNotOwner()` 可与「没有在跑」区分 |
 
 - **后台派发**：goal / loop 调度在**加载会话之前**先查归属，非持有节点不会把会话加载进内存。goal 没拿到租约时按 `GoalExtension.builder().ownerProbeIntervalMs(...)`（缺省 15 秒）退避，持有节点宕机、租约过期后在一个探测间隔内接管；建议探测间隔不超过租期的一半。
 - **租约由实现自行保活**（节点心跳批量续期、Redisson watchdog 等），只应在节点失联后过期：一次运行可能远长于租期（goal 长轮次、慢工具），引擎不在运行中续约。
@@ -314,10 +314,10 @@ public void onMessage(String tenantId, String sessionId, String text, InputOrigi
 
 private void onRejected(InputOrigin origin, InputOutcome o) {
     switch (o.getRejectReason()) {
-        case InputOutcome.REJECT_NOT_OWNER:            forwardTo(o.getRejectDetail()); break;  // 转发给持有节点
-        case InputOutcome.REJECT_SCOPE_UNAVAILABLE:    reply(origin, "无权限或授权服务不可用"); break;
-        case InputOutcome.REJECT_ENGINE_CLOSED:        retryOnFreshEngine(); break;            // 引擎刚被池回收：重新 pool.get
-        default:                                       reply(origin, o.getRejectDetail());     // busy / hitl_pending / 不可排队 / 积压已满
+        case NOT_OWNER:         forwardTo(o.getRejectDetail()); break;  // 转发给持有节点
+        case SCOPE_UNAVAILABLE: reply(origin, "无权限或授权服务不可用"); break;
+        case ENGINE_CLOSED:     retryOnFreshEngine(); break;            // 引擎刚被池回收：重新 pool.get
+        default:                reply(origin, o.getRejectDetail());     // BUSY / HITL_PENDING / 不可排队 / 积压已满（线上值用 getRejectReason().code()）
     }
 }
 
@@ -333,7 +333,7 @@ private void drain(HarnessEngine engine, AgentSession session) {
 
 ### 6.2 管理态（控制台 / 后台 API）
 
-门面（`queue.enqueue`、`steer.steer`、`goal.create/update/pause`、`loop.schedule`、`engine.interrupt` 等）是对象路径，**不经过 `handle` 的受理判定**：
+门面（`queue.enqueue`、`steer.steer`、`goal.create/update/pause`、`loop.schedule`、`InterruptMode.INTERRUPT` 等）是对象路径，**不经过 `handle` 的受理判定**：
 
 | 检查 | `handle` 路径 | 门面路径 | 宿主要做的 |
 |---|---|---|---|
@@ -371,13 +371,13 @@ public class AdminController {
             case OK:        return Result.succeed();
             case NOT_OWNER: return Result.failure(307, r.getOwner());   // 网关转发
             case NOT_FOUND: return Result.failure(404, r.getDetail());
-            default:        return Result.failure(409, r.getDetail());  // INVALID：当前状态不可暂停
+            default:        return Result.failure(409, r.getDetail());  // CONFLICT：当前状态不可暂停
         }
     }
 }
 ```
 
-> `engine.interrupt` 会**连带清空队列**；只想停当前流、保留排队用 `engine.cancelStream(session)`。改 goal 配置时 `goal.update(..., stopper)` 的 `stopper` 不要传 `engine::interrupt`（会清队列）。
+> `InterruptMode.INTERRUPT` 会**连带清空队列**；只想停当前流、保留排队用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`。改 goal 配置时 `goal.update(..., stopper)` 的 `stopper` 不要传 `InterruptMode.INTERRUPT`（会清队列）。
 
 ---
 

@@ -127,7 +127,7 @@ class SaasContractTest {
 
         InputOutcome o = engine.handle(HarnessInput.of(s, "hi"));
         assertEquals(InputOutcome.Kind.REJECTED, o.getKind());
-        assertEquals(InputOutcome.REJECT_NOT_OWNER, o.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.NOT_OWNER, o.getRejectReason());
         assertEquals("node-b", o.getRejectDetail());
         assertEquals(0, resolverCalls.get(), "非持有节点不调用作用域解析器");
 
@@ -138,7 +138,35 @@ class SaasContractTest {
         assertTrue(plan.isNotOwner());
         assertEquals("node-b", plan.getOwner());
         assertFalse(plan.hasActiveRun());
-        assertFalse(engine.interrupt(s));
+        assertEquals(HarnessResult.Code.NOT_OWNER, engine.interrupt(s, InterruptMode.INTERRUPT).getCode());
+    }
+
+    /** 三种中断方式在非持有节点上一律什么都不做，并显式返回 NOT_OWNER（此前 cancel/preempt 不查归属） */
+    @Test
+    void notOwnerInterruptModesLeaveRunUntouched() {
+        HarnessEngine engine = builder().sessionOwnership(REMOTE).build();
+        AgentSession s = session("s1");
+        AtomicInteger disposed = new AtomicInteger();
+        SessionRuns.attach(s, new Disposable() {
+            @Override
+            public void dispose() {
+                disposed.incrementAndGet();
+            }
+
+            @Override
+            public boolean isDisposed() {
+                return disposed.get() > 0;
+            }
+        });
+
+        for (InterruptMode mode : InterruptMode.values()) {
+            HarnessResult<Boolean> r = engine.interrupt(s, mode);
+            assertEquals(HarnessResult.Code.NOT_OWNER, r.getCode(), mode.name());
+            assertEquals("node-b", r.getOwner(), mode.name());
+        }
+        assertEquals(0, disposed.get(), "非持有节点不得停掉运行流");
+        assertTrue(SessionRuns.isBusy(s));
+        assertEquals(0, SessionRuns.cancelCount(s), "非持有节点不得推进取消代数");
     }
 
     @Test
@@ -184,7 +212,7 @@ class SaasContractTest {
         busy(s);
 
         InputOutcome o = engine.handle(HarnessInput.of(s, "queued?"));
-        assertEquals(InputOutcome.REJECT_SCOPE_UNAVAILABLE, o.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, o.getRejectReason());
         assertTrue(backlog.offered.isEmpty(), "解析不到作用域的输入不进积压");
     }
 
@@ -198,7 +226,7 @@ class SaasContractTest {
 
         InputScope withAttr = InputScope.builder("u").attr("k", new Object()).build();
         InputOutcome o = engine.handle(HarnessInput.of(s, "x").scope(withAttr));
-        assertEquals(InputOutcome.REJECT_SCOPE_NOT_DEFERRABLE, o.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.SCOPE_NOT_DEFERRABLE, o.getRejectReason());
         assertTrue(backlog.offered.isEmpty());
 
         InputScope plain = InputScope.builder("u").tools("read").build();
@@ -227,7 +255,7 @@ class SaasContractTest {
 
         // 主体不一致：拒绝
         HarnessInput other = HarnessInput.of(s, "x").restoredScope(InputScope.builder("someone-else").build());
-        assertEquals(InputOutcome.REJECT_SCOPE_UNAVAILABLE, engine.handle(other).getRejectReason());
+        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, engine.handle(other).getRejectReason());
     }
 
     @Test
@@ -306,7 +334,7 @@ class SaasContractTest {
         String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1");
         assertTrue(g.startsWith("[OK]"), g);
         assertNotNull(engine.resolveAgent(sessions.get("s2"), "reviewer"), "全局对所有会话可见");
-        assertTrue(engine.getWorkspaceSource().exists(engine.getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
+        assertTrue(engine.getWorkspaceSource().exists(engine.getSettings().getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
 
         // 同名不覆盖（全局与会话级都拒绝）
         assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2").startsWith("ERROR"));
@@ -366,8 +394,8 @@ class SaasContractTest {
         }));
         assertThrows(IllegalStateException.class, () -> engine.getAgentManager().addAgent(AgentDefinition.builder().name("z").build()));
         assertThrows(IllegalStateException.class, () -> engine.toolPermissionReset(Collections.emptyList(), Collections.emptyList()));
-        assertThrows(IllegalStateException.class, () -> engine.setMemoryEnabled(true));
-        assertThrows(IllegalStateException.class, () -> engine.setSubagentDefaultConcurrency(2));
+        assertThrows(IllegalStateException.class, () -> engine.getSettings().setMemoryEnabled(true));
+        assertThrows(IllegalStateException.class, () -> engine.getSettings().setSubagentDefaultConcurrency(2));
 
         HarnessEngine coding = builder().build();
         assertFalse(coding.getCommandRegistry().isSealed());
@@ -383,7 +411,7 @@ class SaasContractTest {
         engine.shutdown();
         assertTrue(engine.isClosed());
         InputOutcome o = engine.handle(HarnessInput.of(session("s1"), "hi"));
-        assertEquals(InputOutcome.REJECT_ENGINE_CLOSED, o.getRejectReason());
+        assertEquals(InputOutcome.RejectReason.ENGINE_CLOSED, o.getRejectReason());
     }
 
     // ---------- M4.1 主体与 cwd ----------
@@ -396,7 +424,7 @@ class SaasContractTest {
                 .build();
         AgentSession s = session("s1");
 
-        assertEquals(InputOutcome.REJECT_SCOPE_UNAVAILABLE, engine.handle(HarnessInput.of(s, "hi")).getRejectReason(),
+        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, engine.handle(HarnessInput.of(s, "hi")).getRejectReason(),
                 "无主体时解析不到作用域");
 
         engine.setSessionPrincipal(s, "tenant-a");
@@ -443,7 +471,7 @@ class SaasContractTest {
         Path outside = Files.createDirectories(workspace.resolve("outside"));
 
         // 绕过 setSessionCwd（如请求级 toolContext 传入 __cwd）：消费端拒绝执行
-        CommandResult r = engine.getTerminalTalent().exec("echo hi", outside.toString(), 5000, 1000);
+        CommandResult r = engine.getTalents().getTerminal().exec("echo hi", outside.toString(), 5000, 1000);
         assertEquals(CommandResult.Status.FAILED, r.getStatus());
         assertTrue(r.getText().contains("out of policy"), r.getText());
     }

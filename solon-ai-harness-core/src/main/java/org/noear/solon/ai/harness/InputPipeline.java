@@ -92,7 +92,7 @@ final class InputPipeline {
 
         if (engine.isClosed()) {
             // 宿主持有过期引用：明确失败，而不是悄悄重新拉起 LSP / MCP 等已释放的资源
-            return InputOutcome.rejected(InputOutcome.REJECT_ENGINE_CLOSED, null);
+            return InputOutcome.rejected(InputOutcome.RejectReason.ENGINE_CLOSED, null);
         }
 
         if (session == null || admittedOnThread.containsKey(session)) {
@@ -110,7 +110,7 @@ final class InputPipeline {
         //    HITL 决策同样要求持有：挂起的 trace 与运行态都在持有节点内存里。
         OwnerCheck owner = sessionControl.checkOwner(session.getSessionId());
         if (owner.isOwned() == false) {
-            return InputOutcome.rejected(InputOutcome.REJECT_NOT_OWNER, owner.getOwner());
+            return InputOutcome.rejected(InputOutcome.RejectReason.NOT_OWNER, owner.getOwner());
         }
 
         // ========== 0b. 作用域预检（锁外；归属之后，非持有节点不调解析器）==========
@@ -177,7 +177,7 @@ final class InputPipeline {
         // 扩展可在 onInput 里就地覆盖（input.scope(...)），以输入上的最终值为准。
         final InputScope scope = input.getScope();
         if (scope == null && options.isScopeRequired()) {
-            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, null);
         }
 
         final AgentSession session = input.getSession();
@@ -354,7 +354,7 @@ final class InputPipeline {
             if (explicit == null) {
                 input.resolvedScope(null);
                 if (required) {
-                    return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+                    return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, null);
                 }
             }
             return null;
@@ -368,24 +368,24 @@ final class InputPipeline {
                 throw e;
             }
             LOG.warn("[Harness] scope resolve failed, input rejected: {}", e.toString());
-            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, e.getMessage());
+            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, e.getMessage());
         }
 
         if (explicit != null) {
             // 积压续发：保存的显式作用域 ∩ 最新解析（撤销的权限立即生效，且不会被放宽）
             if (resolved == null) {
-                return required ? InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null) : null;
+                return required ? InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, null) : null;
             }
             InputScope narrowed = InputScope.intersect(explicit, resolved);
             if (narrowed == null) {
-                return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, "principal mismatch");
+                return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, "principal mismatch");
             }
             input.scope(narrowed);
             return null;
         }
 
         if (resolved == null && required) {
-            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_UNAVAILABLE, null);
+            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, null);
         }
         input.resolvedScope(resolved);
         return null;

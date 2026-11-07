@@ -18,7 +18,7 @@ import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
-import org.noear.solon.ai.harness.host.StopMode;
+import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.Submitted;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.scope.InputScope;
@@ -143,7 +143,7 @@ class QuickstartSampleTest {
                     .call("s1", "goal.get", GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get("s1"))).isOk());
 
             // §六 停止
-            assertTrue(host.admin("acme", "acme/admin").stop("s1", StopMode.STOP_AND_CLEAR).isOk());
+            assertTrue(host.admin("acme", "acme/admin").interrupt("s1", InterruptMode.INTERRUPT).isOk());
         } finally {
             pool.close();
         }

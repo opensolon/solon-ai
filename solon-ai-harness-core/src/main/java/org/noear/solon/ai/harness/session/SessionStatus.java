@@ -18,11 +18,13 @@ package org.noear.solon.ai.harness.session;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.hitl.HitlCard;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.Objects;
 import java.util.function.BinaryOperator;
 
@@ -241,6 +243,20 @@ public final class SessionStatus {
     }
 
     /**
+     * 受理占位登记值是否有效（唯一实现；引擎的受理闸门也委托这里）。
+     *
+     * <p>登记值是凭据本身（{@link BooleanSupplier}：未释放且未超时为真）；兼容旧的 {@code Boolean.TRUE} 写法。
+     * 宿主读占位用 {@code engine.status(session).isAdmitting()}，不要直接调本方法。</p>
+     */
+    @Internal
+    public static boolean isAdmissionMark(@Nullable Object mark) {
+        if (mark instanceof BooleanSupplier) {
+            return ((BooleanSupplier) mark).getAsBoolean();
+        }
+        return Boolean.TRUE.equals(mark);
+    }
+
+    /**
      * 快照组装器：核心事实在创建时读定，扩展经 {@link #put} 贡献事实。
      *
      * @since 4.2.0
@@ -265,11 +281,7 @@ public final class SessionStatus {
                 this.busy = activeRunCount > 0;
                 this.pendingHitl = HitlCard.pendingCount(session);
                 this.cancelGeneration = SessionRuns.cancelCount(session);
-                // 与引擎 InputGate#isValidMark 同口径：登记值是凭据本身（BooleanSupplier，未释放且未超时为真）
-                Object mark = session.attrs().get(HarnessAttrs.INPUT_ADMITTING);
-                this.admitting = mark instanceof java.util.function.BooleanSupplier
-                        ? ((java.util.function.BooleanSupplier) mark).getAsBoolean()
-                        : Boolean.TRUE.equals(mark);
+                this.admitting = isAdmissionMark(session.attrs().get(HarnessAttrs.INPUT_ADMITTING));
             }
         }
 

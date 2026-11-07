@@ -7,7 +7,7 @@ package org.noear.solon.ai.harness.host;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -73,17 +73,17 @@ public interface HostSink {
     /**
      * 拒绝提示文案（国际化在这里做）。
      *
-     * @param reason 原因码：{@code InputOutcome.REJECT_*} 或 {@link Submitted#REJECT_SESSION_NOT_FOUND}
+     * @param reason 拒绝原因（与引擎同一张码表，含宿主层的 {@code SESSION_NOT_FOUND}）
      * @param detail 引擎给出的可展示文字（可空）
      */
-    default String rejectText(String reason, @Nullable String detail) {
-        if (Submitted.REJECT_SESSION_NOT_FOUND.equals(reason)) {
+    default String rejectText(RejectReason reason, @Nullable String detail) {
+        if (reason == RejectReason.SESSION_NOT_FOUND) {
             return "会话不存在";
         }
-        if (InputOutcome.REJECT_SCOPE_UNAVAILABLE.equals(reason)) {
+        if (reason == RejectReason.SCOPE_UNAVAILABLE) {
             return "无权限或授权服务不可用";
         }
-        return detail != null && detail.isEmpty() == false ? detail : reason;
+        return detail != null && detail.isEmpty() == false ? detail : reason.code();
     }
 
     /** 排队提示文案 */

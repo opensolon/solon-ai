@@ -219,7 +219,7 @@ public class LoopExtension extends AbsHarnessExtension {
             if (outcome.getKind() != InputOutcome.Kind.TASK) {
                 // 忙 / 待审批（REJECTED）等未受理结局：本轮跳过，不计错误
                 return LoopOutcome.skip(outcome.getRejectReason() != null
-                        ? outcome.getRejectReason() : "input not admitted: " + outcome.getKind());
+                        ? outcome.getRejectReason().code() : "input not admitted: " + outcome.getKind());
             }
             try {
                 return LoopOutcome.done(outcome.call().getContent());

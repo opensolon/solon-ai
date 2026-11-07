@@ -106,6 +106,35 @@ final class SessionControl {
         return HarnessInterrupts.claim(session);
     }
 
+    /**
+     * 统一的中断入口：三种方式都先做归属检查（非持有节点什么都不做，返回 NOT_OWNER）。
+     */
+    HarnessResult<Boolean> interrupt(AgentSession session, InterruptMode mode) {
+        Objects.requireNonNull(mode, "mode");
+        if (session == null) {
+            return HarnessResult.ok(false);
+        }
+
+        if (mode == InterruptMode.INTERRUPT) {
+            InterruptPlan plan = prepareInterrupt(session);
+            if (plan.isNotOwner()) {
+                return HarnessResult.notOwner(plan.getOwner());
+            }
+            return HarnessResult.ok(plan.commit());
+        }
+
+        OwnerCheck owner = checkOwner(session.getSessionId());
+        if (owner.isOwned() == false) {
+            return HarnessResult.notOwner(owner.getOwner());
+        }
+
+        if (mode == InterruptMode.CANCEL_STREAM) {
+            return HarnessResult.ok(HarnessInterrupts.cancelStream(session));
+        } else {
+            return HarnessResult.ok(HarnessInterrupts.preemptStream(session));
+        }
+    }
+
     SessionStatus status(AgentSession session) {
         SessionStatus.Builder builder = SessionStatus.builder(session);
         if (session != null) {
@@ -178,9 +207,9 @@ final class SessionControl {
         return false;
     }
 
-    boolean isRunnableWhenBusy(String input) {
-        Command command = resolveCommand(input);
-        return command != null && !command.terminalOnly() && command.runnableWhenBusy();
+    /** 对外门面与受理判定共用 {@link #isBusyRunnable(HarnessInput)}：只有一份口径 */
+    boolean isRunnableWhenBusy(HarnessInput input) {
+        return input != null && isBusyRunnable(input);
     }
 
     /**
@@ -211,7 +240,7 @@ final class SessionControl {
                 if (exempt == false) {
                     HitlCard next = HitlCard.next(session);
                     String toolName = next == null ? null : next.getToolName();
-                    return Admission.outcome(InputOutcome.rejected(InputOutcome.REJECT_HITL_PENDING,
+                    return Admission.outcome(InputOutcome.rejected(InputOutcome.RejectReason.HITL_PENDING,
                             toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName));
                 }
             }
@@ -249,16 +278,16 @@ final class SessionControl {
 
         // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存
         if (input.isProgram() || input.isResume()) {
-            return InputOutcome.rejected(InputOutcome.REJECT_BUSY, busyText);
+            return InputOutcome.rejected(InputOutcome.RejectReason.BUSY, busyText);
         }
 
         InputBacklog backlog = engine.getExtension(InputBacklog.class).orElse(null);
         if (backlog == null) {
-            return InputOutcome.rejected(InputOutcome.REJECT_BUSY, busyText);
+            return InputOutcome.rejected(InputOutcome.RejectReason.BUSY, busyText);
         }
 
         if (input.hasAttachments()) {
-            return InputOutcome.rejected(InputOutcome.REJECT_ATTACHMENTS_NOT_DEFERRABLE,
+            return InputOutcome.rejected(InputOutcome.RejectReason.ATTACHMENTS_NOT_DEFERRABLE,
                     "当前任务正在执行，带附件的消息不能排队，请稍后再发");
         }
 
@@ -269,7 +298,7 @@ final class SessionControl {
         // 显式作用域随积压保存（解析所得的不存，续发时重新解析）；含不可保存维度时拒绝，
         // 不能悄悄丢掉模型 / 属性后按更宽的权限执行
         if (input.isScopeExplicit() && input.getScope().isDeferrable() == false) {
-            return InputOutcome.rejected(InputOutcome.REJECT_SCOPE_NOT_DEFERRABLE,
+            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_NOT_DEFERRABLE,
                     "当前任务正在执行，该消息带有不可保存的权限范围，请稍后再发");
         }
 
@@ -282,7 +311,7 @@ final class SessionControl {
         }
 
         if (position < 0) {
-            return InputOutcome.rejected(InputOutcome.REJECT_BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
+            return InputOutcome.rejected(InputOutcome.RejectReason.BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
         }
 
         return InputOutcome.deferred(position);
@@ -293,8 +322,12 @@ final class SessionControl {
         if (input.isCommandAware() == false || input.hasAttachments() || input.isHitlDecision() || input.isResume()) {
             return false;
         }
-        Command command = resolveCommand(input.getText());
-        return command != null && command.runnableWhenBusy() && (command.terminalOnly() == false || input.isTerminal());
+        return isBusyRunnable(resolveCommand(input.getText()), input.isTerminal());
+    }
+
+    /** 「忙时可执行」的唯一实现：声明 runnableWhenBusy，且 terminalOnly 命令仅在终端输入时算 */
+    private static boolean isBusyRunnable(Command command, boolean terminal) {
+        return command != null && command.runnableWhenBusy() && (command.terminalOnly() == false || terminal);
     }
 
     Command resolveCommand(String input) {

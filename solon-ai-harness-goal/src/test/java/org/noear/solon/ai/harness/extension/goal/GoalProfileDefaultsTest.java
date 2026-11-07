@@ -75,7 +75,7 @@ class GoalProfileDefaultsTest {
         HarnessEngine engine = engine(HarnessProfile.CODING);
         GoalExtension goal = attach(engine, GoalExtension.builder());
         // SERVER/CODING 都走 TerminalTalent.exec：CODING 下关掉沙盒只为在测试机上可执行
-        engine.getTerminalTalent().setSandboxEnabled(false);
+        engine.getTalents().getTerminal().setSandboxEnabled(false);
         CommandResult r = goal.getGoalRuntime().runValidationCommand("echo ok", engine.getWorkspace());
         assertEquals(CommandResult.Status.COMPLETED, r.getStatus());
         assertTrue(r.getText().contains("ok"));
