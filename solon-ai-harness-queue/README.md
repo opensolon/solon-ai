@@ -278,29 +278,34 @@ QueueClaimStatus st = queue.claimNext(session,
         });
 
 void startStreamAsync(AgentSession session, QueueItem item) {
+    // 同线程回到 handle：引擎识别为派发轮次
+    InputOutcome outcome = engine.handle(item.toInput(session));
+    if (outcome.getKind() != InputOutcome.Kind.TASK) {
+        handleOutcome(session, outcome, item.getOrigin());
+        return;
+    }
     // 必须在订阅前、领取回调内调用：此时会捕获本次 QueueClaim
     SessionTurn turn = SessionTurn.begin(session);
+    // 终态后续发下一条：登记在「运行句柄注销之后」（见下方要点）
+    outcome.afterRun(() -> queue.drainLoop(session, s -> !engine.status(s).isOccupied(), this::dispatch));
     executor.execute(() -> {
         if (turn.isCancelled()) {
+            outcome.discard();
             turn.settle(false);               // 调度窗口内被取消；若已被 cancelPending 作废则为空操作
             return;
         }
-        boolean ok = false;
-        try {
-            runStream(session, item);         // 宿主自己的流执行（阻塞到终态）
-            ok = true;
-        } finally {
-            turn.settle(ok);                  // 幂等：true=确认，false=回滚到队首
-            // 终态后续发下一条
-            queue.drainLoop(session, s -> !engine.status(s).isOccupied(), this::dispatch);
-            // dispatch 即本例的 QueueClaimHandler：claim -> { startStreamAsync(session, claim.getItem()); return false; }
-        }
+        outcome.getRequest().stream()
+                .doOnNext(e -> render(session, e))
+                .doFinally(s -> turn.settle(true))   // 幂等；此时会话仍算忙，不要在这里 drain
+                .subscribe();
     });
 }
+// dispatch 即本例的 QueueClaimHandler：claim -> { startStreamAsync(session, claim.getItem()); return false; }
 ```
 
 要点：
 
+- **终态续发用 `outcome.afterRun(...)`，不要写在流的 `doFinally` 里**：Reactor 正常终止时下游的 `doFinally` 先于上游执行，而运行句柄在请求内部最上游才注销——宿主 `doFinally` 里 `isOccupied` 仍为 true，`drainLoop` 会直接返回，排队消息要等下一次外部触发才发出。`blockLast()` 等待同样不可靠（它在 `onComplete` 时就返回）。`afterRun` 在句柄注销后、执行线程上运行；未开流就放弃时不会执行。
 - 返回值必须诚实。异步却返回 `true`，流失败后无法回滚；同步却返回 `false`，会留下未收口的 in-flight，挡住后续领取。
 - 同一会话同时只有一条 in-flight。它未收口前，再次 `claimNext` 返回 `NO_TASK`。
 - `QueueClaim.current(session)` 可取回会话当前未收口的队列领取（槽位里是别的插件的派发时返回 null）。

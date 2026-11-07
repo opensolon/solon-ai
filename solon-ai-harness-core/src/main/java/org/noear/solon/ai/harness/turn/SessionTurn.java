@@ -39,17 +39,20 @@ import org.noear.solon.lang.Nullable;
  * // 1) 在订阅前（调用线程内）开一轮
  * SessionTurn turn = SessionTurn.begin(session);
  *
- * // 2) 订阅动作可能被调度到别的线程
+ * // 2) 续发积压登记到「运行句柄注销之后」：宿主 doFinally 里会话仍算忙，在那里 drain 会被挡掉
+ * outcome.afterRun(() -> drainQueue());
+ *
+ * // 3) 订阅动作可能被调度到别的线程
  * runAsync(() -> {
  *     if (turn.isCancelled()) {        // 调度窗口内被取消：不开流
+ *         outcome.discard();
  *         emitDoneOnce();
  *         return;
  *     }
- *     request.stream()
+ *     outcome.getRequest().stream()
  *            .doFinally(s -> {
  *                turn.settle(true);   // 幂等；非程序派发的输入时是空操作
- *                emitDoneOnce();
- *                drainQueue();
+ *                emitDoneOnce();      // 不在这里 drain
  *            })
  *            .subscribe();
  * });
@@ -58,7 +61,7 @@ import org.noear.solon.lang.Nullable;
  * <p><b>{@link #begin} 必须早于 {@code stream()}/{@code subscribe()}。</b>晚于它调用会失去
  * 存在意义——基准取到的是「已经开始的这一轮」的代数，取消永远判定不到。</p>
  *
- * <p><b>本类不负责</b>：发 done、发 reset、drain 队列、MDC 作用域。终态去重门是宿主的
+ * <p><b>本类不负责</b>：发 done、发 reset、drain 队列（用 {@code InputOutcome#afterRun}）、MDC 作用域。终态去重门是宿主的
  * （Web 用事件发布器的 done 门、桌面端用 {@code terminalSent} CAS），harness 无法也不该
  * 替它决定「谁是终态」。</p>
  *

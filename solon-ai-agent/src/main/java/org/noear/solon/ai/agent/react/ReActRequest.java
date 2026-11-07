@@ -146,6 +146,7 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             return new ReActResponse(session, trace, message);
         } finally {
             SessionRuns.detach(session, run);
+            fireAfterRun();
         }
     }
 
@@ -267,8 +268,35 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             .doFinally(signal -> {
                 // 按值注销，只摘自己那条流
                 SessionRuns.detach(session, runRef.get());
+                // 注销之后才回调：下游（宿主）的 doFinally 先于这里执行，那时运行句柄仍在登记表里，
+                // 会话仍算忙；「本轮结束后接着做」的动作（如续发积压）只能放在这里
+                fireAfterRun();
             });
         });
+    }
+
+    /**
+     * 一次运行结束、且运行句柄已从 {@link SessionRuns} 注销之后的回调点（默认空操作）。
+     *
+     * <p>{@link #stream()} 每次订阅终止（完成 / 出错 / 取消）回调一次，{@link #call()} 每次返回或抛出后回调一次。
+     * 回调时本轮已不再计入会话的运行流，因此子类可在这里做「会话空闲后才允许」的事。</p>
+     *
+     * <p>为什么不能交给下游 {@code doFinally}：Reactor 正常终止时下游的 {@code doFinally} 先于上游执行，
+     * 宿主在自己的 {@code doFinally} 里看到的会话一定还忙。</p>
+     *
+     * <p>回调抛出的异常只记日志，不影响终止信号与句柄注销。</p>
+     *
+     * @since 4.2.0
+     */
+    protected void afterRun() {
+    }
+
+    private void fireAfterRun() {
+        try {
+            afterRun();
+        } catch (Throwable e) {
+            log.warn("ReActRequest afterRun failed", e);
+        }
     }
 
     /**

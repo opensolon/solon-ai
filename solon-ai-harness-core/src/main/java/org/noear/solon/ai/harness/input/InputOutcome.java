@@ -29,6 +29,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 一次输入的处置结果
@@ -188,6 +189,8 @@ public final class InputOutcome {
     private TurnDispatch dispatch;
     /** 放弃执行时释放受理占位（仅 TASK 且占到了位时非空；幂等） */
     private Runnable discarder;
+    /** 登记「本轮运行句柄注销之后」的回调（仅 TASK 且请求由引擎装配时非空） */
+    private Consumer<Runnable> afterRunRegistrar;
 
     private InputOutcome(Kind kind, String commandName, String commandOutput,
                         ParsedCommand command, Prompt prompt, String agentName, String modelName,
@@ -262,13 +265,16 @@ public final class InputOutcome {
      * @param besideRunning 是否在正在运行的任务旁边执行（忙时可执行命令）
      * @param dispatch      本轮所属的程序派发事务（可为 null）
      * @param discarder     放弃执行时释放受理占位的动作（可为 null）
+     * @param afterRunRegistrar 登记「运行句柄注销之后」回调的动作（可为 null，见 {@link #afterRun(Runnable)}）
      * @return 本实例
      * @since 4.2.0
      */
-    public InputOutcome admitted(boolean besideRunning, @Nullable TurnDispatch dispatch, @Nullable Runnable discarder) {
+    public InputOutcome admitted(boolean besideRunning, @Nullable TurnDispatch dispatch, @Nullable Runnable discarder,
+                                 @Nullable Consumer<Runnable> afterRunRegistrar) {
         this.besideRunning = besideRunning;
         this.dispatch = dispatch;
         this.discarder = discarder;
+        this.afterRunRegistrar = afterRunRegistrar;
         return this;
     }
 
@@ -589,6 +595,34 @@ public final class InputOutcome {
             discarder = null;
             r.run();
         }
+    }
+
+    /**
+     * 登记「本轮运行结束、且会话已不再因本轮而忙」之后的回调（仅 {@link Kind#TASK} 有效）。
+     *
+     * <p><b>续发积压必须放在这里，不要放在宿主流的 {@code doFinally} 里。</b>Reactor 正常终止时下游的
+     * {@code doFinally} 先于上游执行，而本轮的运行句柄在请求内部最上游才注销——宿主在自己的
+     * {@code doFinally} 里看到的会话一定还忙，续发会被「忙」判定挡掉。本回调在注销之后执行：</p>
+     * <ul>
+     *     <li>{@code stream()}：每次订阅终止（完成 / 出错 / 取消）后各执行一次，晚于宿主的 {@code doFinally}
+     *     （收口派发、发 done 都已完成）；</li>
+     *     <li>{@code call()}：返回或抛出前执行一次。</li>
+     * </ul>
+     *
+     * <p>须在开流 / 调用之前登记。未开流就放弃（{@link #discard()}、开流前出错）时不会执行，
+     * 那是宿主自己的失败收尾。回调在执行线程上运行，异常只记日志；耗时动作宿主应自行调度。</p>
+     *
+     * @param hook 回调
+     * @return 是否登记成功（非 TASK、或请求不是引擎装配的时为 false）
+     * @since 4.2.0
+     */
+    public boolean afterRun(Runnable hook) {
+        Consumer<Runnable> registrar = afterRunRegistrar;
+        if (kind != Kind.TASK || registrar == null || hook == null) {
+            return false;
+        }
+        registrar.accept(hook);
+        return true;
     }
 
     @Override

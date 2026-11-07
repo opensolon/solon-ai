@@ -1,5 +1,11 @@
 ### vNEXT
 
+* **`InputOutcome#afterRun(Runnable)`：本轮运行句柄注销之后的回调**（4.2.0；纯新增）:
+  * **修复**：宿主在流的 `doFinally` 里续发积压时，排队消息不会自动发出。Reactor 正常终止时下游 `doFinally` 先于上游执行，而运行句柄在 `ReActRequest` 最内层才注销，宿主 `doFinally` 里 `isOccupied` 恒为 true，`drainLoop` 直接返回，要等下一次外部触发
+  * **新增**：`ReActRequest#afterRun()`（受保护钩子，`stream()` 每次订阅终止、`call()` 每次结束且句柄注销后调用，异常只记日志）；`InputOutcome#afterRun(Runnable)`（仅 TASK 有效，返回是否登记成功；未开流就 `discard` 时不执行）；`InputOutcome#admitted` 增加第 4 参 `afterRunRegistrar`
+  * **文档**：`SessionTurn` javadoc 与 queue README 4.4 的标准写法改为 `outcome.afterRun(() -> drainQueue())`，`doFinally` 只保留 `settle` 与发 done
+  * **验证**：新增 `AfterRunContractTest` 6 例；core 644 例 32F+5E（失败集与基线一致），goal 229 / queue 94 / steer 72 / loop 100 全绿，聚合 7 例 1F（既有 @Deprecated 守卫）
+
 * **TerminalTalent 受保护目录跟随 harnessHome**（新增面为主）：新增 `TerminalTalent(MountManager, String harnessHome)`，harness 引擎传入自身 harnessHome；文件工具强制拒绝 `<hh>commands|agents|cache/mount`、OS 沙盒对工作区根与本轮工作根下的 `<hh>commands|agents` 加 denyWrite、物化缓存改为 `~/<hh>cache/mount`、ignoreDirs 追加 `<hh>` 首段。修复引擎缺省 `.solon/` 时模型可改写 `<ws>/.solon/agents|commands`。单参构造与 `TerminalSupport.isMandatoryDenyRelativePath(rel)` 仍按 `.soloncode/`，另增双参版本
 * **`HarnessEngine.getSessionOrNil` → `getSessionOrNull`**（未发布，直接改名）：与 soloncode-cli `SessionManager.getSessionOrNull` 统一
 

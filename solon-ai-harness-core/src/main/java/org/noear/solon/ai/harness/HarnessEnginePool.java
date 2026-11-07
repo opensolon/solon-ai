@@ -100,7 +100,7 @@ public final class HarnessEnginePool implements AutoCloseable {
      *
      * @throws IllegalStateException 池已关闭，或达到上限且没有可回收的引擎
      */
-    public HarnessEngine acquire(String key) {
+    public HarnessEngine get(String key) {
         Objects.requireNonNull(key, "key");
         if (closed) {
             throw new IllegalStateException("HarnessEnginePool is closed");

@@ -89,8 +89,10 @@ final class InputPipeline {
         final Map<AgentSession, Boolean> admittedOnThread = ADMITTED_ON_THREAD.get();
 
         if (session == null || admittedOnThread.containsKey(session)) {
-            // 无会话（如一次性摘要）或命令内部重入：不判定、不占位
-            return assemble(input);
+            // 无会话（如一次性摘要）或命令内部重入：不判定、不占位（afterRun 仍可用）
+            InputOutcome outcome = assemble(input);
+            AdmittedRequest admitted = admittedOf(outcome);
+            return admitted == null ? outcome : outcome.admitted(false, null, null, admitted::addAfterRun);
         }
 
         // ========== 0. 受理判定（判定、占位、入积压同一把会话锁）==========
@@ -115,18 +117,25 @@ final class InputPipeline {
         }
 
         // 占位跟着请求走：TASK 由请求在开流 / 调用结束时释放；其余结局当场释放
+        final AdmittedRequest admitted = admittedOf(outcome);
         Runnable discarder = null;
         if (ticket.isAcquired()) {
-            if (outcome.getKind() == InputOutcome.Kind.TASK && outcome.getRequest() instanceof AdmittedRequest) {
-                AdmittedRequest request = (AdmittedRequest) outcome.getRequest();
-                request.bind(ticket);
-                discarder = request::release;
+            if (admitted != null) {
+                admitted.bind(ticket);
+                discarder = admitted::release;
             } else {
                 ticket.close();
             }
         }
 
-        return outcome.admitted(admission.isBesideRunning(), admission.getDispatch(), discarder);
+        return outcome.admitted(admission.isBesideRunning(), admission.getDispatch(), discarder,
+                admitted == null ? null : admitted::addAfterRun);
+    }
+
+    /** TASK 且请求由本引擎装配时取出请求，否则 null。 */
+    private static AdmittedRequest admittedOf(InputOutcome outcome) {
+        return (outcome.getKind() == InputOutcome.Kind.TASK && outcome.getRequest() instanceof AdmittedRequest)
+                ? (AdmittedRequest) outcome.getRequest() : null;
     }
 
     /**

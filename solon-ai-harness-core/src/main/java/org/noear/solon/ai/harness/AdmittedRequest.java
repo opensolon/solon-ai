@@ -23,6 +23,11 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Nullable;
 import reactor.core.publisher.Flux;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -38,11 +43,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  *     <li>宿主拿到 TASK 决定不执行时经 {@code InputOutcome#discard()} 释放；再兜底有中断清除与占位时限。</li>
  * </ul>
  *
+ * <p>宿主经 {@code InputOutcome#afterRun(Runnable)} 登记的回调在父类注销运行句柄之后执行
+ * （见 {@link ReActRequest#afterRun()}）：那时会话已不再因本轮而忙，续发积压此时才判得到空闲。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
 final class AdmittedRequest extends ReActRequest {
+    private static final Logger LOG = LoggerFactory.getLogger(AdmittedRequest.class);
+
     private volatile InputGate.Ticket ticket;
+    /** 运行句柄注销后的宿主回调（每次运行结束都执行；通常只有一次运行） */
+    private final List<Runnable> afterRunHooks = new CopyOnWriteArrayList<>();
     /** 引擎级运行计数（供 {@code HarnessEngine#isQuiescent} 判定空闲回收） */
     private final AtomicInteger activeRuns;
 
@@ -54,6 +66,26 @@ final class AdmittedRequest extends ReActRequest {
     /** 挂上受理占位（仅 handle 第 0 步占到时）。 */
     void bind(InputGate.Ticket ticket) {
         this.ticket = ticket;
+    }
+
+    /** 登记运行句柄注销后的回调（须在开流 / 调用前登记）。 */
+    void addAfterRun(Runnable hook) {
+        if (hook != null) {
+            afterRunHooks.add(hook);
+        }
+    }
+
+    @Override
+    protected void afterRun() {
+        // 占位此前已在订阅 / 调用结束时释放；再释放一次兜底（幂等），确保回调里会话可受理
+        release();
+        for (Runnable hook : afterRunHooks) {
+            try {
+                hook.run();
+            } catch (Throwable e) {
+                LOG.warn("[Harness] afterRun hook failed", e);
+            }
+        }
     }
 
     /** 释放受理占位（幂等）。 */

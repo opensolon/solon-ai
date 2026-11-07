@@ -267,10 +267,10 @@ class MultiTenantContractTest {
                 .build();
 
         try {
-            HarnessEngine a1 = pool.acquire("a");
-            HarnessEngine a2 = pool.acquire("a");
+            HarnessEngine a1 = pool.get("a");
+            HarnessEngine a2 = pool.get("a");
             assertSame(a1, a2);
-            pool.acquire("b");
+            pool.get("b");
             assertEquals(2, created.get());
 
             // 未到 TTL：不回收
@@ -309,7 +309,7 @@ class MultiTenantContractTest {
                                 public boolean isQuiescent(HarnessEngine e) {
                                     // 回收判定期间，另一线程恰好 acquire 同一个键
                                     if (racer.get() == null) {
-                                        Thread t = new Thread(() -> acquired.set(poolRef.get().acquire(key)));
+                                        Thread t = new Thread(() -> acquired.set(poolRef.get().get(key)));
                                         racer.set(t);
                                         t.start();
                                         try {
@@ -335,7 +335,7 @@ class MultiTenantContractTest {
         poolRef.set(pool);
 
         try {
-            pool.acquire("a");
+            pool.get("a");
             now.addAndGet(20_000);
             pool.evictIdle();
             racer.get().join(5_000);
@@ -364,7 +364,7 @@ class MultiTenantContractTest {
                             public void onDetach(HarnessEngine e) {
                                 // 旧引擎关闭途中：另一线程重建同一个键并认领同一会话
                                 if (raced.compareAndSet(false, true)) {
-                                    Thread t = new Thread(() -> poolRef.get().acquire(key).handle(HarnessInput.of(s, "again")).discard());
+                                    Thread t = new Thread(() -> poolRef.get().get(key).handle(HarnessInput.of(s, "again")).discard());
                                     racer.set(t);
                                     t.start();
                                     try {
@@ -382,7 +382,7 @@ class MultiTenantContractTest {
         poolRef.set(pool);
 
         try {
-            pool.acquire("a").handle(HarnessInput.of(s, "hello")).discard();
+            pool.get("a").handle(HarnessInput.of(s, "hello")).discard();
             now.addAndGet(20_000);
             assertEquals(1, pool.evictIdle());
             racer.get().join(5_000);
@@ -409,20 +409,20 @@ class MultiTenantContractTest {
                 .build();
 
         try {
-            pool.acquire("a");
+            pool.get("a");
             now.incrementAndGet();
-            pool.acquire("b");
+            pool.get("b");
             now.incrementAndGet();
 
-            pool.acquire("c"); // a 最久未用且静默 → 腾位
+            pool.get("c"); // a 最久未用且静默 → 腾位
             assertEquals(new HashSet<>(Arrays.asList("b", "c")), pool.keys());
 
             exts.get("b").busy.set(true);
             exts.get("c").busy.set(true);
-            assertThrows(IllegalStateException.class, () -> pool.acquire("d"), "全部忙时拒绝而不是误杀");
+            assertThrows(IllegalStateException.class, () -> pool.get("d"), "全部忙时拒绝而不是误杀");
         } finally {
             pool.close();
         }
-        assertThrows(IllegalStateException.class, () -> pool.acquire("x"), "关闭后不可再取");
+        assertThrows(IllegalStateException.class, () -> pool.get("x"), "关闭后不可再取");
     }
 }
