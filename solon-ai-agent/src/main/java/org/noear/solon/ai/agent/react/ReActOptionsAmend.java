@@ -47,6 +47,17 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     }
 
     /**
+     * 设置请求级属性（仅框架与拦截器可见，不会并入工具调用参数；与 toolContext 不同）
+     *
+     * @since 4.2.0
+     */
+    public ReActOptionsAmend attrPut(String key, Object value) {
+        Assert.notNull(key, "key");
+        options.setAttr(key, value);
+        return this;
+    }
+
+    /**
      * 配置容错策略
      *
      * @param maxRetries   最大重试次数

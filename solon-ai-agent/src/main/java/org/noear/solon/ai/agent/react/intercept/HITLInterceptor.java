@@ -49,7 +49,17 @@ public class HITLInterceptor extends AbsReActInterceptor {
     private static final String APPLIED_PREFIX = "_hitl_applied_";
 
     private final Map<String, HITLStrategy> strategyMap = new ConcurrentHashMap<>();
-    private volatile BiConsumer<String, Map<String, Object>> approvedCallback;
+    private volatile ApprovedHandler approvedCallback;
+
+    /**
+     * 「总是允许」回调（带运行轨迹，可取到会话：用于把记忆规则写到会话而不是全局）
+     *
+     * @since 4.2.0
+     */
+    @FunctionalInterface
+    public interface ApprovedHandler {
+        void onApproved(ReActTrace trace, String toolName, Map<String, Object> args);
+    }
 
     /**
      * 注册工具介入策略
@@ -112,6 +122,11 @@ public class HITLInterceptor extends AbsReActInterceptor {
         int hitlTargetCount = 0;
 
         for (ToolExchanger ex : toolCalls) {
+            // 已被更高优先级的拦截器预填结果（如作用域否决）：不会真正执行，不弹审批卡
+            if (ex.getToolResult() != null) {
+                continue;
+            }
+
             HITLStrategy strategy = strategyMap.get(ex.getToolName());
             if (strategy == null) {
                 continue;
@@ -156,7 +171,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
     @Override
     public void onToolCallStart(ReActTrace trace, ToolExchanger toolExchanger) {
         HITLStrategy strategy = strategyMap.get(toolExchanger.getToolName());
-        if (strategy == null) {
+        if (strategy == null || toolExchanger.getToolResult() != null) {
             return;
         }
 
@@ -231,9 +246,21 @@ public class HITLInterceptor extends AbsReActInterceptor {
      * 设置批准回调（用于 alwaysAllow 场景，自动注入会话级规则）
      *
      * @param callback 回调函数，参数为 (toolName, args)
+     * @deprecated 4.2.0 {@link #onApproved(ApprovedHandler)}
      */
+    @Deprecated
     public HITLInterceptor onApproved(BiConsumer<String, Map<String, Object>> callback) {
-        this.approvedCallback = callback;
+        this.approvedCallback = callback == null ? null : (trace, toolName, args) -> callback.accept(toolName, args);
+        return this;
+    }
+
+    /**
+     * 设置批准回调（带运行轨迹；用于把 alwaysAllow 记忆写到会话级）
+     *
+     * @since 4.2.0
+     */
+    public HITLInterceptor onApproved(ApprovedHandler handler) {
+        this.approvedCallback = handler;
         return this;
     }
 
@@ -310,7 +337,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
                 ex.getArgs().putAll(decision.getModifiedArgs());
             }
             if (decision.isAlwaysAllow() && approvedCallback != null) {
-                approvedCallback.accept(ex.getToolName(), ex.getArgs());
+                approvedCallback.onApproved(trace, ex.getToolName(), ex.getArgs());
             }
         } else if (decision.isSkipped()) {
             String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");

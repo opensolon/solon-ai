@@ -287,6 +287,32 @@ public class HITLBatchUnitTest {
         Assertions.assertEquals(1, HITL.getPendingTasks(session).size());
     }
 
+    /** 已被更高优先级拦截器预填结果的调用（如作用域否决）不会真正执行：不得为它弹审批卡 */
+    @Test
+    public void prefilledCallIsNotSuspended() {
+        HITLInterceptor hitl = new HITLInterceptor().onSensitiveTool("transfer", "delete");
+        AgentSession session = InMemoryAgentSession.of("batch_prefilled");
+        ReActTrace trace = newTrace(session);
+
+        ToolExchanger denied = new ToolExchanger("p1", "transfer", mapOf("to", "A"));
+        denied.setResult("Error: tool 'transfer' is not available in this context.");
+        ToolExchanger normal = new ToolExchanger("p2", "delete", mapOf("id", "1"));
+
+        hitl.onActionStart(trace, Arrays.asList(denied, normal));
+
+        Assertions.assertTrue(session.isPending(), "未预填的敏感调用仍要挂起");
+        List<HITLTask> tasks = HITL.getPendingTasks(session);
+        Assertions.assertEquals(1, tasks.size(), "预填的调用不进审批");
+        Assertions.assertEquals("p2", tasks.get(0).getCallUuid());
+
+        // 单工具兆底路径同口径
+        AgentSession s2 = InMemoryAgentSession.of("batch_prefilled_2");
+        ToolExchanger only = new ToolExchanger("p3", "transfer", mapOf("to", "B"));
+        only.setResult("denied");
+        hitl.onToolCallStart(newTrace(s2), only);
+        Assertions.assertFalse(s2.isPending());
+    }
+
     private static ReActTrace newTrace(AgentSession session) {
         ReActTrace trace = new ReActTrace();
         try {
