@@ -97,6 +97,40 @@ public class TerminalSupport {
         return harnessHome;
     }
 
+    /** 宿主状态目录（相对工作区，已带 harnessHome 前缀）：模型的文件工具与 bash 都不得读写。 */
+    private volatile List<String> protectedStatePaths = Collections.emptyList();
+
+    /**
+     * 设置受保护的宿主状态子路径（相对 harnessHome，如 {@code sessions}、{@code memory}）。
+     * 与 commands/agents 不同，这些路径读也拒绝：里面是其它会话/用户的数据。
+     */
+    void setProtectedStatePaths(Collection<String> subPaths) {
+        List<String> list = new ArrayList<>();
+        if (subPaths != null) {
+            for (String sub : subPaths) {
+                if (sub == null) {
+                    continue;
+                }
+                String s = sub.trim().replace("\\", "/");
+                while (s.startsWith("/") || s.startsWith("./")) {
+                    s = s.substring(s.startsWith("/") ? 1 : 2);
+                }
+                while (s.endsWith("/")) {
+                    s = s.substring(0, s.length() - 1);
+                }
+                if (s.isEmpty() || s.contains("..")) {
+                    throw new IllegalArgumentException("Invalid protected state path: " + sub);
+                }
+                list.add(harnessHome + s);
+            }
+        }
+        this.protectedStatePaths = Collections.unmodifiableList(list);
+    }
+
+    List<String> getProtectedStatePaths() {
+        return protectedStatePaths;
+    }
+
     /**
      * 设置物化缓存管理器（由 TerminalTalent 构造后接线）。
      *
@@ -1208,7 +1242,23 @@ public class TerminalSupport {
     }
 
     private boolean isMandatoryDeny(String relativePath) {
-        return isMandatoryDenyRelativePath(relativePath, harnessDenyPaths);
+        if (isMandatoryDenyRelativePath(relativePath, harnessDenyPaths)) {
+            return true;
+        }
+        List<String> state = protectedStatePaths;
+        if (relativePath == null || state.isEmpty()) {
+            return false;
+        }
+        String normalized = relativePath.replace("\\", "/");
+        if (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        for (String deny : state) {
+            if (matchesDenyEntry(normalized, deny)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isMandatoryDenyRelativePath(String relativePath, List<String> harnessDeny) {

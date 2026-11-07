@@ -95,6 +95,29 @@ public class SkillTalent extends AbsTalent {
          prompt.attrPut(CTX_SKILLS_SELECTED, skillNames);
     }
 
+    /**
+     * 技能工具的可用名单（值为 {@code List<String>}，与「视野」不同）：键存在时，
+     * skilllist / skillsearch / skillread 及系统提示里的清单与预加载只认名单内的技能；
+     * 空名单表示全部禁止，越界按「不存在」处理。由宿主的请求级作用域写入。
+     *
+     * <p>只约束技能工具：技能挂载点仍可经文件工具或 bash 访问。需要文件级隔离时，
+     * 不要把名单外的技能挂进该引擎。</p>
+     *
+     * @since 4.2.0
+     */
+    public final static String CTX_SKILLS_ALLOWED = "_skills_allowed";
+
+    /**
+     * 读取可用名单（未设置返回 null = 不限制）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    public static List<String> getAllowed(@Nullable Map<String, Object> map) {
+        return map == null ? null : (List<String>) map.get(CTX_SKILLS_ALLOWED);
+    }
+
 
     private volatile SkillCatalog skillCatalog;
 
@@ -212,14 +235,14 @@ public class SkillTalent extends AbsTalent {
 
     /** 便捷入口（非工具注册，供内部/测试直接调用）：无视野约束 */
     public String skilllist() {
-        return skilllist(null);
+        return skilllist(null, null);
     }
 
     @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
-    public String skilllist(List<String> _skills_selected) {
-        // _skills_selected 由 toolContext 隐式注入（无 selected 时为 null），模型不可见；
+    public String skilllist(List<String> _skills_selected, List<String> _skills_allowed) {
+        // _skills_selected / _skills_allowed 由 toolContext 隐式注入（未设置时为 null），模型不可见；
         // 与指令清单同口径：只列视野内的技能
-        Collection<SkillDescriptor> skillList = availableSkills(_skills_selected);
+        Collection<SkillDescriptor> skillList = availableSkills(_skills_selected, _skills_allowed);
         if (skillList.isEmpty()) {
             return "当前没有可用的技能。";
         }
@@ -239,15 +262,19 @@ public class SkillTalent extends AbsTalent {
         return sb.toString();
     }
 
+    public String skillsearch(String query) {
+        return skillsearch(query, null, null);
+    }
+
     @ToolMapping(name = "skillsearch", description = "在所有挂载点中搜索技能关键字。支持空格分隔多个词。")
-    public String skillsearch(@Param("query") String query) {
+    public String skillsearch(@Param("query") String query, List<String> _skills_selected, List<String> _skills_allowed) {
         Collection<SkillDescriptor> matches = skillCatalog.searchDescriptors(query);
 
         if (matches.isEmpty()) return "未找到匹配技能。";
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDescriptor s : matches) {
-            if (skillCatalog.isAllowed(s)) {
+            if (isAvailable(s, _skills_selected, _skills_allowed)) {
                 sb.append("  <skill name=\"").append(s.getId()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
         }
@@ -256,12 +283,18 @@ public class SkillTalent extends AbsTalent {
         return sb.toString();
     }
 
+    public String skillread(String name) throws IOException {
+        return skillread(name, null);
+    }
+
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
-    public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name) throws IOException {
+    public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name,
+                            List<String> _skills_allowed) throws IOException {
         // 从技能目录按逻辑标识查找（与会话工作目录无关，故不接收 __cwd）
         SkillContent content = skillCatalog.readContent(name);
 
-        if (content != null) {
+        // 可用名单：越界与不存在同一口径（不泄露名单外的技能是否存在）
+        if (content != null && isAllowedBy(content.getDescriptor(), _skills_allowed)) {
             return content.getRenderedText();
         }
 
@@ -275,14 +308,25 @@ public class SkillTalent extends AbsTalent {
      * 否则被选技能的 SKILL.md 里引用另一个技能时会断链。</p>
      */
     private Collection<SkillDescriptor> availableSkills(@Nullable Prompt prompt) {
-        return availableSkills(getSelected(prompt));
+        return availableSkills(getSelected(prompt), prompt == null ? null : getAllowed(prompt.attrs()));
     }
 
-    private Collection<SkillDescriptor> availableSkills(@Nullable List<String> selected) {
+    private Collection<SkillDescriptor> availableSkills(@Nullable List<String> selected, @Nullable List<String> allowed) {
         return skillCatalog.getDescriptors().stream()
-                .filter(skillCatalog::isAllowed)
-                .filter(s -> selected == null || selected.isEmpty() || matchesSelected(s, selected))
+                .filter(s -> isAvailable(s, selected, allowed))
                 .collect(Collectors.toList());
+    }
+
+    /** 列表/搜索口径：目录放行 + 在可用名单内 + 在视野内（视野为空表示不收窄） */
+    private boolean isAvailable(SkillDescriptor s, @Nullable List<String> selected, @Nullable List<String> allowed) {
+        return skillCatalog.isAllowed(s)
+                && isAllowedBy(s, allowed)
+                && (selected == null || selected.isEmpty() || matchesSelected(s, selected));
+    }
+
+    /** 可用名单为 null 表示不限制 */
+    private static boolean isAllowedBy(SkillDescriptor s, @Nullable List<String> allowed) {
+        return allowed == null || matchesSelected(s, allowed);
     }
 
     /**
@@ -313,14 +357,15 @@ public class SkillTalent extends AbsTalent {
         if (selected.isEmpty() || preloadCharLimit <= 0) {
             return;
         }
+        List<String> allowed = prompt == null ? null : getAllowed(prompt.attrs());
 
         int remaining = preloadCharLimit;
         StringBuilder block = new StringBuilder();
 
         for (String name : selected) {
             SkillContent content = skillCatalog.readContent(name);
-            if (content == null) {
-                // 不存在的选择名忽略，不报错：一个过期技能名不应打死整轮对话
+            if (content == null || isAllowedBy(content.getDescriptor(), allowed) == false) {
+                // 不存在（或越界）的选择名忽略，不报错：一个过期技能名不应打死整轮对话
                 continue;
             }
 

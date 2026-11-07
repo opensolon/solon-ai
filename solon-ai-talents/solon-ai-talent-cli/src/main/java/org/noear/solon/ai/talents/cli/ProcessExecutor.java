@@ -263,10 +263,19 @@ public class ProcessExecutor {
      * 不影响 {@code onOutput} 的实时流式回调。</p>
      */
     public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
+        return executeCmdResult(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput).getText();
+    }
+
+    /**
+     * 执行完整命令并返回结构化结果（状态 + 退出码 + 面向 LLM 的文本）。
+     * 程序侧调用方（如 goal 验证器）靠状态与退出码判定成败，不解析文本。
+     */
+    public CommandResult executeCmdResult(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
         if (timeoutMs == null || timeoutMs < 0) {
             timeoutMs = DEFAULT_TIMEOUT_MS;
         }
 
+        Process process = null;
         try {
             ProcessBuilder pb = new ProcessBuilder(fullCmd);
             pb.directory(rootPath.toFile());
@@ -276,7 +285,8 @@ public class ProcessExecutor {
             // 显式 envs（如 PYTHON/NODE）优先级更高
             EnvironmentResolver.applyTo(pb, envs);
 
-            Process process = pb.start();
+            process = pb.start();
+            final Process proc = process;
             // 非交互执行：立刻关闭子进程 stdin，让读取输入的命令拿到 EOF 而不是一直等到超时。
             // 不关的话（ProcessBuilder 默认给 stdin 挂一个没人写的管道），`git commit`（拉起编辑器）、
             // `npm login`、Unix 的 `read`、CMD 的 `pause` 这类命令会稳定空转到 timeoutMs 才返回——
@@ -296,7 +306,7 @@ public class ProcessExecutor {
             final boolean[] sizeCapped = {false};
             CompletableFuture<byte[]> outputFuture = RunUtil.async(() -> {
                 ByteArrayOutputStream buf = new ByteArrayOutputStream();
-                try (InputStream in = process.getInputStream()) {
+                try (InputStream in = proc.getInputStream()) {
                     byte[] buffer = new byte[4096];
                     int n;
                     while ((n = in.read(buffer)) != -1) {
@@ -328,7 +338,7 @@ public class ProcessExecutor {
                             // 物理上限兜底：防止超大输出撑爆内存。必须整树终止——Windows 无进程组信号，
                             // 只杀 shell 会让孙进程（node/mvn/java 等）孤儿化继续跑
                             sizeCapped[0] = true;
-                            TerminalSessionManager.destroyProcessTree(process);
+                            TerminalSessionManager.destroyProcessTree(proc);
                             break;
                         }
                     }
@@ -369,7 +379,7 @@ public class ProcessExecutor {
                 String partial = renderOutput(awaitOutput(outputFuture, OUTPUT_DRAIN_TIMEOUT_MS),
                         streamDecoder, cliXmlMessages, maxOutputChars);
                 String head = "执行超时：运行时间超过 " + timeoutMs + " 毫秒（已终止进程树）。";
-                return partial.isEmpty() ? head : (head + "\n--- 超时前已产生的输出 ---\n" + partial);
+                return CommandResult.timedOut(partial.isEmpty() ? head : (head + "\n--- 超时前已产生的输出 ---\n" + partial));
             }
 
             // 3. 获取原始字节输出（读取线程可能仍在收尾：给足排空时间，而不是 1 秒硬超时后抛异常
@@ -377,15 +387,19 @@ public class ProcessExecutor {
             byte[] raw = awaitOutput(outputFuture, OUTPUT_DRAIN_TIMEOUT_MS);
 
             // 二进制输出降级：在字节层探测，避免乱码塞满上下文（如 cat 某个 jar/class/图片）
-            if (isLikelyBinary(raw)) {
-                return summarizeBinaryOutput(raw);
-            }
-
-            String result = renderOutput(raw, streamDecoder, cliXmlMessages, maxOutputChars);
+            boolean binary = isLikelyBinary(raw);
+            String result = binary
+                    ? summarizeBinaryOutput(raw)
+                    : renderOutput(raw, streamDecoder, cliXmlMessages, maxOutputChars);
 
             if (sizeCapped[0]) {
-                result = result + "\n... [输出超过 " + maxOutputSize
-                        + " 字节的物理上限，命令已被终止。请缩小输出范围（如加过滤/分页），或重定向到文件后再分段查看]";
+                // 被上限终止不是命令自然结束，退出码无意义：归为 FAILED（验证器据此判「无法判定」而不是「失败」）
+                return CommandResult.failed(result + "\n... [输出超过 " + maxOutputSize
+                        + " 字节的物理上限，命令已被终止。请缩小输出范围（如加过滤/分页），或重定向到文件后再分段查看]");
+            }
+
+            if (binary) {
+                return CommandResult.completed(process.exitValue(), result);
             }
 
             // 退出码：非零时必须显式给出。否则命令失败（编译报错、测试失败、脚本 exit 1）时模型只能
@@ -396,13 +410,20 @@ public class ProcessExecutor {
             }
 
             if (result.isEmpty()) {
-                return "执行成功";
+                return CommandResult.completed(exitCode, "执行成功");
             }
-            return result;
+            return CommandResult.completed(exitCode, result);
 
+        } catch (InterruptedException e) {
+            // 调用线程被中断（如引擎关闭）：终止进程树，否则子进程会成为孤儿继续跑；并恢复中断标记
+            if (process != null) {
+                TerminalSessionManager.destroyProcessTree(process);
+            }
+            Thread.currentThread().interrupt();
+            return CommandResult.failed("执行被中断（已终止进程树）");
         } catch (Throwable e) {
             LOG.error("Process execution failed", e);
-            return "系统失败: " + e;
+            return CommandResult.failed("系统失败: " + e);
         }
     }
 

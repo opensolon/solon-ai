@@ -108,6 +108,56 @@ class SkillTalentScopeToolTest {
         assertTrue(out.contains("B 的正文"));
     }
 
+    // ---------- 强制边界（_skills_allowed） ----------
+
+    @Test
+    void allowedParamIsInvisibleInSchema() {
+        for (FunctionTool t : talent().getToolAry()) {
+            assertFalse(t.inputSchema().contains("_skills_allowed"), t.name() + " schema leaks implicit param");
+        }
+    }
+
+    @Test
+    void skillreadOutsideAllowedLooksLikeMissing() throws Throwable {
+        FunctionTool skillread = toolsOf(talent()).get("skillread");
+
+        Map<String, Object> callArgs = new HashMap<>();
+        callArgs.put(SkillTalent.CTX_SKILLS_ALLOWED, Arrays.asList("@m/a"));
+        callArgs.put("name", "@m/b");
+        String denied = (String) skillread.handle(callArgs);
+        assertFalse(denied.contains("B 的正文"));
+
+        callArgs.put("name", "@m/none");
+        String missing = (String) skillread.handle(callArgs);
+        assertTrue(denied.replace("@m/b", "X").equals(missing.replace("@m/none", "X")),
+                "越界与不存在同口径，不泄露存在性");
+
+        callArgs.put("name", "@m/a");
+        assertTrue(((String) skillread.handle(callArgs)).contains("A 的正文"), "边界内放行");
+    }
+
+    @Test
+    void allowedBoundsListAndSearchEvenWithoutSelection() throws Throwable {
+        Map<String, FunctionTool> tools = toolsOf(talent());
+
+        Map<String, Object> listArgs = new HashMap<>();
+        listArgs.put(SkillTalent.CTX_SKILLS_ALLOWED, Arrays.asList("@m/b"));
+        String list = (String) tools.get("skilllist").handle(listArgs);
+        assertTrue(list.contains("@m/b"));
+        assertFalse(list.contains("@m/a"));
+
+        Map<String, Object> searchArgs = new HashMap<>(listArgs);
+        searchArgs.put("query", "技能");
+        String search = (String) tools.get("skillsearch").handle(searchArgs);
+        assertTrue(search.contains("@m/b"));
+        assertFalse(search.contains("@m/a"));
+
+        Map<String, Object> emptyArgs = new HashMap<>();
+        emptyArgs.put(SkillTalent.CTX_SKILLS_ALLOWED, Arrays.asList());
+        String none = (String) tools.get("skilllist").handle(emptyArgs);
+        assertFalse(none.contains("@m/a") || none.contains("@m/b"), "空边界 = 全部禁止");
+    }
+
     // ---------- 测试替身 ----------
 
     private static class ScopeFakeCatalog implements SkillCatalog {

@@ -95,4 +95,74 @@ public class McpGatewayTalentScopeTest {
         assertNotNull(result);
         assertFalse(result.getContent().contains("不在本次选中"));
     }
+
+    // ---------- 强制边界（_mcps_allowed） ----------
+
+    private static Map<String, FunctionTool> toolsOf(McpGatewayTalent talent) {
+        Map<String, FunctionTool> map = new HashMap<>();
+        for (FunctionTool t : talent.getToolAry()) {
+            map.put(t.name(), t);
+        }
+        return map;
+    }
+
+    @Test
+    void serverOfTool() {
+        McpGatewayTalent talent = build();
+        assertEquals("alpha", talent.getServerOfTool("alpha_fetch"));
+        assertEquals("beta", talent.getServerOfTool("BETA_SEARCH"));
+        assertNull(talent.getServerOfTool("bash"));
+    }
+
+    @Test
+    void callToolOutsideAllowedLooksLikeMissingAndBoundaryNotForwarded() throws Throwable {
+        AtomicInteger counter = new AtomicInteger();
+        Map<String, Object> received = new HashMap<>();
+        McpGatewayTalent talent = new McpGatewayTalent();
+        talent.addMcpServer("alpha", new FakeProvider(Arrays.asList(new FunctionToolDesc("alpha_search")
+                .description("a").inputSchema("{\"type\":\"object\",\"properties\":{}}")
+                .doHandle(args -> {
+                    counter.incrementAndGet();
+                    received.putAll(args);
+                    return ToolResult.success("ok");
+                }))));
+        talent.addMcpServer("beta", new FakeProvider(Arrays.asList(mockTool("beta_search", "b", counter))));
+
+        FunctionTool callTool = toolsOf(talent).get("call_tool");
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("tool_name", "beta_search");
+        args.put("tool_args", new HashMap<>());
+        args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, Arrays.asList("alpha"));
+        ToolResult denied = (ToolResult) callTool.handle(args);
+        assertTrue(denied.getContent().contains("未找到MCP工具"), "越界按不存在处理");
+        assertEquals(0, counter.get());
+
+        args.put("tool_name", "alpha_search");
+        callTool.handle(args);
+        assertEquals(1, counter.get());
+        assertFalse(received.containsKey(McpGatewayTalent.CTX_MCPS_ALLOWED), "边界键不转发给 MCP 服务");
+    }
+
+    @Test
+    void searchAndDetailRespectAllowed() throws Throwable {
+        McpGatewayTalent talent = build();
+        Map<String, FunctionTool> tools = toolsOf(talent);
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("keyword", "搜索");
+        args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, Arrays.asList("beta"));
+        String found = String.valueOf(tools.get("search_tools").handle(args));
+        assertTrue(found.contains("beta_search"));
+        assertFalse(found.contains("alpha_search"));
+
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("tool_name", "alpha_search");
+        detail.put(McpGatewayTalent.CTX_MCPS_ALLOWED, Arrays.asList("beta"));
+        assertTrue(String.valueOf(tools.get("get_tool_detail").handle(detail)).contains("未找到"));
+
+        for (FunctionTool t : talent.getToolAry()) {
+            assertFalse(t.inputSchema().contains("_mcps_allowed"), t.name() + " schema leaks implicit param");
+        }
+    }
 }

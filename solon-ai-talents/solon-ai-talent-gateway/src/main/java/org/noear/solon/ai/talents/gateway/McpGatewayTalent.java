@@ -92,6 +92,50 @@ public class McpGatewayTalent extends AbsTalent {
         prompt.attrPut(CTX_MCPS_SELECTED, mcpServerNames);
     }
 
+    /**
+     * 强制边界（与「视野」不同）：键存在时，只有名单内的服务可见、可搜、可调用（含 {@code call_tool} 点名调用）；
+     * 空名单表示全部禁止。由宿主的请求级作用域写入。
+     *
+     * @since 4.2.0
+     */
+    public static final String CTX_MCPS_ALLOWED = "_mcps_allowed";
+
+    /**
+     * 读取强制边界（未设置返回 null = 不限制）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    public static List<String> getAllowed(@Nullable Map<String, Object> map) {
+        return map == null ? null : (List<String>) map.get(CTX_MCPS_ALLOWED);
+    }
+
+    /**
+     * 生效视野：选择（视野）与强制边界取交集；两者都未设置时返回 null（= 全量）
+     */
+    @Nullable
+    private static List<String> effectiveSelection(@Nullable Prompt prompt) {
+        List<String> selected = getSelected(prompt);
+        List<String> allowed = prompt == null ? null : getAllowed(prompt.attrs());
+
+        if (allowed == null) {
+            return selected.isEmpty() ? null : selected;
+        }
+
+        if (selected.isEmpty()) {
+            return new ArrayList<>(allowed);
+        }
+
+        List<String> view = new ArrayList<>();
+        for (String s : selected) {
+            if (allowed.contains(s)) {
+                view.add(s);
+            }
+        }
+        return view;
+    }
+
     // 工具索引（自建，完全由本类管理）
     private final Map<String, Map<String, FunctionTool>> categoryTools = new ConcurrentHashMap<>();
     private final Map<String, FunctionTool> allTools = new ConcurrentHashMap<>();
@@ -349,6 +393,31 @@ public class McpGatewayTalent extends AbsTalent {
         return providerMap.containsKey(name);
     }
 
+    /**
+     * 工具名 → 归属服务名（不是本网关的工具返回 null）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getServerOfTool(@Nullable String toolName) {
+        if (toolName == null) {
+            return null;
+        }
+
+        String key = toolName.trim().toLowerCase();
+        for (Map.Entry<String, Map<String, FunctionTool>> entry : categoryTools.entrySet()) {
+            if (entry.getValue().containsKey(key)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    /** 工具是否在强制边界内（allowed 为 null 时不限制） */
+    private boolean isToolAllowed(String toolName, @Nullable List<String> allowed) {
+        return allowed == null || allowed.contains(getServerOfTool(toolName));
+    }
+
     // ========== Talent 接口实现（四阶段路由） ==========
 
     @Override
@@ -445,8 +514,8 @@ public class McpGatewayTalent extends AbsTalent {
      * 回退全量会让「我明明只勾了一个服务」变成「全都开着」，属于静默越权。
      */
     private Map<String, Map<String, FunctionTool>> viewCategories(@Nullable Prompt prompt) {
-        List<String> selected = getSelected(prompt);
-        if (selected.isEmpty()) {
+        List<String> selected = effectiveSelection(prompt);
+        if (selected == null) {
             return categoryTools;
         }
 
@@ -462,8 +531,8 @@ public class McpGatewayTalent extends AbsTalent {
 
     /** 本次请求可见的工具（toolKey 小写） */
     private Map<String, FunctionTool> viewTools(@Nullable Prompt prompt) {
-        List<String> selected = getSelected(prompt);
-        if (selected.isEmpty()) {
+        List<String> selected = effectiveSelection(prompt);
+        if (selected == null) {
             return allTools;
         }
 
@@ -479,13 +548,18 @@ public class McpGatewayTalent extends AbsTalent {
 
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
+    public Object searchTools(String keyword) {
+        return searchTools(keyword, null);
+    }
+
     @ToolMapping(name = "search_tools", description = "搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
-    public Object searchTools(@Param("keyword") String keyword) {
+    public Object searchTools(@Param("keyword") String keyword, List<String> _mcps_allowed) {
         if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
 
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
 
         List<Map<String, String>> results = allTools.values().stream()
+                .filter(t -> isToolAllowed(t.name(), _mcps_allowed))
                 .filter(t -> {
                     String content = (t.name() + " " + t.description()).toLowerCase();
                     return Arrays.stream(keys).allMatch(content::contains);
@@ -510,12 +584,16 @@ public class McpGatewayTalent extends AbsTalent {
         return results;
     }
 
+    public String getToolDetail(String name) {
+        return getToolDetail(name, null);
+    }
+
     @ToolMapping(name = "get_tool_detail", description = "获取指定MCP工具的完整参数 Schema")
-    public String getToolDetail(@Param("tool_name") String name) {
+    public String getToolDetail(@Param("tool_name") String name, List<String> _mcps_allowed) {
         if (Utils.isEmpty(name)) return "错误：tool_name 不能为空";
 
         FunctionTool tool = allTools.get(name.trim().toLowerCase());
-        if (tool != null) {
+        if (tool != null && isToolAllowed(tool.name(), _mcps_allowed)) {
             return "### MCP工具详情: " + tool.name() + "\n" +
                     "- 功能描述: " + tool.description() + "\n" +
                     "- 参数架构 (JSON Schema): \n```json\n" + tool.inputSchema() + "\n```";
@@ -584,11 +662,14 @@ public class McpGatewayTalent extends AbsTalent {
 
             FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
 
-            if (tool == null) {
+            // selected 是视野不是权限：call_tool 是点名调用，不按视野硬控；
+            // 但 _mcps_allowed 是强制边界，越界按「不存在」处理（不泄露其它租户服务是否存在）。
+            if (tool == null || gatewayTalent.isToolAllowed(tool.name(), getAllowed(args)) == false) {
                 return ToolResult.success("错误：未找到MCP工具 '" + tool_name + "'");
             }
 
-            // selected 是视野不是权限：call_tool 是点名调用，不做执行侧硬控。
+            // 边界与视野等框架键不转发给 MCP 服务
+            finalToolArgs.remove(CTX_MCPS_ALLOWED);
 
             try {
                 return RetryUtil.callWithRetry(gatewayTalent.maxRetries, gatewayTalent.retryDelayMs, gatewayTalent.retryDelayMs * 4, () -> tool.call(finalToolArgs));

@@ -49,7 +49,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.noear.solon.ai.chat.tool.FunctionTool;
@@ -84,6 +83,8 @@ public class TerminalTalent extends AbsTalent {
     //关闭后仅依赖 Java 层自保护 + 系统提示词软约束，可减少误伤（如构建工具被拦截）。
     //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
     private boolean sandboxSystemRestrict = true;
+    /** 是否由本实例自行初始化进程级 OS 沙盒（见 setSandboxSelfBootstrap） */
+    private volatile boolean sandboxSelfBootstrap = true;
     /**
      * 单次读取/搜索的最大物理长度限制（字符数）。
      * 默认 128KB (128 * 1024)。
@@ -91,7 +92,6 @@ public class TerminalTalent extends AbsTalent {
     private int maxCharacterLimit = 128 * 1024;
     private final MountManager mountManager; // 引入挂载管理器
     private @Nullable SandboxRuntimeConfig sandboxConfig;
-    private final ReentrantLock sandboxInitLock = new ReentrantLock();
     private final SandboxViolationStore violationStore = new SandboxViolationStore(Collections.emptyMap());
 
     /** 运行时探测失败后的重试间隔：失败结果在窗口期内直接返回 null，避免每次对话都 fork 探测（最长等 2s 超时） */
@@ -268,6 +268,35 @@ public class TerminalTalent extends AbsTalent {
     }
 
     /**
+     * 是否由本实例在首次执行命令时初始化进程级 OS 沙盒（缺省 true，适合 CLI/桌面单引擎）。
+     *
+     * <p>{@code SandboxManager} 是 JVM 单例：网络代理与域名白名单按「第一次初始化」的配置全局生效，
+     * 初始化失败的 reset 也影响全进程。一个进程里有多个引擎（SaaS 引擎池）时应设为 false，
+     * 由宿主在启动时调用一次 {@link SandboxBootstrap#initOnce}；未初始化就执行命令会被拒绝（不会裸跑）。
+     * 文件系统边界不受影响：每次调用仍按本引擎的挂载重新生成。</p>
+     */
+    public void setSandboxSelfBootstrap(boolean sandboxSelfBootstrap) {
+        this.sandboxSelfBootstrap = sandboxSelfBootstrap;
+    }
+
+    public boolean isSandboxSelfBootstrap() {
+        return sandboxSelfBootstrap;
+    }
+
+    /**
+     * 设置受保护的宿主状态子路径（相对 harnessHome，如 {@code sessions}、{@code memory}）。
+     *
+     * <p>这些目录里是其它会话/用户的数据：文件工具读写都拒绝，启用 OS 沙盒时 bash 也读写不到。</p>
+     */
+    public void setProtectedStatePaths(Collection<String> subPaths) {
+        support.setProtectedStatePaths(subPaths);
+    }
+
+    public List<String> getProtectedStatePaths() {
+        return support.getProtectedStatePaths();
+    }
+
+    /**
      * 文件工具层（read/write/ls 等）的用户级路径策略。
      *
      * <p>恒返回 null：文件系统的可访问范围只由挂载生成（唯一正向来源），
@@ -289,26 +318,14 @@ public class TerminalTalent extends AbsTalent {
      */
     private void ensureSandboxInitialized() {
         if (sandboxSystemRestrict && sandboxEnabled && !SandboxManager.isSandboxingEnabled()) {
-            sandboxInitLock.lock();
-            try {
-                if (!SandboxManager.isSandboxingEnabled()) {
-                    SandboxRuntimeConfig cfg = sandboxConfig != null
-                            ? sandboxConfig
-                            : buildDefaultSandboxConfig();
-                    SandboxManager.initialize(cfg, null);
-                }
-            } catch (Exception e) {
-                // sandboxSystemRestrict 是显式的强制安全选项，初始化失败不能降级成裸执行。
-                // initialize() 可能已写入部分全局状态，失败后先复位，允许后续显式重试。
-                try {
-                    SandboxManager.reset();
-                } catch (Exception ignored) {
-                    // 保留原始初始化异常作为工具错误返回
-                }
-                throw new IllegalStateException("OS sandbox initialization failed", e);
-            } finally {
-                sandboxInitLock.unlock();
+            if (!sandboxSelfBootstrap) {
+                // 进程级沙盒由宿主统一引导：这里既不自建也不 reset（避免一个引擎影响整个进程）
+                throw new IllegalStateException("OS sandbox is not bootstrapped: "
+                        + "call SandboxBootstrap.initOnce(...) at process start");
             }
+            // 进程内只有一个初始化入口（与宿主引导共用同一把锁）；失败已复位并抛出，
+            // sandboxSystemRestrict 是显式的强制安全选项，初始化失败不能降级成裸执行。
+            SandboxBootstrap.initOnce(sandboxConfig != null ? sandboxConfig : buildDefaultSandboxConfig());
         }
     }
 
@@ -392,6 +409,10 @@ public class TerminalTalent extends AbsTalent {
 
         // 2.1) 宿主配置目录下的命令与子代理定义：与文件工具层 mandatory deny 同口径，禁止 bash 改写
         //      （否则文件工具拦住了，模型仍可用 echo > 绕过）。工作区根与本轮工作根各登记一份。
+        // 2.2) 宿主状态目录（sessions / memory 等，见 setProtectedStatePaths）：读写都禁止，
+        //      与文件工具层同口径（否则模型可以用 cat 读到其它会话的快照）。
+        List<String> denyRead = new ArrayList<>();
+        List<String> statePaths = support.getProtectedStatePaths();
         for (String root : new String[]{workDir, workPath == null ? null : workPath.toString()}) {
             if (root != null) {
                 Path base = Paths.get(root).toAbsolutePath().normalize();
@@ -399,6 +420,15 @@ public class TerminalTalent extends AbsTalent {
                     String p = base.resolve(harnessHome + sub).normalize().toString();
                     if (!denyWrite.contains(p)) {
                         denyWrite.add(p);
+                    }
+                }
+                for (String rel : statePaths) {
+                    String p = base.resolve(rel).normalize().toString();
+                    if (!denyWrite.contains(p)) {
+                        denyWrite.add(p);
+                    }
+                    if (!denyRead.contains(p)) {
+                        denyRead.add(p);
                     }
                 }
             }
@@ -435,7 +465,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         return new FilesystemConfig(
-                null,                           // denyRead
+                denyRead.isEmpty() ? null : denyRead,
                 allowRead.isEmpty() ? null : allowRead,
                 allowWrite.isEmpty() ? null : allowWrite,
                 denyWrite.isEmpty() ? null : denyWrite,
@@ -1008,13 +1038,49 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", ndCmd);
         }
 
+        return runCommand(command, workPath, envs, timeout, maxOutputChars).getText();
+    }
+
+    /**
+     * 程序侧执行命令（不是模型工具）：与 bash 工具共用同一条执行链——逻辑路径翻译、
+     * OS 沙盒包装（包装失败即拒绝执行，不裸跑）、超时整树终止、输出上限。
+     *
+     * <p>用于 harness 自身需要跑命令的场景（如 goal 的构建/测试验证器），避免各自 {@code ProcessBuilder}
+     * 绕开沙盒、无超时。</p>
+     *
+     * @param command        命令
+     * @param cwd            工作目录（与工具的 __cwd 同口径；null = 工作区）
+     * @param timeoutMs      超时（毫秒，必须 > 0）
+     * @param maxOutputChars 返回文本上限
+     * @since 4.2.0
+     */
+    public CommandResult exec(String command, @Nullable String cwd, int timeoutMs, int maxOutputChars) {
+        if (Assert.isEmpty(command)) {
+            return CommandResult.failed("错误：命令为空");
+        }
+        if (timeoutMs <= 0) {
+            throw new IllegalArgumentException("timeoutMs must be > 0: " + timeoutMs);
+        }
+
+        Path workPath;
+        try {
+            workPath = getWorkPath(cwd);
+        } catch (SecurityException ex) {
+            return CommandResult.failed("错误：" + ex.getMessage());
+        }
+        return runCommand(command, workPath, new HashMap<>(), timeoutMs, maxOutputChars);
+    }
+
+    /**
+     * bash 工具与 {@link #exec} 共用的执行链：逻辑路径翻译 → OS 沙盒包装 → 按 shell 方言执行。
+     */
+    private CommandResult runCommand(String command, Path workPath, Map<String, String> envs,
+                                     Integer timeoutMs, Integer maxOutputChars) {
         String finalCommand;
         try {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
-        } catch (SecurityException ex) {
-            return "错误：" + ex.getMessage();
-        } catch (MountMaterializer.MaterializationException ex) {
-            return "错误：" + ex.getMessage();
+        } catch (SecurityException | MountMaterializer.MaterializationException ex) {
+            return CommandResult.failed("错误：" + ex.getMessage());
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
@@ -1024,13 +1090,12 @@ public class TerminalTalent extends AbsTalent {
             ensureSandboxInitialized();
             if (sandboxEnabled && sandboxSystemRestrict) {
                 if (!SandboxManager.isSandboxingEnabled()) {
-                    return "错误：OS 沙盒未启用，拒绝执行命令";
+                    return CommandResult.failed("错误：OS 沙盒未启用，拒绝执行命令");
                 }
-                finalCommand = SandboxManager.wrapWithSandbox(
-                        finalCommand, null, buildDynamicCustomConfig(workPath));
+                finalCommand = SandboxManager.wrapWithSandbox(finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
-            return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();
+            return CommandResult.failed("错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage());
         }
 
         // 与 bash_start 共用 ShellCommandFactory：Unix 直接 shell -lc 执行；Windows 改走 prepare
@@ -1040,17 +1105,17 @@ public class TerminalTalent extends AbsTalent {
             try {
                 prepared = shellCommandFactory.prepare(finalCommand);
             } catch (IOException ex) {
-                return "错误：无法准备 Windows 执行方案: " + ex.getMessage();
+                return CommandResult.failed("错误：无法准备 Windows 执行方案: " + ex.getMessage());
             }
             if (prepared != null) {
                 try {
-                    return executor.executeCmd(workPath, prepared.argv(), envs, timeout, maxOutputChars, null);
+                    return executor.executeCmdResult(workPath, prepared.argv(), envs, timeoutMs, maxOutputChars, null);
                 } finally {
                     prepared.cleanup();
                 }
             }
         }
-        return executor.executeCmd(workPath, shellCommandFactory.build(finalCommand), envs, timeout, maxOutputChars, null);
+        return executor.executeCmdResult(workPath, shellCommandFactory.build(finalCommand), envs, timeoutMs, maxOutputChars, null);
     }
 
     @ToolMapping(
