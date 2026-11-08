@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class AdmittedRequest extends ReActRequest {
     private static final Logger LOG = LoggerFactory.getLogger(AdmittedRequest.class);
 
-    private volatile InputGate.Ticket ticket;
+    private volatile AdmissionGate.Hold hold;
     /** 运行句柄注销后的宿主回调（每次运行结束都执行；通常只有一次运行） */
     private final List<Runnable> afterRunHooks = new CopyOnWriteArrayList<>();
     /** 引擎级运行计数（供 {@code HarnessEngine#isQuiescent} 判定空闲回收） */
@@ -64,8 +64,8 @@ final class AdmittedRequest extends ReActRequest {
     }
 
     /** 挂上受理占位（仅 handle 第 0 步占到时）。 */
-    void bind(InputGate.Ticket ticket) {
-        this.ticket = ticket;
+    void bind(AdmissionGate.Hold hold) {
+        this.hold = hold;
     }
 
     /** 登记运行句柄注销后的回调（须在开流 / 调用前登记）。 */
@@ -90,9 +90,9 @@ final class AdmittedRequest extends ReActRequest {
 
     /** 释放受理占位（幂等）。 */
     void release() {
-        InputGate.Ticket t = ticket;
+        AdmissionGate.Hold t = hold;
         if (t != null) {
-            ticket = null;
+            hold = null;
             t.close();
         }
     }

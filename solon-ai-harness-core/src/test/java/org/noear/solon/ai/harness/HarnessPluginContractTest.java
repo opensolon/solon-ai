@@ -502,7 +502,7 @@ class HarnessPluginContractTest {
         InputOutcome admit = engine.handle(HarnessInput.of(session, "派发的一轮"));
         assertEquals(InputOutcome.Kind.TASK, admit.getKind(), "程序派发的一轮天然空闲");
         assertTrue(admit.isDispatched());
-        assertSame(dispatch, admit.getDispatch());
+        assertEquals(dispatch.getOrigin(), admit.getDispatchOrigin());
         assertTrue(engine.status(session).isAdmitting(), "派发轮次的 TASK 同样占位到开流（派发方据此判断已异步开流）");
         admit.discard();
         assertFalse(engine.status(session).isAdmitting());

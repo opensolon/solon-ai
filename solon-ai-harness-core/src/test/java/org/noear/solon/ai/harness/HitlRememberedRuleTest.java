@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
-import org.noear.solon.ai.harness.hitl.SessionPermissions;
+import org.noear.solon.ai.harness.hitl.RememberedApprovals;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
@@ -99,21 +99,21 @@ class HitlRememberedRuleTest {
         AgentSession b = InMemoryAgentSession.of();
         PermissionRule rule = HarnessEngine.rememberedRuleOf("bash", cmd("mvn clean"));
 
-        SessionPermissions.remember(a, rule);
-        SessionPermissions.remember(a, HarnessEngine.rememberedRuleOf("bash", cmd("mvn clean")));
-        assertEquals(1, SessionPermissions.of(a).size(), "同一条只记一次");
-        assertTrue(SessionPermissions.of(b).isEmpty(), "其它会话 / 用户不受影响");
+        RememberedApprovals.remember(a, rule);
+        RememberedApprovals.remember(a, HarnessEngine.rememberedRuleOf("bash", cmd("mvn clean")));
+        assertEquals(1, RememberedApprovals.of(a).size(), "同一条只记一次");
+        assertTrue(RememberedApprovals.of(b).isEmpty(), "其它会话 / 用户不受影响");
 
         // 叠加到 ask 规则上：本会话放行，其它会话仍需审批
         PermissionContext base = PermissionContext.create().addRule(PermissionRule.ask("bash"));
         assertNotEquals(evalBash(base, "mvn clean"),
-                evalBash(base.addRules(SessionPermissions.of(a)), "mvn clean"));
+                evalBash(base.addRules(RememberedApprovals.of(a)), "mvn clean"));
 
-        for (int i = 0; i < SessionPermissions.MAX_RULES + 10; i++) {
-            SessionPermissions.remember(a, HarnessEngine.rememberedRuleOf("bash", cmd("echo " + i)));
+        for (int i = 0; i < RememberedApprovals.MAX_RULES + 10; i++) {
+            RememberedApprovals.remember(a, HarnessEngine.rememberedRuleOf("bash", cmd("echo " + i)));
         }
-        assertEquals(SessionPermissions.MAX_RULES, SessionPermissions.of(a).size(), "有上限，淘汰最早的");
+        assertEquals(RememberedApprovals.MAX_RULES, RememberedApprovals.of(a).size(), "有上限，淘汰最早的");
 
-        SessionPermissions.remember(null, rule); // 无会话：不记忆、不抛异常
+        RememberedApprovals.remember(null, rule); // 无会话：不记忆、不抛异常
     }
 }

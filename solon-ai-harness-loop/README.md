@@ -458,7 +458,7 @@ public class ImLoopHost {
     /** 受理与执行：入站消息与积压续发共用同一个 handle 入口 */
     private void dispatch(AgentSession session, HarnessInput input) {
         InputOutcome outcome = engine.handle(input);   // 第 0 步受理判定：忙时可排队输入由引擎入积压
-        InputOrigin origin = outcome.isDispatched() ? outcome.getDispatch().getOrigin() : input.getOrigin();
+        InputOrigin origin = outcome.isDispatched() ? outcome.getDispatchOrigin() : input.getOrigin();
         switch (outcome.getKind()) {
             case TASK:
                 routes.put(session.getSessionId(), origin);   // 记下回复路由，供定时轮次使用

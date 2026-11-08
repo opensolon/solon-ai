@@ -20,9 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.NotOwnerException;
-import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -47,7 +45,7 @@ import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
-import org.noear.solon.ai.harness.hitl.SessionPermissions;
+import org.noear.solon.ai.harness.hitl.RememberedApprovals;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
@@ -1857,7 +1855,7 @@ public class HarnessEngine {
                         return;
                     }
                     // 只记到本会话：同引擎的其它会话 / 用户照常审批（无会话时不记忆）
-                    SessionPermissions.remember(trace == null ? null : trace.getSession(), rule);
+                    RememberedApprovals.remember(trace == null ? null : trace.getSession(), rule);
                 }));
     }
 

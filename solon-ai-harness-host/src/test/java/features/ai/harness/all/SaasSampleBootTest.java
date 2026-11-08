@@ -11,7 +11,7 @@ import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
+import org.noear.solon.ai.harness.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;

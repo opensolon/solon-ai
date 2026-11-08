@@ -944,7 +944,7 @@ AgentSessionProvider provider = (id, create) -> create
 | 1 | 工具可见性 | `agent.ToolName`、代理定义 `tools` / `disallowedTools` | 模型能看到哪些工具（看不到就调不了） | §5：`Builder.toolsAdd / disallowedToolsAdd`、`engine.allowTool / disallowTool` |
 | 2 | 输入级作用域 | `scope.InputScope`（由常驻的 `ScopeGuardInterceptor` 执行，优先级最高） | 这一次输入能用哪些工具 / 技能 / MCP / 模型；越界调用在执行前预填拒绝结果，HITL 也不会为它弹卡 | 引擎级 `scopeResolver`（推荐 `InputScopeResolver.byPrincipal`）或 `HarnessInput.scope(...)` |
 | 3 | 权限规则 | `permission.PermissionEngine` / `PermissionRule` | 对工具参数（命令、路径、域名）判 `ALLOW / DENY / ASK` | 由 hitl 策略内部调用；全局规则在策略上配 |
-| 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.SessionPermissions` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §8.2、`hitlEnabled(true)` |
+| 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.RememberedApprovals` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §8.2、`hitlEnabled(true)` |
 | 5 | 执行环境 | `TerminalTalent` 沙箱、`protectedStatePaths`、`cwdPolicy` | 工具真正执行时能碰哪些目录、哪些状态文件 | §6 配置项、§8.3、[SAAS.md](docs/SAAS.md) §5.1 / §5.2 |
 
 前两关是「能不能用」，后三关是「用的时候允不允许」。会话归属（`session.SessionOwnership`）不属于工具门控：它在受理之前就决定「这个节点能不能跑这个会话」。
@@ -1044,20 +1044,23 @@ org.noear.solon.ai.harness
 ├── HarnessSettings / HarnessTalents   引擎的两个视图：目录布局与运行期配置、内置能力（engine.getSettings() / getTalents()）
 ├── HarnessOptions                运行时配置（包私有）
 ├── HarnessExtension / AbsHarnessExtension   扩展 SPI
+├── InputScopeResolver            作用域解析器（配给引擎的策略：Builder.scopeResolver(...)）
 ├── RunTicket / InterruptPlan / InterruptMode   一条流（run）的生命周期凭据、两段式中断计划、一步式停流方式
 ├── HarnessResult                 插件写门面与管理入口的统一结果（粗码 OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / CONFLICT / FORBIDDEN + 可空细分码 getReason + 自带建议 HTTP 状态码 httpStatus()）
-├── InputPipeline / SessionControl / InputGate / Admission / AdmittedRequest / HarnessInterrupts   受理、装配与停流实现（包内，不是 API）
+├── InputPipeline / SessionControl / AdmissionGate / AdmissionDecision / AdmittedRequest / HarnessInterrupts   受理、装配与停流实现（包内，不是 API）
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、AgentMentions
 ├── command/                      命令框架：Command / CommandContext / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
 ├── agent/                        子代理（一个包覆盖定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName（定义）、AgentManager / SessionAgents / GenerateTalent（注册与创建）、AgentFactory（构建）、TaskTalent / TaskWrapEvent（委派与子事件）；SubTaskScheduler 包内、SessionAgentsTalent @Internal
-├── scope/                        输入级作用域：InputScope / InputScopeResolver / ScopeGuardInterceptor
+├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
 ├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership（宿主实现的租约）/ OwnerCheck / NotOwnerException
-├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、会话级「总是允许」
+├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、RememberedApprovals（会话级「总是允许」）
 ├── permission/                   权限引擎（PermissionRule / PermissionContext / PermissionBehavior / PermissionEngine）
 └── util/                         ErrorClassifier / HarnessIds / TraceUtil
 ```
+
+子包之间只允许两个双包循环：`{input, command}`（输入带命令工厂与解析结果）与 `{agent, scope}`（作用域名单用已发布的 `agent.ToolName`），其余依赖单向：`spi → input ⇄ command → util → session → hitl → permission`，`input → scope ⇄ agent → session / permission`。白名单与循环检测由 `HarnessPackageBoundaryTest` 守护，新建子包必须先登记。
 
 插件包为 `org.noear.solon.ai.harness.extension.{goal,loop,queue,steer}`，宿主只接触各自的 `XxxExtension` 门面与只读数据类。
 

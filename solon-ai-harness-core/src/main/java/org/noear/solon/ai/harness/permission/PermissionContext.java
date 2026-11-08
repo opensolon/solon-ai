@@ -32,6 +32,16 @@ import java.util.stream.Collectors;
  * @since 4.0
  */
 public class PermissionContext {
+    /**
+     * 代理级权限增量在代理属性（{@code ReActOptions#getAttrAs}）里的键。
+     *
+     * <p>构建子代理时写入，工具策略审批时读取；与 {@code AgentDefinition.ATTR_PERMISSION_CONTEXT} 同值。
+     * 放在 permission 包，是为了让 hitl 包读取它时不必依赖 agent 包。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final String ATTR_KEY = "__permissionContext";
+
     private final Path workingDirectory;
     private final List<PermissionRule> rules;
     private final List<Path> additionalDirs;

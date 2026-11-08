@@ -349,7 +349,7 @@ private void drain(HarnessEngine engine, AgentSession session) {
 ```
 
 `RejectReason` 是 core `input` 包的顶层枚举。队列续发在领取回调里**同线程**调用 `engine.handle(claim.getItem().toInput(session))`，引擎会识别为程序派发（`outcome.isDispatched()`），
-回复路由取 `outcome.getDispatch().getOrigin()`。完整写法见 [queue README](../../solon-ai-harness-queue/README.md)。
+回复路由取 `outcome.getDispatchOrigin()`。完整写法见 [queue README](../../solon-ai-harness-queue/README.md)。
 
 ### 6.2 管理态（控制台 / 后台 API）
 

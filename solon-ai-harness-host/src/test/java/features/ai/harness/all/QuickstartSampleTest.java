@@ -27,7 +27,7 @@ import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
+import org.noear.solon.ai.harness.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.MountSource;
 

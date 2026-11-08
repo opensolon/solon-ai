@@ -13,8 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.scope;
+package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import java.util.function.Function;
 import java.util.Objects;

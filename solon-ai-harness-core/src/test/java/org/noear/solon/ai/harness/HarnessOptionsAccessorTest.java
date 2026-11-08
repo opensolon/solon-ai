@@ -421,7 +421,7 @@ class HarnessOptionsAccessorTest {
 
         // 多租户：作用域解析器与会话归属（null 归一为 LOCAL）
         assertNull(o.getScopeResolver());
-        org.noear.solon.ai.harness.scope.InputScopeResolver resolver = (s, in) -> null;
+        InputScopeResolver resolver = (s, in) -> null;
         o.setScopeResolver(resolver);
         assertSame(resolver, o.getScopeResolver());
         assertSame(org.noear.solon.ai.harness.session.SessionOwnership.LOCAL, o.getSessionOwnership());

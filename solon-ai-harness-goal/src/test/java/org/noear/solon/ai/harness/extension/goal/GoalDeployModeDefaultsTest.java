@@ -8,7 +8,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.DeployMode;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
+import org.noear.solon.ai.harness.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.cli.CommandResult;
 

@@ -64,7 +64,7 @@ final class HarnessInterrupts {
      * @since 4.2.0
      */
     @Nullable
-    public static InterruptPlan claim(@Nullable AgentSession session) {
+    static InterruptPlan claim(@Nullable AgentSession session) {
         if (session == null) {
             return null;
         }
@@ -90,7 +90,7 @@ final class HarnessInterrupts {
      * @return true = 确有运行中的流被停掉；false = 调用时没有已登记的活跃流（但取消代数已推进）
      * @since 4.2.0
      */
-    public static boolean cancelStream(AgentSession session) {
+    static boolean cancelStream(AgentSession session) {
         if (session == null) {
             return false;
         }
@@ -109,25 +109,12 @@ final class HarnessInterrupts {
      * @return true = 确有活跃流被停掉
      * @since 4.2.0
      */
-    public static boolean preemptStream(AgentSession session) {
+    static boolean preemptStream(AgentSession session) {
         if (session == null) {
             return false;
         }
 
         return SessionRuns.cancelActive(session);
-    }
-
-    /**
-     * 补取消消息与快照（幂等：同一 runId 已有取消消息时不再重复写入）。
-     *
-     * <p>供需要自己控制事件时序的宿主（如 Web 端要求“先落库、后回执”）单独调用；
-     * 不中断流，也不清队列。</p>
-     */
-    public static void writeCancel(AgentSession session) {
-        if (session == null) {
-            return;
-        }
-        writeCancelMessage(session);
     }
 
     /**

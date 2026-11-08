@@ -40,15 +40,15 @@ import java.util.function.BooleanSupplier;
  * @author noear
  * @since 4.2.0
  */
-final class InputGate {
+final class AdmissionGate {
     /** 缺省占位时限（毫秒）：宿主拿到 TASK 却始终不订阅时，会话最多被占这么久。 */
     static final long DEFAULT_TIMEOUT_MS = 60_000L;
 
-    private InputGate() {
+    private AdmissionGate() {
     }
 
     /** 尝试占位（缺省时限）。 */
-    static Ticket tryAcquire(@Nullable AgentSession session) {
+    static Hold tryAcquire(@Nullable AgentSession session) {
         return tryAcquire(session, DEFAULT_TIMEOUT_MS);
     }
 
@@ -59,21 +59,21 @@ final class InputGate {
      * 那两项属于受理策略，由 {@code SessionControl#admit} 另判。本方法只保证两条输入不会同时开流。</p>
      *
      * @param timeoutMs 占位时限（毫秒，&lt;=0 取缺省）
-     * @return 受理凭据；永不返回 null，用 {@link Ticket#isAcquired()} 判断是否真的占到了
+     * @return 受理凭据；永不返回 null，用 {@link Hold#isAcquired()} 判断是否真的占到了
      */
-    static Ticket tryAcquire(@Nullable AgentSession session, long timeoutMs) {
+    static Hold tryAcquire(@Nullable AgentSession session, long timeoutMs) {
         if (session == null) {
-            return Ticket.NONE;
+            return Hold.NONE;
         }
 
         long timeout = timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS;
         synchronized (session.attrs()) {
             if (SessionStatus.of(session).isBusy() || isAdmitting(session)) {
-                return Ticket.NONE;
+                return Hold.NONE;
             }
-            Ticket ticket = new Ticket(session, System.currentTimeMillis() + timeout);
-            session.attrs().put(HarnessAttrs.INPUT_ADMITTING, ticket);
-            return ticket;
+            Hold hold = new Hold(session, System.currentTimeMillis() + timeout);
+            session.attrs().put(HarnessAttrs.INPUT_ADMITTING, hold);
+            return hold;
         }
     }
 
@@ -93,8 +93,8 @@ final class InputGate {
         }
         synchronized (session.attrs()) {
             Object value = session.attrs().remove(HarnessAttrs.INPUT_ADMITTING);
-            if (value instanceof Ticket) {
-                ((Ticket) value).released = true;
+            if (value instanceof Hold) {
+                ((Hold) value).released = true;
             }
         }
     }
@@ -107,15 +107,15 @@ final class InputGate {
     /**
      * 受理凭据：幂等释放，只清自己的登记；未占到的凭据是空操作。
      */
-    static final class Ticket implements AutoCloseable, BooleanSupplier {
+    static final class Hold implements AutoCloseable, BooleanSupplier {
         /** 未占到窗口的空凭据。 */
-        static final Ticket NONE = new Ticket(null, 0L);
+        static final Hold NONE = new Hold(null, 0L);
 
         private final AgentSession session;
         private final long deadline;
         private volatile boolean released;
 
-        private Ticket(@Nullable AgentSession session, long deadline) {
+        private Hold(@Nullable AgentSession session, long deadline) {
             this.session = session;
             this.deadline = deadline;
         }
@@ -147,7 +147,7 @@ final class InputGate {
 
         @Override
         public String toString() {
-            return "InputGate.Ticket{acquired=" + isAcquired() + ", valid=" + getAsBoolean() + "}";
+            return "AdmissionGate.Hold{acquired=" + isAcquired() + ", valid=" + getAsBoolean() + "}";
         }
     }
 }

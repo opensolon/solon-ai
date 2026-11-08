@@ -33,7 +33,7 @@ import org.noear.solon.lang.Preview;
  *       {@code runtimeMutable=false}（SERVER 档位缺省）时调用会抛 {@link IllegalStateException}。</li>
  * </ul>
  *
- * <p>构建期配置走 {@code HarnessEngine.builder()}；这里只放运行期仍有意义的读写，
+ * <p>构建期配置走 {@code HarnessEngine.of(workspace, harnessHome)} 返回的 Builder；这里只放运行期仍有意义的读写，
  * 让引擎门面只保留会话、输入、运行控制与资源管理。</p>
  *
  * @author noear

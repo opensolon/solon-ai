@@ -35,7 +35,7 @@ import java.util.*;
  * 技能名单只约束技能工具，不约束文件工具与 bash 对技能挂载点的访问；需要文件级隔离时，
  * 不要把名单外的技能挂进该引擎。</p>
  *
- * <p>生效路径：{@code HarnessInput.scope(...)} 或引擎级 {@link InputScopeResolver}（goal / loop / queue
+ * <p>生效路径：{@code HarnessInput.scope(...)} 或引擎级 {@link org.noear.solon.ai.harness.InputScopeResolver}（goal / loop / queue
  * 的程序输入同样经过 {@code handle}，因此自动继承）→ 请求级属性 {@link #ATTR_KEY}（不进 toolContext：
  * toolContext 会并入工具参数、经 MCP 发给第三方）→
  * 每个代理常驻的 {@link ScopeGuardInterceptor} 在工具执行前否决越界调用；委派子代理继承同一作用域。</p>

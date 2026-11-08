@@ -16,9 +16,7 @@
 package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
-import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
@@ -120,14 +118,14 @@ public class WebToolStrategy implements HITLStrategy {
         PermissionContext global = permissionContextSupplier.get();
 
         if (trace != null) {
-            PermissionContext agentCtx = trace.getOptions().getAttrAs(AgentDefinition.ATTR_PERMISSION_CONTEXT);
+            PermissionContext agentCtx = trace.getOptions().getAttrAs(PermissionContext.ATTR_KEY);
             if (agentCtx != null && !agentCtx.rules().isEmpty()) {
                 global = global.addRules(agentCtx.rules());
             }
         }
 
         // 会话级记忆（人工审批「总是允许」只对本会话生效）
-        return SessionPermissions.merge(global, trace);
+        return RememberedApprovals.merge(global, trace);
     }
 
     @Override

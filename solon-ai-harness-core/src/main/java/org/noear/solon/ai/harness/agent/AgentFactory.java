@@ -110,7 +110,7 @@ public class AgentFactory {
         // HITL 策略在 evaluate 时会通过 trace.getExtraAs 读取并合并
         if (metadata.hasPermissionRules()) {
             PermissionContext agentCtx = PermissionContext.create().addRules(metadata.getPermissionRules());
-            builder.attr(AgentDefinition.ATTR_PERMISSION_CONTEXT, agentCtx);
+            builder.attr(PermissionContext.ATTR_KEY, agentCtx);
         }
 
         builder.modelOptions(o -> {

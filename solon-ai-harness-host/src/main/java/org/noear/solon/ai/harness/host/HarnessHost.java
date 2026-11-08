@@ -32,7 +32,6 @@ import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
-import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -609,9 +608,8 @@ public final class HarnessHost {
                                @Nullable QueueItem item, @Nullable HarnessInput in, @Nullable RunSink observer,
                                boolean inClaim, @Nullable Admitting adm) {
         InputOrigin routeIn = origin;
-        RunDispatch dispatch = outcome.getDispatch();
-        if (dispatch != null && dispatch.getOrigin() != null && dispatch.getOrigin().isEmpty() == false) {
-            routeIn = dispatch.getOrigin();
+        if (outcome.isDispatched() && outcome.getDispatchOrigin().isEmpty() == false) {
+            routeIn = outcome.getDispatchOrigin();
         }
         final HostInput input = HostInput.of(dispositionOf(outcome), c.tenant, c.session, routeIn, text, outcome, item, in);
 

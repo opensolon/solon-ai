@@ -385,7 +385,7 @@ public class ImInputHandler {
     private void drain(AgentSession session) {
         queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
             InputOutcome outcome = engine.handle(claim.getItem().toInput(session)); // 同一线程：派发轮次
-            // 按上面的结局分支处理，回复路由取 outcome.getDispatch().getOrigin()（略）
+            // 按上面的结局分支处理，回复路由取 outcome.getDispatchOrigin()（略）
             return true;
         });
     }

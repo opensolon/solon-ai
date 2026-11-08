@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * {@link QueueExtension#drainLoop} 终止条件（随 queue 插件独立，原在核心 InputGateTest）。
+ * {@link QueueExtension#drainLoop} 终止条件（随 queue 插件独立，原在核心 AdmissionGateTest）。
  */
 class QueueDrainLoopTest {
 

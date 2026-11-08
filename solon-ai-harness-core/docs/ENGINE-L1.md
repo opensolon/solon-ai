@@ -193,7 +193,7 @@ switch (outcome.getKind()) {
 | `isHitlApplied()` | 决策是否真的写入；`false` = 过期审批卡（无匹配挂起任务），非审批输入为 null |
 | `getPendingHitlCount()` | 决策写入后仍待审批的挂起项数量；0 表示本批已齐备 |
 | `getBacklogPosition()` / `getRejectReason()` / `getRejectDetail()` | `DEFERRED` / `REJECTED` 的事实 |
-| `isBesideRunning()` / `isDispatched()` / `getDispatch()` | 忙时旁路执行 / 程序派发轮次（§2.6） |
+| `isBesideRunning()` / `isDispatched()` / `getDispatchOrigin()` | 忙时旁路执行 / 程序派发轮次（§2.6） |
 | `discard()` / `afterRun(Runnable)` | 拿到 `TASK` 却不执行时释放占位；登记「本轮终态后」回调（队列续发应挂在这里） |
 
 **`HITL` 态下的三种情形（必须读事实区分）**：
@@ -562,7 +562,7 @@ switch (outcome.getKind()) {
 - 宿主拿到 `TASK` 决定不执行（开流前出错、本轮已被中断等）时调用 `outcome.discard()`（幂等）；
 - 兜底：`InterruptMode.INTERRUPT_ALL` / `prepareInterrupt` 会清除占位；占位有时限 `HarnessEngine.Builder#admissionTimeoutMs(Long)`（缺省 60000 毫秒），超时的占位不再算占用；
 - 非 `TASK` 结局在 `handle` 返回前已释放占位；
-- **程序派发线程上的一轮**（队列续发：在领取回调里同线程 `engine.handle(claim.getItem().toInput(session))`）由引擎识别（`outcome.isDispatched()` / `getDispatch()`，宿主取 `getDispatch().getOrigin()` 作回复路由），免于「有积压就延后」；其 `TASK` 同样占位，派发方据此用「返回时会话是否忙」判断已异步开流；
+- **程序派发线程上的一轮**（队列续发：在领取回调里同线程 `engine.handle(claim.getItem().toInput(session))`）由引擎识别（`outcome.isDispatched()`，宿主取 `getDispatchOrigin()` 作回复路由），免于「有积压就延后」；其 `TASK` 同样占位，派发方据此用「返回时会话是否忙」判断已异步开流；
 - 命令内部再次调用 `handle`（命令声明任务意图的二段装配）继承外层占位，不再判定；
 - 扩展钩子 `onInput` 在受理判定通过之后才触发：被排队 / 拒绝的输入不触发，排队的输入续发时触发一次。
 

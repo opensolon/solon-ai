@@ -18,7 +18,6 @@ package org.noear.solon.ai.harness.input;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.HitlCard;
-import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -158,8 +157,8 @@ public final class InputOutcome {
     private String rejectDetail;
     /** 本条（忙时可执行命令）是否在正在运行的任务旁边执行 */
     private boolean besideRunning;
-    /** 本轮所属的程序派发事务（如积压续发）；非派发为 null */
-    private RunDispatch dispatch;
+    /** 本轮所属程序派发的回复路由来源（如积压续发）；非派发为 null（是 {@link #isDispatched()} 的判据） */
+    private InputOrigin dispatchOrigin;
     /** 放弃执行时释放受理占位（仅 TASK 且占到了位时非空；幂等） */
     private Runnable discarder;
     /** 登记「本轮运行句柄注销之后」的回调（仅 TASK 且请求由引擎装配时非空） */
@@ -244,7 +243,7 @@ public final class InputOutcome {
      * 引擎交出去的那份（及其占位释放器）不受影响——「占位跟着请求走」的不变量不会被外部破坏。</p>
      *
      * @param besideRunning 是否在正在运行的任务旁边执行（忙时可执行命令）
-     * @param dispatch      本轮所属的程序派发事务（可为 null）
+     * @param dispatchOrigin 本轮所属程序派发的回复路由来源（非派发为 null；派发但无来源传 {@link InputOrigin#NONE}）
      * @param discarder     放弃执行时释放受理占位的动作（可为 null）
      * @param afterRunRegistrar 登记「运行句柄注销之后」回调的动作（可为 null，见 {@link #afterRun(Runnable)}）
      * @return 新实例
@@ -252,7 +251,7 @@ public final class InputOutcome {
      */
     @Internal
     public InputOutcome admitted(boolean besideRunning,
-                                 @Nullable RunDispatch dispatch,
+                                 @Nullable InputOrigin dispatchOrigin,
                                  @Nullable Runnable discarder,
                                  @Nullable Consumer<Runnable> afterRunRegistrar) {
         InputOutcome copy = new InputOutcome(kind, commandName, commandOutput, command, prompt, agentName, modelName,
@@ -261,7 +260,7 @@ public final class InputOutcome {
         copy.rejectReason = rejectReason;
         copy.rejectDetail = rejectDetail;
         copy.besideRunning = besideRunning;
-        copy.dispatch = dispatch;
+        copy.dispatchOrigin = dispatchOrigin;
         copy.discarder = discarder;
         copy.afterRunRegistrar = afterRunRegistrar;
         return copy;
@@ -560,17 +559,20 @@ public final class InputOutcome {
      * @since 4.2.0
      */
     public boolean isDispatched() {
-        return dispatch != null;
+        return dispatchOrigin != null;
     }
 
     /**
-     * 本轮所属的程序派发事务（非派发为 null）。宿主据此取回复路由来源（{@link RunDispatch#getOrigin()}）。
+     * 本轮所属程序派发的回复路由来源（如积压续发时为当初入队的来源）。
+     *
+     * <p>非派发、或派发但无来源时为 {@link InputOrigin#NONE}（永不为 null）。宿主常用写法：
+     * {@code outcome.isDispatched() ? outcome.getDispatchOrigin() : origin}。
+     * 需要派发事务本身（收口、线程判定）时用 {@code RunDispatch.current(session)}。</p>
      *
      * @since 4.2.0
      */
-    @Nullable
-    public RunDispatch getDispatch() {
-        return dispatch;
+    public InputOrigin getDispatchOrigin() {
+        return dispatchOrigin == null ? InputOrigin.NONE : dispatchOrigin;
     }
 
     /**

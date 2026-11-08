@@ -377,9 +377,9 @@ private PermissionContext resolveContext(ReActTrace trace) {
     PermissionContext global = permissionContextSupplier.get();
 
     if (trace != null) {
-        // 读取 Agent 级权限 delta（由 AgentFactory 注入）
+        // 读取 Agent 级权限 delta（由 AgentFactory 注入；键与 AgentDefinition.ATTR_PERMISSION_CONTEXT 同值）
         PermissionContext agentCtx = trace.getOptions().getAttrAs(
-            AgentDefinition.ATTR_PERMISSION_CONTEXT);
+            PermissionContext.ATTR_KEY);
         if (agentCtx != null && !agentCtx.rules().isEmpty()) {
             global = global.addRules(agentCtx.rules());
         }

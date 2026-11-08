@@ -6,7 +6,6 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.scope.InputScope;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;

@@ -21,7 +21,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.function.BiPredicate;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.session.SessionOwnership;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.MountSource;
 import java.nio.file.Path;
@@ -84,7 +83,7 @@ class HarnessOptions implements NonSerializable {
     // ========== 执行控制 ==========
     private volatile int maxTurns = 20;
     /** 受理占位时限（毫秒）：handle 返回 TASK 后宿主始终不开流时，会话最多被占这么久 */
-    private volatile long admissionTimeoutMs = InputGate.DEFAULT_TIMEOUT_MS;
+    private volatile long admissionTimeoutMs = AdmissionGate.DEFAULT_TIMEOUT_MS;
     private volatile boolean autoRethink = true;
 
     // ========== 会话与压缩 ==========

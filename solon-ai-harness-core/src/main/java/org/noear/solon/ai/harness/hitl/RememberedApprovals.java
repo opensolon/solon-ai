@@ -34,11 +34,11 @@ import java.util.List;
  * @author noear
  * @since 4.2.0
  */
-public final class SessionPermissions {
+public final class RememberedApprovals {
     static final String ATTR_KEY = "harness.permission.remembered";
     public static final int MAX_RULES = 100;
 
-    private SessionPermissions() {
+    private RememberedApprovals() {
     }
 
     /** 记住一条规则（去重；超出上限淘汰最早的） */

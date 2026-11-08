@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.agent.SessionAgentsTalent;
-import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
@@ -41,10 +40,12 @@ import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.input.AgentMentions;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputAttachments;
+import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.session.SessionSelections;
+import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.talents.cli.*;
@@ -128,18 +129,18 @@ final class InputPipeline {
         }
 
         // ========== 0c. 受理判定（判定、占位、入积压同一把会话锁）==========
-        Admission admission = sessionControl.admit(input);
+        AdmissionDecision admission = sessionControl.admit(input);
         if (admission.getOutcome() != null) {
             return admission.getOutcome();
         }
 
-        final InputGate.Ticket ticket = admission.getTicket();
+        final AdmissionGate.Hold hold = admission.getHold();
         InputOutcome outcome;
         admittedOnThread.put(session, Boolean.TRUE);
         try {
             outcome = assemble(input);
         } catch (RuntimeException | Error e) {
-            ticket.close();
+            hold.close();
             throw e;
         } finally {
             admittedOnThread.remove(session);
@@ -151,17 +152,26 @@ final class InputPipeline {
         // 占位跟着请求走：TASK 由请求在开流 / 调用结束时释放；其余结局当场释放
         final AdmittedRequest admitted = admittedOf(outcome);
         Runnable discarder = null;
-        if (ticket.isAcquired()) {
+        if (hold.isAcquired()) {
             if (admitted != null) {
-                admitted.bind(ticket);
+                admitted.bind(hold);
                 discarder = admitted::release;
             } else {
-                ticket.close();
+                hold.close();
             }
         }
 
-        return outcome.admitted(admission.isBesideRunning(), admission.getDispatch(), discarder,
+        return outcome.admitted(admission.isBesideRunning(), dispatchOriginOf(admission.getDispatch()), discarder,
                 admitted == null ? null : admitted::addAfterRun);
+    }
+
+    /** 派发事务 → 回复路由来源（非派发为 null；派发但无来源为 NONE）。 */
+    private static InputOrigin dispatchOriginOf(RunDispatch dispatch) {
+        if (dispatch == null) {
+            return null;
+        }
+        InputOrigin origin = dispatch.getOrigin();
+        return origin == null ? InputOrigin.NONE : origin;
     }
 
     /** TASK 且请求由本引擎装配时取出请求，否则 null。 */
@@ -571,7 +581,7 @@ final class InputPipeline {
      * 解析 HITL 请求的生效子代理名：审批入参优先，其次会话级选择
      * <p>
      * Web 端审批请求通常不携带 selectedAgent，而首轮生效代理（含 {@code @子代理} 解析结果）
-     * 已由宿主写入会话级子代理选择（{@link #setSessionAgent}）。HITL 续流必须沿用它：trace 按代理名分 key，
+     * 已由宿主写入会话级子代理选择（{@link HarnessEngine#setSessionAgent}）。HITL 续流必须沿用它：trace 按代理名分 key，
      * 取错代理会取不到挂起的 tool_calls，表现为续跑空转。
      */
     private String resolveHitlAgent(@Nullable AgentSession session, @Nullable String selectedAgent) {

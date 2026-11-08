@@ -28,35 +28,35 @@ import org.noear.solon.lang.Nullable;
  * @author noear
  * @since 4.2.0
  */
-final class Admission {
-    private static final Admission FREE = new Admission(null, InputGate.Ticket.NONE, false, null);
+final class AdmissionDecision {
+    private static final AdmissionDecision FREE = new AdmissionDecision(null, AdmissionGate.Hold.NONE, false, null);
 
     private final InputOutcome outcome;
-    private final InputGate.Ticket ticket;
+    private final AdmissionGate.Hold hold;
     private final boolean besideRunning;
     private final RunDispatch dispatch;
 
-    private Admission(@Nullable InputOutcome outcome, InputGate.Ticket ticket, boolean besideRunning,
-                      @Nullable RunDispatch dispatch) {
+    private AdmissionDecision(@Nullable InputOutcome outcome, AdmissionGate.Hold hold, boolean besideRunning,
+                              @Nullable RunDispatch dispatch) {
         this.outcome = outcome;
-        this.ticket = ticket == null ? InputGate.Ticket.NONE : ticket;
+        this.hold = hold == null ? AdmissionGate.Hold.NONE : hold;
         this.besideRunning = besideRunning;
         this.dispatch = dispatch;
     }
 
     /** 无会话：不判定、不占位。 */
-    static Admission free() {
+    static AdmissionDecision free() {
         return FREE;
     }
 
     /** 受理判定已给出结局（不再装配）。 */
-    static Admission outcome(InputOutcome outcome) {
-        return new Admission(outcome, InputGate.Ticket.NONE, false, null);
+    static AdmissionDecision outcome(InputOutcome outcome) {
+        return new AdmissionDecision(outcome, AdmissionGate.Hold.NONE, false, null);
     }
 
     /** 已受理：继续装配。 */
-    static Admission admitted(InputGate.Ticket ticket, boolean besideRunning, @Nullable RunDispatch dispatch) {
-        return new Admission(null, ticket, besideRunning, dispatch);
+    static AdmissionDecision admitted(AdmissionGate.Hold hold, boolean besideRunning, @Nullable RunDispatch dispatch) {
+        return new AdmissionDecision(null, hold, besideRunning, dispatch);
     }
 
     @Nullable
@@ -64,8 +64,8 @@ final class Admission {
         return outcome;
     }
 
-    InputGate.Ticket getTicket() {
-        return ticket;
+    AdmissionGate.Hold getHold() {
+        return hold;
     }
 
     boolean isBesideRunning() {

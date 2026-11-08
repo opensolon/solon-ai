@@ -101,7 +101,7 @@ final class SessionControl {
         }
 
         // ② 兜底清除受理占位：宿主看到本轮已取消就不再订阅，占位不能一直留着
-        InputGate.clear(session);
+        AdmissionGate.clear(session);
 
         // ③ 核心：原子认领运行句柄（停流与补收尾在 plan.commit）
         return HarnessInterrupts.claim(session);
@@ -220,10 +220,10 @@ final class SessionControl {
      * 程序派发的那一轮（当前线程在派发调用栈里）天然空闲；声明 {@code runnableWhenBusy} 的命令
      * 忙时也可执行（{@code terminalOnly} 的命令仅在终端输入时算）。</p>
      */
-    Admission admit(HarnessInput input) {
+    AdmissionDecision admit(HarnessInput input) {
         final AgentSession session = input.getSession();
         if (session == null) {
-            return Admission.free();
+            return AdmissionDecision.free();
         }
 
         // 会话归属与作用域预检已在锁外完成（见 InputPipeline#handle 的 0a / 0b 步）
@@ -241,7 +241,7 @@ final class SessionControl {
                 if (exempt == false) {
                     HitlCard next = HitlCard.next(session);
                     String toolName = next == null ? null : next.getToolName();
-                    return Admission.outcome(InputOutcome.rejected(RejectReason.HITL_PENDING,
+                    return AdmissionDecision.outcome(InputOutcome.rejected(RejectReason.HITL_PENDING,
                             toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName));
                 }
             }
@@ -251,25 +251,25 @@ final class SessionControl {
             //    TASK 到开流之间没有占位会被误判成同步完成、提前收口并续发下一条（两条流并发）。
             //    非 TASK 结局在 handle 返回前即释放，同步完成的命令不会被误判成忙。
             if (onDispatchThread) {
-                return Admission.admitted(InputGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, dispatch);
+                return AdmissionDecision.admitted(AdmissionGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, dispatch);
             }
 
-            boolean busyNow = status.isBusy() || InputGate.isAdmitting(session) || hasPendingBacklog(session);
+            boolean busyNow = status.isBusy() || AdmissionGate.isAdmitting(session) || hasPendingBacklog(session);
 
             // 3) 忙时可执行命令 / 审批决策：在运行中的任务旁边执行，不占位、不改写回复路由
             //    （审批决策不可排队；三端历史上都是直接写入决策）。
             if ((busyCommand || hitlDecision) && busyNow) {
-                InputGate.Ticket ticket = InputGate.tryAcquire(session, options.getAdmissionTimeoutMs());
-                return Admission.admitted(ticket, status.isBusy() && ticket.isAcquired() == false, null);
+                AdmissionGate.Hold hold = AdmissionGate.tryAcquire(session, options.getAdmissionTimeoutMs());
+                return AdmissionDecision.admitted(hold, status.isBusy() && hold.isAcquired() == false, null);
             }
 
             // 4) 忙态（有活跃流 / 已在受理窗口）或积压里还有待执行输入：延后（保证先进先出）或拒绝。
             if (busyNow) {
-                return Admission.outcome(deferOrReject(session, input));
+                return AdmissionDecision.outcome(deferOrReject(session, input));
             }
 
             // 5) 正常受理：判定与占位同临界区
-            return Admission.admitted(InputGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, null);
+            return AdmissionDecision.admitted(AdmissionGate.tryAcquire(session, options.getAdmissionTimeoutMs()), false, null);
         }
     }
 

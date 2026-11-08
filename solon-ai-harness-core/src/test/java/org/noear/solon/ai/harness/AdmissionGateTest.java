@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 输入受理窗口（{@link InputGate}）契约验证。
+ * 输入受理窗口（{@link AdmissionGate}）契约验证。
  *
  * <p>锁定的核心不变量：</p>
  * <ol>
@@ -28,63 +28,63 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>HITL 挂起不算占位（审批期间宿主仍可接受旁路输入）。</li>
  * </ol>
  */
-class InputGateTest {
+class AdmissionGateTest {
 
     private AgentSession session() {
         return InMemoryAgentSession.of();
     }
 
     @Test
-    void acquiredTicketMakesSessionOccupied() {
+    void acquiredHoldMakesSessionOccupied() {
         AgentSession session = session();
         assertFalse(SessionStatus.of(session).isOccupied());
 
-        InputGate.Ticket ticket = InputGate.tryAcquire(session);
+        AdmissionGate.Hold hold = AdmissionGate.tryAcquire(session);
 
-        assertTrue(ticket.isAcquired());
-        assertTrue(InputGate.isAdmitting(session));
+        assertTrue(hold.isAcquired());
+        assertTrue(AdmissionGate.isAdmitting(session));
         assertTrue(SessionStatus.of(session).isOccupied());
         assertTrue(SessionStatus.of(session).isAdmitting());
         // 只占位、没有活跃流：busy 口径不应被污染
         assertFalse(SessionStatus.of(session).isBusy());
 
-        ticket.close();
+        hold.close();
         assertFalse(SessionStatus.of(session).isOccupied());
     }
 
     @Test
     void secondAcquireFailsWhileHeld() {
         AgentSession session = session();
-        InputGate.Ticket first = InputGate.tryAcquire(session);
+        AdmissionGate.Hold first = AdmissionGate.tryAcquire(session);
         assertTrue(first.isAcquired());
 
-        InputGate.Ticket second = InputGate.tryAcquire(session);
+        AdmissionGate.Hold second = AdmissionGate.tryAcquire(session);
         assertFalse(second.isAcquired(), "同一会话不得被两条输入同时占位");
 
         // 失败者释放不应影响持有者
         second.close();
-        assertTrue(InputGate.isAdmitting(session));
+        assertTrue(AdmissionGate.isAdmitting(session));
 
         first.close();
-        assertFalse(InputGate.isAdmitting(session));
+        assertFalse(AdmissionGate.isAdmitting(session));
     }
 
     @Test
     void closeIsIdempotent() {
         AgentSession session = session();
-        InputGate.Ticket ticket = InputGate.tryAcquire(session);
-        ticket.close();
-        ticket.close();
-        assertFalse(InputGate.isAdmitting(session));
+        AdmissionGate.Hold hold = AdmissionGate.tryAcquire(session);
+        hold.close();
+        hold.close();
+        assertFalse(AdmissionGate.isAdmitting(session));
         // 释放后可再次占位
-        assertTrue(InputGate.tryAcquire(session).isAcquired());
+        assertTrue(AdmissionGate.tryAcquire(session).isAcquired());
     }
 
     @Test
-    void emptyTicketIsNoop() {
-        assertFalse(InputGate.Ticket.NONE.isAcquired());
-        InputGate.Ticket.NONE.close();
-        assertFalse(InputGate.isAdmitting(null));
+    void emptyHoldIsNoop() {
+        assertFalse(AdmissionGate.Hold.NONE.isAcquired());
+        AdmissionGate.Hold.NONE.close();
+        assertFalse(AdmissionGate.isAdmitting(null));
     }
 
     @Test
@@ -95,16 +95,16 @@ class InputGateTest {
         CountDownLatch start = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threads);
         AtomicInteger winners = new AtomicInteger();
-        AtomicReference<InputGate.Ticket> holder = new AtomicReference<>();
+        AtomicReference<AdmissionGate.Hold> holder = new AtomicReference<>();
 
         for (int i = 0; i < threads; i++) {
             pool.submit(() -> {
                 try {
                     start.await();
-                    InputGate.Ticket ticket = InputGate.tryAcquire(session);
-                    if (ticket.isAcquired()) {
+                    AdmissionGate.Hold hold = AdmissionGate.tryAcquire(session);
+                    if (hold.isAcquired()) {
                         winners.incrementAndGet();
-                        holder.set(ticket);
+                        holder.set(hold);
                     }
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
@@ -130,8 +130,8 @@ class InputGateTest {
         AgentSession session = session();
         session.attrs().put("_test_hitl_marker_", Boolean.TRUE);
 
-        InputGate.Ticket ticket = InputGate.tryAcquire(session);
-        assertTrue(ticket.isAcquired());
-        ticket.close();
+        AdmissionGate.Hold hold = AdmissionGate.tryAcquire(session);
+        assertTrue(hold.isAcquired());
+        hold.close();
     }
 }

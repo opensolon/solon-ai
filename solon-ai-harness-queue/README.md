@@ -296,7 +296,7 @@ queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
 });
 ```
 
-`QueueItem#toInput(session)` 把队列项还原为续发输入：正文、来源、模型、子代理、宿主域属性（`getAttrs()`）与输入快照原样带回，正文仍按命令识别。引擎在派发线程上识别出这一轮（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定。
+`QueueItem#toInput(session)` 把队列项还原为续发输入：正文、来源、模型、子代理、宿主域属性（`getAttrs()`）与输入快照原样带回，正文仍按命令识别。引擎在派发线程上识别出这一轮（`outcome.isDispatched()` 为 true），免于"有积压就延后"的判定。
 
 `drainLoop` 的终止条件（任一成立即返回）：`canDrain` 返回 false、领取结果为 `NO_TASK`、领取结果为 `START_FAILED`（不重试）、启动成功后队列已无待执行项。
 
@@ -388,7 +388,7 @@ public class ImQueueHost {
     /** 结局处理：入站消息与队列派发的一轮共用 */
     private void handleOutcome(AgentSession session, InputOutcome outcome, InputOrigin origin) {
         // 派发轮次沿用派发事务的来源（回复要回到当初排队的那个渠道）
-        InputOrigin route = outcome.isDispatched() ? outcome.getDispatch().getOrigin() : origin;
+        InputOrigin route = outcome.isDispatched() ? outcome.getDispatchOrigin() : origin;
         switch (outcome.getKind()) {
             case TASK:       // 普通消息（含派发出来的那一轮）：同步跑完，call() 结束即释放占位
                 try {
@@ -426,7 +426,7 @@ public class ImQueueHost {
     /** 续发：领取队首，在同一线程回到 handle（使用态与管理态共用） */
     public void drain(AgentSession session) {
         queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
-            // 同线程调用：引擎识别出"派发轮次"（outcome.getDispatch() 非空）
+            // 同线程调用：引擎识别出"派发轮次"（outcome.isDispatched() 为 true）
             InputOutcome outcome = engine.handle(claim.getItem().toInput(session));
             handleOutcome(session, outcome, claim.getItem().getOrigin());
             return true;                                         // 同步跑完，内核当场确认
@@ -492,8 +492,8 @@ void startStreamAsync(AgentSession session, QueueItem item) {
 1. **命令注册由插件完成**：`QueueExtension#onAttach` 已注册 `/queue`，宿主不用注册。
 2. **忙态由引擎处理，宿主不要自己拦**：所有输入直接交给 `engine.handle`（L0 交给 `host.submit`）。`/queue` 声明 `runnableWhenBusy`，运行中在运行任务旁边执行（`isBesideRunning() == true`，宿主不要据此改写回复路由）；其余可排队输入由引擎调 `InputBacklog#offer` 入队并返回 `DEFERRED`。宿主侧不要再为忙态调 `queue.enqueue`，否则会重复入队。
 3. **空闲时的 `/queue` 也会入队**（L1）：此时没有终态可等，必须在 `REPLY` 后立即 `drain`（示例的 `handleOutcome`），否则这条要等下一个任务结束才会被发出。L0 骨架在回执后自动续发。
-4. **续发在同一线程回到 `handle`**（L1）：在领取回调里调用 `engine.handle(claim.getItem().toInput(session))`，引擎用 `RunDispatch#isOnDispatchThread()` 识别派发轮次（`outcome.getDispatch()` 非空），免于"有积压就延后"的判定；派发线程上的 `TASK` 同样占位，直到请求被订阅或 `call()` 结束。异步开流的宿主改为在领取回调里 `RunTicket.begin(session)`，流终态 `ticket.settle(ok)`（5.4）。
-5. **派发轮次的回复路由取当初入队时的来源**：L1 为 `outcome.getDispatch().getOrigin()`，L0 为 `HostInput#getOrigin()`（续发时即排队那条的来源），而不是触发续发的那次请求。
+4. **续发在同一线程回到 `handle`**（L1）：在领取回调里调用 `engine.handle(claim.getItem().toInput(session))`，引擎用 `RunDispatch#isOnDispatchThread()` 识别派发轮次（`outcome.isDispatched()` 为 true），免于"有积压就延后"的判定；派发线程上的 `TASK` 同样占位，直到请求被订阅或 `call()` 结束。异步开流的宿主改为在领取回调里 `RunTicket.begin(session)`，流终态 `ticket.settle(ok)`（5.4）。
+5. **派发轮次的回复路由取当初入队时的来源**：L1 为 `outcome.getDispatchOrigin()`，L0 为 `HostInput#getOrigin()`（续发时即排队那条的来源），而不是触发续发的那次请求。
 6. **派发轮次启动失败要抛出**（L1）：抛给 `drainLoop` 的回调后，内核按领取时的代际回滚到队首并返回 `START_FAILED`，不会无限重试。
 7. **排队的可以是命令**：忙态下用户发 `/goal ...`、`/loop ...` 这类非忙时可执行命令时，`handle` 把它们以原文入队并返回 `DEFERRED`，续发时经同一入口按命令执行。宿主域属性（如 `attr("reasoningEffort", ...)`）随队列项保存，`toInput` 时原样带回。
 8. **审批挂起**：有待审批卡时，普通输入返回 `REJECTED("hitl_pending")`；`/queue` 等忙时可执行命令、审批决策、续流与派发轮次由引擎按输入本身豁免，宿主无需传任何谓词。

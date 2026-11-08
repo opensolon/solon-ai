@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <ol>
  *   <li>{@code onSessionInterrupt}：{@code engine.interrupt(session, INTERRUPT_ALL)} / {@code prepareInterrupt} 先清队列再停流，无流也清；</li>
  *   <li>{@code InputBacklog}：引擎按能力接口找到本插件，{@code status} 带出自有键 {@code STATUS_PENDING}、有积压时 {@code isIdle} 为假、忙态 {@code handle} 由引擎自己入队并给 DEFERRED（附件、选择、宿主属性原样保存）；</li>
- *   <li>{@code RunDispatch}：派发登记在核心槽位，{@code handle} 识别为派发轮次（不占位、带回派发事务）；</li>
+ *   <li>{@code RunDispatch}：派发登记在核心槽位，{@code handle} 识别为派发轮次（不占位、带回派发来源）；</li>
  *   <li>{@code /queue} 命令经引擎全链路。</li>
  * </ol>
  */
@@ -231,7 +231,8 @@ class QueueEngineIntegrationTest {
             assertTrue(current instanceof QueueClaim);
             InputOutcome admit = engine.handle(claim.getItem().toInput(session));
             assertEquals(InputOutcome.Kind.TASK, admit.getKind());
-            assertSame(current, admit.getDispatch());
+            assertTrue(admit.isDispatched());
+            assertSame(current.getOrigin(), admit.getDispatchOrigin(), "派发轮次带回入队时的来源");
             assertTrue(engine.status(session).isAdmitting(), "派发轮次的 TASK 占位到开流：返回时判忙=已异步开流");
             admit.discard();
             assertFalse(engine.status(session).isAdmitting(), "放弃后释放：同步完成判定成立");

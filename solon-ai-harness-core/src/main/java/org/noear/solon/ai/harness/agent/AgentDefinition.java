@@ -38,7 +38,6 @@ import java.util.function.Consumer;
 public class AgentDefinition {
     public static final String AGENT_MAIN = "main";
     public static final String AGENT_GENERAL = "general";
-    public final static String ATTR_PERMISSION_CONTEXT = "__permissionContext";
 
     protected Metadata metadata = new Metadata();
     protected String systemPrompt;
