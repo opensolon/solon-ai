@@ -14,7 +14,7 @@ import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
-import org.noear.solon.ai.harness.host.HarnessEnginePool;
+import org.noear.solon.ai.harness.HarnessEnginePool;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;

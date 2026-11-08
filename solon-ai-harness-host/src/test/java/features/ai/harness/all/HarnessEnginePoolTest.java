@@ -7,7 +7,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
-import org.noear.solon.ai.harness.host.HarnessEnginePool;
+import org.noear.solon.ai.harness.HarnessEnginePool;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 

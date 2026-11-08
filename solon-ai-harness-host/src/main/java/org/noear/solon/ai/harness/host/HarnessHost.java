@@ -4,14 +4,11 @@
  */
 package org.noear.solon.ai.harness.host;
 
-import org.noear.solon.ai.harness.HarnessResult;
+import org.noear.solon.ai.harness.*;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
-import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.InterruptMode;
-import org.noear.solon.ai.harness.RunTicket;
 import org.noear.solon.ai.harness.extension.goal.GoalExecutor;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.goal.GoalOutcome;
