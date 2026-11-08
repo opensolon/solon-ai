@@ -74,7 +74,7 @@ final class ReferenceHosts {
             return host.stream(tenant, sid, SubmitSpec.of(q)
                     .origin(InputOrigin.of("http", userId, null, null))
                     .principal(tenant + "/" + userId)
-                    .rejectWhenBusy(true)
+                    .whenBusy(SubmitSpec.BusyPolicy.REJECT)
                     .customize(in -> in.attr("client", "sse"))
                     .observe(new RunSink() {
                         @Override
@@ -115,7 +115,7 @@ final class ReferenceHosts {
             return host.submit(tenant, "im-" + chatId, SubmitSpec.of(text)
                     .origin(InputOrigin.of("im", userId, chatId, null))
                     .principal(tenant + "/" + userId)
-                    .steerWhenBusy(true)
+                    .whenBusy(SubmitSpec.BusyPolicy.STEER)
                     .customize(in -> in.attr("im.chat", chatId)));
         }
 
@@ -207,7 +207,7 @@ final class ReferenceHosts {
             return host.submit(tenant, sid, SubmitSpec.of(text)
                     .origin(InputOrigin.of("web", userId, sid, null))
                     .principal(tenant + "/" + userId)
-                    .steerWhenBusy(true));
+                    .whenBusy(SubmitSpec.BusyPolicy.STEER));
         }
 
         private void push(String sid, String frame) {

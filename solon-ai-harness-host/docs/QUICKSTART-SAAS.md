@@ -135,7 +135,7 @@ public String chat(String tenant, String sid, String text, Context ctx) {
 @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
 @Mapping("/chat/{tenant}/{sid}/sse")
 public Flux<HostSignal> sse(String tenant, String sid, String text, Context ctx) {
-    return host.stream(tenant, sid, SubmitSpec.of(text).principal(tenant + "/" + userOf(ctx)).rejectWhenBusy(true));
+    return host.stream(tenant, sid, SubmitSpec.of(text).principal(tenant + "/" + userOf(ctx)).whenBusy(SubmitSpec.BusyPolicy.REJECT));
 }
 
 // 审批（协议字符串 → 枚举，脏值直接报错）
@@ -151,7 +151,7 @@ public String decide(String tenant, String sid, String callId, String action, Co
 @Post 
 @Mapping("/chat/{tenant}/{sid}/stop")
 public Result stop(String tenant, String sid) {
-    HarnessResult<Boolean> r = host.interrupt(tenant, sid, InterruptMode.INTERRUPT_ALL);
+    HarnessResult<Boolean> r = host.interrupt(tenant, sid);
     return r.isOk() ? Result.succeed(r.getValue()) : Result.failure(r.getCode().name());
 }
 ```
@@ -179,7 +179,7 @@ if (host.closeSession(tenant, sid, () -> store.delete(sid)) == false) {
 | `STARTED` | 已开流（`getRun()`） | `admitted` → `open` →（命令回执）→ `event`* → `runFinished` → `hitl`（若挂起） | 200 |
 | `REPLY` | 命令已执行，只有回执（`getReplyText()`） | `admitted` → `reply` | 200 |
 | `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `deferred(input, position)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
-| `STEERED` | 已插话给运行中的那一轮（`steerWhenBusy`） | `steered(input)` | 200 |
+| `STEERED` | 已插话给运行中的那一轮（`whenBusy(STEER)`） | `steered(input)` | 200 |
 | `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `rejected(input, reason, detail)`；`NOT_OWNER` 时为 `notOwner(input, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
 | `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(input, cards)` 或 `hitlExpired(input)` | 200 |
 | `IGNORED` | 空输入 | `admitted` | 200 |
@@ -198,8 +198,8 @@ host.submit(tenant, sid, SubmitSpec.of(text).origin(origin)
 HarnessHost.builder().input((tenant, in) -> in.commandContextFactory(myFactory));
 ```
 
-IM 类入口常用「忙时先插话、插不进再排队」：`SubmitSpec.of(text).steerWhenBusy(true)`（需装 steer 插件，命令不插话）。
-一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`SubmitSpec.of(text).rejectWhenBusy(true)`。
+IM 类入口常用「忙时先插话、插不进再排队」：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.STEER)`（需装 steer 插件，命令不插话）。
+一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.REJECT)`。
 
 ```java
 ```
@@ -258,7 +258,10 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 
 ---
 
-## 六、停止：`InterruptMode`
+## 六、停止
+
+普通宿主只需要两个动作：用户点「停止」用 `host.interrupt(tenant, sid)`（即 `INTERRUPT_ALL`）；只取消本次请求开出的那一轮用 `RunHandle.cancel()`（即 `CANCEL_STREAM`，SSE 断开时框架自动调用）。
+其它方式经 `host.admin(tenant).interrupt(sid, mode)`：
 
 | InterruptMode | 行为 |
 |---|---|
@@ -270,7 +273,8 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 
 ## 七、goal / loop 后台轮次
 
-`HarnessHost` 首次取到某个引擎时，先为它的 goal / loop 登记执行器（通道名 `host`），再恢复 goal 调度。后台轮次与用户轮次
+`HarnessHost` 首次取到某个引擎时，先为它的 goal / loop 登记执行器（通道名 `host`），再恢复 goal 调度、按 queue 积压索引续发
+（只恢复 `programRuns` 接管范围内的会话；`programRuns(false)` 时都不做）。后台轮次与用户轮次
 **同一条链**：`open` → `prepare` → `event`* → `finished`（`run.isProgram()` 为 true，`run.getInput().getOrigin()` 为 `channel("goal")` /
 `channel("loop")`，最终文本在 `RunOutcome.getResultText()`），可被 `interrupt` 停止，结束后自动续发积压。
 

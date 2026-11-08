@@ -42,7 +42,7 @@ public final class SubmitResult {
         IGNORED,
         /** 会话忙，已入积压，空闲后自动续发（位置见 {@link #getBacklogPosition()}） */
         DEFERRED,
-        /** 会话忙，已作为插话交给正在运行的那一轮（{@code SubmitSpec.steerWhenBusy}） */
+        /** 会话忙，已作为插话交给正在运行的那一轮（{@code SubmitSpec.whenBusy(STEER)}） */
         STEERED,
         /** 未受理（原因见 {@link #getRejectReason()}，持有者见 {@link #getOwner()}） */
         REJECTED

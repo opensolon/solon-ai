@@ -10,7 +10,6 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.HarnessResult;
-import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.extension.goal.GoalOutcome;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopSpec;
@@ -217,14 +216,14 @@ class HarnessHostExtensionPointsTest {
     }
 
     @Test
-    void rejectWhenBusyDoesNotQueue() throws Exception {
+    void busyPolicyRejectDoesNotQueue() throws Exception {
         HarnessEngine engine = engine();
         AgentSession session = engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor()).build();
         try {
             host.submit("t", "s1", "first", null);
-            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("second").rejectWhenBusy(true));
+            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("second").whenBusy(SubmitSpec.BusyPolicy.REJECT));
             assertEquals(RejectReason.BUSY, r.getRejectReason());
             assertEquals(0, engine.getExtension(QueueExtension.class).get().pendingSize(session), "一问一答：不排队");
         } finally {
@@ -233,7 +232,7 @@ class HarnessHostExtensionPointsTest {
     }
 
     @Test
-    void steerWhenBusyFallsBackToQueueWhenNoStreamIsRunning() throws Exception {
+    void busyPolicySteerFallsBackToQueueWhenNoStreamIsRunning() throws Exception {
         HarnessEngine engine = engine();
         engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
@@ -241,7 +240,7 @@ class HarnessHostExtensionPointsTest {
         try {
             host.submit("t", "s1", "first", null);
             // 受理窗口里还没开流：插话无处可去，回落到排队
-            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("more detail").steerWhenBusy(true));
+            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("more detail").whenBusy(SubmitSpec.BusyPolicy.STEER));
             assertEquals(SubmitResult.Kind.DEFERRED, r.getKind());
             assertTrue(sink.steeredInputs.isEmpty());
         } finally {
@@ -350,7 +349,7 @@ class HarnessHostExtensionPointsTest {
         try {
             SubmitResult r = host.submit("t", "s1", "hello", null);
             assertTrue(inPrepare.await(10, TimeUnit.SECONDS));
-            HarnessResult<Boolean> stopped = host.interrupt("t", "s1", InterruptMode.INTERRUPT_ALL);
+            HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
             assertTrue(stopped.isOk());
             release.countDown();
 

@@ -10,7 +10,6 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessResult;
-import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
@@ -80,7 +79,7 @@ class HarnessHostLifecycleTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
             SubmitResult r = host.submit("t", "s1", "hello", null);
-            HarnessResult<Boolean> stopped = host.interrupt("t", "s1", InterruptMode.INTERRUPT_ALL);
+            HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
             assertTrue(stopped.isOk());
             assertEquals(Boolean.TRUE, stopped.getValue(), "调度窗口里的那一轮也算：它一定会以 finished(CANCELLED) 收尾");
 
@@ -100,7 +99,7 @@ class HarnessHostLifecycleTest {
         engine.getSession("s1");
         HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
         try {
-            HarnessResult<Boolean> r = host.interrupt("t", "s1", InterruptMode.INTERRUPT_ALL);
+            HarnessResult<Boolean> r = host.interrupt("t", "s1");
             assertTrue(r.isOk());
             assertEquals(Boolean.FALSE, r.getValue(), "没有在跑的轮次：宿主自己补终态");
         } finally {
@@ -206,7 +205,7 @@ class HarnessHostLifecycleTest {
         try {
             SubmitResult r = host.submit("t", "s1", "hello", null);
             if (firstEvent.await(10, TimeUnit.SECONDS)) {
-                assertTrue(host.interrupt("t", "s1", InterruptMode.INTERRUPT_ALL).isOk());
+                assertTrue(host.interrupt("t", "s1").isOk());
                 stopped.set(true);
                 interrupted.countDown();
                 RunOutcome o = r.getRun().await(Duration.ofSeconds(30));
@@ -265,6 +264,29 @@ class HarnessHostLifecycleTest {
         try {
             host.warmup(Collections.singletonList("t"));
             assertTrue(sink.started.isEmpty(), "同一引擎上的其它宿主的会话不归本骨架续发");
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    /** 不接管后台工作（programRuns(false)）的骨架也不恢复：否则与别的入口共用引擎时会跑掉不属于它的积压 */
+    @Test
+    void hostWithoutProgramRunsDoesNotResumeBacklog() throws Exception {
+        HarnessEngine before = engine();
+        QueueExtension q1 = before.getExtension(QueueExtension.class).get();
+        assertTrue(q1.enqueue(before.getSession("s1"), "belongs to another entry").isOk());
+        before.shutdown();
+
+        HarnessEngine engine = engine();
+        RecordingSink sink = new RecordingSink();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor())
+                .programRuns(false)
+                .build();
+        try {
+            host.warmup(Collections.singletonList("t"));
+            assertTrue(sink.started.isEmpty(), "programRuns(false)：首次绑定不续发积压");
+            assertEquals(Collections.singletonList("s1"),
+                    engine.getExtension(QueueExtension.class).get().pendingSessions(), "积压原样保留给负责它的入口");
         } finally {
             engine.shutdown();
         }

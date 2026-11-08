@@ -142,7 +142,8 @@ public final class HarnessHost {
     HarnessEngine engine(String tenant) {
         Objects.requireNonNull(tenant, "tenant");
         HarnessEngine engine = Objects.requireNonNull(engines.apply(tenant), "engine");
-        if (bound.add(engine)) {
+        if (bound.add(engine) && programRuns) {
+            // 不接管后台工作的骨架也不恢复：否则与别的入口共用引擎时，会在本入口跑掉不属于它的会话积压
             bindProgramRuns(tenant, engine);
             recoverGoals(tenant, engine);
             recoverBacklog(tenant, engine);
@@ -354,8 +355,8 @@ public final class HarnessHost {
     }
 
     /**
-     * 中断会话的运行（方式见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT_ALL}，
-     * 只停当前运行、保留排队用 {@code CANCEL_STREAM}）。
+     * 用户点「停止」：清掉积压、写入取消消息、停掉正在运行的那一轮（{@code InterruptMode.INTERRUPT_ALL}）。
+     * 只停本次请求开出的那一轮、保留排队用 {@link RunHandle#cancel()}；其它中断方式见 {@link SessionAdmin#interrupt}。
      *
      * <p>停止就是停止：受理之后本轮不再把事件交给宿主，终态一定是 {@link RunOutcome.End#CANCELLED}
      * （原因见 {@link RunOutcome#getCancelCause()}）。宿主不需要在调用前做任何准备。</p>
@@ -363,7 +364,12 @@ public final class HarnessHost {
      * @return OK 时值为 true = 有一轮被停掉（本骨架的轮次——含还在调度窗口里、尚未开流的——会以
      *         {@code finished(CANCELLED)} 收尾）；false = 没有在跑的轮次。另有 NOT_FOUND、NOT_OWNER
      */
-    public HarnessResult<Boolean> interrupt(String tenant, String sessionId, InterruptMode mode) {
+    public HarnessResult<Boolean> interrupt(String tenant, String sessionId) {
+        return interrupt(tenant, sessionId, InterruptMode.INTERRUPT_ALL);
+    }
+
+    /** 按指定方式中断（包内：对外经 {@link SessionAdmin#interrupt}） */
+    HarnessResult<Boolean> interrupt(String tenant, String sessionId, InterruptMode mode) {
         Objects.requireNonNull(mode, "mode");
         return interrupt(tenant, sessionId, mode, causeOf(mode));
     }
@@ -488,13 +494,14 @@ public final class HarnessHost {
             HarnessInput in = inputOf.apply(session);
             decorate(tenant, in);
 
-            if (spec != null && spec.isSteerWhenBusy()) {
+            SubmitSpec.BusyPolicy whenBusy = spec == null ? SubmitSpec.BusyPolicy.QUEUE : spec.getWhenBusy();
+            if (whenBusy == SubmitSpec.BusyPolicy.STEER) {
                 SubmitResult steered = trySteer(tenant, engine, session, origin, in);
                 if (steered != null) {
                     return steered;
                 }
             }
-            if (spec != null && spec.isRejectWhenBusy() && isBusyFor(engine, session, in)) {
+            if (whenBusy == SubmitSpec.BusyPolicy.REJECT && isBusyFor(engine, session, in)) {
                 return rejectEarly(tenant, sessionId, origin, session, text, in, RejectReason.BUSY, null);
             }
 
@@ -560,7 +567,7 @@ public final class HarnessHost {
         return SubmitResult.of(SubmitResult.Kind.STEERED);
     }
 
-    /** rejectWhenBusy 的忙判定：不空闲（运行中 / 受理窗口 / 有积压），且不是待审批（那由引擎给出 HITL_PENDING） */
+    /** BusyPolicy.REJECT 的忙判定：不空闲（运行中 / 受理窗口 / 有积压），且不是待审批（那由引擎给出 HITL_PENDING） */
     private static boolean isBusyFor(HarnessEngine engine, AgentSession session, HarnessInput in) {
         SessionStatus st = engine.status(session);
         if (st.hasPendingHitl() || engine.isIdle(session)) {
@@ -1188,7 +1195,8 @@ public final class HarnessHost {
         }
 
         /**
-         * goal / loop 后台轮次是否接入本骨架（缺省 true：与用户轮次同一条链）。关闭时沿用插件自带的缺省执行器。
+         * goal / loop 后台轮次是否接入本骨架（缺省 true：与用户轮次同一条链）。关闭时沿用插件自带的缺省执行器，
+         * 首次绑定引擎时也不恢复 goal、不续发积压（那些归接管后台工作的入口）。
          */
         public Builder programRuns(boolean programRuns) {
             this.programRuns = programRuns;

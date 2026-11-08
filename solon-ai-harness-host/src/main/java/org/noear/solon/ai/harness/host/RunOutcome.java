@@ -31,11 +31,11 @@ public final class RunOutcome {
 
     /** 被中断的原因（只在 {@link End#CANCELLED} 时有值） */
     public enum CancelCause {
-        /** {@code host.interrupt(..., INTERRUPT_ALL)}：用户点「停止」（清积压、写取消消息） */
+        /** {@code host.interrupt(tenant, sid)}：用户点「停止」（清积压、写取消消息） */
         INTERRUPT_ALL,
-        /** {@code host.interrupt(..., CANCEL_STREAM)}：程序取消，只停当前一轮 */
+        /** {@code admin.interrupt(sid, CANCEL_STREAM)}：程序取消，只停当前一轮 */
         CANCEL_STREAM,
-        /** {@code host.interrupt(..., PREEMPT_STREAM)}：为新一轮腾位 */
+        /** {@code admin.interrupt(sid, PREEMPT_STREAM)}：为新一轮腾位 */
         PREEMPT_STREAM,
         /** {@link RunHandle#cancel()}，含 {@link HarnessHost#stream} 的下游取消（客户端断开） */
         HANDLE,

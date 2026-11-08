@@ -327,7 +327,7 @@ class HarnessHostContractTest {
             assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", "hello", null).getKind());
 
             // 开流前被停止
-            assertTrue(host.interrupt("t", "s1", InterruptMode.CANCEL_STREAM).isOk());
+            assertTrue(host.admin("t").interrupt("s1", InterruptMode.CANCEL_STREAM).isOk());
             assertTrue(executor.runNext(5_000));
 
             assertEquals(1, sink.finished.size(), "被取消的一轮同样恰好收尾一次");
@@ -411,6 +411,7 @@ class HarnessHostContractTest {
             assertEquals(SubmitResult.Kind.HITL, r.getKind(), "过期卡不得续流（否则会把上一轮问题重跑）");
             assertTrue(sink.started.isEmpty());
             assertEquals(1, sink.hitlExpiredInputs.size(), "提示卡已失效（文案由宿主决定）");
+            assertTrue(sink.hitlExpiredInputs.get(0).isResume(), "审批决策是续跑：界面续用原来的输出流");
         } finally {
             engine.shutdown();
         }

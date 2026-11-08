@@ -50,6 +50,7 @@ public final class HostInput {
     private final String selectedModel;
     private final String selectedAgent;
     private final Map<String, String> attrs;
+    private final boolean resume;
 
     private HostInput(String tenant, String sessionId, InputOrigin origin, AgentSession session, String text,
                       Kind kind, String commandName, ParsedCommand command, boolean besideRunning,
@@ -69,6 +70,7 @@ public final class HostInput {
         this.selectedAgent = in == null ? null : in.getSelectedAgent();
         this.attrs = in == null || in.getAttrs().isEmpty() ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(in.getAttrs()));
+        this.resume = in != null && (in.isResume() || in.isHitlDecision());
     }
 
     /** 受理之前就结束的输入（会话不存在、非持有节点、主体不符、忙时插话） */
@@ -145,6 +147,14 @@ public final class HostInput {
     /** 引擎是否给出了回执文本（命令无输出时为 false：宿主可在 {@link HostSink#admitted} 里兜底提示） */
     public boolean hasReply() {
         return hasReply;
+    }
+
+    /**
+     * 是否是「续跑」：审批决策或显式续流，开出的那一轮接着挂起的那一轮跑。
+     * 界面据此决定续用原来的输出流（序号、回放缓冲），而不是新开一段。
+     */
+    public boolean isResume() {
+        return resume;
     }
 
     /** 是否由队列续发而来 */

@@ -81,20 +81,30 @@ public RunSink open(HostRun run) {
 
 ## 4. 类型一览
 
+**先认识哪几个**（按用法加深，后一档不影响前一档）：
+
+| 档 | 要认识的类型 | 够用于 |
+|---|---|---|
+| 一问一答 | `HarnessHost`、`SubmitSpec`、`RunHandle` / `RunOutcome`、`HostSignal` | HTTP / SSE / 批处理、无头脚本 |
+| 推送型 | + `HostSink`、`HostInput` | WebSocket / IM：受理、排队、拒收、回执的呈现 |
+| 每轮有状态 | + `RunSink`、`HostRun`、`RunPrep`、`SessionAdmin` | 分段渲染、按轮计费、管理控制台 |
+
+停止只有两个动作：用户点「停止」用 `host.interrupt(tenant, sid)`，只取消本次请求的那一轮用 `RunHandle.cancel()`。
+
 | 类型 | 作用 |
 |---|---|
 | `HarnessHost` | 骨架本体：`openSession` / `closeSession` / `warmup` / `submit` / `stream` / `decide` / `interrupt` / `admin` |
-| `SubmitSpec` | 一次提交：`origin` / `principal` / `steerWhenBusy` / `rejectWhenBusy` / `customize` / `observe` |
+| `SubmitSpec` | 一次提交：`origin` / `principal` / `whenBusy` / `customize` / `observe` |
 | `SubmitResult` | 结果：`getKind()`、`httpStatus()`；开了流时 `getRun()`，只有回执时 `getReplyText()` |
 | `RunHandle` | 本次请求开出的那一轮：`future()` / `await(Duration)` / `cancel()` |
 | `HostSignal` | `stream` 的元素：`REPLY` / `EVENT` / `DEFERRED` / `STEERED` / `REJECTED` / `HITL` / `IGNORED` / `FINISHED` |
 | `HostSink` | 全局输出通道（全部有缺省）：会话级 `admitted` / `reply` / `deferred` / `steered` / `rejected` / `notOwner` / `hitl` / `hitlExpired`；轮次级 `open` / `event` / `runFinished` |
 | `RunSink` | 每轮输出通道（全部有缺省）：`prepare` / `reply` / `event` / `finished` |
-| `HostInput` | 一次输入：租户、会话、来源、输入文本、结局、命令、是否在运行中任务旁边、队列项；本次输入的 `selectedModel` / `selectedAgent` / 宿主属性 `getAttr(key)`（续发时为排队时保存的值） |
+| `HostInput` | 一次输入：租户、会话、来源、输入文本、结局、命令、是否在运行中任务旁边、队列项、是否续跑（`isResume`：审批决策 / 显式续流，界面续用原来的输出流）；本次输入的 `selectedModel` / `selectedAgent` / 宿主属性 `getAttr(key)`（续发时为排队时保存的值） |
 | `HostRun` | 一轮运行：所属输入、会话、代理 / 模型名、是否队列派发、是否后台轮次 |
 | `RunPrep` | 开流前的准备视图：`request()` / `prompt()` / `session()` / `engine()` |
 | `RunOutcome` / `RunUsage` | 终态：结束方式、错误、最终文本、挂起的审批卡；用量：token、工具调用数、耗时 |
-| `SessionAdmin` | 管理态：`call(sid, 扩展类型, 操作)` 与 `interrupt(sid, mode)`；**不做鉴权** |
+| `SessionAdmin` | 管理态：`call(sid, 扩展类型, 操作)` 与高级用法 `interrupt(sid, mode)`；**不做鉴权** |
 
 ### 4.1 HarnessHost.Builder
 
@@ -105,7 +115,7 @@ public RunSink open(HostRun run) {
 | `executor(Executor)` | Reactor `boundedElastic` | 开流动作的执行器 |
 | `wrap(BiFunction<String, Runnable, Runnable>)` | 原样 | 包装框架代跑的动作（开流、续发、后台轮次）：MDC、日志作用域、租户上下文 |
 | `input(BiConsumer<String, HarnessInput>)` | 无 | 统一补充每条输入（用户提交、审批、队列续发、后台轮次） |
-| `programRuns(boolean)` / `programRuns(Predicate<String>)` | `true`（全部会话） | goal / loop 后台轮次是否接入骨架、接入哪些会话；关闭或不命中时沿用插件缺省执行器 |
+| `programRuns(boolean)` / `programRuns(Predicate<String>)` | `true`（全部会话） | goal / loop 后台轮次是否接入骨架、接入哪些会话；关闭或不命中时沿用插件缺省执行器。首次绑定引擎时只恢复接管范围内的 goal 与积压；`false` 时不恢复（与别的入口共用引擎的无头 / 脚本入口用） |
 
 ### 4.2 SubmitSpec
 
@@ -113,8 +123,7 @@ public RunSink open(HostRun run) {
 |---|---|
 | `of(text)` / `origin(origin)` | 输入文本与来源（回复路由） |
 | `principal(p)` | 提交者主体：非空时必须与会话主体一致，否则 `REJECTED(SCOPE_UNAVAILABLE)`。多用户 SaaS 应当总是传；SERVER 模式下不传只告警一次 |
-| `steerWhenBusy(true)` | 会话正在运行时，先作为插话交给运行中的那一轮（需 steer 插件），插不进再排队；命令不插话 |
-| `rejectWhenBusy(true)` | 忙时直接 `REJECTED(BUSY)`，不排队（一问一答型宿主用） |
+| `whenBusy(BusyPolicy)` | 会话忙时怎么办：`QUEUE`（缺省，进积压、空闲后续发）/ `STEER`（先作为插话交给运行中的那一轮，需 steer 插件，插不进再排队；命令不插话）/ `REJECT`（直接 `REJECTED(BUSY)`，一问一答型宿主用） |
 | `customize(in -> ...)` | 本次的附件、显式模型 / 子代理、`attr(...)` |
 | `observe(RunSink)` | 只作用于本次请求开出的那一轮的附加监听（在全局 sink 之后调用；进了积压时不调用） |
 
@@ -148,7 +157,7 @@ submit ─┬─ 会话不存在 / 非持有 / 主体不符 ── rejected / no
 
 ### 4.5 InterruptMode
 
-`host.interrupt` / `admin.interrupt` 使用 core 的 `InterruptMode`，本轮都以 `RunOutcome.End.CANCELLED` 收尾：
+`host.interrupt(tenant, sid)` 就是 `INTERRUPT_ALL`；其它方式经 `admin.interrupt(sid, mode)`（高级用法），本轮都以 `RunOutcome.End.CANCELLED` 收尾：
 
 | 值 | 行为 |
 |---|---|

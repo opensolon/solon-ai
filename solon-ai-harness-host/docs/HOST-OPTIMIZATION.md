@@ -4,7 +4,7 @@
 > （一个工作区 = 一个租户）是验证样本之一，而不是接口的模子。
 >
 > 状态：4.2.0 未发布、`@Preview`，直接改 API，不留桥接。`HarnessEnginePool` 留在 core。
-> 进度：M0–M7、第九节 H1–H5 / S1–S4、9.3 命名收口全部落地（host 69 例全绿；soloncode-cli 1225 例，失败只有 3 个既有 settings 用例）。
+> 进度：M0–M7、第九节 H1–H5 / S1–S4、9.3 命名收口、第十节（桌面端与无头模式迁移）全部落地（host 70 例全绿；soloncode-cli 1226 例，失败只有 3 个既有 settings 用例）。
 
 ## 一、已拍板的决定
 
@@ -79,7 +79,7 @@ public interface RunSink {                          // 每轮一个；全部缺�
 | `RunPrep` | 只读视图：request()、prompt()、session()、modelName()、agentName()、run() |
 | `RunOutcome` | end（COMPLETED/FAILED/CANCELLED）、error、resultText、usage（`RunUsage`：tokens、toolCalls、elapsedMs）、streamOpened、hitlCards |
 | `RunHandle` | future()、await(Duration)、cancel() |
-| `SubmitSpec` | text、origin、principal、steerWhenBusy、rejectWhenBusy、customize(Consumer&lt;HarnessInput&gt;)、observe(RunSink) |
+| `SubmitSpec` | text、origin、principal、whenBusy(QUEUE/STEER/REJECT)、customize(Consumer&lt;HarnessInput&gt;)、observe(RunSink) |
 | `HostSignal` | `host.stream` 元素：REPLY / EVENT / DEFERRED / REJECTED / HITL / STEERED / FINISHED |
 
 Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,Runnable,Runnable>)`、
@@ -180,3 +180,49 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 - 守卫：`HostGenericityGuardTest.hostTurnStaysRetired` 锁定主代码不得再出现 `HostTurn` / `getTurn(`。
 - soloncode：`WebHostSink` / `WebRunSink` / `WebInputAttrs` 跟进；删除只有测试在用的 `WebStreamBuilder.buildStreamFlux`，`ImageReplyLifecycleTest.buildStream()` 改为在测试里直接组装 `openPipeline` + 订阅（同步装配失败时 replyError + cleanup，与生产上 `WebRunSink.finished(FAILED)` 一致）。
 - 验证：host 69 例全绿（新增守卫 1 例）并已 install；soloncode-cli 全量 1225 例，失败 3 例（settings 既有），跳过 3 例。
+
+## 十、第三轮：让所有入口都只剩「协议适配」（2026-11-08）
+
+**问题**：soloncode 有 5 套编排（Web+IM 已用 HarnessHost；桌面、无头、命令行、`/web/run` 各写一套），
+同一条规则写在多处已经走样（桌面端 goal 的行动证据只排除了 goal 工具，框架口径排除 goal/task/multitask/memory）。
+
+**原则**：不要过度设计——只做有真实使用方、且能在本仓验证的改动；每项改动先读代码核实前提。
+
+### 10.1 决定（执行前按代码核实后修订）
+
+| 编号 | 原建议 | 核实后的决定 |
+|---|---|---|
+| F1 | 忙时策略改枚举，含 `REPLACE` | 做，但只要 `QUEUE` / `STEER` / `REJECT` 三个值：`REPLACE` 没有使用方——桌面端开流前的 `CANCEL_STREAM` 只是防御（会话忙时引擎早已排队，后台轮次忙时直接跳过）；「先插话再拒绝」的组合也没有使用方。`ROLLBACK` 不做 |
+| F2 | 停止只留 `stop` + `RunHandle.cancel` | 做，但方法名保留 `interrupt`（此前已拍板：stop 像停服务，且与 `prepareInterrupt` 配套）：`host.interrupt(tenant, sid)` = 用户停止；三种 `InterruptMode` 只留在 `SessionAdmin.interrupt` |
+| F3 | 多 sink | 不做：唯一的使用方是 S2，而 S2 拆分后 Web 与 IM 仍要互相知道对方的规则（IM 撞上待审批时 Web 不报错、忙时命令提示），反而更绕。需要计费 / 审计的宿主自己组合一个 HostSink 即可 |
+| F4 | 按租户绑定 sink | 不做：sink 的生命周期要跟引擎实例走，缓存「租户 → sink」要处理引擎回收与强引用（值引用引擎会让 WeakHashMap 失效），比宿主侧 7 处查找更复杂；soloncode 侧收成一个小工具方法 |
+| F5 | AG-UI 适配模块 | 暂缓：当前没有使用方，本环境也无法用真实 AG-UI 客户端验证；审批（interrupt）在 AG-UI 1.0 里还没有定型。等有使用方时单独立项（可在宿主层基于 `host.stream` 实现，框架不需要改） |
+| F6 | RecordingSink 测试工具 | 不做：需要额外发布 test-jar；现有契约测试各自的记录器足够 |
+| F7 | 文档路线图 | 做：README 写清「先认识哪几个类型」 |
+| 新增 | — | `HostInput.isResume()`：桌面端审批续流要续用原来的流序号（不复位），这是任何「挂起后续跑」的界面都需要的事实 |
+| 新增 | — | 修 `programRuns(false)` 的语义漏洞：不接管后台工作的骨架首次绑定引擎时也会恢复 goal、续发**全部**会话的积压（无头模式与 Web 共用引擎时，会在 `soloncode run` 进程里跑掉 Web 会话的排队）。改为不接管就不恢复 |
+| S1 | 所有入口改用 HarnessHost | 桌面端、无头模式做；命令行与 `/web/run` 不做（命令行续发会与 readLine 抢终端，需另行验证；`/web/run` 保留子进程隔离） |
+| S2 | Web / IM 呈现拆两个类 | 不做（见 F3） |
+| S3 | IM 回复路由跟着本轮走 | 不做：`ImageReplyTurn` 也读这个属性，改动面超出本轮 |
+| S4 | reset/done 集中到一个类 | 不做：规则已在 WebHostSink / WebRunSink 两处，各自有注释与测试；再抽一层只是搬家 |
+| S5 | 清理 | 做：删已废弃的兼容入口，`recoverSessionQueues` 改名 `onWorkspaceReady` |
+
+### 10.2 执行记录
+
+- 框架（host）：`SubmitSpec.whenBusy(BusyPolicy)`（`QUEUE` / `STEER` / `REJECT`）取代两个布尔；`HarnessHost.interrupt(tenant, sid)` 即用户停止，
+  带 `InterruptMode` 的版本收为包内，对外只经 `SessionAdmin.interrupt`；新增 `HostInput.isResume()`；`programRuns(false)` 首次绑定引擎时不再恢复 goal、不再续发积压。
+  守卫 `EXTENSION_POINTS` 的两项合并为 `SubmitSpec#whenBusy`，数量上限不变。新增用例：`hostWithoutProgramRunsDoesNotResumeBacklog`、过期审批卡的 `isResume`。
+- soloncode 桌面端：删除 `DesktopStreamTurn`（订阅、`RunTicket`、顶流）与 `DesktopInputRouter` 的 `dispatchTurn` / `drainBacklog` / `afterRun`、`WsGate.runGoalRoundAndCapture`（闭锁、自算证据与 token、`PREEMPT_STREAM`）。
+  新增 `DesktopHostSink`（会话级回执，发给该会话最近一次发起请求的连接，与迁移前一致）与 `DesktopRunSink`（每轮：流开 / 续用、请求选项、事件转换、hitl / done / error 终态；goal 轮次只推过程）。
+  `WsGate` 建 `HarnessHost`（租户 `desktop`，`programRuns(SessionIdOwnership::isDesktop)`），构造时 `warmup`。goal 行动证据改为框架口径（修复只排除 goal 工具的偏差）。
+  桌面会话的 loop 轮次经骨架执行但不推流（桌面端没有 loop 界面，与迁移前插件缺省执行器一致）。
+- soloncode 无头模式：`PrintMode.runAgent` 改为 `host.submit(...whenBusy(REJECT).observe(...))` + `RunHandle.future().get()`；删除闭锁、`turnStateLock`、`AtomicReference` 句柄；
+  「中断帧先于句柄发布」的竞态改为两个 volatile 互相可见（先写自己、再读对方，重复停止幂等）。`programRuns(false)`：不在 `soloncode run` 进程里恢复别的入口的积压。
+- soloncode Web：`whenBusy(STEER/QUEUE)`、`host.interrupt(tenant, sid)`；删除 `WebGate` 的废弃兼容入口（`ATTR_INPUT_ADMITTING` / `hasActiveStream` / `isInputAdmitting`，测试改测 `SessionActivity`）；
+  `recoverSessionQueues` 改名 `onWorkspaceReady`。
+- 测试：删除 `DesktopStreamTurnCancelTest`（测的是已删除的顶流防御，框架的停止屏障与单流受理已覆盖）；新增 `DesktopHostFlowContractTest` 4 例（真实引擎 + 骨架：终态恰好一次且带序号、无运行时停止只发 reason + done、过期审批卡回执、受理后才写选择）。
+  `InjectedRoundChannelContractTest` 的桌面条款改为 `.programRuns(SessionIdOwnership::isDesktop)`。
+- 发现的既有问题（未改）：`/prompts/desktop-collaboration.md` 资源从未提交（`DesktopCollaborationPrompt` 自 82e3a313 引入起即缺），桌面端每轮都会在选项装配时抛
+  `ExceptionInInitializerError`。迁移前后表现一致（迁移后以一个 error 终态收尾），需要补上提示词文件。
+- 验证：host 70 例全绿并已 install；soloncode-cli 全量 1226 例，失败 3 例（settings 既有），跳过 3 例。
+

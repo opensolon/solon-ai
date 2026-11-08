@@ -70,8 +70,7 @@ class HostGenericityGuardTest {
             {"Builder#input", ".input("},
             {"Builder#programRuns", ".programRuns("},
             {"SubmitSpec#principal", ".principal("},
-            {"SubmitSpec#steerWhenBusy", ".steerWhenBusy("},
-            {"SubmitSpec#rejectWhenBusy", ".rejectWhenBusy("},
+            {"SubmitSpec#whenBusy", ".whenBusy("},
             {"SubmitSpec#customize", ".customize("},
             {"SubmitSpec#observe", ".observe("},
     };

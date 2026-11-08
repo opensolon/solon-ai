@@ -69,7 +69,7 @@ public interface HostSink {
         HostSinkSupport.LOG.info("[HarnessHost] input deferred: input={}, position={}", input, position);
     }
 
-    /** 忙时插话成功（{@code SubmitSpec.steerWhenBusy}）：输入已交给正在运行的那一轮 */
+    /** 忙时插话成功（{@code SubmitSpec.whenBusy(STEER)}）：输入已交给正在运行的那一轮 */
     default void steered(HostInput input) {
     }
 

@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  * host.submit(tenant, sid, SubmitSpec.of(text)
  *         .origin(InputOrigin.of("im", userId, chatId, msgId))
  *         .principal(tenant + "/" + userId)     // 校验会话主体，防止用别人的 sessionId 提交
- *         .steerWhenBusy(true)                  // 忙时先插话，插不进再排队
+ *         .whenBusy(SubmitSpec.BusyPolicy.STEER) // 忙时先插话，插不进再排队
  *         .customize(in -> in.selectedModel("gpt-4o").attr("effort", "high")));
  * }</pre>
  *
@@ -27,11 +27,26 @@ import java.util.function.Consumer;
  */
 @Preview("4.2.0")
 public final class SubmitSpec {
+    /**
+     * 会话忙（正在运行 / 受理窗口 / 有积压）时怎么处理这条输入。忙时可执行的命令、待审批的会话不受影响
+     * （前者照常执行，后者由引擎给出 {@code HITL_PENDING}）。
+     */
+    public enum BusyPolicy {
+        /** 进积压，当前一轮结束后自动续发（缺省；推送型宿主用） */
+        QUEUE,
+        /**
+         * 先作为插话交给正在运行的那一轮（需装配 steer 插件；斜杠命令、带附件的输入不插话），插不进再排队
+         * （IM / 聊天输入框「边跑边补充」用）
+         */
+        STEER,
+        /** 直接拒绝（{@code BUSY}），不进积压（一问一答型宿主用：请求结束了，排队的那一轮没人接） */
+        REJECT
+    }
+
     private final String text;
     private InputOrigin origin = InputOrigin.NONE;
     private String principal;
-    private boolean steerWhenBusy;
-    private boolean rejectWhenBusy;
+    private BusyPolicy whenBusy = BusyPolicy.QUEUE;
     private Consumer<HarnessInput> customizer;
     private RunSink observer;
 
@@ -60,21 +75,9 @@ public final class SubmitSpec {
         return this;
     }
 
-    /**
-     * 会话正在运行时，先把这条输入作为插话交给运行中的那一轮（需装配 steer 插件）；插不进再走正常受理
-     * （排队或拒绝）。斜杠命令不插话。缺省 false。
-     */
-    public SubmitSpec steerWhenBusy(boolean steerWhenBusy) {
-        this.steerWhenBusy = steerWhenBusy;
-        return this;
-    }
-
-    /**
-     * 会话忙时直接拒绝（{@code BUSY}），不进积压：一问一答型宿主用（请求结束了，排队的那一轮没人接）。
-     * 忙时可执行的命令照常执行。与 {@link #steerWhenBusy} 可同时开：先插话，插不进再拒绝。缺省 false。
-     */
-    public SubmitSpec rejectWhenBusy(boolean rejectWhenBusy) {
-        this.rejectWhenBusy = rejectWhenBusy;
+    /** 会话忙时的处理方式（缺省 {@link BusyPolicy#QUEUE}；null 视为缺省） */
+    public SubmitSpec whenBusy(@Nullable BusyPolicy whenBusy) {
+        this.whenBusy = whenBusy == null ? BusyPolicy.QUEUE : whenBusy;
         return this;
     }
 
@@ -106,12 +109,8 @@ public final class SubmitSpec {
         return principal;
     }
 
-    public boolean isSteerWhenBusy() {
-        return steerWhenBusy;
-    }
-
-    public boolean isRejectWhenBusy() {
-        return rejectWhenBusy;
+    public BusyPolicy getWhenBusy() {
+        return whenBusy;
     }
 
     @Nullable

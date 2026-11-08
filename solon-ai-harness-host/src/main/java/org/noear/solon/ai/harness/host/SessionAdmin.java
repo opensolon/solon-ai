@@ -102,10 +102,16 @@ public final class SessionAdmin {
     }
 
     /**
-     * 中断会话的运行（见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT_ALL}，
-     * 只停当前运行、保留排队用 {@code CANCEL_STREAM}）。
+     * 按指定方式中断会话的运行（高级用法）。普通宿主只需要两个动作：用户停止用
+     * {@link HarnessHost#interrupt(String, String)}，只取消本次请求的那一轮用 {@link RunHandle#cancel()}。
      *
-     * @return OK（值为「确有运行中的流被停掉」）、NOT_FOUND、NOT_OWNER
+     * <ul>
+     *   <li>{@code INTERRUPT_ALL}：用户停止（清积压、写取消消息、停流）；</li>
+     *   <li>{@code CANCEL_STREAM}：只停当前运行、保留排队、不写取消消息（如停掉 goal 的当前轮次）；</li>
+     *   <li>{@code PREEMPT_STREAM}：为新一轮腾位（不推进取消代数）。</li>
+     * </ul>
+     *
+     * @return OK（值为「有一轮被停掉」）、NOT_FOUND、NOT_OWNER
      */
     public HarnessResult<Boolean> interrupt(String sessionId, InterruptMode mode) {
         return host.interrupt(tenant, sessionId, mode);
