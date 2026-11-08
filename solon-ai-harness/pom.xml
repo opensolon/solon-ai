@@ -17,31 +17,7 @@
     <description>solon-ai-harness 聚合包（只做引用、不含代码）：核心 + 全部会话插件（goal / queue / steer / loop）+ 宿主骨架（solon-ai-harness-host）。插件不会自动生效，需在构建期用 Builder.extensionAdd 装配（SERVER 模式必须如此）</description>
 
     <dependencies>
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-goal</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-queue</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-steer</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-loop</artifactId>
-        </dependency>
-
+        <!-- 全家桶坐标（4.1.1 已发布，保留）：只引 host，core 与四个插件经 host 传递引入，依赖清单只维护一处 -->
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-ai-harness-host</artifactId>

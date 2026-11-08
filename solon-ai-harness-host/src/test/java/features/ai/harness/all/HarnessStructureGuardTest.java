@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -77,15 +78,21 @@ class HarnessStructureGuardTest {
         assertTrue(Files.isRegularFile(BASE.resolve("solon-ai-harness").resolve("pom.xml")), "聚合包未定位到：" + BASE);
         assertTrue(files.isEmpty(), "聚合包只做引用，不得有源码（宿主代码放 solon-ai-harness-host）：" + files);
 
-        // 聚合包自身没有测试：在这里确认它引用了核心、全部插件与宿主骨架
+        // 聚合包自身没有测试：在这里确认它只引 host，而 host 引了核心与全部插件（依赖清单只维护一处）
         String pom = read(BASE.resolve("solon-ai-harness").resolve("pom.xml"));
+        assertTrue(pom.contains("<artifactId>solon-ai-harness-host</artifactId>"), "聚合包 pom 必须引用 host");
+        for (String module : Arrays.asList("core", "goal", "loop", "queue", "steer")) {
+            assertFalse(pom.contains("<artifactId>solon-ai-harness-" + module + "</artifactId>"),
+                    "聚合包不要重复列出 host 已传递的模块：" + module);
+        }
+        String hostPom = read(BASE.resolve("solon-ai-harness-host").resolve("pom.xml"));
         List<String> missing = new ArrayList<>();
-        for (String module : Arrays.asList("core", "goal", "loop", "queue", "steer", "host")) {
-            if (pom.contains("<artifactId>solon-ai-harness-" + module + "</artifactId>") == false) {
+        for (String module : Arrays.asList("core", "goal", "loop", "queue", "steer")) {
+            if (hostPom.contains("<artifactId>solon-ai-harness-" + module + "</artifactId>") == false) {
                 missing.add(module);
             }
         }
-        assertTrue(missing.isEmpty(), "聚合包 pom 漏引用：" + missing);
+        assertTrue(missing.isEmpty(), "host pom 漏引用：" + missing);
     }
 
     /** 插件门面的写方法名（状态变更类）；读方法（get/list/has*）与续发机制（claimNext/drainLoop/offer）不在其列 */
@@ -176,7 +183,7 @@ class HarnessStructureGuardTest {
 
     @Test
     void pluginInternalsAreNotPublic() throws IOException {
-        Pattern internal = Pattern.compile("^public\\s+(final\\s+)?(class|interface)\\s+(\\w+(Runtime|Store|Mailbox|Scheduler))\\b",
+        Pattern internal = Pattern.compile("^public\\s+(final\\s+)?(class|interface)\\s+(\\w+(Runtime|Store|Mailbox|Scheduler|Attrs|Limits))\\b",
                 Pattern.MULTILINE);
         List<String> violations = new ArrayList<>();
         for (String plugin : PLUGINS) {

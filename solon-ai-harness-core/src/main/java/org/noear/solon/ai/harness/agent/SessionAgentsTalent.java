@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.agent.task;
+package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.Talent;
-import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.lang.Internal;
 
 import java.util.List;
 
@@ -27,9 +27,12 @@ import java.util.List;
  * <p>{@link TaskTalent} 的「当前可用的子代理」只列引擎级代理；本会话用 {@code generate(saveToFile=false)}
  * 创建的子代理由引擎在装配本会话的请求时用本类补充列出（其它会话的请求不挂，自然看不到）。</p>
  *
+ * <p>只由引擎装配请求时构造（跨包可见只因装配代码在根包），宿主不要直接使用。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
+@Internal
 public final class SessionAgentsTalent implements Talent {
     private final List<AgentDefinition> agents;
 

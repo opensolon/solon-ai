@@ -58,7 +58,7 @@ class QueueExtensionTest {
 
         // 同步 drain：返回 true 即同步完成，收口由内核完成（布尔型 drainOne 已删）
         AtomicReference<String> executed = new AtomicReference<>();
-        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, null, claim -> {
             executed.set(claim.getItem().getText());
             return true;
         }));
@@ -94,7 +94,7 @@ class QueueExtensionTest {
 
         // 异步语义：回调只启动并返回 false，收口句柄留给终态
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, null, claim -> {
             ref.set(claim);
             return false;
         }));
@@ -107,13 +107,14 @@ class QueueExtensionTest {
     }
 
     @Test
-    void cancelPendingClearsAndBumpsGeneration() {
+    void interruptHookClearsAndBumpsGeneration() {
         QueueExtension queue = new QueueExtension();
         AgentSession session = InMemoryAgentSession.of();
         queue.enqueue(session, "a", null);
         queue.enqueue(session, "b", null);
 
-        assertTrue(queue.cancelPending(session).isOk());
+        // 停止语义只经引擎中断回调触发（门面不再公开 cancelPending）
+        queue.onSessionInterrupt(null, session);
         assertEquals(0, queue.pendingSize(session));
         assertFalse(queue.hasItems(session));
     }
@@ -146,5 +147,15 @@ class QueueExtensionTest {
         AgentSession session = InMemoryAgentSession.of();
         assertEquals(HarnessResult.Code.DISABLED, queue.enqueue(session, "x", null).getCode(), "停用后不再接单");
         assertFalse(queue.hasItems(session));
+    }
+
+    /** 键名是落盘与跨模块（core 的 HarnessAttrs 命名空间）契约：QueueAttrs 包内可见，由本测试守住取值。 */
+    @Test
+    void attrKeysAreStable() {
+        assertEquals("session.queue", QueueAttrs.QUEUE);
+        assertEquals("session.queue.items", QueueAttrs.QUEUE_ITEMS);
+        assertEquals("session.queue.inFlight", QueueAttrs.QUEUE_IN_FLIGHT);
+        assertEquals("session.queue.generation", QueueAttrs.QUEUE_GENERATION);
+        assertEquals("session.queue.claim", QueueAttrs.QUEUE_CLAIM);
     }
 }

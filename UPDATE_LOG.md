@@ -1,5 +1,19 @@
 ### vNEXT
 
+* **harness：核心对外面收敛（停流、结果模型、引擎视图、包结构、插件门面）**（4.2.0；4.2.0 新增的 API 直接改不留桥接，4.1.1 已发布的引擎方法保留 `@Deprecated` 委托、4.3.0 删除）:
+  * **停流**：新增根包 `InterruptMode { INTERRUPT, CANCEL_STREAM, PREEMPT_STREAM }`，唯一一步式入口 `engine.interrupt(session, mode)` 返回 `HarnessResult<Boolean>`，三种方式都先查归属（修复：原 `cancelStream` / `preemptStream` 不查归属，`interrupt` 吞掉 NOT_OWNER）；旧 `interrupt(session)` / `cancelStream` / `preemptStream` 删除，两段式 `prepareInterrupt` 保留。host 的 `StopMode` 删除，`HarnessHost` / `AdminGateway` 改 `interrupt(…, InterruptMode)`，鉴权操作名 `stop` → `interrupt`
+  * **单份判定**：`isRunnableWhenBusy` 只接 `HarnessInput`（与受理共用一份 `terminalOnly` 口径）；受理占位有效性只在 `SessionStatus.isAdmissionMark`（`@Internal`）；`prompt` / `resume` 补 `@Deprecated`；`HarnessExtensionHooksDocTest` 守住扩展钩子清单与类注释一致
+  * **结果模型**：`HarnessResult.Code` 新增 `CONFLICT`（状态不允许，409；`INVALID` 只表示参数非法，400），新增细分码 `getReason()` / `hasReason()` / `getReasonOrCode()`；`InputOutcome.REJECT_*` 字符串常量与 `Submitted.REJECT_SESSION_NOT_FOUND` 改为枚举 `InputOutcome.RejectReason`（`code()` 仍是线上小写值）；`InputOutcome` 工厂标 `@Internal`；steer 的 `SteerResult` / `SteerCancelResult` 删除，四个门面返回 `HarnessResult<SteerReceipt>`，细分码 `SteerExtension.REASON_*` 与 Web 应答码同名
+  * **引擎视图**：新增 `engine.getTalents()`（`HarnessTalents`）与 `engine.getSettings()`（`HarnessSettings`：目录布局与运行期配置）；引擎上对应的 `getXxxTalent` / `getHarnessXxx` / `setXxx` 标 `@Deprecated` 委托
+  * **包结构**：`spi.SessionOwnership` → `session.SessionOwnership`（会话归属三件套 `SessionOwnership` / `OwnerCheck` / `NotOwnerException` 同处；`spi` 只留插件能力接口 `InputBacklog` / `RunDispatch`）。4.2 开发期新增的 `agent.task` 包并回 `agent`：`TaskTalent` / `GenerateTalent` / `TaskWrapEvent` 回到 4.1.1 的发布位置（与 4.1.1 源码兼容，公开方法只增不减），`SubTaskScheduler` 仍包内、`SessionAgentsTalent` 标 `@Internal`；`agent` 一个包覆盖子代理的定义、注册、构建、委派。有意不做：不建 `run` / `ownership` / `guard` 包，`ToolName`、`hitl`、`permission` 原位不动（已发布或分组后不减少概念），改为 README §10.1 增加「门控总览」
+  * **queue**：删除 `claimNext(session, handler)` 两参重载（用 `claimNext(session, null, handler)` 或 `drainLoop`）；删除门面 `cancelPending`——「作废全部」只经引擎中断（`onSessionInterrupt` 清空并递增代际），只清待执行用 `clearPending`
+  * **steer**：`SteerLimits` 与 `getLimits()` 收为包内，门面改 `getMaxBoxSize()` / `getMaxTextLength()` / `getMaxIdLength()`
+  * **插件内部键**：`QueueAttrs` / `GoalAttrs` / `SteerAttrs` 改为包内可见，键名由插件测试守住
+  * **聚合包**：`solon-ai-harness` 只引 `solon-ai-harness-host`（core 与四插件经 host 传递），依赖清单只维护一处
+  * **守卫**：`HarnessPackageBoundaryTest` 增加「spi 只放接口、SessionOwnership 不回 spi、session 不依赖 spi」；`HarnessStructureGuardTest` 的插件内部类规则扩展到 `*Attrs` / `*Limits`，聚合包规则改为「只引 host、host 引全部」
+  * **soloncode-cli 同步**：停流调用改 `interrupt(…, InterruptMode)`；`WebChatInputHandler.interruptSession` 去掉冗余的 `queue.cancelPending`（`prepareInterrupt` 已先清队列），非持有节点按 `plan.isNotOwner()` 拒绝；`CliShell` 改用三参 `claimNext`；`ChatWebController` 插话端点按 `HarnessResult` 映射（INVALID→400，其余 409，应答码取细分码）
+  * **验证**：core 671 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor 既有用例），goal 232 / queue 99 / steer 73 / loop 102 / host 25 全绿，soloncode-cli 1224 例 3F（settings 既有）
+
 * **harness：API 收敛（错误模型、命名、命令、模块结构）**（4.2.0；破坏性，未发布直接改，不留桥接）:
   * **统一结果**：新增 core `org.noear.solon.ai.harness.HarnessResult<T>`（OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / FORBIDDEN）。queue / goal / loop 的写门面全部改返回它：不再有 `int` 哨兵值（`-1`、`QueueExtension.NOT_OWNER = -2` 已删）、`boolean` 与业务异常（`IllegalStateException` / `NotOwnerException`）。host 层 `FacadeResult` 删除。steer 继续用 `SteerResult` / `SteerCancelResult`（码值下发前端）
   * **queue**：9 参 `enqueue` 删除，改为 `enqueue(HarnessInput, id)`；`QueueItem` 删除 `getReasoningEffort` / `getThinkingMode` / `hasFiles`（宿主字段走 `attrs`，读旧数据时顶层字段并入 attrs）；新增 `QueueItem.Status` 枚举（落盘仍写字符串）与 `clearPending`（只清待执行、不递增代际）

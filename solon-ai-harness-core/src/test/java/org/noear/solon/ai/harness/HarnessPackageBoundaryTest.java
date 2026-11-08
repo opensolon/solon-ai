@@ -28,14 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <pre>
  * input   → (根包)                 纯输入值对象，只依赖 command 的工厂/解析类型
  * hitl    → agent, permission
- * session → input, hitl            只放会话事实，不得依赖 command
+ * session → input, hitl            只放会话事实与归属（SessionOwnership / OwnerCheck / NotOwnerException），不得依赖 command、spi
+ * spi     → session, input        只放插件能力接口（可带静态槽位访问方法）
  * command → input, session, util
  * </pre>
  *
  * <p>一条流（run）的生命周期类型 {@code RunTicket}、{@code InterruptPlan} 在根包，任何子包都不得依赖它们（见
  * {@link #subPackagesDoNotDependOnRunLifecycle()}）。</p>
  *
- * <p>另外锁定已退役的包不得复活：{@code runtime}、{@code session.interrupt}、{@code turn}、{@code run}。纯文本扫描 import，不引入 ArchUnit。</p>
+ * <p>另外锁定已退役的包不得复活：{@code runtime}、{@code session.interrupt}、{@code turn}、{@code run}、{@code agent.task}。纯文本扫描 import，不引入 ArchUnit。</p>
  */
 class HarnessPackageBoundaryTest {
     private static final Path ROOT = Paths.get("src/main/java/org/noear/solon/ai/harness");
@@ -46,7 +47,8 @@ class HarnessPackageBoundaryTest {
 
     static {
         FORBIDDEN.put("input", set("session", "agent", "util"));
-        FORBIDDEN.put("session", set("command", "agent"));
+        FORBIDDEN.put("session", set("command", "agent", "spi"));
+        FORBIDDEN.put("spi", set("command", "agent", "hitl", "permission", "scope"));
         FORBIDDEN.put("hitl", set("input", "session", "command"));
         FORBIDDEN.put("permission", set("input", "session", "command", "hitl", "agent"));
         FORBIDDEN.put("util", set("input", "command", "hitl", "agent"));
@@ -81,6 +83,7 @@ class HarnessPackageBoundaryTest {
         assertFalse(Files.exists(ROOT.resolve("session/interrupt")), "session.interrupt 已退役（InterruptPlan→根包，InterruptCommand→command.builtin）");
         assertFalse(Files.exists(ROOT.resolve("turn")), "turn 包已退役（SessionTurn→根包 RunTicket，InterruptPlan→根包）");
         assertFalse(Files.exists(ROOT.resolve("run")), "run 包已并入根包（只有 RunTicket、InterruptPlan 两个类）");
+        assertFalse(Files.exists(ROOT.resolve("agent/task")), "agent.task 已并回 agent（子代理的定义、注册、构建、委派同处一包；TaskTalent/GenerateTalent/TaskWrapEvent 回到 4.1.1 的发布位置）");
     }
 
     /** 子包不得依赖流生命周期类型（原 turn/run 包的约束，并入根包后保留；javadoc 里的全类名链接不算依赖）。 */
@@ -99,6 +102,22 @@ class HarnessPackageBoundaryTest {
             }
         }
         assertTrue(violations.isEmpty(), "子包不得依赖流生命周期类型：" + violations);
+    }
+
+    /** spi 只放接口：顶层类型必须是 interface；会话归属归 session 包，不得回到 spi。 */
+    @Test
+    void spiHoldsOnlyPluginCapabilityInterfaces() throws Exception {
+        List<String> violations = new ArrayList<>();
+        for (Path file : javaFiles(ROOT.resolve("spi"))) {
+            String name = file.getFileName().toString().replace(".java", "");
+            Class<?> c = Class.forName("org.noear.solon.ai.harness.spi." + name);
+            if (!c.isInterface()) {
+                violations.add(name);
+            }
+        }
+        assertTrue(violations.isEmpty(), "spi 包只放接口：" + violations);
+        assertFalse(Files.exists(ROOT.resolve("spi/SessionOwnership.java")), "SessionOwnership 已归 session 包（与 OwnerCheck / NotOwnerException 同处）");
+        assertFalse(Files.exists(ROOT.resolve("ownership")), "不单设 ownership 包：归属是会话事实的一部分");
     }
 
     @Test

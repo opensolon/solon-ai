@@ -18,22 +18,22 @@ package org.noear.solon.ai.harness.extension.goal;
  * @author noear
  * @since 4.2.0
  */
-public final class GoalAttrs {
+final class GoalAttrs {
     private GoalAttrs() {
     }
 
     /**
      * goal 快照投影（{@code FlowContext.data()} 的持久化 key，值为 Map；单槽：一条 goal 记录）
      */
-    public static final String GOAL = "session.goal";
+    static final String GOAL = "session.goal";
 
     /**
      * goal 运行态实例（{@code attrs()} 中的 {@link GoalState}，transient；首次访问时从投影 hydrate）
      */
-    public static final String GOAL_STATE = "session.goal.state";
+    static final String GOAL_STATE = "session.goal.state";
 
     /**
      * 轮次防重入标记（{@code attrs()}，一轮执行期间为 TRUE；清除时 notifyAll 唤醒停等者）
      */
-    public static final String GOAL_RUNNING = "session.goal.running";
+    static final String GOAL_RUNNING = "session.goal.running";
 }

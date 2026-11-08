@@ -9,7 +9,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.agent.SessionAgents;
-import org.noear.solon.ai.harness.agent.task.GenerateTalent;
+import org.noear.solon.ai.harness.agent.GenerateTalent;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.HarnessInput;
@@ -20,7 +20,7 @@ import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.NotOwnerException;
-import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.session.SessionOwnership;
 import reactor.core.Disposable;
 
 import java.nio.file.Files;

@@ -124,9 +124,19 @@ public class SteerExtension extends AbsHarnessExtension {
         engine.getCommandRegistry().register(steerCommand);
     }
 
-    /** 本扩展生效的容量 / 长度约束 */
-    public SteerLimits getLimits() {
-        return limits;
+    /** 邮箱容量上限（条，与 {@code builder().maxBoxSize} 同源） */
+    public int getMaxBoxSize() {
+        return limits.getMaxBoxSize();
+    }
+
+    /** 单条插话文本长度上限（字符） */
+    public int getMaxTextLength() {
+        return limits.getMaxTextLength();
+    }
+
+    /** steerId 长度上限（字符） */
+    public int getMaxIdLength() {
+        return limits.getMaxIdLength();
     }
 
     @Override
@@ -196,7 +206,7 @@ public class SteerExtension extends AbsHarnessExtension {
     /**
      * 撤销一条待生效插话（与 {@link #steerOnRun} 对称）。
      *
-     * <p>steerId 校验（空 / 超长，按实例 {@link #getLimits()}）、轮次比对都在内核完成，
+     * <p>steerId 校验（空 / 超长，按实例 {@link #getMaxIdLength()}）、轮次比对都在内核完成，
      * 宿主只需把结果码映射成自身协议（细分码 {@link #REASON_INVALID_STEER_ID} / {@link #REASON_RUN_CHANGED} / {@link #REASON_NOT_PENDING}）。转排队失败而暂存的插话与轮次无关，
      * 任务结束后仍可撤销。</p>
      *

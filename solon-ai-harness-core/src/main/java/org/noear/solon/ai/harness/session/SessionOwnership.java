@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.spi;
+package org.noear.solon.ai.harness.session;
 
 import java.util.Objects;
 import org.noear.solon.lang.Nullable;

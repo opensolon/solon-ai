@@ -2,7 +2,7 @@ package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.chat.CacheControl;
-import org.noear.solon.ai.harness.agent.task.TaskTalent;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
@@ -424,9 +424,9 @@ class HarnessOptionsAccessorTest {
         org.noear.solon.ai.harness.scope.InputScopeResolver resolver = (s, in) -> null;
         o.setScopeResolver(resolver);
         assertSame(resolver, o.getScopeResolver());
-        assertSame(org.noear.solon.ai.harness.spi.SessionOwnership.LOCAL, o.getSessionOwnership());
+        assertSame(org.noear.solon.ai.harness.session.SessionOwnership.LOCAL, o.getSessionOwnership());
         o.setSessionOwnership(null);
-        assertSame(org.noear.solon.ai.harness.spi.SessionOwnership.LOCAL, o.getSessionOwnership());
+        assertSame(org.noear.solon.ai.harness.session.SessionOwnership.LOCAL, o.getSessionOwnership());
     }
 
     @Test

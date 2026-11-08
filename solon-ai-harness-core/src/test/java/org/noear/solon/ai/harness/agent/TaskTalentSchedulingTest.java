@@ -13,9 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.agent.task;
+package org.noear.solon.ai.harness.agent;
 
-import org.noear.solon.ai.harness.agent.AgentManager;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -45,7 +44,7 @@ public class TaskTalentSchedulingTest {
 
     /** TaskPlan / MultitaskContext 都是私有内部结构，用反射构造，不重复生产逻辑 */
     private static Object context(int total) throws Exception {
-        Class<?> ctxClass = Class.forName("org.noear.solon.ai.harness.agent.task.TaskTalent$MultitaskContext");
+        Class<?> ctxClass = Class.forName("org.noear.solon.ai.harness.agent.TaskTalent$MultitaskContext");
         Constructor<?> ctor = ctxClass.getDeclaredConstructors()[0];
         ctor.setAccessible(true);
 
@@ -87,7 +86,7 @@ public class TaskTalentSchedulingTest {
         Object ctx = context(1);
 
         Method m = TaskTalent.class.getDeclaredMethod("aggregate", List.class,
-                Class.forName("org.noear.solon.ai.harness.agent.task.TaskTalent$MultitaskContext"));
+                Class.forName("org.noear.solon.ai.harness.agent.TaskTalent$MultitaskContext"));
         m.setAccessible(true);
 
         // preemptive：若退回死循环，用例会在 2 秒后超时失败（而不是挂住整个构建）

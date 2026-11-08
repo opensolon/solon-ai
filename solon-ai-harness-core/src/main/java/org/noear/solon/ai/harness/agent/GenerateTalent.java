@@ -13,11 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness.agent.task;
+package org.noear.solon.ai.harness.agent;
 
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.agent.SessionAgents;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;

@@ -115,7 +115,7 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 沙箱 | `sandboxSystemRestrict(Boolean)` | `true` | 禁止访问系统路径 |
 | 权限 | `toolsAdd(...)` / `disallowedToolsAdd(...)` | 空 | 主代理工具权限（§7） |
 | 权限 | `permissionRuleAdd(PermissionRule)` | 空 | 权限规则 |
-| 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§10.1） |
+| 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§10.2） |
 | 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` |
 | 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
 | 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；模型配了 `AiConfig#concurrency` 以模型为准） |
@@ -922,7 +922,7 @@ int steers  = st.get(SteerExtension.STATUS_PENDING);        // 待生效插话�
 GoalSnapshot.Status goal = st.get(GoalExtension.STATUS_GOAL);  // 无 goal 为 null
 ```
 
-**会话属性键各自登记**：核心 `HarnessAttrs` 只放引擎键与核心槽位；插件键在插件模块内——`QueueAttrs`（`session.queue.*`）、`GoalAttrs`（`session.goal.*`）、`SteerAttrs`（`session.steer`）。宿主不读写它们（`PackageBoundaryTest` 守卫）。
+**会话属性键各自登记**：核心 `HarnessAttrs` 只放引擎键与核心槽位；插件键在插件模块内——`QueueAttrs`（`session.queue.*`）、`GoalAttrs`（`session.goal.*`）、`SteerAttrs`（`session.steer`）。三者都是包内可见类（4.2.0 起），宿主无法也不应读写（`HarnessStructureGuardTest` 与 soloncode 的 `PackageBoundaryTest` 守卫）。
 
 **推荐：构建期用 `Builder.extensionAdd` 装配**（CODING / SERVER 通用，SERVER 下 build 之后不能再挂扩展）。插件就是普通扩展，
 不要哪个删哪一行，宿主自己的扩展也是同一写法：
@@ -1033,7 +1033,7 @@ engine.interrupt(session, InterruptMode.INTERRUPT);  // HarnessResult<Boolean>�
 |---|---|---|
 | `enqueue` | 返回 `HarnessResult`：`FULL`（队列已满）/ `INVALID`（文本为空或超长）/ `CONFLICT`（id 重复）/ `DISABLED`（扩展已停用）/ `NOT_OWNER` | 提示用户稍后再试，或改为直接发送 |
 | `steer` | 返回 `HarnessResult<SteerReceipt>`，`isOk() == false`，细分码见 §5.3 表格 | `hasReason(SteerExtension.REASON_NOT_RUNNING)` → 改走 queue；`hasReason(SteerExtension.REASON_BOX_FULL)` → 改走 queue 或直发 |
-| `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息、不改快照；**但队列已被 `cancelPending` 清空**（见 §5.4 第 ① 步） |
+| `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息、不改快照；**但队列已被中断回调 `onSessionInterrupt` 清空**（见 §5.4 第 ① 步） |
 | `create` | 抛 `IllegalStateException`：已有进行中 goal | 回 409，提示先 `/goal clear` |
 
 **取消是「请求」，不是「处决」**：`interrupt` / `cancelAll` 的实现是向执行线程发中断（`Thread#interrupt`），而不是强制终止线程。因此——
@@ -1275,7 +1275,7 @@ engine.setExtensionEnabled(queue, false);
 
 ```java
 // 领取并启动；终态由 dispatch 收口，异步运行者长期持有它就够了
-QueueClaimStatus status = queue.claimNext(session, claim -> {
+QueueClaimStatus status = queue.claimNext(session, null, claim -> {   // 第二参是锁内谓词「现在能不能接」，null = 不预判
     QueueItem item = claim.getItem();      // 领域对象由 harness 交给你，不用自己存取强转
     setReplyRoute(session, item.getOrigin());
     startTurnAsync(session, item);          // 宿主持有的只是纯业务参数
@@ -1287,7 +1287,7 @@ if (status == QueueClaimStatus.STARTED) {
 }
 ```
 
-> **为什么代际必须由 claim 持有**：`cancelPending` 会递增代际并移除 in-flight。若宿主在终态「现取」`generation(session)`，取到的必然是新代际，`isGenerationActive` 恒真，于是**被用户 Stop 掉的任务会重新入队继续执行**——丢弃语义被破坏。`QueueClaim` 在领取瞬间绑定代际，对已清空的会话 `settle(false)`（回队）必然被拒。
+> **为什么代际必须由 claim 持有**：引擎中断时 queue 的 `onSessionInterrupt` 会递增代际并移除 in-flight。若宿主在终态「现取」`generation(session)`，取到的必然是新代际，`isGenerationActive` 恒真，于是**被用户 Stop 掉的任务会重新入队继续执行**——丢弃语义被破坏。`QueueClaim` 在领取瞬间绑定代际，对已清空的会话 `settle(false)`（回队）必然被拒。
 >
 > `QueueClaimStatus` 三态而非布尔：`NO_TASK`（可以停）/ `STARTED` / `START_FAILED`（任务已回队首，**勿立即重试**，否则同一条失败任务会无限循环）。
 
@@ -1323,7 +1323,7 @@ queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
 | `pendingSize` / `hasItems` | 待执行数 / 是否有任务 |
 | `list(session)` | 展示视图（`QueueItem` 只读，`toMap()` 为展示字段，含 displayText/source） |
 | `isPersisted(context)` | 快照探测（不实例化会话） |
-| `cancelItem` / `promote` / `cancelPending` | 取消单条 / 置顶 / 清空并递增代际 |
+| `cancelItem` / `promote` / `clearPending` | 取消单条 / 置顶 / 清空待执行（不动运行中那条、不递增代际）；「作废全部」只经引擎中断 |
 | `importItems(session, rows)` | 旧 `queue-tasks.json` 一次性迁移 |
 
 #### 运行期操作：任务在跑时改队列
@@ -1337,20 +1337,20 @@ for (QueueItem it : items) {
     System.out.println(it.getId() + " " + it.getStatus() + " " + it.getText());
 }
 
-// ② 取消某一条待执行任务（只能取消 PENDING；运行中那条不在队列里，取消返回 false）
+// ② 取消某一条待执行任务（只能取消 PENDING；运行中那条不在队列里，返回 NOT_FOUND）
 queue.cancelItem(session, itemId);
 
 // ③ 把某条提到队首（下一个就执行它）
 queue.promote(session, itemId);
 
-// ④ 清空全部待执行，包括已被 drain 暂存的那条；in-flight 不受影响
-queue.cancelPending(session);
+// ④ 清空全部待执行；in-flight 不受影响、不递增代际（OK 时值为清掉的条数）
+queue.clearPending(session);
 ```
 
 三个语义细节：
 
-- **`cancelItem` / `promote` 都只能作用于 PENDING**。运行中那条已从队列出队并记为 in-flight，不在 `Deque` 里，对它的 id 调用一律返回 `false`。要停运行中那条，用 `engine.interrupt(session, InterruptMode.INTERRUPT)`。
-- **`cancelPending` 会递增代际**（`session.queue.generation`）：它之后到达的 `QueueClaim.rollback()`（旧代际的回队请求）会被拒绝，避免「用户清了队列又冒出一条」。但它**不动 in-flight**，所以“清队列”不等于“停任务”。
+- **`cancelItem` / `promote` 都只能作用于 PENDING**。运行中那条已从队列出队并记为 in-flight，不在 `Deque` 里，对它的 id 调用一律返回 `NOT_FOUND`。要停运行中那条，用 `engine.interrupt(session, InterruptMode.INTERRUPT)`。
+- **`clearPending` 不动 in-flight、不递增代际**，所以“清队列”不等于“停任务”。要连运行中那条一起作废，用 `engine.interrupt(session, InterruptMode.INTERRUPT)`：queue 的中断回调会递增代际（`session.queue.generation`），之后到达的旧代际回队请求被拒绝，避免「用户停了又冒出一条」。
 - **`promote` 没有重排位次的概念**：只有置顶，没有“插到第 3 位”。需要精确排序请 `cancelItem` 后重新 `enqueue`。
 
 **任务在跑时“再插一条”就是普通 `enqueue`**——它不需要任何特殊入口，也不会打扰运行中的任务：
@@ -1379,12 +1379,12 @@ HarnessResult<Integer> r = queue.enqueue(session, "跑完顺便把文档也更�
 | 类别 | 方法 | `setEnabled(false)` 后 |
 |---|---|---|
 | 受控 | `enqueue` / `claimNext` / `drainLoop` | 不再接单、不再续发（`enqueue` 返回 `DISABLED`，领取返回 `NO_TASK`） |
-| 不受控 | `settle`（收口）/ `cancelItem` / `promote` / `cancelPending` / `pendingSize` 等 | 照常可用——否则停用前已入队的项将永远无法取消 |
+| 不受控 | `settle`（收口）/ `cancelItem` / `promote` / `clearPending` / `pendingSize` 等 | 照常可用——否则停用前已入队的项将永远无法取消 |
 
 三条容易踩的语义：
 
 - **回调返回值必须诚实**——异步启动却返回 `true`，流失败后无法回队重试；同步完成却返回 `false`，会留下悬挂领取挡住后续领取；
-- 回队（`settle(false)`）受**代际**保护：`cancelPending` 会递增 `session.queue.generation`，旧代际的回队请求被拒绝，避免「用户清了队列又冒出一条」；身份校验（in-flight 是不是这一条）由 harness 内部完成，宿主不传 item id；
+- 回队（`settle(false)`）受**代际**保护：引擎中断时 queue 的 `onSessionInterrupt` 会递增 `session.queue.generation`，旧代际的回队请求被拒绝，避免「用户清了队列又冒出一条」；身份校验（in-flight 是不是这一条）由 harness 内部完成，宿主不传 item id；
 - `pendingSize` **不含** in-flight，所以容量判定按待执行数算——运行中的那条不占容量。
 
 #### 持久化与重启恢复
@@ -1410,7 +1410,7 @@ int imported = queue.importItems(session, legacyRows);   // rows 为 Map 列表�
 | key | 内容 |
 |---|---|
 | `session.queue` | 待执行队列本体（`Deque<QueueItem>`，运行态） |
-| `session.queue.generation` | 清空代际（`cancelPending` 递增） |
+| `session.queue.generation` | 清空代际（中断回调 `onSessionInterrupt` 递增） |
 | `session.queue.claim` | 领取权（同一时刻仅一个运行者，`claimNext` 调用栈内存活） |
 | `session.queue.inFlight` | 当前运行中的任务 |
 | `session.run.dispatch`（核心 `HarnessAttrs.RUN_DISPATCH`） | **跨线程存活的派发事务**（`QueueClaim`，实现 `RunDispatch`），到流终态收口才清；槽位由核心持有，queue 只是当前唯一的登记方 |
@@ -1726,20 +1726,20 @@ try (InterruptPlan plan = engine.prepareInterrupt(session)) {
 | 能力 | 能看什么 | 能改什么 | 入口 |
 |---|---|---|---|
 | goal | `goal.get(sessionId)` / `GoalSnapshot.toMap()` | 暂停 / 恢复 / 改配置 / 清除 | `pause` · `resume` · `update(sid, GoalPatch, stopper)` · `clear`（§5.1） |
-| queue | `queue.list(session)`（运行中在首位） | 取消单条 / 置顶 / 清空 / 再入队 | `cancelItem` · `promote` · `cancelPending` · `enqueue`（§5.2） |
+| queue | `queue.list(session)`（运行中在首位） | 取消单条 / 置顶 / 清空 / 再入队 | `cancelItem` · `promote` · `clearPending` · `enqueue`（§5.2） |
 | steer | `steer.pending(session)` | 取消单条 / 批量 / 清空 | `steer` · `cancelOnRun` · `cancelPending`（§5.3） |
 | 停 | — | 停流 + 清队列 | `engine.interrupt(session, InterruptMode.INTERRUPT)`（本节） |
 
 三个容易搞混的边界：
 
-- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `cancelPending` 不动 in-flight。真正“现在立刻停”只有 `InterruptMode.INTERRUPT`。
+- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `clearPending` 不动 in-flight。真正“现在立刻停”只有 `InterruptMode.INTERRUPT`。
 - **steer 没有“改”的能力**。已入邮箱的插话只能取消后重新投递，不支持就地编辑——文本不可变，且邮箱里若已满 5 条，取消一条才能再投一条。
 - **goal 与 queue/steer 不同层**。goal 是会话级持续轮次，queue/steer 服务于单次任务；一个会话可以有 goal 同时又有排队任务，但 goal 的每轮也会走 `SessionStatus.isOccupied()` 守卫，不与宿主正在跑的任务抢。
 
 从这张表可以直接推出两个宿主要自己处理的边界：
 
 - **“改”的前置条件比“停”窄**：“停”只需流句柄存在，“改”需要已进入推理边界。所以任务刚被受理、模型还没开口的那一小段时间，interrupt 能成功而 steer 会失败——这不是 bug。
-- **“停”与“重排”有副作用叠加**：`interrupt` 里的 `cancelPending` 会把队列一起清掉。若宿主想“只停当前、保留已有排队”，用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`——只停流、不写取消消息、不动队列（自动循环被新目标顶掉旧轮次的场景用它，避免历史里出现假“用户已取消”）。
+- **“停”与“重排”有副作用叠加**：`InterruptMode.INTERRUPT` 会经 queue 的中断回调把队列一起清掉。若宿主想“只停当前、保留已有排队”，用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`——只停流、不写取消消息、不动队列（自动循环被新目标顶掉旧轮次的场景用它，避免历史里出现假“用户已取消”）。
 
  三者都**不自己开流、不做跨能力降级**：steer 邮箱满或任务未运行时如实返回状态码，要不要改走 queue 由调用方决定（`SteerMessage` 的「已接受但永不生效」由 `SteerMailbox#transferToBacklog` 在 harness 内兜底，不在此列）。场景 A 里的那次降级就是宿主侧完成的，不是框架代做。
 
@@ -2230,7 +2230,21 @@ AgentSessionProvider provider = (id, create) -> create
 
 ## 十、安全机制
 
-### 10.1 三套策略
+### 10.1 门控总览：一次工具调用要过哪几道关
+
+门控分散在三个包（`scope` / `permission` / `hitl`）和几个引擎配置项里，各管一件事。按生效顺序：
+
+| 顺序 | 关卡 | 所在 | 管什么 | 宿主怎么配 |
+|---|---|---|---|---|
+| 1 | 工具可见性 | `agent.ToolName`、代理定义 `tools` / `disallowedTools` | 模型能看到哪些工具（看不到就调不了） | §7：`Builder.toolsAdd / disallowedToolsAdd`、`engine.allowTool / disallowTool` |
+| 2 | 输入级作用域 | `scope.InputScope`（由常驻的 `ScopeGuardInterceptor` 执行，优先级最高） | 这一次输入能用哪些工具 / 技能 / MCP / 模型；越界调用在执行前预填拒绝结果，HITL 也不会为它弹卡 | 引擎级 `scopeResolver`（推荐 `InputScopeResolver.byPrincipal`）或 `HarnessInput.scope(...)` |
+| 3 | 权限规则 | `permission.PermissionEngine` / `PermissionRule` | 对工具参数（命令、路径、域名）判 `ALLOW / DENY / ASK` | 由 hitl 策略内部调用；全局规则在策略上配 |
+| 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.SessionPermissions` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §10.2、`hitlEnabled(true)` |
+| 5 | 执行环境 | `TerminalTalent` 沙箱、`protectedStatePaths`、`cwdPolicy` | 工具真正执行时能碰哪些目录、哪些状态文件 | §8 配置项、[SAAS.md](SAAS.md) |
+
+前两关是「能不能用」，后三关是「用的时候允不允许」。会话归属（`session.SessionOwnership`）不属于工具门控：它在受理之前就决定「这个节点能不能跑这个会话」。
+
+### 10.2 三套策略
 
 `hitl` 包提供三套内置干预策略：
 
@@ -2258,13 +2272,13 @@ engine.getHitlInterceptor()
 
 详见 [`docs/hitl.md`](../solon-ai-harness-core/docs/hitl.md)。
 
-### 10.2 服务端安全底线
+### 10.3 服务端安全底线
 
 多租户部署时，除 HITL 外还有三道引擎级防线：请求级作用域（`InputScope`，工具执行前否决越界调用）、
 受保护状态路径（`protectedStatePaths`，文件工具与 OS 沙盒同时拒绝）、会话工作目录策略（`cwdPolicy`）。
 配置与取舍见 [SAAS.md](SAAS.md)。
 
-### 10.3 宿主侧拿到审批请求
+### 10.4 宿主侧拿到审批请求
 
 拦截触发时，事件流会推 `HITLPendingEvent`；也可凭会话直接查：
 
@@ -2327,18 +2341,19 @@ org.noear.solon.ai.harness
 ├── HarnessEngine                 ★ 引擎（Builder + 编排 + 唯一入口 handle）
 ├── HarnessEnginePool             引擎池（按租户 / 工作区懒建、空闲回收）
 ├── HarnessProfile                运行模式预设（CODING / SERVER）
+├── HarnessSettings / HarnessTalents   引擎的两个视图：目录布局与运行期配置、内置能力（engine.getSettings() / getTalents()）
 ├── HarnessOptions                运行时配置（包私有）
 ├── HarnessExtension / AbsHarnessExtension   扩展 SPI
-├── RunTicket / InterruptPlan     一条流（run）的生命周期凭据、两段式中断计划
+├── RunTicket / InterruptPlan / InterruptMode   一条流（run）的生命周期凭据、两段式中断计划、一步式停流方式
 ├── HarnessResult                 插件写门面与管理入口的统一结果（粗码 OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / CONFLICT / FORBIDDEN + 可空细分码 getReason）
-├── InputPipeline / SessionControl / InputGate / Admission / AdmittedRequest   受理与装配（包内）
+├── InputPipeline / SessionControl / InputGate / Admission / AdmittedRequest / HarnessInterrupts   受理、装配与停流实现（包内，不是 API）
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、AgentMentions
 ├── command/                      命令框架：Command / CommandContext / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
-├── agent/                        代理层：AgentDefinition / AgentFactory / AgentManager / ToolName；task/（TaskTalent / GenerateTalent）
+├── agent/                        子代理（一个包覆盖定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName（定义）、AgentManager / SessionAgents / GenerateTalent（注册与创建）、AgentFactory（构建）、TaskTalent / TaskWrapEvent（委派与子事件）；SubTaskScheduler 包内、SessionAgentsTalent @Internal
 ├── scope/                        输入级作用域：InputScope / InputScopeResolver / ScopeGuardInterceptor
-├── spi/                          插件与宿主 SPI（只放接口）：InputBacklog / RunDispatch / SessionOwnership（OwnerCheck / NotOwnerException 在 session/）
-├── session/                      会话事实：SessionStatus / HarnessAttrs / SessionSelections
+├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
+├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership（宿主实现的租约）/ OwnerCheck / NotOwnerException
 ├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、会话级「总是允许」
 ├── permission/                   权限引擎（PermissionRule / PermissionContext / PermissionBehavior / PermissionEngine）
 └── util/                         ErrorClassifier / HarnessIds / TraceUtil
@@ -2389,12 +2404,12 @@ org.noear.solon.ai.harness
 22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
 23. **`.jobManager(null)` 之后 goal 不会自动推进**——`hasScheduler()` 为 false，`trigger` 仍可手动跑一轮。
 24. **goal 对外只有只读快照**——`GoalSnapshot` 没有修改方法，一切状态转移经门面；运行态是包内实现。
-25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是位置 `int`（`-1` = 失败）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
-26. **`steer` 取消了也可能已经生效**——`cancelOnRun(session, runId, steerId)` 返回 `NOT_PENDING` 不代表出错，只代表那条已被推理线程取走（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。
+25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是 `HarnessResult<Integer>`（OK 时值为位置）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
+26. **`steer` 取消了也可能已经生效**——`cancelOnRun(session, runId, steerId)` 返回细分码 `NOT_PENDING`（`CONFLICT`）不代表出错，只代表那条已被推理线程取走（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。
 27. **门面不经受理、不经作用域**——`queue.enqueue`、`steer.steer`、`goal.create/update`、`loop.schedule`、`InterruptMode.INTERRUPT` 会先查会话归属（非持有节点返回 `NOT_OWNER`，宿主按 `getOwner()` 转发），但不校验作用域；多租户的管理接口先自行鉴权（[SAAS.md](SAAS.md) §6）。
 28. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`engine.getSession(id)` 不存在就新建；`engine.requireSession(id)` 不存在时抛 `IllegalArgumentException`。goal 门面已改为不新建会话。
 29. **引擎 `shutdown()` 之后不要再用旧引用**——`shutdown` 幂等，会关闭 LSP 进程与 MCP 连接；之后的 `handle` 返回 `REJECTED(engine_closed)`，引擎池模式下重新 `pool.get(key)` 即可。
-30. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`），不会惄悄丢掉这些维度。服务端请用引擎级 `scopeResolver`（`InputScopeResolver.byPrincipal`），不要只靠显式传入。`selectedSkill` / `selectedMcp` 视野随积压保存（见 [SAAS.md](SAAS.md) §3.3）。
+30. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`），不会悄悄丢掉这些维度。服务端请用引擎级 `scopeResolver`（`InputScopeResolver.byPrincipal`），不要只靠显式传入。`selectedSkill` / `selectedMcp` 视野随积压保存（见 [SAAS.md](SAAS.md) §3.3）。
 
 ---
 

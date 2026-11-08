@@ -275,7 +275,7 @@ class SteerExtensionTest {
     @Test
     void builderLimitsAreEnforced() {
         SteerExtension ext = SteerExtension.builder().maxBoxSize(2).maxTextLength(8).build();
-        assertEquals(2, ext.getLimits().getMaxBoxSize());
+        assertEquals(2, ext.getMaxBoxSize());
 
         AgentSession session = runningSession("run-1");
 
@@ -290,9 +290,9 @@ class SteerExtensionTest {
     @Test
     void defaultConstructorUsesDefaultLimits() {
         SteerExtension ext = new SteerExtension();
-        assertEquals(SteerMailbox.MAX_BOX_SIZE, ext.getLimits().getMaxBoxSize());
-        assertEquals(SteerMailbox.MAX_TEXT_LENGTH, ext.getLimits().getMaxTextLength());
-        assertEquals(SteerMailbox.MAX_ID_LENGTH, ext.getLimits().getMaxIdLength());
+        assertEquals(SteerMailbox.MAX_BOX_SIZE, ext.getMaxBoxSize());
+        assertEquals(SteerMailbox.MAX_TEXT_LENGTH, ext.getMaxTextLength());
+        assertEquals(SteerMailbox.MAX_ID_LENGTH, ext.getMaxIdLength());
     }
 
     // ==================== 消息协议 ====================

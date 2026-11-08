@@ -241,7 +241,7 @@ class QueueClaimTest {
         queue.enqueue(session, "task", null);
 
         AtomicReference<QueueClaim> ref = new AtomicReference<>();
-        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, claim -> {
+        assertEquals(QueueClaimStatus.STARTED, queue.claimNext(session, null, claim -> {
             ref.set(claim);
             return false;
         }));
@@ -256,7 +256,7 @@ class QueueClaimTest {
         queue.setEnabled(false);
         QueueStore.enqueue(session, "task", null);
 
-        assertEquals(QueueClaimStatus.NO_TASK, queue.claimNext(session, claim -> false));
+        assertEquals(QueueClaimStatus.NO_TASK, queue.claimNext(session, null, claim -> false));
         assertEquals(1, QueueStore.pendingSize(session), "停用后不接单，队列原样保留");
     }
 }

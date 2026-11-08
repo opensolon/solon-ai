@@ -104,7 +104,7 @@ SteerExtension steer = engine.addExtensionIfAbsent(SteerExtension.builder()
         .maxIdLength(64)        // steerId 字符上限
         .build());
 
-SteerLimits limits = steer.getLimits();   // 投递与提示文案读同一份约束
+int maxBox = steer.getMaxBoxSize();       // 投递与提示文案读同一份约束（另有 getMaxTextLength / getMaxIdLength）
 ```
 
 ### 3.2 两种时态
@@ -366,8 +366,8 @@ public class SteerAdminController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("runId", steer.activeRunId(session));               // 无活跃轮次为 null：输入框置灰
         data.put("pending", rows);
-        data.put("maxBoxSize", steer.getLimits().getMaxBoxSize());
-        data.put("maxTextLength", steer.getLimits().getMaxTextLength());
+        data.put("maxBoxSize", steer.getMaxBoxSize());
+        data.put("maxTextLength", steer.getMaxTextLength());
         return Result.succeed(data);
     }
 
@@ -471,7 +471,7 @@ engine.setExtensionEnabled(steer, true);
 
 ## 六、配置与状态码
 
-### 6.1 Builder（SteerLimits）
+### 6.1 Builder
 
 | 方法 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -479,7 +479,7 @@ engine.setExtensionEnabled(steer, true);
 | `maxTextLength(int)` | int | `4096` | 单条插话字符上限（按 trim 后长度）；超出返回 `TEXT_TOO_LONG` |
 | `maxIdLength(int)` | int | `128` | steerId 字符上限；超出返回 `INVALID_STEER_ID` |
 
-三个值都必须为正数，否则 `build()` 抛 `IllegalArgumentException("steer limits must be positive")`。`new SteerExtension()` 等价于 `builder().build()`（`SteerLimits.DEFAULT`）。
+三个值都必须为正数，否则 `build()` 抛 `IllegalArgumentException("steer limits must be positive")`。`new SteerExtension()` 等价于 `builder().build()`（全取缺省值）。生效值经门面 `getMaxBoxSize()` / `getMaxTextLength()` / `getMaxIdLength()` 读取。
 
 ### 6.2 结果码与细分码
 
@@ -539,7 +539,7 @@ HTTP 映射建议（与 5.2 示例一致）：`INVALID` → 400，其余失败 �
 | 常量 | 值 | 说明 |
 |---|---|---|
 | `SteerExtension.STATUS_PENDING` | `SessionStatus.Key.count("steer.pending")` | 待生效插话数（本轮邮箱 + orphans），不受开关影响 |
-| `SteerAttrs.STEER` | `"session.steer"` | 会话级插话状态（`attrs()`，瞬态）；**宿主不得读写**，一律走门面 |
+| `SteerAttrs.STEER` | `"session.steer"` | 会话级插话状态（`attrs()`，瞬态）；`SteerAttrs` 包内可见，宿主一律走门面 |
 | `SteerProtocol.PREFIX` / `SOURCE` / `META_STEER_ID` | `"[用户实时补充] "` / `"steer"` / `"steerId"` | 注入消息协议 |
 
 ---
@@ -557,7 +557,7 @@ HTTP 映射建议（与 5.2 示例一致）：`INVALID` → 400，其余失败 �
 | `cancelPending(session, ids)` | `HarnessResult<SteerReceipt>` | 否 | 管理 | 批量撤销，null = 全部 |
 | `pending(session)` | `List<SteerMessage>` | 否 | 管理 | 待生效快照（副本） |
 | `activeRunId(session)` | `String` | 否 | 管理 | 当前轮次，无则 null |
-| `getLimits()` | `SteerLimits` | — | — | 生效的容量约束 |
+| `getMaxBoxSize()` / `getMaxTextLength()` / `getMaxIdLength()` | `int` | — | — | 生效的容量约束 |
 | `SteerProtocol.textOf(message)` | `String` | — | — | 识别插话消息并还原原话 |
 
 ---

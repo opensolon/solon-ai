@@ -224,7 +224,7 @@ class QueueEngineIntegrationTest {
         queue.enqueue(session, "a", InputOrigin.channel("feishu"));
 
         AtomicInteger checked = new AtomicInteger();
-        queue.claimNext(session, claim -> {
+        queue.claimNext(session, null, claim -> {
             RunDispatch current = RunDispatch.current(session);
             assertTrue(current instanceof QueueClaim);
             InputOutcome admit = engine.handle(claim.getItem().toInput(session));

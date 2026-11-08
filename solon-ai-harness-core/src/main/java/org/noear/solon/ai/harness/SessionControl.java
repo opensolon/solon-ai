@@ -16,9 +16,8 @@
 package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.harness.session.OwnerCheck;
-import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;

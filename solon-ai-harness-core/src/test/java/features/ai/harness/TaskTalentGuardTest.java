@@ -17,7 +17,7 @@ package features.ai.harness;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.harness.agent.task.TaskTalent;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;

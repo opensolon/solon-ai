@@ -18,7 +18,7 @@ package org.noear.solon.ai.harness;
 import java.net.Proxy;
 import java.util.function.Consumer;
 import org.noear.solon.ai.chat.CacheControl;
-import org.noear.solon.ai.harness.agent.task.TaskTalent;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.net.http.HttpUtils;
 import org.noear.solon.lang.Preview;
 

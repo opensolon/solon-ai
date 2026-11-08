@@ -15,8 +15,8 @@
  */
 package org.noear.solon.ai.harness;
 
-import org.noear.solon.ai.harness.agent.task.GenerateTalent;
-import org.noear.solon.ai.harness.agent.task.TaskTalent;
+import org.noear.solon.ai.harness.agent.GenerateTalent;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.talents.cli.ClockTalent;
 import org.noear.solon.ai.talents.cli.SkillTalent;
 import org.noear.solon.ai.talents.cli.TerminalTalent;

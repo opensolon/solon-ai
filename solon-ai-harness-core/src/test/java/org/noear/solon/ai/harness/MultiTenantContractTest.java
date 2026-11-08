@@ -6,7 +6,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;

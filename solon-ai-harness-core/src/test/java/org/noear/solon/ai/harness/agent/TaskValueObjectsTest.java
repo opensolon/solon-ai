@@ -1,4 +1,4 @@
-package org.noear.solon.ai.harness.agent.task;
+package org.noear.solon.ai.harness.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentEvent;

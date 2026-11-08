@@ -34,7 +34,7 @@ solon-ai-harness 的会话级排队插件。在当前任务运行时，把后续
    - handler 返回 `true`（同步完成）：内核当场确认（acknowledge），从 in-flight 移除；
    - handler 返回 `false`（异步启动）：由流终态调用核心 `RunTicket#settle(boolean)`，内部转到 `QueueClaim#settle(boolean)`：`true` 为确认，`false` 为回滚到队首。
    - handler 抛异常：视为启动失败，内核按领取时的代际快照回滚到队首，返回 `START_FAILED`。
-4. **代际保护**：`cancelPending`（以及 `InterruptMode.INTERRUPT` 触发的 `onSessionInterrupt`）会清空待执行、移除 in-flight 记录、注销本插件的派发登记并把代际加一。此后旧 claim 的回滚因代际不匹配被拒绝，任务被丢弃，不会在用户 Stop 后“复活”。
+4. **代际保护**：引擎中断（`engine.interrupt(session, InterruptMode.INTERRUPT)` 或 `prepareInterrupt`）先回调本插件的 `onSessionInterrupt`，清空待执行、移除 in-flight 记录、注销本插件的派发登记并把代际加一。此后旧 claim 的回滚因代际不匹配被拒绝，任务被丢弃，不会在用户 Stop 后“复活”。
 
 ```mermaid
 sequenceDiagram
@@ -63,7 +63,7 @@ sequenceDiagram
         Note over Q: true=确认; false=回队首(代际已变则丢弃)
     end
     U->>H: Stop
-    H->>Q: engine.interrupt -> onSessionInterrupt -> cancelPending(代际+1)
+    H->>Q: engine.interrupt -> onSessionInterrupt -> 清空并代际+1
 ```
 
 ### 1.3 与核心的协作
@@ -73,7 +73,7 @@ sequenceDiagram
 | `spi.InputBacklog#offer(session, HarnessInput)` | 由引擎 `handle` 在忙时调用（宿主不必调）；保存正文、来源（null 时按 `InputOrigin.NONE`）、`selectedModel`、子代理（explicitAgent 优先，否则 selectedAgent）与宿主域属性 `getAttrs()`；受开关控制，返回位置（从 1 计）或 `-1`（满 / 超长 / 停用，引擎据此返回 `REJECTED("backlog_unavailable")`） |
 | `spi.InputBacklog#hasPending` | `pendingSize(session) > 0`，事实口径，不受开关影响；引擎 `handle` 受理判定的先进先出与 `isIdle` 依赖它 |
 | `HarnessExtension#contributeSessionStatus` | 贡献 `QueueExtension.STATUS_PENDING`（待执行数） |
-| `HarnessExtension#onSessionInterrupt` | 调用 `cancelPending`（清理类，不判开关） |
+| `HarnessExtension#onSessionInterrupt` | 清空待执行、作废运行中那条的登记并递增代际（清理类，不判开关）；这是「作废全部」的唯一入口，门面不单独提供 |
 | `HarnessExtension#onAttach` | 注册 `/queue` 命令 |
 | `spi.RunDispatch` | `QueueClaim` 实现，领取成功即登记到核心槽位，收口即注销 |
 
@@ -113,7 +113,7 @@ flowchart LR
         H -- "忙时可执行命令（isBesideRunning）" --> C["/queue 命令"]
     end
     subgraph 管理态
-        U2["队列面板"] --> API["宿主管理接口"] --> EQ2["enqueue / cancelItem / promote / clearPending / cancelPending"]
+        U2["队列面板"] --> API["宿主管理接口"] --> EQ2["enqueue / cancelItem / promote / clearPending"]
     end
     EQ1 --> Q[("会话队列<br/>随快照落盘")]
     C --> Q
@@ -126,7 +126,7 @@ flowchart LR
 | 用户动作 | 任务运行中照常发消息（自动排队）；或输入 `/queue <消息>` 显式排队 | 在队列面板里添加、删除一条、立即执行一条、清空 |
 | 宿主入口 | 统一输入入口：`engine.handle(HarnessInput)`（忙时由引擎入积压，宿主不调 `enqueue`） | 宿主自己的管理接口，直接调门面 |
 | 是否经过 `handle` 受理判定 | 是；`/queue` 声明 `runnableWhenBusy`，运行中在运行任务旁边执行（`isBesideRunning()`） | 否 |
-| 本插件入口 | `InputBacklog#offer(session, input)`（引擎调用）、`QueueCommand`（`/queue <消息>` / `list` / `cancel` / `clear`） | `list` / `enqueue`（带 `id` 幂等）/ `cancelItem` / `promote` / `clearPending` / `cancelPending` |
+| 本插件入口 | `InputBacklog#offer(session, input)`（引擎调用）、`QueueCommand`（`/queue <消息>` / `list` / `cancel` / `clear`） | `list` / `enqueue`（带 `id` 幂等）/ `cancelItem` / `promote` / `clearPending` |
 | 结果怎么返回 | `DEFERRED` 的 `outcome.getBacklogPosition()`；命令回执 `outcome.getCommandOutput()` | 写操作返回 `HarnessResult`（按 `getCode()` 判定）；读操作返回队列快照 |
 | 只有这一态能做的 | 自动排队（`DEFERRED`，连同宿主域属性 `attr` 一起保存） | 删除单条、置顶、清空、幂等入队、带模型 / agent 等执行参数入队 |
 
@@ -304,7 +304,7 @@ void startStreamAsync(AgentSession session, QueueItem item) {
     executor.execute(() -> {
         if (ticket.isCancelled()) {
             outcome.discard();
-            ticket.settle(false);               // 调度窗口内被取消；若已被 cancelPending 作废则为空操作
+            ticket.settle(false);               // 调度窗口内被取消；若已被中断作废则为空操作
             return;
         }
         outcome.getRequest().stream()
@@ -351,7 +351,7 @@ void startStreamAsync(AgentSession session, QueueItem item) {
 | 删除一条 | `queue.cancelItem(session, itemId)` | 无值 | `NOT_FOUND`（不存在或已在运行）→ 404 |
 | 立即执行一条 | `queue.promote(session, itemId)` + 续发 | 无值 | `NOT_FOUND`（不存在或已在运行）→ 404 |
 | 清空待执行 | `queue.clearPending(session)` | 值为清掉的条数 | — |
-| 作废全部（Stop 语义） | `queue.cancelPending(session)` | 无值 | —（还会作废运行中那条的登记并递增代际，一般由 `InterruptMode.INTERRUPT` 触发） |
+| 作废全部（Stop 语义） | `engine.interrupt(session, InterruptMode.INTERRUPT)` | `HarnessResult<Boolean>` | 不是队列门面：引擎先回调本插件清空并递增代际，再停流（Web 两段式用 `prepareInterrupt`） |
 | 停止正在跑的那条 | `engine.interrupt(session, InterruptMode.INTERRUPT)` | — | 同时清空整个队列（见 5.6） |
 
 所有写操作在多节点部署下还可能返回 `NOT_OWNER`（`getOwner()` 为持有者，宿主转发）。
@@ -508,7 +508,7 @@ engine.setExtensionEnabled(queue, false);   // 同时停用 /queue 命令
 | 受控 | `enqueue`（三个重载） | 返回 `DISABLED` |
 | 受控 | `offer`（引擎积压入口） | 返回 `-1`，引擎据此返回 `REJECTED("backlog_unavailable")` |
 | 受控 | `claimNext`（两个重载）、`drainLoop` | 返回 `NO_TASK`，不领取 |
-| 不受控 | `cancelItem` / `promote` / `clearPending` / `cancelPending` / `importItems` / `onSessionInterrupt` | 照常执行，保证停用前已入队的项可以清理 |
+| 不受控 | `cancelItem` / `promote` / `clearPending` / `importItems` / `onSessionInterrupt` | 照常执行，保证停用前已入队的项可以清理 |
 | 不受控（事实口径） | `pendingSize` / `hasItems` / `list` / `hasPending` / `STATUS_PENDING` | 照常反映真实队列 |
 
 ### 5.6 与 engine.interrupt 的关系
@@ -598,14 +598,14 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getVa
 
 ### 6.5 会话属性键（QueueAttrs）
 
-以下键归本插件所有，宿主不应读写，应只通过 `QueueExtension` 操作。
+以下键归本插件所有（`QueueAttrs` 包内可见），宿主只通过 `QueueExtension` 操作；键名由 `QueueExtensionTest.attrKeysAreStable` 守住。
 
 | 常量 | 值 | 位置 | 含义 |
 |---|---|---|---|
 | `QUEUE` | `session.queue` | `session.attrs()`（瞬态） | 待执行队列本体（`Deque<QueueItem>`） |
 | `QUEUE_ITEMS` | `session.queue.items` | `FlowContext.data()`（持久化） | 快照投影 `List<Map>`，运行中项在首位；值不可改，否则丢失存量队列 |
 | `QUEUE_IN_FLIGHT` | `session.queue.inFlight` | `session.attrs()` | 当前运行中的队列项 |
-| `QUEUE_GENERATION` | `session.queue.generation` | `session.attrs()` | 清空代际，`cancelPending` 加一 |
+| `QUEUE_GENERATION` | `session.queue.generation` | `session.attrs()` | 清空代际，中断回调 `onSessionInterrupt` 加一 |
 | `QUEUE_CLAIM` | `session.queue.claim` | `session.attrs()` | 领取权占位，`claimNext` 返回即释放 |
 
 ### 6.6 状态键
@@ -617,7 +617,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getVa
 ## 七、持久化与恢复语义
 
 - **快照即持久化**：每次队列变更（入队、领取、确认、回滚、取消、置顶、导入、有内容时的清空）都会把“in-flight + 待执行”写入 `FlowContext.data()` 的 `session.queue.items`，并调用 `session.updateSnapshot()`。没有独立的队列文件。
-- **空队列移除投影**：投影行为空时删除该键；对本就为空的会话执行 `cancelPending` 不写快照。
+- **空队列移除投影**：投影行为空时删除该键；对本就为空的会话执行中断清空不写快照。
 - **惰性恢复**：`session.attrs()` 是瞬态的。首次访问队列时，若 attrs 中没有队列，就从投影重建。
 - **RUNNING 回到队首**：投影中 `RUNNING` 的项只说明上一个进程领取过，重建时重置为 `PENDING`、清空 `claimedAt`，并排在其余待执行项之前。重启后它会被重新执行一次。
 - **非法行丢弃**：文本为空或超过 4096 字符的行在恢复时被跳过。
@@ -635,8 +635,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getVa
 | `enqueue(session, text, origin)` | `HarnessResult<Integer>` | 是 | 使用 / 管理 | 入队，携带来源（忙态排队由引擎经 `offer` 完成，宿主无需调用） |
 | `enqueue(input, id)` | `HarnessResult<Integer>` | 是 | 管理 | 完整入队（模型、子代理、attrs、视野），`id` 幂等 |
 | `offer(session, input)` | `int` | 是 | 内核 | `InputBacklog` 入口，由引擎 `handle` 忙时调用；保存正文、来源、`selectedModel`、子代理与 `getAttrs()` |
-| `claimNext(session, handler)` | `QueueClaimStatus` | 是 | 续发 | 领取并执行队首一条 |
-| `claimNext(session, canAccept, handler)` | `QueueClaimStatus` | 是 | 续发 | 同上，带锁内原子谓词 |
+| `claimNext(session, canAccept, handler)` | `QueueClaimStatus` | 是 | 续发 | 领取并执行队首一条；`canAccept` 在领取锁内求值（null = 不预判） |
 | `drainLoop(session, canDrain, handler)` | `QueueClaimStatus` | 是 | 续发 | 循环领取，返回最后一次领取结果 |
 | `pendingSize(session)` | `int` | 否 | 管理 | 待执行数 |
 | `hasItems(session)` | `boolean` | 否 | 管理 | 是否有任务（含运行中） |
@@ -645,7 +644,6 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getVa
 | `cancelItem(session, itemId)` | `HarnessResult<Void>` | 否 | 管理 | 取消一条待执行；`NOT_FOUND` = 不存在或已在运行 |
 | `promote(session, itemId)` | `HarnessResult<Void>` | 否 | 管理 | 置顶一条待执行；`NOT_FOUND` 同上 |
 | `clearPending(session)` | `HarnessResult<Integer>` | 否 | 管理 | 清空待执行（不动运行中那条、不递增代际），值为清掉的条数 |
-| `cancelPending(session)` | `HarnessResult<Void>` | 否 | 管理 | Stop 语义：清空、作废运行中那条的登记并递增代际 |
 | `importItems(session, rows)` | `HarnessResult<Integer>` | 否 | 运维 | 旧数据迁移，值为实际导入条数 |
 | `static isPersisted(FlowContext)` | `boolean` | — | 运维 | 快照中是否有队列投影 |
 | `getMaxSize()` | `int` | — | — | 本实例的待执行条数上限（缺省 `20`） |
@@ -673,7 +671,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getVa
 3. **drainLoop 的返回值是最后一次领取的结果**：异步 handler 启动一条后若仍有待执行项，且 `canDrain` 仍为 true（或为 null），下一次领取会因已有 in-flight 而得到 `NO_TASK` 并返回它。不要用返回值判断“本次是否启动过任务”。drainLoop 单次调用的循环次数有上限作为失控保护。
 4. **START_FAILED 不要立即重试**：任务已回到队首，立即重试会对同一条失败任务无限循环。
 5. **回滚遇到队列已满**：回滚允许在待执行已有 20 条时再放回 1 条；超过时回滚被拒，任务保持 in-flight，派发登记也保持，需要再次收口。
-6. **cancelPending 不停流**：它只清空队列、移除 in-flight 记录并递增代际，正在跑的流需要用 `InterruptMode.INTERRUPT` 停止。之后该流终态的 `settle` 为空操作。
+6. **「作废全部」只经引擎中断**：队列门面没有 `cancelPending`；`InterruptMode.INTERRUPT` / `prepareInterrupt` 先回调 `onSessionInterrupt`（清空、移除 in-flight 记录、递增代际）再停流，被停那条流终态的 `settle` 为空操作。只清待执行、让当前这条照常跑完用 `clearPending`。
 7. **代际由 claim 持有**：不要在终态自己读代际再判断，那样拿到的总是新代际。收口一律通过 `RunTicket#settle` 或 handler 返回值。
 8. **RunTicket.begin 必须在领取回调内、订阅之前调用**：否则捕获不到本次 `QueueClaim`（`settle` 会退回收口会话当前的派发）。
 9. **不要直接读写 `session.queue.*`**：宿主只经 `QueueExtension` 操作。`QueueStore` 为包内实现。

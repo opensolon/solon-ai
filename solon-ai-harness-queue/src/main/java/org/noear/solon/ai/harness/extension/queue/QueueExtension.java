@@ -202,7 +202,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * <ul>
      *   <li>受控：{@link #enqueue} 与 {@link #claimNext}/{@link #drainLoop}
      *       —— 停用后不再接单、不再续发；</li>
-     *   <li>不受控：cancelItem / promote / cancelPending 等清理类接口 —— 开关不得阻止清理，
+     *   <li>不受控：cancelItem / promote / clearPending 等清理类接口 —— 开关不得阻止清理，
      *       否则停用前已入队的项将永远无法取消。</li>
      * </ul>
      */
@@ -304,21 +304,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * （同步完成）或流终态的 {@code RunTicket#settle}（异步启动）完成——不需要往会话 attrs 里塞
      * QueueItem，也不需要在终态现取代际。</p>
      *
-     * @since 4.2.0
-     */
-    public QueueClaimStatus claimNext(AgentSession session, QueueClaimHandler handler) {
-        if (isEnabled() == false || owned(session) == false) {
-            return QueueClaimStatus.NO_TASK;
-        }
-        return QueueStore.claimNext(session, handler);
-    }
-
-    /**
-     * 领取并执行队首一条（带「现在能不能接」的原子谓词）。
-     *
-     * <p>与 {@link #claimNext(AgentSession, QueueClaimHandler)} 的差别：谓词在领取权的
-     * <b>同一把会话锁内</b>求值，途中不存在「刚判完空闲、领取前已被占」的窗口，
-     * 宿主不需要再写 {@code synchronized (session.attrs())} 与代际复核。</p>
+     * <p>{@code canAccept} 在领取权的<b>同一把会话锁内</b>求值，途中不存在「刚判完空闲、领取前已被占」的窗口，
+     * 宿主不需要再写 {@code synchronized (session.attrs())} 与代际复核。只想「领到队空为止」的宿主用 {@link #drainLoop}。</p>
      *
      * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
      * @since 4.2.0
@@ -406,20 +393,10 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
     }
 
     /**
-     * 作废全部排队（Stop 语义）：清空待执行、连同运行中那条的登记一起作废并递增代际
-     * （旧代际的回滚被拒，被停掉的任务不会复活）。只想清空待执行、让当前这条照常跑完时用 {@link #clearPending}。
-     */
-    public HarnessResult<Void> cancelPending(AgentSession session) {
-        HarnessResult<Void> owner = ownerCheck(session);
-        if (owner != null) {
-            return owner;
-        }
-        QueueStore.cancelPending(session);
-        return HarnessResult.ok();
-    }
-
-    /**
      * 清空全部待执行（不动正在执行的那条、不递增代际）。
+     *
+     * <p>「连同运行中那条一起作废」是停止语义，不在本门面：宿主调 {@code engine.interrupt(session, InterruptMode.INTERRUPT)}
+     * 或 {@code engine.prepareInterrupt(session)}，引擎先回调本扩展的 {@link #onSessionInterrupt}（清空并递增代际）再停流。</p>
      *
      * @return OK 时值为清掉的条数
      * @since 4.2.0

@@ -25,7 +25,7 @@ import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.Submitted;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.spi.SessionOwnership;
+import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;

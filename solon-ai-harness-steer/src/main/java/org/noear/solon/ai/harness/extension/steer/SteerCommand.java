@@ -80,7 +80,7 @@ class SteerCommand extends AbsCommand {
     /**
      * 解析投递门面：优先所属扩展，其次引擎上装配的扩展，都没有时回落无引擎门面。
      *
-     * <p>提示文案读同一个门面的 {@link SteerExtension#getLimits()}，与投递实际使用的约束同源。</p>
+     * <p>提示文案读同一个门面的 {@link SteerExtension#getMaxBoxSize()} 等，与投递实际使用的约束同源。</p>
      */
     private SteerExtension facade(HarnessEngine engine) {
         if (owner != null) {
@@ -111,7 +111,6 @@ class SteerCommand extends AbsCommand {
         }
 
         SteerExtension steer = facade(engine);
-        SteerLimits limits = steer.getLimits();
         HarnessResult<SteerReceipt> result = steer.steer(session, text, resolved);
 
         if (result.isOk()) {
@@ -119,12 +118,12 @@ class SteerCommand extends AbsCommand {
         } else if (result.getCode() == HarnessResult.Code.DISABLED) {
             ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
         } else if (result.hasReason(SteerExtension.REASON_BOX_FULL)) {
-            ctx.println("插话邮箱已满（上限 " + limits.getMaxBoxSize() + " 条），可用 /queue 排队");
+            ctx.println("插话邮箱已满（上限 " + steer.getMaxBoxSize() + " 条），可用 /queue 排队");
         } else if (result.hasReason(SteerExtension.REASON_NOT_RUNNING)
                 || result.hasReason(SteerExtension.REASON_RUN_CHANGED)) {
             ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
         } else if (result.hasReason(SteerExtension.REASON_TEXT_TOO_LONG)) {
-            ctx.println("插话内容过长（上限 " + limits.getMaxTextLength() + " 字符）");
+            ctx.println("插话内容过长（上限 " + steer.getMaxTextLength() + " 字符）");
         } else {
             ctx.println("插话未生效：" + result.getReasonOrCode());
         }
