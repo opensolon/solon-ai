@@ -111,7 +111,7 @@ class HarnessOptions implements NonSerializable {
     private volatile boolean bashAsyncEnabled = false;
 
     // ========== 多租户 / 服务端 ==========
-    private volatile HarnessProfile profile = HarnessProfile.STANDALONE;
+    private volatile DeployMode deployMode = DeployMode.STANDALONE;
     /** 记忆是否按会话隔离（SERVER 缺省 true） */
     private volatile boolean memorySessionIsolation = false;
     /** 是否由引擎自行初始化进程级 OS 沙盒（SERVER 缺省 false，由宿主 SandboxBootstrap.initOnce） */
@@ -545,8 +545,8 @@ class HarnessOptions implements NonSerializable {
 
     // ========== 多租户 / 服务端 ==========
 
-    HarnessProfile getProfile() {
-        return profile;
+    DeployMode getDeployMode() {
+        return deployMode;
     }
 
     /**
@@ -554,12 +554,12 @@ class HarnessOptions implements NonSerializable {
      *
      * @param explicit 用户显式设过的字段名（这些字段不被预设覆盖）
      */
-    void applyProfile(HarnessProfile profile, Set<String> explicit) {
-        if (profile == null) {
+    void applyDeployMode(DeployMode deployMode, Set<String> explicit) {
+        if (deployMode == null) {
             return;
         }
-        this.profile = profile;
-        if (profile == HarnessProfile.SERVER) {
+        this.deployMode = deployMode;
+        if (deployMode == DeployMode.SERVER) {
             if (!explicit.contains("sandboxEnabled")) this.sandboxEnabled = true;
             if (!explicit.contains("sandboxAllowUserHome")) this.sandboxAllowUserHome = false;
             if (!explicit.contains("sandboxSystemRestrict")) this.sandboxSystemRestrict = true;

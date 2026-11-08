@@ -381,9 +381,9 @@ class HarnessOptionsAccessorTest {
     }
 
     @Test
-    void serverFacingAccessorsAndProfile() {
+    void serverFacingAccessorsAndDeployMode() {
         HarnessOptions o = new HarnessOptions("work", ".solon");
-        assertEquals(HarnessProfile.STANDALONE, o.getProfile());
+        assertEquals(DeployMode.STANDALONE, o.getDeployMode());
         assertFalse(o.isMemorySessionIsolation());
         assertTrue(o.isSandboxSelfBootstrap());
         assertTrue(o.isRuntimeMutable());
@@ -391,8 +391,8 @@ class HarnessOptionsAccessorTest {
         assertEquals(HarnessOptions.DEFAULT_PROTECTED_STATE_PATHS, o.getProtectedStatePaths());
         assertNull(o.getStateSourceOrNull(), "未显式设置时不触发缺省来源");
 
-        o.applyProfile(HarnessProfile.SERVER, java.util.Collections.<String>emptySet());
-        assertEquals(HarnessProfile.SERVER, o.getProfile());
+        o.applyDeployMode(DeployMode.SERVER, java.util.Collections.<String>emptySet());
+        assertEquals(DeployMode.SERVER, o.getDeployMode());
         assertTrue(o.isMemorySessionIsolation());
         assertFalse(o.isSandboxSelfBootstrap());
         assertFalse(o.isRuntimeMutable());

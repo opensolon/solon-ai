@@ -16,7 +16,7 @@ import java.util.concurrent.TimeoutException;
  * 本次请求开出的那一轮（{@link SubmitResult#getRun()}）：按请求拿结果，不必写 sink、也不必轮询。
  *
  * <pre>{@code
- * RunOutcome o = host.submit(tenant, sid, SubmitSpec.of("hello")).getRun().await(Duration.ofMinutes(5));
+ * RunOutcome o = host.submit(tenant, sid, HarnessInput.of("hello")).getRun().await(Duration.ofMinutes(5));
  * }</pre>
  *
  * @author noear

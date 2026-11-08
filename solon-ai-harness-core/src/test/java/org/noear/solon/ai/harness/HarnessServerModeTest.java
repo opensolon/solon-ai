@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * SERVER 预设契约：保守缺省、构建期快速失败、运行期全局配置锁、会话 cwd 边界、状态目录对模型不可见
  */
-class HarnessServerProfileTest {
+class HarnessServerModeTest {
 
     @TempDir
     Path tmp;
@@ -36,7 +36,7 @@ class HarnessServerProfileTest {
         Path ws = Files.createDirectories(tmp.resolve("ws"));
         Path state = Files.createDirectories(tmp.resolve("state"));
         return HarnessEngine.of(ws.toString(), ".solon/")
-                .profile(HarnessProfile.SERVER)
+                .deployMode(DeployMode.SERVER)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
@@ -47,7 +47,7 @@ class HarnessServerProfileTest {
     @Test
     void serverDefaultsAreConservative() throws Exception {
         HarnessEngine engine = server().build();
-        assertEquals(HarnessProfile.SERVER, engine.getProfile());
+        assertEquals(DeployMode.SERVER, engine.getDeployMode());
         assertTrue(engine.getTalents().getTerminal().isSandboxEnabled());
         assertTrue(engine.getTalents().getTerminal().isSandboxSystemRestrict());
         assertFalse(engine.getTalents().getTerminal().isSandboxSelfBootstrap(), "进程级沙盒由宿主统一引导");
@@ -56,14 +56,14 @@ class HarnessServerProfileTest {
     }
 
     @Test
-    void profileIsComposedAtBuildRegardlessOfOrder() throws Exception {
-        // 显式值写在 profile 之前：不被预设覆盖
+    void deployModeIsComposedAtBuildRegardlessOfOrder() throws Exception {
+        // 显式值写在 deployMode 之前：不被预设覆盖
         Path ws = Files.createDirectories(tmp.resolve("w-order"));
         Path state = Files.createDirectories(tmp.resolve("s-order"));
         HarnessEngine before = HarnessEngine.of(ws.toString(), ".solon/")
                 .sandboxEnabled(false)
                 .scopeRequired(false)
-                .profile(HarnessProfile.SERVER)
+                .deployMode(DeployMode.SERVER)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
@@ -72,13 +72,13 @@ class HarnessServerProfileTest {
         assertFalse(before.isScopeRequired());
         assertTrue(before.getTalents().getTerminal().isSandboxSystemRestrict(), "未显式设置的仍取预设");
 
-        // 后写的 profile 生效，前一个不留痕迹
+        // 后写的 deployMode 生效，前一个不留痕迹
         HarnessEngine last = HarnessEngine.of(tmp.resolve("w-last").toString(), ".solon/")
-                .profile(HarnessProfile.SERVER)
-                .profile(HarnessProfile.STANDALONE)
+                .deployMode(DeployMode.SERVER)
+                .deployMode(DeployMode.STANDALONE)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        assertEquals(HarnessProfile.STANDALONE, last.getProfile());
+        assertEquals(DeployMode.STANDALONE, last.getDeployMode());
         assertTrue(last.getTalents().getTerminal().isSandboxSelfBootstrap());
         assertFalse(last.isScopeRequired());
 
@@ -86,11 +86,11 @@ class HarnessServerProfileTest {
     }
 
     @Test
-    void codingProfileKeepsExistingDefaults() throws Exception {
+    void standaloneKeepsExistingDefaults() throws Exception {
         HarnessEngine engine = HarnessEngine.of(tmp.toString(), ".solon/")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        assertEquals(HarnessProfile.STANDALONE, engine.getProfile());
+        assertEquals(DeployMode.STANDALONE, engine.getDeployMode());
         assertTrue(engine.getTalents().getTerminal().isSandboxSelfBootstrap());
         engine.allowTool("bash"); // 运行期修改仍允许
         // 状态目录保护在所有模式下都开启
@@ -102,14 +102,14 @@ class HarnessServerProfileTest {
         Path ws = Files.createDirectories(tmp.resolve("w2"));
         // 未显式配置 stateSource
         IllegalStateException e1 = assertThrows(IllegalStateException.class, () ->
-                HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                         .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                         .modelAdd(model()).build());
         assertTrue(e1.getMessage().contains("stateSource"));
 
         // stateSource 在工作区内
         IllegalStateException e2 = assertThrows(IllegalStateException.class, () ->
-                HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                         .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(ws.resolve(".solon")))
                         .modelAdd(model()).build());
@@ -117,7 +117,7 @@ class HarnessServerProfileTest {
 
         // 没有模型
         assertThrows(IllegalStateException.class, () ->
-                HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                         .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(tmp.resolve("s2"))).build());
 
@@ -128,14 +128,14 @@ class HarnessServerProfileTest {
 
         // 要求作用域（scopeRequired）却没有 scopeResolver：每轮输入都会被拒，构建期就报错
         IllegalStateException e5 = assertThrows(IllegalStateException.class, () ->
-                HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                         .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s5"))))
                         .modelAdd(model()).defaultModel("fake").build());
         assertTrue(e5.getMessage().contains("scopeResolver"), e5.getMessage());
 
         // 显式关掉 scopeRequired 则不要求解析器
-        HarnessEngine noScope = HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+        HarnessEngine noScope = HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                 .scopeRequired(false)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s6"))))

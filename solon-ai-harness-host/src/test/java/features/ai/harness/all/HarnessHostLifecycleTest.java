@@ -1,5 +1,7 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import features.ai.harness.all.HarnessHostContractTest.ManualExecutor;
 import features.ai.harness.all.HarnessHostContractTest.RecordingSink;
 import org.junit.jupiter.api.Test;
@@ -18,7 +20,6 @@ import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import reactor.core.Disposable;
 import reactor.core.scheduler.Schedulers;
 
@@ -82,7 +83,7 @@ class HarnessHostLifecycleTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            SubmitResult r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
             HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
             assertTrue(stopped.isOk());
             assertEquals(Boolean.TRUE, stopped.getValue(), "调度窗口里的那一轮也算：它一定会以 finished(CANCELLED) 收尾");
@@ -118,7 +119,7 @@ class HarnessHostLifecycleTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).executor(executor).build();
         try {
-            SubmitResult r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
             r.getRun().cancel();
             assertTrue(executor.runNext(5_000));
             RunOutcome o = r.getRun().await(Duration.ofSeconds(10));
@@ -168,7 +169,7 @@ class HarnessHostLifecycleTest {
             }
         }).build();
         try {
-            host.submit("t", "s1", "hello", null).getRun().await(Duration.ofSeconds(30));
+            host.submit("t", "s1", HarnessInput.of("hello")).getRun().await(Duration.ofSeconds(30));
             assertEquals("open", calls.get(0));
             assertEquals("prepare", calls.get(1), "prepare 在执行线程上，不在调用线程上");
             assertEquals("finished", calls.get(calls.size() - 1));
@@ -207,7 +208,7 @@ class HarnessHostLifecycleTest {
             }
         }).build();
         try {
-            SubmitResult r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
             if (firstEvent.await(10, TimeUnit.SECONDS)) {
                 assertTrue(host.interrupt("t", "s1").isOk());
                 stopped.set(true);
@@ -316,7 +317,7 @@ class HarnessHostLifecycleTest {
                 .build();
         try {
             CompletableFuture<SubmitResult> f = CompletableFuture.supplyAsync(
-                    () -> host.submit("t", "s1", "hello", null));
+                    () -> host.submit("t", "s1", HarnessInput.of("hello")));
             assertTrue(entered.await(10, TimeUnit.SECONDS));
 
             HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
@@ -356,7 +357,7 @@ class HarnessHostLifecycleTest {
                 })
                 .build();
         try {
-            Disposable d = host.stream("t", "s1", SubmitSpec.of("hello"))
+            Disposable d = host.stream("t", "s1", HarnessInput.of("hello"))
                     .subscribeOn(Schedulers.boundedElastic())
                     .subscribe();
             assertTrue(entered.await(10, TimeUnit.SECONDS));

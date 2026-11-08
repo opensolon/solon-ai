@@ -26,7 +26,7 @@ import java.util.Map;
  *
  * <p>与相邻类型的分工：</p>
  * <ul>
- *   <li>{@link HarnessInput}：交给引擎的输入，可改（{@code SubmitSpec.customize} / {@code Builder#input}）；</li>
+ *   <li>{@link HarnessInput}：交给引擎的输入，可改（调用方交给 {@code submit} 的那个对象 / {@code Builder#input}；框架交给引擎的是它的副本）；</li>
  *   <li>{@code HostInput}：框架回报给宿主的那次输入，只读，多了受理结果；</li>
  *   <li>{@link HostRun}：一次输入开出的那一轮运行（0 或 1 个），经 {@link HostRun#getInput()} 指回本对象。</li>
  * </ul>
@@ -186,7 +186,7 @@ public final class HostInput {
     }
 
     /**
-     * 本次输入的宿主属性（{@code SubmitSpec.customize(in -> in.attr(k, v))} / Builder#input 写入的；
+     * 本次输入的宿主属性（{@code HarnessInput.attr(k, v)} / Builder#input 写入的；
      * 队列续发时为排队时保存的属性）。只读，永不为 null。
      */
     public Map<String, String> getAttrs() {

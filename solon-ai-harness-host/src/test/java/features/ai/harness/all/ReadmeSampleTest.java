@@ -1,5 +1,9 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.BusyPolicy;
+
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import features.ai.harness.all.ReadmeSamples.AskController;
 import features.ai.harness.all.ReadmeSamples.HostBootstrap;
 import features.ai.harness.all.ReadmeSamples.ImBot;
@@ -22,7 +26,6 @@ import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostSignal;
 import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.handle.Result;
 
@@ -97,15 +100,15 @@ class ReadmeSampleTest {
         HarnessHost host = ReadmeSamples.minimalHost(engineOf("acme"));
         try {
             host.openSession("acme", "s1", "acme/u1");
-            SubmitResult r = host.submit("acme", "s1", SubmitSpec.of("hello").principal("acme/u1")
-                    .whenBusy(SubmitSpec.BusyPolicy.REJECT));
+            SubmitResult r = host.submit("acme", "s1", HarnessInput.of("hello").principal("acme/u1")
+                    .whenBusy(BusyPolicy.REJECT));
             assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
             Result<String> answer = AskController.awaitAnswer(r.getRun());
             assertEquals(500, answer.getCode(), "模型连不上：异常结束 → 500");
 
-            SubmitResult idor = host.submit("acme", "s1", SubmitSpec.of("hello").principal("acme/u2"));
+            SubmitResult idor = host.submit("acme", "s1", HarnessInput.of("hello").principal("acme/u2"));
             assertEquals(403, idor.httpStatus(), "别人的会话不能用");
-            assertEquals(404, host.submit("acme", "ghost", SubmitSpec.of("hello")).httpStatus(), "只查不建");
+            assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("hello")).httpStatus(), "只查不建");
         } finally {
             shutdownAll();
         }
@@ -116,7 +119,7 @@ class ReadmeSampleTest {
         HarnessHost host = ReadmeSamples.minimalHost(engineOf("acme"));
         try {
             host.openSession("acme", "s1", "acme/u1");
-            List<HostSignal> signals = host.stream("acme", "s1", SubmitSpec.of("hello").principal("acme/u1"))
+            List<HostSignal> signals = host.stream("acme", "s1", HarnessInput.of("hello").principal("acme/u1"))
                     .collectList().block(Duration.ofSeconds(30));
             assertNotNull(signals);
             HostSignal last = signals.get(signals.size() - 1);
@@ -163,7 +166,7 @@ class ReadmeSampleTest {
                 .build();
         try {
             host.openSession("acme", "w1", "acme/u1");
-            SubmitResult r = host.submit("acme", "w1", SubmitSpec.of("hello")
+            SubmitResult r = host.submit("acme", "w1", HarnessInput.of("hello")
                     .origin(InputOrigin.of("web", "u1", "w1", null)).principal("acme/u1"));
             RunOutcome o = r.getRun().await(Duration.ofSeconds(30));
             assertTrue(o.isCompleted() && o.isAbnormal(), o.toString());

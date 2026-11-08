@@ -1,5 +1,9 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.BusyPolicy;
+
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import features.ai.harness.all.HarnessHostContractTest.ManualExecutor;
 import features.ai.harness.all.HarnessHostContractTest.RecordingSink;
 import org.junit.jupiter.api.Test;
@@ -26,7 +30,6 @@ import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome.Kind;
 import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
@@ -94,14 +97,14 @@ class HarnessHostExtensionPointsTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            host.submit("acme", "ghost", "x", InputOrigin.channel("web"));
+            host.submit("acme", "ghost", HarnessInput.of("x").origin(InputOrigin.channel("web")));
             HostInput rejected = sink.rejectedInputs.get(0);
             assertEquals("acme", rejected.getTenant());
             assertEquals("ghost", rejected.getSessionId(), "拒绝也知道是哪个会话（按会话推送的宿主才能投递）");
             assertNull(rejected.getKind(), "受理之前就结束的回合没有引擎结局");
 
-            host.submit("acme", "s1", "first", InputOrigin.channel("a"));
-            host.submit("acme", "s1", "second", InputOrigin.channel("b"));
+            host.submit("acme", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a")));
+            host.submit("acme", "s1", HarnessInput.of("second").origin(InputOrigin.channel("b")));
             HostInput deferred = sink.deferredInputs.get(0);
             assertEquals("acme", deferred.getTenant());
             assertEquals("s1", deferred.getSessionId());
@@ -131,7 +134,7 @@ class HarnessHostExtensionPointsTest {
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            assertEquals(SubmitResult.Kind.IGNORED, host.submit("t", "s1", "", null).getKind());
+            assertEquals(SubmitResult.Kind.IGNORED, host.submit("t", "s1", HarnessInput.of("")).getKind());
             assertEquals(1, sink.admittedInputs.size());
             assertEquals(Kind.IGNORED, sink.admittedInputs.get(0).getKind());
         } finally {
@@ -147,14 +150,13 @@ class HarnessHostExtensionPointsTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            host.submit("t", "s1", SubmitSpec.of("first")
-                    .customize(in -> in.selectedModel("fake").attr("effort", "high")));
+            host.submit("t", "s1", HarnessInput.of("first").selectedModel("fake").attr("effort", "high"));
             HostInput first = sink.admittedInputs.get(0);
             assertEquals("fake", first.getSelectedModel(), "admitted 里能看到「用户这次选了什么」");
             assertEquals("high", first.getAttr("effort"));
             assertThrows(UnsupportedOperationException.class, () -> first.getAttrs().put("x", "y"), "只读");
 
-            host.submit("t", "s1", SubmitSpec.of("second").customize(in -> in.attr("effort", "low")));
+            host.submit("t", "s1", HarnessInput.of("second").attr("effort", "low"));
             assertEquals("low", sink.deferredInputs.get(0).getAttr("effort"), "排队时也能看到");
 
             assertTrue(executor.runNext(5_000));
@@ -171,6 +173,30 @@ class HarnessHostExtensionPointsTest {
     }
 
     @Test
+    void submittedInputIsCopiedAndHasOneOrigin() throws Exception {
+        HarnessEngine engine = engine();
+        engine.getSession("s1");
+        RecordingSink sink = new RecordingSink();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor())
+                .input((tenant, in) -> in.origin(InputOrigin.channel("decorated")))
+                .build();
+        try {
+            HarnessInput in = HarnessInput.of("hello").origin(InputOrigin.channel("web"));
+            host.submit("t", "s1", in);
+            assertNull(in.getSession(), "调用方的对象不被绑定（交给引擎的是副本）");
+            assertEquals("web", in.getOrigin().getChannel(), "调用方的对象不被装饰器改动");
+            assertEquals("decorated", sink.admittedInputs.get(0).getOrigin().getChannel(),
+                    "回调看到的来源与交给引擎的是同一份");
+
+            AgentSession other = engine.getSession("s2");
+            assertThrows(IllegalArgumentException.class, () -> host.submit("t", "s1", HarnessInput.of(other, "x")),
+                    "输入带的会话与 sessionId 不一致");
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    @Test
     void principalMismatchIsRejectedBeforeHandling() throws Exception {
         HarnessEngine engine = engine();
         RecordingSink sink = new RecordingSink();
@@ -178,13 +204,13 @@ class HarnessHostExtensionPointsTest {
         try {
             host.openSession("t", "s1", "u1");
 
-            SubmitResult idor = host.submit("t", "s1", SubmitSpec.of("hello").principal("u2"));
+            SubmitResult idor = host.submit("t", "s1", HarnessInput.of("hello").principal("u2"));
             assertEquals(SubmitResult.Kind.REJECTED, idor.getKind());
             assertEquals(RejectReason.SCOPE_UNAVAILABLE, idor.getRejectReason());
             assertEquals(403, idor.httpStatus());
             assertFalse(engine.status(engine.getSessionOrNull("s1")).isOccupied(), "被拒的输入不占位");
 
-            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", SubmitSpec.of("hello").principal("u1")).getKind());
+            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", HarnessInput.of("hello").principal("u1")).getKind());
         } finally {
             engine.shutdown();
         }
@@ -201,8 +227,8 @@ class HarnessHostExtensionPointsTest {
                 .input((tenant, in) -> decorated.add(tenant + ":" + in.getText()))
                 .build();
         try {
-            host.submit("t", "s1", "first", null);
-            host.submit("t", "s1", "second", null);
+            host.submit("t", "s1", HarnessInput.of("first"));
+            host.submit("t", "s1", HarnessInput.of("second"));
             assertTrue(executor.runNext(5_000));
             await(() -> sink.finished.size() == 1, "第一条结束");
             assertTrue(executor.runNext(30_000));
@@ -222,8 +248,8 @@ class HarnessHostExtensionPointsTest {
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor()).build();
         try {
-            host.submit("t", "s1", "first", null);
-            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("second").whenBusy(SubmitSpec.BusyPolicy.REJECT));
+            host.submit("t", "s1", HarnessInput.of("first"));
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("second").whenBusy(BusyPolicy.REJECT));
             assertEquals(RejectReason.BUSY, r.getRejectReason());
             assertEquals(0, engine.getExtension(QueueExtension.class).get().pendingSize(session), "一问一答：不排队");
         } finally {
@@ -238,9 +264,9 @@ class HarnessHostExtensionPointsTest {
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor()).build();
         try {
-            host.submit("t", "s1", "first", null);
+            host.submit("t", "s1", HarnessInput.of("first"));
             // 受理窗口里还没开流：插话无处可去，回落到排队
-            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("more detail").whenBusy(SubmitSpec.BusyPolicy.STEER));
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("more detail").whenBusy(BusyPolicy.STEER));
             assertEquals(SubmitResult.Kind.DEFERRED, r.getKind());
             assertTrue(sink.steeredInputs.isEmpty());
         } finally {
@@ -285,7 +311,7 @@ class HarnessHostExtensionPointsTest {
                     }
                 }).build();
         try {
-            RunOutcome o = host.submit("acme", "s1", "hello", null).getRun().await(Duration.ofSeconds(30));
+            RunOutcome o = host.submit("acme", "s1", HarnessInput.of("hello")).getRun().await(Duration.ofSeconds(30));
             assertTrue(o.isStreamOpened());
             assertEquals("open", calls.get(0));
             assertEquals("prepare:acme", calls.get(1), "执行线程上能读到 wrap 注入的租户上下文");
@@ -313,7 +339,7 @@ class HarnessHostExtensionPointsTest {
                     }
                 }).build();
         try {
-            RunOutcome o = host.submit("t", "s1", "hello", null).getRun().await(Duration.ofSeconds(30));
+            RunOutcome o = host.submit("t", "s1", HarnessInput.of("hello")).getRun().await(Duration.ofSeconds(30));
             assertEquals(RunOutcome.End.FAILED, o.getEnd());
             assertEquals("bad model config", o.getError().getMessage());
             assertFalse(o.isStreamOpened());
@@ -347,7 +373,7 @@ class HarnessHostExtensionPointsTest {
                     }
                 }).build();
         try {
-            SubmitResult r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
             assertTrue(inPrepare.await(10, TimeUnit.SECONDS));
             HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
             assertTrue(stopped.isOk());
@@ -372,12 +398,12 @@ class HarnessHostExtensionPointsTest {
         List<RunOutcome> observed = new CopyOnWriteArrayList<>();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            SubmitResult r = host.submit("t", "s1", SubmitSpec.of("hello").observe(new RunSink() {
+            SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"), new RunSink() {
                 @Override
                 public void finished(RunOutcome outcome) {
                     observed.add(outcome);
                 }
-            }));
+            });
             RunOutcome o = r.getRun().await(Duration.ofSeconds(30));
             assertSame(o, observed.get(0), "本次监听与 RunHandle 拿到同一个终态");
             await(() -> sink.outcomes.size() == 1, "全局 sink 同样收到终态");
@@ -393,7 +419,7 @@ class HarnessHostExtensionPointsTest {
         engine.getSession("s1");
         HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
         try {
-            List<HostSignal> signals = host.stream("t", "s1", SubmitSpec.of("hello"))
+            List<HostSignal> signals = host.stream("t", "s1", HarnessInput.of("hello"))
                     .collectList().block(Duration.ofSeconds(30));
             assertNotNull(signals);
             assertEquals(HostSignal.Type.FINISHED, signals.get(signals.size() - 1).getType());
@@ -411,13 +437,13 @@ class HarnessHostExtensionPointsTest {
         engine.getSession("s1");
         HarnessHost host = HarnessHost.builder().engines(k -> engine).executor(new ManualExecutor()).build();
         try {
-            host.submit("t", "s1", "first", null);
-            List<HostSignal.Type> deferred = host.stream("t", "s1", SubmitSpec.of("second"))
+            host.submit("t", "s1", HarnessInput.of("first"));
+            List<HostSignal.Type> deferred = host.stream("t", "s1", HarnessInput.of("second"))
                     .map(HostSignal::getType).collectList().block(Duration.ofSeconds(5));
             assertEquals(1, deferred.size());
             assertEquals(HostSignal.Type.DEFERRED, deferred.get(0));
 
-            List<HostSignal> rejected = host.stream("t", "ghost", SubmitSpec.of("x"))
+            List<HostSignal> rejected = host.stream("t", "ghost", HarnessInput.of("x"))
                     .collectList().block(Duration.ofSeconds(5));
             assertEquals(1, rejected.size());
             assertEquals(RejectReason.SESSION_NOT_FOUND, rejected.get(0).getRejectReason());

@@ -1,5 +1,7 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import org.noear.solon.ai.harness.HarnessResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -8,7 +10,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessProfile;
+import org.noear.solon.ai.harness.DeployMode;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
@@ -20,7 +22,6 @@ import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
 import org.noear.solon.ai.harness.host.HostInput;
 import org.noear.solon.ai.harness.host.RunOutcome;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -64,7 +65,7 @@ class QuickstartSampleTest {
             model.setApiKey("test");
 
             return HarnessEngine.of(ws.toString(), ".solon/")
-                    .profile(HarnessProfile.SERVER)
+                    .deployMode(DeployMode.SERVER)
                     .stateSource(stateSrc)
                     .sessionProvider((id, create) -> create
                             ? store.computeIfAbsent(id, InMemoryAgentSession::of)
@@ -125,7 +126,7 @@ class QuickstartSampleTest {
             host.openSession("acme", "s1", "acme/u1");
 
             // §3.4 使用态
-            SubmitResult r = host.submit("acme", "s1", SubmitSpec.of("hello")
+            SubmitResult r = host.submit("acme", "s1", HarnessInput.of("hello")
                     .origin(InputOrigin.of("web", "u1", null, null))
                     .principal("acme/u1"));
             assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
@@ -134,17 +135,17 @@ class QuickstartSampleTest {
             assertEquals(1, sink.finished.size(), "全局 sink 同样收到终态");
 
             // 用别人的主体提交：拒绝（sessionId 来自客户端，不校验就能用别人的会话）
-            SubmitResult idor = host.submit("acme", "s1", SubmitSpec.of("hello").principal("acme/u2"));
+            SubmitResult idor = host.submit("acme", "s1", HarnessInput.of("hello").principal("acme/u2"));
             assertEquals(403, idor.httpStatus());
 
             // 别的租户的主体：解析不到作用域 → SERVER 下拒绝受理
             host.openSession("acme", "s2", "other/u1");
-            SubmitResult noScope = host.submit("acme", "s2", "hello", null);
+            SubmitResult noScope = host.submit("acme", "s2", HarnessInput.of("hello"));
             assertEquals(SubmitResult.Kind.REJECTED, noScope.getKind());
             assertEquals(403, noScope.httpStatus());
 
             // 未开通的会话：只查不建
-            assertEquals(404, host.submit("acme", "ghost", "hello", null).httpStatus());
+            assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("hello")).httpStatus());
 
             // §五 管理态：鉴权在控制器层做（框架不参与），管理态只保证不变量
             assertTrue(host.admin("acme")

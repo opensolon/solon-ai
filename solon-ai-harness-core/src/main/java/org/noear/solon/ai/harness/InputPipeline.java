@@ -113,8 +113,14 @@ final class InputPipeline {
             return InputOutcome.rejected(InputOutcome.RejectReason.NOT_OWNER, owner.getOwner());
         }
 
-        // ========== 0b. 作用域预检（锁外；归属之后，非持有节点不调解析器）==========
-        //    放在受理之前：解析不到作用域的输入不占位、不进积压（不消耗积压配额）。
+        // ========== 0b. 主体与作用域预检（锁外；归属之后，非持有节点不调解析器）==========
+        //    放在受理之前：主体不符、解析不到作用域的输入不占位、不进积压（不消耗积压配额）。
+        String principal = input.getPrincipal();
+        if (principal != null && principal.isEmpty() == false
+                && principal.equals(engine.getSessionPrincipal(session)) == false) {
+            // sessionId 来自客户端：提交者不是会话主体时拒绝，防止用别人的会话提交
+            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, "principal mismatch");
+        }
         InputOutcome scopeReject = precheckScope(input);
         if (scopeReject != null) {
             return scopeReject;

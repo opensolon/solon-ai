@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.hitl.HitlCard;
+import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.spi.InputBacklog;
@@ -275,8 +276,9 @@ final class SessionControl {
     private InputOutcome deferOrReject(AgentSession session, HarnessInput input) {
         final String busyText = "当前任务正在执行，请稍后再试";
 
-        // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存
-        if (input.isProgram() || input.isResume()) {
+        // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存。
+        // 调用方选了 REJECT：与「是否忙」同在会话锁内判定，不会被别的输入抢先开流后错进积压
+        if (input.isProgram() || input.isResume() || input.getWhenBusy() == BusyPolicy.REJECT) {
             return InputOutcome.rejected(InputOutcome.RejectReason.BUSY, busyText);
         }
 

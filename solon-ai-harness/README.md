@@ -17,7 +17,7 @@
 | 你想做什么 | 读哪里 |
 |---|---|
 | 先跑起来看看 | 第一章（五分钟上手）→ **第三章 3.1**（最小骨架） |
-| 做多租户 / 服务端（SaaS） | **[QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)**（宿主骨架 `HarnessHost`，只实现两个输出回调）→ [CONCEPTS.md](CONCEPTS.md)（术语）→ [SAAS.md](SAAS.md)（`HarnessProfile.SERVER`、作用域、会话归属、引擎池、部署清单） |
+| 做多租户 / 服务端（SaaS） | **[QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)**（宿主骨架 `HarnessHost`，只实现两个输出回调）→ [CONCEPTS.md](CONCEPTS.md)（术语）→ [SAAS.md](SAAS.md)（`DeployMode.SERVER`、作用域、会话归属、引擎池、部署清单） |
 | 接一个真产品 | **第三章**全部（两段式、事件渲染、HITL 续流、四端时序） |
 | 加命令 / 子代理 | 第四章、第六章 |
 | 跑 goal / queue / steer / loop | **第五章**（5.1 / 5.2 / 5.3，状态型命令的装配与宿主责任）；完整参考见各插件 README：[goal](../solon-ai-harness-goal/README.md) · [loop](../solon-ai-harness-loop/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) |
@@ -86,7 +86,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 ```
 
 > 缺省（`STANDALONE` 模式）下 `build()` 只硬校验 `sessionProvider`。没配模型不会在 `build()` 报错，而是在**首次 `handle`**
-> 时由 `ReActAgentConfig` 抛 `chatModel is required`。`profile(HarnessProfile.SERVER)` 会在构建期额外校验
+> 时由 `ReActAgentConfig` 抛 `chatModel is required`。`deployMode(DeployMode.SERVER)` 会在构建期额外校验
 > 状态来源、模型与 `defaultModel`（见 [SAAS.md](SAAS.md)）。
 
 builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvider` 之外的全部方法；完整语义见 §8.1，运行期可调的见 §8.2）：
@@ -132,7 +132,7 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
 | 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（§3.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
-| 服务端 | `profile(HarnessProfile)` | `STANDALONE` | 运行模式预设；`SERVER` 的缺省与校验见 [SAAS.md](SAAS.md) |
+| 服务端 | `deployMode(DeployMode)` | `STANDALONE` | 部署模式（本机单用户 / 多租户服务端）；`SERVER` 的缺省与校验见 [SAAS.md](SAAS.md) |
 | 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
 | 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |
 | 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | 会话工作目录的边界策略：`setSessionCwd` 与终端工具使用端都按真实路径校验，不满足抛 `SecurityException` |
@@ -2012,7 +2012,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 
 ### 8.1 构造期
 
-> 与 §1.2 的 builder 配置表同源，此处为完整语义参考。`profile(SERVER)` 会改变部分缺省值（显式值 > 预设 > 默认，与调用顺序无关）。
+> 与 §1.2 的 builder 配置表同源，此处为完整语义参考。`deployMode(SERVER)` 会改变部分缺省值（显式值 > 预设 > 默认，与调用顺序无关）。
 
 | 配置 | 默认值 | 说明 |
 |---|---|---|
@@ -2049,7 +2049,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理任务默认并发上限，取值 `1~10`（`0`=未设置取默认 5，超 10 按 10，负数报错），**不存在「不限制」**；仅在模型未配置 `AiConfig#concurrency` 时生效（模型配了以模型为准）。超限任务排队，不报错。`task` 与 `multitask` 均取槽（信号量引擎级、跨会话共享） |
 | `admissionTimeoutMs(Long)` | `60000` | 受理占位时限 |
 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` | harness 状态来源（算存分离） |
-| `profile` / `scopeResolver` / `scopeRequired` / `sessionOwnership` / `cwdPolicy` / `runtimeMutable` / `memorySessionIsolation` / `sandboxSelfBootstrap` / `protectedStatePaths` | 见 §1.2 | 服务端与多租户配置，完整语义见 [SAAS.md](SAAS.md) |
+| `deployMode` / `scopeResolver` / `scopeRequired` / `sessionOwnership` / `cwdPolicy` / `runtimeMutable` / `memorySessionIsolation` / `sandboxSelfBootstrap` / `protectedStatePaths` | 见 §1.2 | 服务端与多租户配置，完整语义见 [SAAS.md](SAAS.md) |
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 
@@ -2342,7 +2342,7 @@ solon-ai-harness            聚合包（只做引用，没有源码）
 ```
 org.noear.solon.ai.harness
 ├── HarnessEngine                 ★ 引擎（Builder + 编排 + 唯一入口 handle）
-├── HarnessProfile                运行模式预设（STANDALONE / SERVER）
+├── DeployMode                    部署模式（STANDALONE / SERVER）
 ├── HarnessSettings / HarnessTalents   引擎的两个视图：目录布局与运行期配置、内置能力（engine.getSettings() / getTalents()）
 ├── HarnessOptions                运行时配置（包私有）
 ├── HarnessExtension / AbsHarnessExtension   扩展 SPI

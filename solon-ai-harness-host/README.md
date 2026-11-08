@@ -33,7 +33,7 @@ solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终�
 
 | 层 | 入口 | 适用 |
 |---|---|---|
-| **L0 宿主骨架**（本模块） | `HarnessHost` + `SubmitSpec`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE、多会话推送、管理控制台 |
+| **L0 宿主骨架**（本模块） | `HarnessHost` + `HarnessInput`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE、多会话推送、管理控制台 |
 | L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件，或要完全自己掌握编排 |
 | L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 |
 
@@ -41,7 +41,7 @@ solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终�
 
 | 档 | 要认识的类型 | 写什么 | 够用于 |
 |---|---|---|---|
-| ① 一问一答 | `HarnessHost`、`SubmitSpec`、`SubmitResult`、`RunHandle` / `RunOutcome`、`HostSignal` | 不写 sink | HTTP / SSE / 批处理 / 无头脚本 |
+| ① 一问一答 | `HarnessHost`、`HarnessInput`（core，与直连 `engine.handle` 同一个类型）、`SubmitResult`、`RunHandle` / `RunOutcome`、`HostSignal` | 不写 sink | HTTP / SSE / 批处理 / 无头脚本 |
 | ② 推送型 | + `HostSink`、`HostInput`、`HostRun` | 覆盖 `HostSink` 的几个回调 | IM 机器人、只发最终文本的推送 |
 | ③ 每轮有状态 | + `RunSink`、`RunPrep` | 覆盖 `HostSink#open`，每轮返回一个 `RunSink` | 流式渲染、按轮序号、按轮调整请求 |
 | 管理态 | + `SessionAdmin` | 控制器里 `host.admin(tenant).call(...)` | 控制台、后台 API |
@@ -72,7 +72,7 @@ HarnessHost host = HarnessHost.builder()
         .build();
 
 host.openSession("default", sid, null);     // 单用户 / 本地部署可不写主体
-RunOutcome o = host.submit("default", sid, SubmitSpec.of("hello")).getRun().await(Duration.ofMinutes(5));
+RunOutcome o = host.submit("default", sid, HarnessInput.of("hello")).getRun().await(Duration.ofMinutes(5));
 ```
 
 ### 2.3 完整装配（多租户，用到全部配置项）
@@ -144,10 +144,10 @@ public class AskController {
     @Post
     @Mapping("/ask/{tenant}/{sid}")
     public Result<String> ask(String tenant, String sid, String text, Context ctx) throws InterruptedException {
-        SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+        SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
                 .origin(InputOrigin.of("http", userOf(ctx), null, null))
                 .principal(principalOf(tenant, userOf(ctx)))        // sessionId 来自客户端：必须校验主体
-                .whenBusy(SubmitSpec.BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
+                .whenBusy(BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
 
         switch (r.getKind()) {
             case STARTED:
@@ -201,10 +201,10 @@ public class AskController {
 @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
 @Mapping("/sse/{tenant}/{sid}")
 public Flux<Map<String, Object>> sse(String tenant, String sid, String text, Context ctx) {
-    return host.stream(tenant, sid, SubmitSpec.of(text)
+    return host.stream(tenant, sid, HarnessInput.of(text)
                     .origin(InputOrigin.of("sse", userOf(ctx), null, null))
                     .principal(principalOf(tenant, userOf(ctx)))
-                    .whenBusy(SubmitSpec.BusyPolicy.REJECT))
+                    .whenBusy(BusyPolicy.REJECT))
             .handle((signal, out) -> {
                 Map<String, Object> frame = toFrame(signal);
                 if (frame != null) {
@@ -299,10 +299,10 @@ final class ImBot implements HostSink {
             String[] parts = text.split(" ", 2);
             return host.decide(tenant, sid, parts[1].trim(), HITLAction.of(parts[0]), null, origin);
         }
-        return host.submit(tenant, sid, SubmitSpec.of(text)
+        return host.submit(tenant, sid, HarnessInput.of(text)
                 .origin(origin)
                 .principal(principal)
-                .whenBusy(SubmitSpec.BusyPolicy.STEER));            // 边跑边补充；插不进再排队
+                .whenBusy(BusyPolicy.STEER));            // 边跑边补充；插不进再排队
     }
 
     @Override
@@ -485,11 +485,11 @@ final class WebPushSink implements HostSink {
 @Post
 @Mapping("/chat/{tenant}/{sid}")
 public String send(String tenant, String sid, String text, String model, Context ctx) {
-    SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+    SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
             .origin(InputOrigin.of("web", userOf(ctx), sid, null))
             .principal(principalOf(tenant, userOf(ctx)))
-            .whenBusy(SubmitSpec.BusyPolicy.STEER)
-            .customize(in -> in.selectedModel(model).attr("effort", ctx.param("effort"))));
+            .whenBusy(BusyPolicy.STEER)
+            .selectedModel(model).attr("effort", ctx.param("effort")));
     ctx.status(r.httpStatus());
     return r.getKind().name();
 }
@@ -552,7 +552,7 @@ public Result<Boolean> stop(String tenant, String sid, Context ctx) {
 
 ### 4.7 忙时策略
 
-会话忙（正在运行 / 受理窗口 / 有积压）时，`SubmitSpec.whenBusy(...)` 决定这条输入怎么处理：
+会话忙（正在运行 / 受理窗口 / 有积压）时，`HarnessInput.whenBusy(BusyPolicy)` 决定这条输入怎么处理（`QUEUE` / `REJECT` 由引擎在受理的会话锁内判定，不会出现「先判空闲、再被别的输入抢先、结果进了积压」的窗口）：
 
 | 策略 | 行为 | 结果 | 适合 |
 |---|---|---|---|
@@ -568,19 +568,19 @@ public Result<Boolean> stop(String tenant, String sid, Context ctx) {
 
 ```java
 // 单次提交：本次的附件、显式模型 / 子代理、宿主属性
-host.submit(tenant, sid, SubmitSpec.of(text)
-        .customize(in -> in.selectedModel("gpt-4o").selectedAgent("reviewer").attr("effort", "high")));
+host.submit(tenant, sid, HarnessInput.of(text)
+        .selectedModel("gpt-4o").selectedAgent("reviewer").attr("effort", "high"));
 
 // 每条输入都要补的（用户提交、审批决策、队列续发、后台轮次四处都经过它）
 HarnessHost.builder().input((tenant, in) -> in.attr("tenant", tenant).commandContextFactory(myFactory));
 
 // 只作用于本次请求开出的那一轮的附加监听（在全局 sink 之后调用；进了积压时不调用）
-host.submit(tenant, sid, SubmitSpec.of(text).observe(new RunSink() {
+host.submit(tenant, sid, HarnessInput.of(text), new RunSink() {
     @Override
     public void finished(RunOutcome o) {
         billing.record(tenant, o.getUsage());                   // 按轮计费
     }
-}));
+});
 ```
 
 写进 `attr` 的宿主属性随输入带回：`HostInput.getAttr(key)`；队列续发时是排队时保存的值。用户这次的选择（`getSelectedModel()` / `getSelectedAgent()`）要不要持久化成会话级选择，由宿主在 `admitted` 里决定（`isBesideRunning()` 为 true 时不要改写，那属于正在运行的任务）。
@@ -892,12 +892,12 @@ public Result<Void> delete(String tenant, String sid, Context ctx) {
 HarnessHost host = HarnessHost.builder().engines(t -> engine).sink(mySink).build();
 host.openSession("acme", "s1", "acme/u1");
 
-SubmitResult r = host.submit("acme", "s1", SubmitSpec.of("hello").principal("acme/u1"));
+SubmitResult r = host.submit("acme", "s1", HarnessInput.of("hello").principal("acme/u1"));
 RunOutcome o = r.getRun().await(Duration.ofSeconds(30));
 
 assertTrue(o.isCompleted() && o.isAbnormal());                    // 模型错误 = 异常结束
-assertEquals(403, host.submit("acme", "s1", SubmitSpec.of("x").principal("acme/u2")).httpStatus());
-assertEquals(404, host.submit("acme", "ghost", SubmitSpec.of("x")).httpStatus());
+assertEquals(403, host.submit("acme", "s1", HarnessInput.of("x").principal("acme/u2")).httpStatus());
+assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus());
 ```
 
 三种形态的参考宿主（A 无状态 SSE、B 文本 IM、C 多会话推送）见 `ReferenceHosts` / `ReferenceHostsTest`。
@@ -914,23 +914,26 @@ assertEquals(404, host.submit("acme", "ghost", SubmitSpec.of("x")).httpStatus())
 | `sink(sink)` | `HostSink` | 只记日志的缺省 sink（null 同缺省） | 全局输出通道，见 [§9.4](#94-hostsink会话级--轮次级回调) |
 | `executor(executor)` | `Executor` | Reactor `Schedulers.boundedElastic()`（null 抛 NPE） | 开流动作的执行器；`RunSink.reply` / `prepare` 在这里执行 |
 | `wrap(fn)` | `BiFunction<String, Runnable, Runnable>` | 原样执行（null 同缺省） | (租户, 动作) → 包装后的动作。作用于开流、续发、后台轮次 |
-| `input(fn)` | `BiConsumer<String, HarnessInput>` | 无 | (租户, 输入) → 就地补充。用户提交、审批决策、队列续发、后台轮次四处都经过它；单次补充用 `SubmitSpec.customize` |
+| `input(fn)` | `BiConsumer<String, HarnessInput>` | 无 | (租户, 输入) → 就地补充。用户提交、审批决策、队列续发、后台轮次四处都经过它；单次提交的参数直接写在交给 `submit` 的 `HarnessInput` 上 |
 | `programRuns(boolean)` | `boolean` | `true` | goal / loop 后台轮次是否接入本骨架。`false` 时不登记执行器、首次绑定引擎时也不恢复 goal、不续发积压 |
 | `programRuns(filter)` | `Predicate<String>` | null = 全部会话 | 只接管命中的会话（同时把开关置为 true） |
 | `build()` | | | 构建实例（线程安全，整个应用共用一个） |
 
-### 8.2 `SubmitSpec`（一次提交）
+### 8.2 `HarnessInput`（一次提交）
+
+提交用的就是 core 的 `HarnessInput`，与直连 `engine.handle` 同一个类型（完整方法见 core README）。经骨架提交时通常不带会话：
 
 | 方法 | 缺省 | 说明 |
 |---|---|---|
-| `SubmitSpec.of(text)` | | 用户输入文本，含斜杠命令；可空（只带附件时由 `customize` 补充） |
+| `HarnessInput.of(text)` | | 用户输入文本，含斜杠命令；可空（只带附件时） |
 | `origin(origin)` | `InputOrigin.NONE` | 来源 = 回复路由：`InputOrigin.of(channel, senderId, replyTarget, messageId)` 或 `InputOrigin.channel(name)` |
-| `principal(p)` | null（不校验） | 提交者主体，非空时必须与会话主体一致，否则 `REJECTED(SCOPE_UNAVAILABLE)`（403）。多用户 SaaS 应当总是传；SERVER 模式下不传只告警一次 |
-| `whenBusy(policy)` | `QUEUE`（null 同缺省） | 忙时策略：`QUEUE` / `STEER` / `REJECT`，见 [§4.7](#47-忙时策略) |
-| `customize(in -> ...)` | 无 | 补充本次的 `HarnessInput`：`selectedModel` / `selectedAgent` / `selectedSkill` / `selectedMcp` / `attachments` / `media` / `reference` / `attr` 等 |
-| `observe(runSink)` | 无 | 只作用于本次请求开出的那一轮的附加监听（在全局 sink 之后调用；进了积压时不调用） |
+| `principal(p)` | null（不校验） | 提交者主体，非空时必须与会话主体一致，否则 `REJECTED(SCOPE_UNAVAILABLE)`（403，detail 为 `principal mismatch`）。由引擎在受理前校验，直连 `engine.handle` 同样生效。多用户 SaaS 应当总是传；SERVER 模式下经骨架提交不传只告警一次 |
+| `whenBusy(policy)` | `BusyPolicy.QUEUE`（null 同缺省） | 忙时策略：`QUEUE` / `STEER` / `REJECT`，见 [§4.7](#47-忙时策略) |
+| `selectedModel` / `selectedAgent` / `selectedSkill` / `selectedMcp` / `attachments` / `media` / `reference` / `attr` 等 | | 本次的模型、子代理、附件、宿主属性 |
 
-同一个 `SubmitSpec` 可以并发复用（框架不改写它）。
+框架加载会话后用 `copyFor(session)` 复制一份交给引擎：调用方的对象不会被改动（作用域回写、装饰器补充都落在副本上），同一个对象可以并发复用。输入若已带会话，其 id 必须与 `sid` 一致，否则 `IllegalArgumentException`。
+
+只作用于本次请求开出的那一轮的附加监听，作为 `submit` / `stream` 的第四个参数传入（在全局 sink 之后调用；进了积压时不调用）。
 
 ---
 
@@ -944,9 +947,9 @@ assertEquals(404, host.submit("acme", "ghost", SubmitSpec.of("x")).httpStatus())
 | `openSession(tenant, sid, principal)` | `AgentSession` | 开通会话并写入主体，一次完成。引擎要求作用域（SERVER）时主体必填，否则 `IllegalArgumentException`；会话已有不同主体时 `SecurityException`；相同主体重复调用幂等 |
 | `closeSession(tenant, sid, storageCleanup)` | `boolean` | 永久删除：判忙 → 通知全部扩展（撤掉调度等）→ 执行 `storageCleanup`（可空，异常只记日志）。true = 已关闭或本来不存在；false = 会话忙，什么都没做 |
 | `closeSession(tenant, sid)` | `boolean` | 同上，不删存储（返回 true 后宿主自行删除） |
-| `submit(tenant, sid, spec)` | `SubmitResult` | 提交一条用户输入（含斜杠命令），见 §9.3。调用线程上完成受理；开流在执行器上 |
-| `submit(tenant, sid, text, origin)` | `SubmitResult` | 等价于 `submit(tenant, sid, SubmitSpec.of(text).origin(origin))` |
-| `stream(tenant, sid, spec)` | `Flux<HostSignal>` | 提交并把本次请求的信号作为流返回，见 §9.8。订阅时才提交；下游取消 = `RunHandle.cancel()` |
+| `submit(tenant, sid, input)` | `SubmitResult` | 提交一条用户输入（含斜杠命令），见 §8.2、§9.3。调用线程上完成受理；开流在执行器上 |
+| `submit(tenant, sid, input, observer)` | `SubmitResult` | 同上，并附加只作用于本次那一轮的 `RunSink`（可空） |
+| `stream(tenant, sid, input[, observer])` | `Flux<HostSignal>` | 提交并把本次请求的信号作为流返回，见 §9.8。订阅时才提交；下游取消 = `RunHandle.cancel()` |
 | `decide(tenant, sid, callId, action, note, origin)` | `SubmitResult` | 提交审批决策（`HITLAction.APPROVE` / `REJECT` / `SKIP`），`note` 可改写工具返回值（可空），见 §4.5 |
 | `interrupt(tenant, sid)` | `HarnessResult<Boolean>` | 用户停止（`INTERRUPT_ALL`）。OK 时 true = 有一轮会以 `finished(CANCELLED)` 收尾（含还在调度窗口里、尚未开流的，以及正在受理的输入）；false = 没有在跑的轮次。另有 `NOT_FOUND`、`NOT_OWNER` |
 | `admin(tenant)` | `SessionAdmin` | 管理态入口（每次新建一个轻量对象），见 §9.2 |
@@ -1047,7 +1050,7 @@ assertEquals(404, host.submit("acme", "ghost", SubmitSpec.of("x")).httpStatus())
 | `isResume()` | 是否续跑（审批决策或显式续流），界面应续用原来的输出流 |
 | `isDispatched()` / `getQueueItem()` | 是否由队列续发而来 / 续发的那一项 |
 | `getSelectedModel()` / `getSelectedAgent()` | 本次显式选择的模型 / 子代理（未选为 null；续发时为排队时的选择） |
-| `getAttrs()` / `getAttr(key)` | 宿主属性（`customize` / `Builder.input` 写入的；续发时为排队时保存的），只读 |
+| `getAttrs()` / `getAttr(key)` | 宿主属性（`HarnessInput.attr` / `Builder.input` 写入的；续发时为排队时保存的），只读 |
 
 ### 9.7 `HostRun`、`RunPrep`、`RunHandle`
 
@@ -1151,7 +1154,7 @@ submit ─┬─ 会话不存在 / 非持有 / 主体不符 ── rejected / no
 
 | 错误写法 | 后果 | 正确写法 |
 |---|---|---|
-| 多用户 SaaS 不传 `principal` | 拿到别人的 sessionId 就能用别人的会话 | 总是 `SubmitSpec.principal(...)`，开通时 `openSession(..., principal)` |
+| 多用户 SaaS 不传 `principal` | 拿到别人的 sessionId 就能用别人的会话 | 总是 `HarnessInput.principal(...)`，开通时 `openSession(..., principal)` |
 | 一问一答接口用缺省 `QUEUE` | 忙时排队的那一轮没人接，结果丢失 | `whenBusy(REJECT)` |
 | 在 `open` 里输出（如复位前端流） | 窗口内被取消的那一轮前端多收一次复位 | 第一次输出（`reply` / `prepare`）时再复位 |
 | 只看 `isCompleted()` 就发结果 | 模型报错、超出 maxTurns 时发出半成品或空文本 | 同时判断 `isAbnormal()` |

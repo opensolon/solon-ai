@@ -12,7 +12,7 @@
 
 | 层 | 入口 | 适用 |
 |---|---|---|
-| **L0 宿主骨架** | `HarnessHost` + `SubmitSpec`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE 接口、多会话推送的 Web 应用（本文） |
+| **L0 宿主骨架** | `HarnessHost` + `HarnessInput`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE 接口、多会话推送的 Web 应用（本文） |
 | L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件依赖，或要完全自己掌握编排的宿主，见 harness README |
 | L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 |
 
@@ -45,7 +45,7 @@
 ```java
 HarnessEngine buildEngine(String tenantId) {
     return HarnessEngine.of(workspaceOf(tenantId), ".solon/")
-            .profile(HarnessProfile.SERVER)
+            .deployMode(DeployMode.SERVER)
             .stateSource(FileMountSource.of(stateDirOf(tenantId)))      // 必须在工作区之外
             .sessionProvider(sessionProviderOf(tenantId))
             .modelAdd(modelsOf(tenantId))
@@ -71,8 +71,8 @@ SERVER 模式还要求：启动时 `SandboxBootstrap.initOnce(...)` 一次；`st
 
 ```java
 // ① 一问一答（HTTP / SSE）：不写 sink，按请求拿结果
-RunOutcome o = host.submit(tenant, sid, SubmitSpec.of(text).principal(p)).getRun().await(Duration.ofMinutes(5));
-Flux<HostSignal> sse = host.stream(tenant, sid, SubmitSpec.of(text).principal(p));
+RunOutcome o = host.submit(tenant, sid, HarnessInput.of(text).principal(p)).getRun().await(Duration.ofMinutes(5));
+Flux<HostSignal> sse = host.stream(tenant, sid, HarnessInput.of(text).principal(p));
 
 // ② 推送型（WebSocket / IM）：覆盖两个投递出口
 public class MySink implements HostSink {
@@ -123,7 +123,7 @@ host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / l
 @Post 
 @Mapping("/chat/{tenant}/{sid}")
 public String chat(String tenant, String sid, String text, Context ctx) {
-    SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+    SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
             .origin(InputOrigin.of("web", userOf(ctx), null, null))
             .principal(tenant + "/" + userOf(ctx)));   // sessionId 来自客户端：必须校验主体
     ctx.status(r.httpStatus());                  // 内容已经经 sink 发出，这里只回状态
@@ -135,7 +135,7 @@ public String chat(String tenant, String sid, String text, Context ctx) {
 @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
 @Mapping("/chat/{tenant}/{sid}/sse")
 public Flux<HostSignal> sse(String tenant, String sid, String text, Context ctx) {
-    return host.stream(tenant, sid, SubmitSpec.of(text).principal(tenant + "/" + userOf(ctx)).whenBusy(SubmitSpec.BusyPolicy.REJECT));
+    return host.stream(tenant, sid, HarnessInput.of(text).principal(tenant + "/" + userOf(ctx)).whenBusy(BusyPolicy.REJECT));
 }
 
 // 审批（协议字符串 → 枚举，脏值直接报错）
@@ -191,15 +191,15 @@ if (host.closeSession(tenant, sid, () -> store.delete(sid)) == false) {
 需要补充输入参数（附件、显式模型 / 子代理、宿主域属性）时：
 
 ```java
-host.submit(tenant, sid, SubmitSpec.of(text).origin(origin)
-        .customize(in -> in.attachments(files).selectedModel("gpt-4o").attr("effort", "high")));
+host.submit(tenant, sid, HarnessInput.of(text).origin(origin)
+        .attachments(files).selectedModel("gpt-4o").attr("effort", "high"));
 
 // 每条输入都要补的（用户提交、审批、队列续发、后台轮次）：放在 Builder.input
 HarnessHost.builder().input((tenant, in) -> in.commandContextFactory(myFactory));
 ```
 
-IM 类入口常用「忙时先插话、插不进再排队」：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.STEER)`（需装 steer 插件，命令不插话）。
-一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.REJECT)`。
+IM 类入口常用「忙时先插话、插不进再排队」：`HarnessInput.of(text).whenBusy(BusyPolicy.STEER)`（需装 steer 插件，命令不插话）。
+一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`HarnessInput.of(text).whenBusy(BusyPolicy.REJECT)`。
 
 每种用况（一问一答、SSE、IM、Web 推送、审批、停止）的完整示例见 [README §4](../README.md#4-使用态用户在对话里输入)。
 
@@ -298,8 +298,8 @@ sink 回调可能在任意线程上执行，实现需线程安全；回调抛出
 
 ## 九、上线检查清单（L0）
 
-- [ ] 引擎：`profile(SERVER)`、`stateSource` 在工作区之外、`SandboxBootstrap.initOnce`、插件经 `Builder.extensionAdd` 在构建期挂上
-- [ ] 权限：用 `host.openSession` 建会话并写入主体；提交时 `SubmitSpec.principal(...)` 校验主体；`scopeResolver` 用 `byPrincipal` 并做短期缓存（SERVER 下缺失会在 `build()` 报错）
+- [ ] 引擎：`deployMode(SERVER)`、`stateSource` 在工作区之外、`SandboxBootstrap.initOnce`、插件经 `Builder.extensionAdd` 在构建期挂上
+- [ ] 权限：用 `host.openSession` 建会话并写入主体；提交时 `HarnessInput.principal(...)` 校验主体；`scopeResolver` 用 `byPrincipal` 并做短期缓存（SERVER 下缺失会在 `build()` 报错）
 - [ ] 骨架：`engines(pool::get)`；预热用 `host.warmup`；sink 线程安全
 - [ ] 管理态：鉴权放在控制器 / 拦截器层；按 `HarnessResult.Code` 映射状态码
 - [ ] 多节点：`SessionOwnership.namespaced(tenantId, impl)`；实现 `HostSink.notOwner` 与 `NOT_OWNER` 的网关转发

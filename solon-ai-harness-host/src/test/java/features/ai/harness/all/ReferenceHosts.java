@@ -1,5 +1,9 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.BusyPolicy;
+
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.hitl.HitlCard;
@@ -13,7 +17,6 @@ import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.RunUsage;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import reactor.core.publisher.Flux;
@@ -71,12 +74,11 @@ final class ReferenceHosts {
 
         /** {@code @Get @Produces(text/event-stream) /chat/{tenant}/{sid}?q=&maxTurns=} */
         Flux<HostSignal> chat(String tenant, String sid, String userId, String q, int maxTurns) {
-            return host.stream(tenant, sid, SubmitSpec.of(q)
+            return host.stream(tenant, sid, HarnessInput.of(q)
                     .origin(InputOrigin.of("http", userId, null, null))
                     .principal(tenant + "/" + userId)
-                    .whenBusy(SubmitSpec.BusyPolicy.REJECT)
-                    .customize(in -> in.attr("client", "sse"))
-                    .observe(new RunSink() {
+                    .whenBusy(BusyPolicy.REJECT)
+                    .attr("client", "sse"), new RunSink() {
                         @Override
                         public void prepare(RunPrep prep) {                 // 按请求参数调整本轮
                             preparedTenants.add(String.valueOf(TENANT_CTX.get()));
@@ -87,7 +89,7 @@ final class ReferenceHosts {
                         public void finished(RunOutcome outcome) {          // 按轮计费
                             billing.add(outcome.getUsage());
                         }
-                    }));
+                    });
         }
     }
 
@@ -112,11 +114,11 @@ final class ReferenceHosts {
 
         /** IM 回调入口 */
         SubmitResult onMessage(String tenant, String chatId, String userId, String text) {
-            return host.submit(tenant, "im-" + chatId, SubmitSpec.of(text)
+            return host.submit(tenant, "im-" + chatId, HarnessInput.of(text)
                     .origin(InputOrigin.of("im", userId, chatId, null))
                     .principal(tenant + "/" + userId)
-                    .whenBusy(SubmitSpec.BusyPolicy.STEER)
-                    .customize(in -> in.attr("im.chat", chatId)));
+                    .whenBusy(BusyPolicy.STEER)
+                    .attr("im.chat", chatId));
         }
 
         private void send(InputOrigin origin, String text) {
@@ -204,10 +206,10 @@ final class ReferenceHosts {
         }
 
         SubmitResult send(String tenant, String sid, String userId, String text) {
-            return host.submit(tenant, sid, SubmitSpec.of(text)
+            return host.submit(tenant, sid, HarnessInput.of(text)
                     .origin(InputOrigin.of("web", userId, sid, null))
                     .principal(tenant + "/" + userId)
-                    .whenBusy(SubmitSpec.BusyPolicy.STEER));
+                    .whenBusy(BusyPolicy.STEER));
         }
 
         private void push(String sid, String frame) {

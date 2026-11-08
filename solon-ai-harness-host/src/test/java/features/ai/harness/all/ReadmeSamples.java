@@ -1,5 +1,9 @@
 package features.ai.harness.all;
 
+import org.noear.solon.ai.harness.input.BusyPolicy;
+
+import org.noear.solon.ai.harness.input.HarnessInput;
+
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.react.task.ReasonDeltaEvent;
@@ -32,7 +36,6 @@ import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.annotation.Controller;
@@ -110,10 +113,10 @@ final class ReadmeSamples {
         @Post
         @Mapping("/ask/{tenant}/{sid}")
         public Result<String> ask(String tenant, String sid, String text, Context ctx) throws InterruptedException {
-            SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+            SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
                     .origin(InputOrigin.of("http", userOf(ctx), null, null))
                     .principal(principalOf(tenant, userOf(ctx)))        // sessionId 来自客户端：必须校验主体
-                    .whenBusy(SubmitSpec.BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
+                    .whenBusy(BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
 
             switch (r.getKind()) {
                 case STARTED:
@@ -163,10 +166,10 @@ final class ReadmeSamples {
         @Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
         @Mapping("/sse/{tenant}/{sid}")
         public Flux<Map<String, Object>> sse(String tenant, String sid, String text, Context ctx) {
-            return host.stream(tenant, sid, SubmitSpec.of(text)
+            return host.stream(tenant, sid, HarnessInput.of(text)
                             .origin(InputOrigin.of("sse", userOf(ctx), null, null))
                             .principal(principalOf(tenant, userOf(ctx)))
-                            .whenBusy(SubmitSpec.BusyPolicy.REJECT))
+                            .whenBusy(BusyPolicy.REJECT))
                     .handle((signal, out) -> {                          // 客户端断开 = 停掉本轮（框架代办）
                         Map<String, Object> frame = toFrame(signal);
                         if (frame != null) {
@@ -273,10 +276,10 @@ final class ReadmeSamples {
                 String[] parts = text.split(" ", 2);
                 return host.decide(tenant, sid, parts[1].trim(), HITLAction.of(parts[0]), null, origin);
             }
-            return host.submit(tenant, sid, SubmitSpec.of(text)
+            return host.submit(tenant, sid, HarnessInput.of(text)
                     .origin(origin)
                     .principal(principal)
-                    .whenBusy(SubmitSpec.BusyPolicy.STEER));            // 边跑边补充；插不进再排队
+                    .whenBusy(BusyPolicy.STEER));            // 边跑边补充；插不进再排队
         }
 
         @Override
@@ -468,11 +471,11 @@ final class ReadmeSamples {
         @Post
         @Mapping("/chat/{tenant}/{sid}")
         public String send(String tenant, String sid, String text, String model, Context ctx) {
-            SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+            SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
                     .origin(InputOrigin.of("web", userOf(ctx), sid, null))
                     .principal(principalOf(tenant, userOf(ctx)))
-                    .whenBusy(SubmitSpec.BusyPolicy.STEER)
-                    .customize(in -> in.selectedModel(model).attr("effort", ctx.param("effort"))));
+                    .whenBusy(BusyPolicy.STEER)
+                    .selectedModel(model).attr("effort", ctx.param("effort")));
             ctx.status(r.httpStatus());
             return r.getKind().name();
         }

@@ -1,10 +1,10 @@
 package features.ai.harness.all;
 
+
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostSink;
 import org.noear.solon.ai.harness.host.RunSink;
-import org.noear.solon.ai.harness.host.SubmitSpec;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -69,10 +69,7 @@ class HostGenericityGuardTest {
             {"Builder#wrap", ".wrap("},
             {"Builder#input", ".input("},
             {"Builder#programRuns", ".programRuns("},
-            {"SubmitSpec#principal", ".principal("},
-            {"SubmitSpec#whenBusy", ".whenBusy("},
-            {"SubmitSpec#customize", ".customize("},
-            {"SubmitSpec#observe", ".observe("},
+            {"HarnessHost#submit|HarnessHost#stream", "), new RunSink() {"},
     };
 
     @Test
@@ -115,11 +112,11 @@ class HostGenericityGuardTest {
                 missing.add("Builder#" + m);
             }
         }
-        for (Method m : SubmitSpec.class.getDeclaredMethods()) {
-            if (Modifier.isPublic(m.getModifiers()) && Modifier.isStatic(m.getModifiers()) == false
-                    && m.getReturnType() == SubmitSpec.class && m.getName().equals("origin") == false
-                    && all.contains("SubmitSpec#" + m.getName()) == false) {
-                missing.add("SubmitSpec#" + m.getName());
+        for (Method m : HarnessHost.class.getDeclaredMethods()) {
+            // 带「本次监听」的提交入口也是扩展点
+            if (Modifier.isPublic(m.getModifiers()) && Arrays.asList(m.getParameterTypes()).contains(RunSink.class)
+                    && all.contains("HarnessHost#" + m.getName()) == false) {
+                missing.add("HarnessHost#" + m.getName());
             }
         }
         assertTrue(missing.isEmpty(), "未登记的扩展点：" + missing);
@@ -174,6 +171,22 @@ class HostGenericityGuardTest {
             }
         }
         assertTrue(violations.isEmpty(), "主代码不得复活 HostTurn / getTurn：" + violations);
+    }
+
+    @Test
+    void submitSpecStaysRetired() throws IOException {
+        // 提交只有一个输入类型：HarnessInput（与直连 engine.handle 相同），不再有第二套描述对象
+        assertFalse(Files.exists(MAIN_DIR.resolve("SubmitSpec.java")), "SubmitSpec 已并入 HarnessInput");
+        Pattern words = Pattern.compile("\\bSubmitSpec\\b|\\.customize\\(");
+        List<String> violations = new ArrayList<>();
+        try (Stream<Path> s = Files.walk(MAIN_DIR)) {
+            for (Path f : s.filter(p -> p.toString().endsWith(".java")).collect(Collectors.toList())) {
+                if (words.matcher(read(f)).find()) {
+                    violations.add(f.getFileName().toString());
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(), "主代码不得复活 SubmitSpec / customize：" + violations);
     }
 
     private static Set<String> callbacks(Class<?> type) {

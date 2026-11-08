@@ -5,7 +5,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.HarnessProfile;
+import org.noear.solon.ai.harness.DeployMode;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
@@ -46,7 +46,7 @@ class SaasSampleBootTest {
         GoalExtension goal = GoalExtension.builder().roundConcurrency(2).build();
 
         HarnessEngine engine = HarnessEngine.of(ws.toString(), ".solon/")
-                .profile(HarnessProfile.SERVER)
+                .deployMode(DeployMode.SERVER)
                 .stateSource(stateSrc)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model())
@@ -84,7 +84,7 @@ class SaasSampleBootTest {
         Path state = Files.createDirectories(tmp.resolve("state"));
 
         HarnessEngine engine = HarnessEngine.of(ws.toString(), ".solon/")
-                .profile(HarnessProfile.SERVER)
+                .deployMode(DeployMode.SERVER)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())

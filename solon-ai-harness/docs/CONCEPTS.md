@@ -17,7 +17,7 @@
 | 类别 | 概念 | 一句话 |
 |---|---|---|
 | 部署 | `HarnessHost` | 宿主骨架：受理、开流、终态、续发都在这里，宿主只投递输出 |
-| | `HarnessProfile.SERVER` | 服务端预设：保守缺省 + 构建期校验 + 运行期锁定引擎全局配置（扩展在构建期 `extensionAdd`） |
+| | `DeployMode.SERVER` | 服务端部署模式：保守缺省 + 构建期校验 + 运行期锁定引擎全局配置（扩展在构建期 `extensionAdd`） |
 | | `stateSource` | harness 自身状态（goal 索引、loop 任务等）的存储来源，必须在工作区之外 |
 | 输出 | `HostSink` | 输出通道：`reply`（文本回执）+ `event`（流事件），其余可选 |
 | | `InputOrigin` | 一次输入的来源（渠道、发送者、返回地址），也是回复路由 |

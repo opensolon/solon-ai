@@ -807,12 +807,12 @@ public class HarnessEngine {
     }
 
     /**
-     * 引擎运行模式（插件据此选择各自的保守缺省）
+     * 部署模式（插件据此选择各自的保守缺省；未设置时为 {@link DeployMode#STANDALONE}）
      *
      * @since 4.2.0
      */
-    public HarnessProfile getProfile() {
-        return options.getProfile();
+    public DeployMode getDeployMode() {
+        return options.getDeployMode();
     }
 
     // ========== 会话级选择项（模型 / 子代理）门面 ==========
@@ -2544,8 +2544,8 @@ public class HarnessEngine {
 
     public static class Builder {
         private final HarnessOptions options;
-        /** 预设在 build() 时合成；显式设过的字段不被预设覆盖 */
-        private HarnessProfile profile;
+        /** 部署模式预设在 build() 时合成；显式设过的字段不被预设覆盖 */
+        private DeployMode deployMode;
         private final Set<String> explicit = new HashSet<>();
 
         private Builder explicit(String field, Object value) {
@@ -2890,12 +2890,12 @@ public class HarnessEngine {
         // ========== 多租户 / 服务端 ==========
 
         /**
-         * 运行模式预设（在 {@code build()} 时合成一组缺省值；显式 setter 优先，与调用顺序无关）
+         * 部署模式（在 {@code build()} 时合成该模式的缺省值；显式 setter 优先，与调用顺序无关）
          *
          * @since 4.2.0
          */
-        public Builder profile(HarnessProfile profile) {
-            this.profile = profile;
+        public Builder deployMode(DeployMode deployMode) {
+            this.deployMode = deployMode;
             return this;
         }
 
@@ -3018,9 +3018,9 @@ public class HarnessEngine {
 
         public HarnessEngine build() {
             Objects.requireNonNull(options.getSessionProvider(), "sessionProvider");
-            options.applyProfile(profile, explicit);
-            if (options.getProfile() == HarnessProfile.SERVER) {
-                validateServerProfile(options);
+            options.applyDeployMode(deployMode, explicit);
+            if (options.getDeployMode() == DeployMode.SERVER) {
+                validateServerMode(options);
             }
 
             HarnessEngine engine = new HarnessEngine(options);
@@ -3041,10 +3041,10 @@ public class HarnessEngine {
         /**
          * SERVER 模式的快速失败校验（把「第一次请求才发现」的配置错误提前到构建期）
          */
-        static void validateServerProfile(HarnessOptions options) {
+        static void validateServerMode(HarnessOptions options) {
             MountSource state = options.getStateSourceOrNull();
             if (state == null) {
-                throw new IllegalStateException("SERVER profile requires an explicit stateSource "
+                throw new IllegalStateException("SERVER deploy mode requires an explicit stateSource "
                         + "outside the workspace (e.g. db / <data>/<tenant>)");
             }
             Path stateRoot = state.getLocalRoot().orElse(null);
@@ -3052,28 +3052,28 @@ public class HarnessEngine {
                 Path ws = Paths.get(options.getWorkspace()).toAbsolutePath().normalize();
                 Path sr = stateRoot.toAbsolutePath().normalize();
                 if (sr.startsWith(ws)) {
-                    throw new IllegalStateException("SERVER profile requires stateSource outside the workspace: " + sr);
+                    throw new IllegalStateException("SERVER deploy mode requires stateSource outside the workspace: " + sr);
                 }
             }
             if (options.getModels().isEmpty()) {
-                throw new IllegalStateException("SERVER profile requires at least one model: call modelAdd(...)");
+                throw new IllegalStateException("SERVER deploy mode requires at least one model: call modelAdd(...)");
             }
             if (Assert.isNotEmpty(options.getDefaultModel()) && !options.hasModel(options.getDefaultModel())) {
                 throw new IllegalStateException("defaultModel not found: " + options.getDefaultModel());
             }
             SessionOwnership ownership = options.getSessionOwnership();
             if (ownership != SessionOwnership.LOCAL && !(ownership instanceof SessionOwnership.Namespaced)) {
-                LOG.warn("[Harness] SERVER profile with a shared SessionOwnership without namespace: "
+                LOG.warn("[Harness] SERVER deploy mode with a shared SessionOwnership without namespace: "
                         + "sessions of different tenants with the same id will contend for one lease. "
                         + "Wrap it with SessionOwnership.namespaced(tenantId, delegate)");
             }
             if (options.isSandboxEnabled() == false || options.isSandboxSystemRestrict() == false) {
-                LOG.warn("[Harness] SERVER profile with OS sandbox relaxed (sandboxEnabled={}, sandboxSystemRestrict={})",
+                LOG.warn("[Harness] SERVER deploy mode with OS sandbox relaxed (sandboxEnabled={}, sandboxSystemRestrict={})",
                         options.isSandboxEnabled(), options.isSandboxSystemRestrict());
             }
             // 要求作用域却没有解析器：每一轮输入都会被拒绝（scope_unavailable），引擎实际不可用
             if (options.isScopeRequired() && options.getScopeResolver() == null) {
-                throw new IllegalStateException("SERVER profile requires a scopeResolver when scopeRequired is true: "
+                throw new IllegalStateException("SERVER deploy mode requires a scopeResolver when scopeRequired is true: "
                         + "call scopeResolver(...) (e.g. InputScopeResolver.byPrincipal(...)), or set scopeRequired(false)");
             }
         }

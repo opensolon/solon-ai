@@ -23,7 +23,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.session.OwnerCheck;
-import org.noear.solon.ai.harness.HarnessProfile;
+import org.noear.solon.ai.harness.DeployMode;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
@@ -52,7 +52,7 @@ import java.util.function.Predicate;
  *
  * // SERVER 模式（runtimeMutable=false）下 build 之后不能再挂扩展，改在构建期挂：
  * GoalExtension goal = GoalExtension.builder().build();
- * HarnessEngine engine = HarnessEngine.of(ws, ".solon/").profile(HarnessProfile.SERVER) ... .extensionAdd(goal).build();
+ * HarnessEngine engine = HarnessEngine.of(ws, ".solon/").deployMode(DeployMode.SERVER) ... .extensionAdd(goal).build();
  *
  * // 宿主的增删改查（每个会话只有一个 goal，一律按 sessionId 定位；写操作返回 HarnessResult）：
  * HarnessResult<GoalSnapshot> r = goal.create(sid, GoalSpec.of(prompt).maxTokens(2000));
@@ -160,7 +160,7 @@ public class GoalExtension extends AbsHarnessExtension {
         // 验证器在本轮会话工作目录下执行（由 goal_update 传入，不再固定为引擎工作区）
         // 服务端模式缺省不注册内置构建/测试验证器（它们会在宿主上跑模型写的构建脚本），
         // 且「无法判定」按未通过处理；本地编码模式保持原有体验
-        boolean server = engine.getProfile() == HarnessProfile.SERVER;
+        boolean server = engine.getDeployMode() == DeployMode.SERVER;
         boolean registerDefaults = defaultValidators != null ? defaultValidators : !server;
         ValidatorPolicy policy = validatorPolicy != null ? validatorPolicy
                 : (server ? ValidatorPolicy.FAIL_CLOSED : ValidatorPolicy.FAIL_OPEN);

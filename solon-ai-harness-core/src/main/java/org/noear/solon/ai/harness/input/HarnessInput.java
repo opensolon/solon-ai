@@ -49,6 +49,12 @@ import java.util.function.Predicate;
  *         .selectedModel("gpt-4o")
  *         .attachments(atts));
  *
+ * // 经宿主骨架提交时不带会话（由 HarnessHost 查归属、加载会话后绑定，见 copyFor）：
+ * host.submit(tenant, sid, HarnessInput.of("帮我看看这个")
+ *         .principal(userId)                // 校验会话主体
+ *         .whenBusy(BusyPolicy.STEER)       // 忙时先插话，插不进再排队
+ *         .selectedModel("gpt-4o"));
+ *
  * switch (outcome.getKind()) {
  *     case TASK:   // 有任务：先渲染回执（若有），再执行
  *         if (outcome.hasReply()) {
@@ -127,6 +133,10 @@ public final class HarnessInput {
     private boolean resume;
     /** 程序代替用户发起的一轮（{@link #ofProgram}）：忙时直接拒绝、不进积压 */
     private boolean program;
+    /** 会话忙时的处理方式（缺省 QUEUE；程序轮次与续流总是拒绝） */
+    private BusyPolicy whenBusy = BusyPolicy.QUEUE;
+    /** 提交者主体（登录身份）：非空时必须与会话主体一致，否则拒绝（SCOPE_UNAVAILABLE） */
+    private String principal;
     /** 宿主域附加属性（如推理强度、思考模式）：引擎不解读，进积压时原样保存、续发时原样带回 */
     private Map<String, String> attrs;
 
@@ -144,6 +154,56 @@ public final class HarnessInput {
      */
     public static HarnessInput of(@Nullable AgentSession session, @Nullable String text) {
         return new HarnessInput(session, text);
+    }
+
+    /**
+     * 创建不带会话的输入（交给 {@code HarnessHost.submit} 的写法：骨架查归属、加载会话后经 {@link #copyFor} 绑定）。
+     *
+     * <p>直接交给 {@code engine.handle} 时等同 {@code of(null, text)}：走临时会话。</p>
+     *
+     * @param text 原始输入（可包含命令前缀与子代理提及前缀；只带附件时可为 null）
+     * @since 4.2.0
+     */
+    public static HarnessInput of(@Nullable String text) {
+        return new HarnessInput(null, text);
+    }
+
+    /**
+     * 复制一份并绑定到指定会话（其余参数原样带上；附件与宿主域属性复制一份，互不影响）。
+     *
+     * <p>宿主骨架用：引擎在受理时会把解析出的作用域写回输入、扩展也可能在 {@code onInput} 里就地修改，
+     * 复制后调用方的对象不被改动，同一个输入对象可以被并发复用。</p>
+     *
+     * @param session 目标会话
+     * @since 4.2.0
+     */
+    public HarnessInput copyFor(@Nullable AgentSession session) {
+        HarnessInput c = new HarnessInput(session, text);
+        c.attachments = attachments.copy();
+        c.selectedModel = selectedModel;
+        c.selectedAgent = selectedAgent;
+        c.selectedSkills = selectedSkills;
+        c.selectedMcps = selectedMcps;
+        c.scope = scope;
+        c.scopeResolved = scopeResolved;
+        c.scopeRestored = scopeRestored;
+        c.commandContextFactory = commandContextFactory;
+        c.origin = origin;
+        c.hitlAction = hitlAction;
+        c.hitlCallId = hitlCallId;
+        c.hitlOutput = hitlOutput;
+        c.agentNameValidator = agentNameValidator;
+        c.trimContent = trimContent;
+        c.explicitAgent = explicitAgent;
+        c.commandAware = commandAware;
+        c.agentAware = agentAware;
+        c.terminal = terminal;
+        c.resume = resume;
+        c.program = program;
+        c.whenBusy = whenBusy;
+        c.principal = principal;
+        c.attrs = attrs == null ? null : new LinkedHashMap<>(attrs);
+        return c;
     }
 
     /**
@@ -169,13 +229,59 @@ public final class HarnessInput {
     /**
      * 是否为程序代替用户发起的一轮（{@link #ofProgram} 创建）。
      *
-     * <p>受理口径：会话忙时直接 {@link InputOutcome.Kind#REJECTED}（{@code "busy"}），不进积压——
+     * <p>受理口径：会话忙时直接 {@link InputOutcome.Kind#REJECTED}（{@code "busy"}），不进积压（不论 {@link #getWhenBusy()}）——
      * 程序轮次有自己的重试节奏，入积压反而会抢在用户消息前面或重复执行。</p>
      *
      * @since 4.2.0
      */
     public boolean isProgram() {
         return program;
+    }
+
+    /**
+     * 会话忙时怎么处理这条输入（缺省 {@link BusyPolicy#QUEUE}；null 视为缺省）。
+     *
+     * <p>{@code QUEUE} / {@code REJECT} 由引擎在受理的会话锁内执行；{@code STEER} 由宿主骨架在受理前尝试，
+     * 直接调 {@code engine.handle} 时按 {@code QUEUE} 处理。程序轮次与续流总是拒绝。</p>
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput whenBusy(@Nullable BusyPolicy whenBusy) {
+        this.whenBusy = whenBusy == null ? BusyPolicy.QUEUE : whenBusy;
+        return this;
+    }
+
+    /**
+     * 会话忙时的处理方式（永不为 null）
+     *
+     * @since 4.2.0
+     */
+    public BusyPolicy getWhenBusy() {
+        return whenBusy;
+    }
+
+    /**
+     * 提交者的主体（登录身份）：非空时必须与会话主体一致（{@code engine.getSessionPrincipal}），
+     * 否则受理前拒绝（{@code SCOPE_UNAVAILABLE}，detail 为 {@code "principal mismatch"}）。
+     *
+     * <p>多用户 SaaS 应当总是传：sessionId 来自客户端，不校验就能用别人的会话。
+     * 不传（null / 空）表示不校验；进积压时不保存（受理时已校验过）。</p>
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput principal(@Nullable String principal) {
+        this.principal = principal;
+        return this;
+    }
+
+    /**
+     * 提交者的主体（未设置时为 null）
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getPrincipal() {
+        return principal;
     }
 
     /**

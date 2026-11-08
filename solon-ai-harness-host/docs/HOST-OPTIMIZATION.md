@@ -257,3 +257,30 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 - soloncode 无头模式：删除 `currentRun`、`turnRunning`、`PrintResult.trace`；只剩 `turnSessionId` 与 `turnInterrupted`，停止直接 `host.interrupt(会话)`；`maxTurnsExceeded` 取 `RunOutcome.isAbnormal()`。
 - soloncode 其它：`WorkspaceRuntimePort` 新增 `isSessionOccupied`，删除 / 批量清理 / 回退改用它；`emitToClient` 只在对话隔离开启时读会话主人；`/rewind` 回执条数的解析合为 `SessionRewindService.rewindReceiptCount`；命令行「这一轮是否做了事」改用 `GoalOutcome.isEvidenceTool`。
 - 验证：host 72 例全绿并已 install；soloncode-cli 全量 1226 例，失败 3 例（settings 既有），跳过 3 例。
+
+## 十二、提交只有一个输入类型：SubmitSpec 并入 HarnessInput（2026-11-08）
+
+### 12.1 决定
+
+`SubmitSpec` 存在的唯一技术原因是 `HarnessInput` 构造时就要带会话（`session` 是 final），而骨架要先查归属、再加载会话，只能用 spec 带文本、再用 `customize` 回调补参数。它另外装的东西都不该在 host：`text` / `origin` 与 `HarnessInput` 重复；`whenBusy` 与 `principal` 属于受理，core 本来就负责；`observe` 是对这一轮的监听，不是输入的一部分。两套并存已经造成两处缺陷：
+
+1. 来源两份：骨架用 `spec.getOrigin()` 做回调与回复路由，`customize(in -> in.origin(x))` 改的是交给引擎的那一份；
+2. `REJECT` 有竞态：骨架先 `isBusyFor` 判空闲、再 `engine.handle`，两步之间没有锁；其间别的输入抢先开流时，这条会被 core 放进积压，一问一答请求收到「已排队」而没人接。
+
+改法：
+
+| 层 | 改动 |
+|---|---|
+| core | `HarnessInput.of(text)`（不带会话）、`whenBusy(BusyPolicy)` / `getWhenBusy()`、`principal(p)` / `getPrincipal()`、`copyFor(session)`；`BusyPolicy` 挪到 `input` 包。`REJECT` 在 `SessionControl.deferOrReject` 里（会话锁内）与程序轮次、续流同一条规则；`STEER` 由骨架在受理前尝试，直连 `handle` 时按 `QUEUE`。主体校验在 `InputPipeline` 第 0b 步（归属之后、作用域预检之前），不符时 `SCOPE_UNAVAILABLE` + `principal mismatch`，不占位、不进积压；不进积压保存（受理时已校验） |
+| host | 删除 `SubmitSpec`、`submit(t, sid, text, origin)`、`isBusyFor`、`checkPrincipal`；`submit(t, sid, input[, observer])`、`stream(t, sid, input[, observer])`；加载会话后 `input.copyFor(session)`，输入已带会话且 id 不符时抛 `IllegalArgumentException`；回调与路由一律用副本上的 origin（装饰器改的也算）；缺主体的告警留在骨架（只对用户提交，不对审批决策） |
+| soloncode | `WebGate`、`DesktopInputRouter`、`PrintMode` 三处把 `customize` 里的内容平铺，`PrintMode` 的 `observe` 改为第四个参数 |
+
+不选的：把会话从 `HarnessInput` 拿掉（`engine.handle(session, input)`，所有直连调用方都要改）；`submit(t, sid, Consumer<HarnessInput>)`（回调式间接写法还在）；让 `SubmitSpec` 继承或包装 `HarnessInput`（还是两个类型）。
+
+核实的两点：`copyFor` 复制全部 25 个字段，由反射测试守住（以后新增字段漏抄会失败）；`InputAttachments` 是可变对象，引擎受理期间不修改它，但仍按列表复制一份（包内 `copy()`），副本与原对象互不影响。
+
+### 12.2 执行记录
+
+- core：`BusyPolicy`（新）、`HarnessInput`、`InputAttachments.copy()`、`SessionControl.deferOrReject`、`InputPipeline` 第 0b 步。新增 `HarnessInputSubmitOptionsTest` 6 例：并发 12 条 REJECT 只有 1 条 TASK、其余 BUSY 且积压为空；QUEUE 与直连的 STEER 照常进积压；主体不符被拒且不占位、一致或不传照常受理、会话无主体时传主体被拒；`copyFor` 反射全字段。
+- 同批：`HarnessProfile` 改名 `DeployMode`（`Builder.deployMode` / `getDeployMode`，校验信息改为 `SERVER deploy mode ...`），goal 与文档同步。
+- host：守卫 `EXTENSION_POINTS` 去掉 `SubmitSpec` 的 4 项，改登记「带本次监听的 `submit` / `stream`」；新增 `submitSpecStaysRetired`。新增 `submittedInputIsCopiedAndHasOneOrigin`（调用方对象不被绑定、不被装饰器改动；回调看到装饰后的来源；会话不一致抛异常）。参考宿主与 README 示例改为平铺写法；README §8.2 改为 `HarnessInput` 表。

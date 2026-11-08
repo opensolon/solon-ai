@@ -25,6 +25,7 @@ import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueItem;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.hitl.HitlCard;
+import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
@@ -42,6 +43,7 @@ import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -69,9 +71,9 @@ import java.util.function.Predicate;
  * host.openSession(tenant, sid, principal);
  *
  * // ① 一个请求一轮：不写 sink
- * RunOutcome o = host.submit(tenant, sid, SubmitSpec.of("hello").principal(principal))
+ * RunOutcome o = host.submit(tenant, sid, HarnessInput.of("hello").principal(principal))
  *                    .getRun().await(Duration.ofMinutes(5));
- * Flux<HostSignal> sse = host.stream(tenant, sid, SubmitSpec.of(text).principal(principal));
+ * Flux<HostSignal> sse = host.stream(tenant, sid, HarnessInput.of(text).principal(principal));
  *
  * // ② 推送型（WebSocket / IM）：覆盖 HostSink 的 reply / event
  * // ③ 每轮有状态：覆盖 HostSink#open，每轮返回自己的 RunSink
@@ -232,32 +234,37 @@ public final class HarnessHost {
     // ==================== 使用态 ====================
 
     /**
-     * 提交一条用户输入（含斜杠命令）。等价于 {@code submit(tenant, sid, SubmitSpec.of(text).origin(origin))}。
+     * 提交一条用户输入（含斜杠命令）。输入与直连 {@code engine.handle} 用的是同一个类型：
      *
-     * @param origin 来源（回复路由；可空）
+     * <pre>{@code
+     * host.submit(tenant, sid, HarnessInput.of(text)
+     *         .origin(InputOrigin.of("im", userId, chatId, msgId))
+     *         .principal(userId)                 // 校验会话主体，防止用别人的 sessionId 提交
+     *         .whenBusy(BusyPolicy.STEER)        // 忙时先插话，插不进再排队（缺省 QUEUE）
+     *         .selectedModel("gpt-4o").attr("effort", "high"));
+     * }</pre>
+     *
+     * <p>输入通常不带会话（{@link HarnessInput#of(String)}）：框架先查归属、再加载会话，然后复制一份绑定上去
+     * （{@link HarnessInput#copyFor}），调用方的对象不会被引擎改动，可以复用。</p>
+     *
+     * @param input 输入（若带了会话，其 id 必须与 {@code sessionId} 一致）
+     * @throws IllegalArgumentException 输入带的会话与 {@code sessionId} 不一致
      */
-    public SubmitResult submit(String tenant, String sessionId, @Nullable String text, @Nullable InputOrigin origin) {
-        return submit(tenant, sessionId, SubmitSpec.of(text).origin(origin));
+    public SubmitResult submit(String tenant, String sessionId, HarnessInput input) {
+        return submit(tenant, sessionId, input, null);
     }
 
     /**
-     * 提交一条用户输入（主体校验、忙时策略、输入补充、本次监听见 {@link SubmitSpec}）。
+     * 提交一条用户输入，并附加只作用于本次请求开出的那一轮的监听（在全局 sink 之后调用；输入进了积压时不会被调用）。
+     *
+     * @param observer 本次监听（可空）
      */
-    public SubmitResult submit(String tenant, String sessionId, SubmitSpec spec) {
-        Objects.requireNonNull(spec, "spec");
-        return submit(tenant, sessionId, spec, spec.getObserver());
-    }
-
-    /** 提交（本次监听显式传入：{@link #stream} 不改写调用方的 spec，同一个 spec 可被并发复用） */
-    private SubmitResult submit(String tenant, String sessionId, SubmitSpec spec, @Nullable RunSink observer) {
-        final InputOrigin o = spec.getOrigin();
-        return admit(tenant, sessionId, o, spec.getText(), spec, observer, session -> {
-            HarnessInput in = HarnessInput.of(session, spec.getText()).origin(o);
-            if (spec.getCustomizer() != null) {
-                spec.getCustomizer().accept(in);
-            }
-            return in;
-        });
+    public SubmitResult submit(String tenant, String sessionId, HarnessInput input, @Nullable RunSink observer) {
+        Objects.requireNonNull(input, "input");
+        if (input.getSession() != null && Objects.equals(input.getSession().getSessionId(), sessionId) == false) {
+            throw new IllegalArgumentException("input is bound to another session: " + input.getSession().getSessionId());
+        }
+        return admit(tenant, sessionId, input, observer);
     }
 
     /**
@@ -266,8 +273,18 @@ public final class HarnessHost {
      * <p>开了流时为 {@code REPLY?} → {@code EVENT*} → {@code HITL?} → {@code FINISHED}；没开流时只有一个结局信号。
      * 下游取消（客户端断开）会停掉本轮（{@link RunHandle#cancel()}）。全局 sink 照常收到全部回调。</p>
      */
-    public Flux<HostSignal> stream(String tenant, String sessionId, SubmitSpec spec) {
-        Objects.requireNonNull(spec, "spec");
+    public Flux<HostSignal> stream(String tenant, String sessionId, HarnessInput input) {
+        return stream(tenant, sessionId, input, null);
+    }
+
+    /**
+     * 同 {@link #stream(String, String, HarnessInput)}，并附加只作用于本次请求开出的那一轮的监听
+     * （如在 {@link RunSink#prepare} 里按请求参数调整本轮、在 {@link RunSink#finished} 里按轮计费；在信号流之前调用）。
+     *
+     * @param observer 本次监听（可空）
+     */
+    public Flux<HostSignal> stream(String tenant, String sessionId, HarnessInput input, @Nullable RunSink observer) {
+        Objects.requireNonNull(input, "input");
         return Flux.create(fs -> {
             // 下游取消先登记：受理期间（submit 还没返回）客户端就断开时，拿到句柄后补做取消
             final AtomicBoolean gone = new AtomicBoolean();
@@ -300,16 +317,9 @@ public final class HarnessHost {
                     fs.complete();
                 }
             };
-            RunSink prev = spec.getObserver();
-            List<RunSink> observers = new ArrayList<>();
-            if (prev != null) {
-                observers.add(prev);
-            }
-            observers.add(signals);
-
             SubmitResult r;
             try {
-                r = submit(tenant, sessionId, spec, RunSink.compose(observers));
+                r = submit(tenant, sessionId, input, observer == null ? signals : RunSink.compose(Arrays.asList(observer, signals)));
             } catch (Throwable e) {
                 fs.error(e);
                 return;
@@ -359,14 +369,8 @@ public final class HarnessHost {
     public SubmitResult decide(String tenant, String sessionId, String callId, HITLAction action,
                                @Nullable String note, @Nullable InputOrigin origin) {
         Objects.requireNonNull(action, "action");
-        final InputOrigin o = origin == null ? InputOrigin.NONE : origin;
-        return admit(tenant, sessionId, o, null, null, null, session -> {
-            HarnessInput in = HarnessInput.of(session, null).origin(o).hitl(action, callId).resume(true);
-            if (note != null) {
-                in.hitlOutput(note);
-            }
-            return in;
-        });
+        return admit(tenant, sessionId, HarnessInput.of((String) null).origin(origin).hitl(action, callId)
+                .hitlOutput(note).resume(true), null);
     }
 
     /**
@@ -485,23 +489,22 @@ public final class HarnessHost {
 
     // ==================== 编排 ====================
 
-    private SubmitResult admit(String tenant, String sessionId, InputOrigin origin, @Nullable String text,
-                               @Nullable SubmitSpec spec, @Nullable RunSink observer,
-                               Function<AgentSession, HarnessInput> inputOf) {
+    private SubmitResult admit(String tenant, String sessionId, HarnessInput template, @Nullable RunSink observer) {
         Objects.requireNonNull(sessionId, "sessionId");
         // 从调用开始就算「受理中」：宿主在 submit 返回前发起的停止不会丢
         Admitting adm = new Admitting(key(tenant, sessionId));
         admitting.add(adm);
         try {
-            return admit(tenant, sessionId, origin, text, spec, observer, inputOf, adm);
+            return admit(tenant, sessionId, template, observer, adm);
         } finally {
             admitting.remove(adm);
         }
     }
 
-    private SubmitResult admit(String tenant, String sessionId, InputOrigin origin, @Nullable String text,
-                               @Nullable SubmitSpec spec, @Nullable RunSink observer,
-                               Function<AgentSession, HarnessInput> inputOf, Admitting adm) {
+    private SubmitResult admit(String tenant, String sessionId, HarnessInput template, @Nullable RunSink observer,
+                               Admitting adm) {
+        final InputOrigin origin = template.getOrigin();
+        final String text = template.getText();
         for (int attempt = 0; ; attempt++) {
             HarnessEngine engine = engine(tenant);
 
@@ -520,25 +523,17 @@ public final class HarnessHost {
                 return rejectEarly(tenant, sessionId, origin, null, text, null, RejectReason.SESSION_NOT_FOUND, null);
             }
 
-            if (spec != null) {
-                SubmitResult denied = checkPrincipal(tenant, engine, session, origin, text, spec.getPrincipal());
-                if (denied != null) {
-                    return denied;
-                }
-            }
+            warnIfNoPrincipal(engine, template);
 
-            HarnessInput in = inputOf.apply(session);
+            // 复制一份绑定会话：引擎会把作用域写回输入，调用方的对象保持不变（主体校验与 REJECT 由引擎在受理时完成）
+            HarnessInput in = template.copyFor(session);
             decorate(tenant, in);
 
-            SubmitSpec.BusyPolicy whenBusy = spec == null ? SubmitSpec.BusyPolicy.QUEUE : spec.getWhenBusy();
-            if (whenBusy == SubmitSpec.BusyPolicy.STEER) {
-                SubmitResult steered = trySteer(tenant, engine, session, origin, in);
+            if (in.getWhenBusy() == BusyPolicy.STEER) {
+                SubmitResult steered = trySteer(tenant, engine, session, in);
                 if (steered != null) {
                     return steered;
                 }
-            }
-            if (whenBusy == SubmitSpec.BusyPolicy.REJECT && isBusyFor(engine, session, in)) {
-                return rejectEarly(tenant, sessionId, origin, session, text, in, RejectReason.BUSY, null);
             }
 
             InputOutcome outcome = engine.handle(in);
@@ -547,7 +542,8 @@ public final class HarnessHost {
                 // 引擎刚被池回收：持有的是过期引用，换新引擎重试一次
                 continue;
             }
-            return route(new Ctx(tenant, engine, session), outcome, origin, text, null, in, observer, false, adm);
+            return route(new Ctx(tenant, engine, session), outcome, in.getOrigin(), in.getText(), null, in, observer,
+                    false, adm);
         }
     }
 
@@ -559,28 +555,21 @@ public final class HarnessHost {
         return SubmitResult.rejected(reason, detail);
     }
 
-    /** 主体校验：传了主体就必须与会话主体一致；没传且引擎要求作用域时只告警一次 */
-    @Nullable
-    private SubmitResult checkPrincipal(String tenant, HarnessEngine engine, AgentSession session, InputOrigin origin,
-                                        @Nullable String text, @Nullable String principal) {
-        if (principal == null || principal.isEmpty()) {
-            if (engine.isScopeRequired() && warnedNoPrincipal.compareAndSet(false, true)) {
-                LOG.warn("[HarnessHost] submit without principal under scopeRequired: sessionId comes from the client, "
-                        + "pass SubmitSpec.principal(...) to stop one user from submitting into another user's session");
-            }
-            return null;
+    /** 用户提交没带主体、而引擎要求作用域时只告警一次（主体校验本身在引擎受理时完成） */
+    private void warnIfNoPrincipal(HarnessEngine engine, HarnessInput in) {
+        if (in.isHitlDecision() || (in.getPrincipal() != null && in.getPrincipal().isEmpty() == false)) {
+            return;
         }
-        if (principal.equals(engine.getSessionPrincipal(session))) {
-            return null;
+        if (engine.isScopeRequired() && warnedNoPrincipal.compareAndSet(false, true)) {
+            LOG.warn("[HarnessHost] submit without principal under scopeRequired: sessionId comes from the client, "
+                    + "pass HarnessInput.principal(...) to stop one user from submitting into another user's session");
         }
-        return rejectEarly(tenant, session.getSessionId(), origin, session, text, null,
-                RejectReason.SCOPE_UNAVAILABLE, "principal mismatch");
     }
 
     /** 忙时插话：会话有运行流、输入是纯文本且不是命令、装了 steer 插件 */
     @Nullable
-    private SubmitResult trySteer(String tenant, HarnessEngine engine, AgentSession session, InputOrigin origin,
-                                  HarnessInput in) {
+    private SubmitResult trySteer(String tenant, HarnessEngine engine, AgentSession session, HarnessInput in) {
+        final InputOrigin origin = in.getOrigin();
         String text = in.getText();
         if (text == null || text.trim().isEmpty() || in.hasAttachments() || in.isHitlDecision() || in.isResume()) {
             return null;
@@ -601,15 +590,6 @@ public final class HarnessHost {
         HostInput input = HostInput.early(tenant, session.getSessionId(), origin, session, text, null, in);
         HostSinkSupport.safe(() -> sink.steered(input));
         return SubmitResult.of(SubmitResult.Kind.STEERED);
-    }
-
-    /** BusyPolicy.REJECT 的忙判定：不空闲（运行中 / 受理窗口 / 有积压），且不是待审批（那由引擎给出 HITL_PENDING） */
-    private static boolean isBusyFor(HarnessEngine engine, AgentSession session, HarnessInput in) {
-        SessionStatus st = engine.status(session);
-        if (st.hasPendingHitl() || engine.isIdle(session)) {
-            return false;
-        }
-        return engine.isRunnableWhenBusy(in) == false;
     }
 
     private void decorate(String tenant, HarnessInput in) {
@@ -1196,7 +1176,7 @@ public final class HarnessHost {
 
         /**
          * 统一补充每条输入（用户提交、审批决策、队列续发、后台轮次四处都经过它），
-         * 如统一的 {@code commandContextFactory}、租户级属性。单次提交的补充用 {@code SubmitSpec.customize}。
+         * 如统一的 {@code commandContextFactory}、租户级属性。单次提交的参数直接写在交给 {@code submit} 的 {@link HarnessInput} 上。
          *
          * @param input (租户, 输入) → 就地补充
          */

@@ -68,6 +68,14 @@ public final class InputAttachments {
         return new InputAttachments();
     }
 
+    /** 复制一份（列表独立，块与路径本身不可变或由宿主持有；供 {@link HarnessInput#copyFor} 用） */
+    InputAttachments copy() {
+        InputAttachments c = new InputAttachments();
+        c.mediaBlocks.addAll(mediaBlocks);
+        c.references.addAll(references);
+        return c;
+    }
+
     // ========== 装配 ==========
 
     /**
