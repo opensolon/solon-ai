@@ -818,8 +818,8 @@ interceptor.setEnabled(false);  // 禁用 HITL（所有工具直接放行）
 interceptor.setEnabled(true);   // 重新启用
 
 // 通过 HarnessEngine
-engine.getSettings().setHitlEnabled(false);
-engine.getSettings().setHitlEnabled(true);
+engine.setHitlEnabled(false);
+engine.setHitlEnabled(true);
 ```
 
 ---

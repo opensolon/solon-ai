@@ -430,10 +430,10 @@ class GoalRuntime {
      * 没有引擎时（纯单测）返回 FAILED，验证器据此得出 INCONCLUSIVE。
      */
     CommandResult runValidationCommand(String command, String workDir) {
-        if (engine == null || engine.getTalents().getTerminal() == null) {
+        if (engine == null || engine.getTerminalTalent() == null) {
             return CommandResult.failed("no command runner (engine not attached)");
         }
-        return engine.getTalents().getTerminal().exec(command, workDir, validatorTimeoutMs, VALIDATOR_MAX_OUTPUT_CHARS);
+        return engine.getTerminalTalent().exec(command, workDir, validatorTimeoutMs, VALIDATOR_MAX_OUTPUT_CHARS);
     }
 
     /**

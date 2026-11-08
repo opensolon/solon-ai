@@ -47,20 +47,20 @@ class HarnessEngineTalentAccessorTest {
     void allTalentAccessorsAreWired() {
         HarnessEngine e = engine();
 
-        assertNotNull(e.getTalents().getTerminal());
-        assertNotNull(e.getTalents().getSkill());
-        assertNotNull(e.getTalents().getTodo());
-        assertNotNull(e.getTalents().getTask());
-        assertNotNull(e.getTalents().getCode());
-        assertNotNull(e.getTalents().getMemory());
-        assertNotNull(e.getTalents().getGenerate());
-        assertNotNull(e.getTalents().getCodeSearch());
-        assertNotNull(e.getTalents().getClock());
-        assertNotNull(e.getTalents().getWebsearch());
-        assertNotNull(e.getTalents().getWebfetch());
-        assertNotNull(e.getTalents().getMcpGateway());
-        assertNotNull(e.getTalents().getOpenApiGateway());
-        assertNotNull(e.getTalents().getLsp());
+        assertNotNull(e.getTerminalTalent());
+        assertNotNull(e.getSkillTalent());
+        assertNotNull(e.getTodoTalent());
+        assertNotNull(e.getTaskTalent());
+        assertNotNull(e.getCodeTalent());
+        assertNotNull(e.getMemoryTalent());
+        assertNotNull(e.getGenerateTalent());
+        assertNotNull(e.getCodeSearchTalent());
+        assertNotNull(e.getClockTalent());
+        assertNotNull(e.getWebsearchTalent());
+        assertNotNull(e.getWebfetchTalent());
+        assertNotNull(e.getMcpGatewayTalent());
+        assertNotNull(e.getOpenApiGatewayTalent());
+        assertNotNull(e.getLspTalent());
         assertNotNull(e.getSessionProvider());
         assertNotNull(e.getSkillCatalog());
         assertNotNull(e.getAgentCatalog());
@@ -75,7 +75,7 @@ class HarnessEngineTalentAccessorTest {
                 .build();
 
         // 未注入 memoryProvider 时，记忆 talent 不装配（访问器返回 null）
-        assertNull(e.getTalents().getMemory());
+        assertNull(e.getMemoryTalent());
     }
 
     @Test

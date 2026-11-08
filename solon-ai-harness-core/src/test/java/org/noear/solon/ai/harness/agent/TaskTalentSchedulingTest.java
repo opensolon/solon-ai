@@ -116,7 +116,7 @@ public class TaskTalentSchedulingTest {
         tasks.add(task("no-such-agent-a", 1));
         tasks.add(task("no-such-agent-b", 2));
 
-        String out = engine.getTalents().getTask().multitask(tasks, workspace.toString(), "session-x");
+        String out = engine.getTaskTalent().multitask(tasks, workspace.toString(), "session-x");
 
         assertTrue(out.contains("<index>1</index>"), "第 1 条应保留在外壳里: " + out);
         assertTrue(out.contains("<index>2</index>"), "第 2 条应保留在外壳里: " + out);
@@ -132,7 +132,7 @@ public class TaskTalentSchedulingTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        String instruction = engine.getTalents().getTask().getInstruction(null);
+        String instruction = engine.getTaskTalent().getInstruction(null);
 
         assertTrue(instruction.contains("\n1. **优先并行**"), "第 1 条应独占一行");
         assertTrue(instruction.contains("\n2. **原子性**"), "第 2 条应另起一行");
@@ -146,7 +146,7 @@ public class TaskTalentSchedulingTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        String instruction = engine.getTalents().getTask().getInstruction(null);
+        String instruction = engine.getTaskTalent().getInstruction(null);
 
         assertTrue(!instruction.contains("分批"), "已改为排队，不应再要求分批");
         assertTrue(!instruction.contains("单次建议"), "不应再给出与实际限流无关的数量建议");
@@ -163,6 +163,6 @@ public class TaskTalentSchedulingTest {
                 .build();
 
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> engine.getSettings().setSubagentDefaultConcurrency(-1));
+                () -> engine.setSubagentDefaultConcurrency(-1));
     }
 }

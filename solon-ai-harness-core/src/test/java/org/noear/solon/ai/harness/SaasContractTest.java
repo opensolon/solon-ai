@@ -331,7 +331,7 @@ class SaasContractTest {
         String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1");
         assertTrue(g.startsWith("[OK]"), g);
         assertNotNull(engine.resolveAgent(sessions.get("s2"), "reviewer"), "全局对所有会话可见");
-        assertTrue(engine.getWorkspaceSource().exists(engine.getSettings().getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
+        assertTrue(engine.getWorkspaceSource().exists(engine.getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
 
         // 同名不覆盖（全局与会话级都拒绝）
         assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2").startsWith("ERROR"));
@@ -391,8 +391,8 @@ class SaasContractTest {
         }));
         assertThrows(IllegalStateException.class, () -> engine.getAgentManager().addAgent(AgentDefinition.builder().name("z").build()));
         assertThrows(IllegalStateException.class, () -> engine.toolPermissionReset(Collections.emptyList(), Collections.emptyList()));
-        assertThrows(IllegalStateException.class, () -> engine.getSettings().setMemoryEnabled(true));
-        assertThrows(IllegalStateException.class, () -> engine.getSettings().setSubagentDefaultConcurrency(2));
+        assertThrows(IllegalStateException.class, () -> engine.setMemoryEnabled(true));
+        assertThrows(IllegalStateException.class, () -> engine.setSubagentDefaultConcurrency(2));
 
         HarnessEngine coding = builder().build();
         assertFalse(coding.getCommandRegistry().isSealed());
@@ -468,7 +468,7 @@ class SaasContractTest {
         Path outside = Files.createDirectories(workspace.resolve("outside"));
 
         // 绕过 setSessionCwd（如请求级 toolContext 传入 __cwd）：消费端拒绝执行
-        CommandResult r = engine.getTalents().getTerminal().exec("echo hi", outside.toString(), 5000, 1000);
+        CommandResult r = engine.getTerminalTalent().exec("echo hi", outside.toString(), 5000, 1000);
         assertEquals(CommandResult.Status.FAILED, r.getStatus());
         assertTrue(r.getText().contains("out of policy"), r.getText());
     }

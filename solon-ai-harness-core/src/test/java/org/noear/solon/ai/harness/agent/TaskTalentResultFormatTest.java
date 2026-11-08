@@ -177,7 +177,7 @@ public class TaskTalentResultFormatTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        TaskTalent talent = engine.getTalents().getTask();
+        TaskTalent talent = engine.getTaskTalent();
 
         String raw = repeat('x', 30000);
         String taskId = "spill-test-1";
@@ -207,7 +207,7 @@ public class TaskTalentResultFormatTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        TaskTalent talent = engine.getTalents().getTask();
+        TaskTalent talent = engine.getTaskTalent();
         Path cwd = Files.createDirectories(workspace.resolve("module-x"));
 
         String out = talent.formatTaskResp(op(), "spill-cwd", true, repeat('z', 30000), false, cwd.toString());
@@ -250,7 +250,7 @@ public class TaskTalentResultFormatTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        TaskTalent talent = engine.getTalents().getTask();
+        TaskTalent talent = engine.getTaskTalent();
 
         talent.formatTaskResp(op(), "spill-test-2", true, "ok", false);
 
@@ -264,7 +264,7 @@ public class TaskTalentResultFormatTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), "home")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        TaskTalent talent = engine.getTalents().getTask();
+        TaskTalent talent = engine.getTaskTalent();
 
         String evil = "../../escape";
         talent.formatTaskResp(op(), evil, true, repeat('y', 30000), false);

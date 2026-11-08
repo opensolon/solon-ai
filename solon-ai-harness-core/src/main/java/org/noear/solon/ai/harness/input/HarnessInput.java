@@ -762,7 +762,7 @@ public final class HarnessInput {
     public AgentMentions.Mention parseMention(HarnessEngine engine) {
         return AgentMentions.parse(engine, session, text,
                 AgentMentions.Options.builder()
-                        .prefix(engine.getSettings().getAgentPrefix())
+                        .prefix(engine.getAgentPrefix())
                         .explicitAgent(explicitAgent)
                         .selectedAgent(selectedAgent)
                         .nameValidator(agentNameValidator)

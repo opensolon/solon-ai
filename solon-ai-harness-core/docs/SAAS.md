@@ -445,7 +445,7 @@ SERVER 模式下 `runtimeMutable=false`：工具权限（含 `toolPermissionRese
 | `engine.getCommandRegistry().register(cmd)` | `Builder.commandAdd(cmd)` |
 | `engine.getCommandRegistry().load(source, dir)` | `Builder.commandLoad(source, dir)` |
 
-推理调优类参数（`setMaxTurns`、`setSessionWindowSize`、`setCompressionThreshold`、重试次数等，经 `engine.getSettings()`）不在锁内，可以在运行期调。
+推理调优类参数（`setMaxTurns`、`setSessionWindowSize`、`setCompressionThreshold`、重试次数等，直接在引擎上调用）不在锁内，可以在运行期调。
 会话级选择（`setSessionModel`、`setSessionAgent`、`setSessionCwd`、`setSessionPrincipal`）也不受锁约束；`setSessionCwd` 受 `cwdPolicy` 约束，`setSessionPrincipal` 设置后不可改。
 
 > 锁是防误用的护栏，不是沙箱：**不要把引擎对象暴露给不可信的代码**。

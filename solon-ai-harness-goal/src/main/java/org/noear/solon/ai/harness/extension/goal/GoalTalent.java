@@ -175,7 +175,7 @@ public class GoalTalent extends AbsTalent {
 
             // Todo/Goal 完成判定联动：TODO 清单尚有未完成项时拒绝完成
             int unfinishedTodos = goalRuntime.countUnfinishedTodos(
-                    engine.getTalents().getTodo(), workDir, __sessionId);
+                    engine.getTodoTalent(), workDir, __sessionId);
             if (unfinishedTodos > 0) {
                 return errJson("TODO_UNFINISHED",
                         "目标尚未完成：任务清单还有 " + unfinishedTodos + " 项未完成（`- [ ]` 或 `- [/]`）。"

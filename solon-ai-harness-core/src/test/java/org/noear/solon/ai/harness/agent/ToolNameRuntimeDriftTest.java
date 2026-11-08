@@ -46,18 +46,18 @@ class ToolNameRuntimeDriftTest {
                 .build();
 
         Map<String, Talent> talents = new LinkedHashMap<>();
-        talents.put("skill", engine.getTalents().getSkill());
-        talents.put("todo", engine.getTalents().getTodo());
-        talents.put("webfetch", engine.getTalents().getWebfetch());
-        talents.put("websearch", engine.getTalents().getWebsearch());
-        talents.put("codesearch", engine.getTalents().getCodeSearch());
-        talents.put("memory", engine.getTalents().getMemory());
-        talents.put("task", engine.getTalents().getTask());
-        talents.put("generate", engine.getTalents().getGenerate());
-        talents.put("mcp", engine.getTalents().getMcpGateway());
-        talents.put("openapi", engine.getTalents().getOpenApiGateway());
-        talents.put("lsp", engine.getTalents().getLsp());
-        talents.put("code", engine.getTalents().getCode());
+        talents.put("skill", engine.getSkillTalent());
+        talents.put("todo", engine.getTodoTalent());
+        talents.put("webfetch", engine.getWebfetchTalent());
+        talents.put("websearch", engine.getWebsearchTalent());
+        talents.put("codesearch", engine.getCodeSearchTalent());
+        talents.put("memory", engine.getMemoryTalent());
+        talents.put("task", engine.getTaskTalent());
+        talents.put("generate", engine.getGenerateTalent());
+        talents.put("mcp", engine.getMcpGatewayTalent());
+        talents.put("openapi", engine.getOpenApiGatewayTalent());
+        talents.put("lsp", engine.getLspTalent());
+        talents.put("code", engine.getCodeTalent());
 
         for (Map.Entry<String, Talent> kv : talents.entrySet()) {
             if (kv.getValue() == null) {
@@ -75,12 +75,12 @@ class ToolNameRuntimeDriftTest {
         }
 
         // 终端工具：映射内的名字都必须是 TerminalTalent 真实提供的
-        Set<String> terminal = namesOf(engine.getTalents().getTerminal());
+        Set<String> terminal = namesOf(engine.getTerminalTalent());
         for (String logical : Arrays.asList("read", "write", "edit", "glob", "grep", "ls", "bash")) {
             assertTrue(terminal.containsAll(ToolName.runtimeNamesOf(logical)),
                     "TerminalTalent 缺少映射内的工具: " + logical + " -> " + ToolName.runtimeNamesOf(logical));
         }
         assertTrue(ToolName.isAlwaysAllowed("now"));
-        assertTrue(namesOf(engine.getTalents().getClock()).contains("now"));
+        assertTrue(namesOf(engine.getClockTalent()).contains("now"));
     }
 }

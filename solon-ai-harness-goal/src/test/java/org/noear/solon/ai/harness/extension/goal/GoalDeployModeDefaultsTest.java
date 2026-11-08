@@ -78,7 +78,7 @@ class GoalDeployModeDefaultsTest {
         HarnessEngine engine = engine(DeployMode.STANDALONE);
         GoalExtension goal = attach(engine, GoalExtension.builder());
         // SERVER/STANDALONE 都走 TerminalTalent.exec：STANDALONE 下关掉沙盒只为在测试机上可执行
-        engine.getTalents().getTerminal().setSandboxEnabled(false);
+        engine.getTerminalTalent().setSandboxEnabled(false);
         CommandResult r = goal.getGoalRuntime().runValidationCommand("echo ok", engine.getWorkspace());
         assertEquals(CommandResult.Status.COMPLETED, r.getStatus());
         assertTrue(r.getText().contains("ok"));

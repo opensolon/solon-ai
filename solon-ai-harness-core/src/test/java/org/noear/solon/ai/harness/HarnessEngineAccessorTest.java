@@ -78,16 +78,16 @@ class HarnessEngineAccessorTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
 
-        assertEquals(".hh/", e.getSettings().getHarnessHome());
-        assertEquals(".hh/sessions/", e.getSettings().getHarnessSessions());
-        assertEquals(".hh/skills/", e.getSettings().getHarnessSkills());
-        assertEquals(".hh/agents/", e.getSettings().getHarnessAgents());
-        assertEquals(".hh/commands/", e.getSettings().getHarnessCommands());
-        assertEquals(".hh/memory/", e.getSettings().getHarnessMemory());
-        assertEquals(".hh/channels/", e.getSettings().getHarnessChannels());
+        assertEquals(".hh/", e.getHarnessHome());
+        assertEquals(".hh/sessions/", e.getHarnessSessions());
+        assertEquals(".hh/skills/", e.getHarnessSkills());
+        assertEquals(".hh/agents/", e.getHarnessAgents());
+        assertEquals(".hh/commands/", e.getHarnessCommands());
+        assertEquals(".hh/memory/", e.getHarnessMemory());
+        assertEquals(".hh/channels/", e.getHarnessChannels());
         assertEquals(workspace.toString(), e.getWorkspace());
-        assertNotNull(e.getSettings().getUserDir());
-        assertNotNull(e.getSettings().getUserHome());
+        assertNotNull(e.getUserDir());
+        assertNotNull(e.getUserHome());
     }
 
     @Test
@@ -104,109 +104,109 @@ class HarnessEngineAccessorTest {
     void numericAndBooleanSettersRoundTrip() {
         HarnessEngine e = engine();
 
-        e.getSettings().setMaxTurns(9);
-        assertEquals(9, e.getSettings().getMaxTurns());
-        e.getSettings().setModelRetries(4);
-        assertEquals(4, e.getSettings().getModelRetries());
-        e.getSettings().setMcpRetries(5);
-        assertEquals(5, e.getSettings().getMcpRetries());
-        e.getSettings().setApiRetries(6);
-        assertEquals(6, e.getSettings().getApiRetries());
-        e.getSettings().setSubagentDefaultConcurrency(2);
-        assertEquals(2, e.getSettings().getSubagentDefaultConcurrency());
+        e.setMaxTurns(9);
+        assertEquals(9, e.getMaxTurns());
+        e.setModelRetries(4);
+        assertEquals(4, e.getModelRetries());
+        e.setMcpRetries(5);
+        assertEquals(5, e.getMcpRetries());
+        e.setApiRetries(6);
+        assertEquals(6, e.getApiRetries());
+        e.setSubagentDefaultConcurrency(2);
+        assertEquals(2, e.getSubagentDefaultConcurrency());
 
         // 旧名 @Deprecated 桥接：必须与新名同效
-        e.getSettings().setSubagentDefaultConcurrency(3);
-        assertEquals(3, e.getSettings().getSubagentDefaultConcurrency());
+        e.setSubagentDefaultConcurrency(3);
+        assertEquals(3, e.getSubagentDefaultConcurrency());
 
         // 桥梁必须同步推送到执行者，否则只写 options 不生效
-        assertEquals(3, e.getTalents().getTask().getDefaultConcurrency());
+        assertEquals(3, e.getTaskTalent().getDefaultConcurrency());
 
-        e.getSettings().setMemoryEnabled(false);
-        assertFalse(e.getSettings().isMemoryEnabled());
-        e.getSettings().setMemoryRelevanceCount(3);
-        e.getSettings().setMemoryPriorityCount(4);
-        e.getSettings().setMemorySummaryLength(42);
+        e.setMemoryEnabled(false);
+        assertFalse(e.isMemoryEnabled());
+        e.setMemoryRelevanceCount(3);
+        e.setMemoryPriorityCount(4);
+        e.setMemorySummaryLength(42);
 
-        e.getSettings().setSandboxEnabled(false);
-        assertFalse(e.getSettings().isSandboxEnabled());
-        e.getSettings().setSandboxAllowUserHome(false);
-        e.getSettings().setSandboxSystemRestrict(true);
-        assertTrue(e.getSettings().isSandboxSystemRestrict());
+        e.setSandboxEnabled(false);
+        assertFalse(e.isSandboxEnabled());
+        e.setSandboxAllowUserHome(false);
+        e.setSandboxSystemRestrict(true);
+        assertTrue(e.isSandboxSystemRestrict());
 
-        e.getSettings().setHitlEnabled(true);
-        assertTrue(e.getSettings().isHitlEnabled());
-        e.getSettings().setSubagentEnabled(false);
-        assertFalse(e.getSettings().isSubagentEnabled());
-        e.getSettings().setBashAsyncEnabled(true);
-        assertTrue(e.getSettings().isBashAsyncEnabled());
+        e.setHitlEnabled(true);
+        assertTrue(e.isHitlEnabled());
+        e.setSubagentEnabled(false);
+        assertFalse(e.isSubagentEnabled());
+        e.setBashAsyncEnabled(true);
+        assertTrue(e.isBashAsyncEnabled());
 
-        e.getSettings().setSessionWindowSize(8);
-        assertEquals(8, e.getSettings().getSessionWindowSize());
-        e.getSettings().setCompressionThreshold(40, 0.5d);
-        assertEquals(40, e.getSettings().getCompressionMaxMessages());
-        assertEquals(0.5d, e.getSettings().getCompressionMaxContextRatio(), 1e-9);
-        e.getSettings().setCompressionDefaultContextLength(9_000L);
-        assertEquals(9_000L, e.getSettings().getCompressionDefaultContextLength());
+        e.setSessionWindowSize(8);
+        assertEquals(8, e.getSessionWindowSize());
+        e.setCompressionThreshold(40, 0.5d);
+        assertEquals(40, e.getCompressionMaxMessages());
+        assertEquals(0.5d, e.getCompressionMaxContextRatio(), 1e-9);
+        e.setCompressionDefaultContextLength(9_000L);
+        assertEquals(9_000L, e.getCompressionDefaultContextLength());
 
-        e.getSettings().setSystemPrompt("sys");
-        assertEquals("sys", e.getSettings().getSystemPrompt());
+        e.setSystemPrompt("sys");
+        assertEquals("sys", e.getSystemPrompt());
         e.setDefaultModel("m1");
         assertEquals("m1", e.getDefaultModel());
 
         // null 入参被忽略，保留旧值
-        e.getSettings().setMaxTurns(null);
-        assertEquals(9, e.getSettings().getMaxTurns());
-        e.getSettings().setHitlEnabled(null);
-        assertTrue(e.getSettings().isHitlEnabled());
+        e.setMaxTurns(null);
+        assertEquals(9, e.getMaxTurns());
+        e.setHitlEnabled(null);
+        assertTrue(e.isHitlEnabled());
     }
 
     @Test
     void defaultConfigValuesAreExposedThroughEngine() {
         HarnessEngine e = bareEngine();
-        assertEquals(20, e.getSettings().getMaxTurns());
-        assertTrue(e.getSettings().isAutoRethink());
-        assertEquals(12, e.getSettings().getSessionWindowSize());
-        assertEquals(100, e.getSettings().getCompressionMaxMessages());
-        assertEquals(0.75d, e.getSettings().getCompressionMaxContextRatio(), 1e-9);
-        assertEquals(128_000L, e.getSettings().getCompressionDefaultContextLength());
-        assertTrue(e.getSettings().isMemoryEnabled());
-        assertTrue(e.getSettings().isSandboxEnabled());
-        assertFalse(e.getSettings().isHitlEnabled());
-        assertTrue(e.getSettings().isSubagentEnabled());
-        assertFalse(e.getSettings().isBashAsyncEnabled());
-        assertEquals("/", e.getSettings().getCommandPrefix());
-        assertEquals("@", e.getSettings().getAgentPrefix());
-        assertEquals(3, e.getSettings().getApiRetries());
-        assertEquals(3, e.getSettings().getMcpRetries());
-        assertEquals(3, e.getSettings().getModelRetries());
-        assertEquals(5, e.getSettings().getSubagentDefaultConcurrency());
-        assertNull(e.getSettings().getSystemPrompt());
-        assertNull(e.getSettings().getUserAgent());
+        assertEquals(20, e.getMaxTurns());
+        assertTrue(e.isAutoRethink());
+        assertEquals(12, e.getSessionWindowSize());
+        assertEquals(100, e.getCompressionMaxMessages());
+        assertEquals(0.75d, e.getCompressionMaxContextRatio(), 1e-9);
+        assertEquals(128_000L, e.getCompressionDefaultContextLength());
+        assertTrue(e.isMemoryEnabled());
+        assertTrue(e.isSandboxEnabled());
+        assertFalse(e.isHitlEnabled());
+        assertTrue(e.isSubagentEnabled());
+        assertFalse(e.isBashAsyncEnabled());
+        assertEquals("/", e.getCommandPrefix());
+        assertEquals("@", e.getAgentPrefix());
+        assertEquals(3, e.getApiRetries());
+        assertEquals(3, e.getMcpRetries());
+        assertEquals(3, e.getModelRetries());
+        assertEquals(5, e.getSubagentDefaultConcurrency());
+        assertNull(e.getSystemPrompt());
+        assertNull(e.getUserAgent());
         assertNull(e.getDefaultModel());
-        assertNull(e.getSettings().getCacheControl());
-        assertNull(e.getSettings().getHttpProxy());
-        assertNull(e.getSettings().getHttpCustomize());
+        assertNull(e.getCacheControl());
+        assertNull(e.getHttpProxy());
+        assertNull(e.getHttpCustomize());
         assertNull(e.getModelOrNil("none"));
     }
 
     @Test
     void httpProxyAndCustomizeAreStored() {
         HarnessEngine e = engine();
-        e.getSettings().setHttpProxy("127.0.0.1", 7890);
-        assertNotNull(e.getSettings().getHttpProxy());
+        e.setHttpProxy("127.0.0.1", 7890);
+        assertNotNull(e.getHttpProxy());
 
         Proxy direct = Proxy.NO_PROXY;
-        e.getSettings().setHttpProxy(direct);
-        assertSame(direct, e.getSettings().getHttpProxy());
+        e.setHttpProxy(direct);
+        assertSame(direct, e.getHttpProxy());
 
         AtomicBoolean called = new AtomicBoolean();
-        e.getSettings().setHttpCustomize(u -> called.set(true));
-        e.getSettings().getHttpCustomize().accept(null);
+        e.setHttpCustomize(u -> called.set(true));
+        e.getHttpCustomize().accept(null);
         assertTrue(called.get());
 
-        e.getSettings().addHttpCustomize(u -> {});
-        assertNotNull(e.getSettings().getHttpCustomize());
+        e.addHttpCustomize(u -> {});
+        assertNotNull(e.getHttpCustomize());
     }
 
     @Test
@@ -237,10 +237,10 @@ class HarnessEngineAccessorTest {
         // 未注入 memoryProvider 时 memoryTalent 为 null；开关只写配置，不抛 NPE
         HarnessEngine e = bareEngine();
 
-        e.getSettings().setMemoryEnabled(true);
-        assertTrue(e.getSettings().isMemoryEnabled());
-        e.getSettings().setMemoryEnabled(false);
-        assertFalse(e.getSettings().isMemoryEnabled());
+        e.setMemoryEnabled(true);
+        assertTrue(e.isMemoryEnabled());
+        e.setMemoryEnabled(false);
+        assertFalse(e.isMemoryEnabled());
     }
 
     @Test
@@ -615,8 +615,8 @@ class HarnessEngineAccessorTest {
     void cacheControlSetterApplies() {
         HarnessEngine e = engine();
         org.noear.solon.ai.chat.CacheControl cc = new org.noear.solon.ai.chat.CacheControl();
-        e.getSettings().setCacheControl(cc);
-        assertSame(cc, e.getSettings().getCacheControl());
+        e.setCacheControl(cc);
+        assertSame(cc, e.getCacheControl());
     }
 
     /**

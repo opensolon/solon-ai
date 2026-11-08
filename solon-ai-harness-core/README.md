@@ -324,8 +324,8 @@ engine.removeSession(sid);                                                // 删
 CommandRegistry registry = engine.getCommandRegistry();
 
 // 1) 从挂载来源加载 Markdown 自定义命令（本地/db/http 均可）
-registry.load(FileMountSource.of(Paths.get(userHome, engine.getSettings().getHarnessCommands())), ""); // ~/.solon/commands/
-registry.load(engine.getWorkspaceSource(), engine.getSettings().getHarnessCommands());                // ./.solon/commands/
+registry.load(FileMountSource.of(Paths.get(userHome, engine.getHarnessCommands())), ""); // ~/.solon/commands/
+registry.load(engine.getWorkspaceSource(), engine.getHarnessCommands());                // ./.solon/commands/
 
 // 2) 注册代码实现的命令
 registry.register(new HelpCommand());
@@ -567,7 +567,7 @@ outcome.getRequest().stream().blockLast();
 
 ```java
 // 一行式：复用 general 定义改写（面向 LLM 的 generate 工具走的就是这条）
-engine.getTalents().getGenerate().generate(
+engine.getGenerateTalent().generate(
         "code_reviewer",                        // name（仅字母数字_-）
         "代码审查专家",                          // description
         "你是一位严格的代码审查专家，只指出真实缺陷。",   // systemPrompt
@@ -603,8 +603,8 @@ engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("fron
 //                不存在「不限制」：生效上限恒为有限正整数（具体理由见下方注记）
 //                模型配了就以模型为准；模型没配才用默认值。超限不报错，在调用线程排队，有空位就提交
 //                排队时「谁的目标模型有空配额就提交谁」，低配额模型不会挡住其他模型的任务
-engine.getSettings().setSubagentEnabled(true);   // 默认 true
-engine.getSettings().setSubagentDefaultConcurrency(5);   // 子代理任务默认并发上限（模型未配置时生效）
+engine.setSubagentEnabled(true);   // 默认 true
+engine.setSubagentDefaultConcurrency(5);   // 子代理任务默认并发上限（模型未配置时生效）
 
 // 模型级并发上限：按模型配额差异配置（如免费中转 Key 配 2、官方 Key 配 8）
 // 语义与 contextLength 的「0=未设置」一致；配了就完全覆盖默认值，不再取 min
@@ -762,7 +762,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 ### 6.2 运行期
 
 ```java
-engine.getSettings().setSandboxEnabled(false);   // 运行期配置统一经 engine.getSettings()；内置能力经 engine.getTalents()
+engine.setSandboxEnabled(false);   // 运行期配置与内置能力都直接在引擎上读写
 engine.setDefaultModel("deepseek");      // 触发主代理重建
 engine.addModel(new ChatConfig(...));
 engine.removeModel("gpt-4");
@@ -1013,7 +1013,7 @@ List<HITLTask> pending = HITL.getPendingTasks(session);
 └── channels/           # IM 通道配置
 ```
 
-派生方法（经 `engine.getSettings()`）：`getHarnessHome()` / `getHarnessSessions()` / `getHarnessSkills()` / `getHarnessAgents()` / `getHarnessCommands()` / `getHarnessMemory()` / `getHarnessChannels()`。
+派生方法（引擎上直接读取）：`getHarnessHome()` / `getHarnessSessions()` / `getHarnessSkills()` / `getHarnessAgents()` / `getHarnessCommands()` / `getHarnessMemory()` / `getHarnessChannels()`。
 
 > 上面是缺省布局。配了 `stateSource(...)` 后，harness 自己的状态（会话级状态、`goal/active/` 索引、`loop/` 任务）落在该来源里；
 > 会话快照的存放位置由 `sessionProvider` 决定。`protectedStatePaths`（缺省 `sessions, memory, channels, tasks.json, loop, goal`，
@@ -1041,7 +1041,6 @@ solon-ai-harness            聚合包（只做引用，没有源码）
 org.noear.solon.ai.harness
 ├── HarnessEngine                 ★ 引擎（Builder + 编排 + 唯一入口 handle）
 ├── DeployMode                    部署模式（STANDALONE / SERVER）
-├── HarnessSettings / HarnessTalents   引擎的两个视图：目录布局与运行期配置、内置能力（engine.getSettings() / getTalents()）
 ├── HarnessOptions                运行时配置（包私有）
 ├── HarnessExtension / AbsHarnessExtension   扩展 SPI
 ├── InputScopeResolver            作用域解析器（配给引擎的策略：Builder.scopeResolver(...)）

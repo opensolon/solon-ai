@@ -23,7 +23,7 @@ class HarnessStateSourceTest {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), ".solon")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        engine.getTalents().getTodo().writeTodo(null, "s1", "- [ ] a");
+        engine.getTodoTalent().writeTodo(null, "s1", "- [ ] a");
         assertTrue(Files.exists(workspace.resolve(".solon/sessions/s1/TODO.md")),
                 "默认数据来源 = <workspace>/<harnessHome>，路径与旧版一致");
     }
@@ -37,7 +37,7 @@ class HarnessStateSourceTest {
                 .build();
 
         assertSame(data, engine.getStateSource());
-        engine.getTalents().getTodo().writeTodo(null, "s1", "- [ ] a");
+        engine.getTodoTalent().writeTodo(null, "s1", "- [ ] a");
         assertEquals("- [ ] a\n", data.readStringOrNull("sessions/s1/TODO.md"));
         assertFalse(Files.exists(workspace.resolve(".solon/sessions/s1/TODO.md")), "不得再写本地");
 

@@ -106,7 +106,7 @@ public class GenerateTalent extends AbsTalent {
                     return "ERROR: 当前环境不允许创建全局子代理。请改用 saveToFile=false（仅本会话可用）。";
                 }
                 // 经工作区来源写入 <harnessAgents>/<name>.md（与工作区 agents 挂载同口径，不再硬编码 .soloncode、不随 cwd 漂移）
-                String agentPath = engine.getSettings().getHarnessAgents() + name + ".md";
+                String agentPath = engine.getHarnessAgents() + name + ".md";
                 if (engine.getWorkspaceSource().exists(agentPath)) {
                     return "ERROR: 代理定义文件已存在，不覆盖：" + agentPath;
                 }

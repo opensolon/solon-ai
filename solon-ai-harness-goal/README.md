@@ -95,7 +95,7 @@ stateDiagram-v2
 |---|---|---|
 | 1 | goal 处于 `PURSUING` | `GOAL_NOT_ACTIVE` |
 | 2 | 执行证据（提示性）：目标含执行型关键词且「上一轮已写入的证据」为 false 时提前拦截。由于每轮执行前证据会被置空，轮内通常放行 | `ACTION_EVIDENCE_REQUIRED` |
-| 3 | TODO 联动：经 `engine.getTalents().getTodo().readTodo(cwd, sessionId)` 读取清单（cwd 为本轮会话工作目录），存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
+| 3 | TODO 联动：经 `engine.getTodoTalent().readTodo(cwd, sessionId)` 读取清单（cwd 为本轮会话工作目录），存在 `- [ ]` 或 `- [/]` 项则拒绝 | `TODO_UNFINISHED` |
 | 4 | 验证器（`validatorEnabled = true` 时）：按目标文本匹配验证器链，在本轮会话工作目录下执行 | `VALIDATION_FAILED` |
 
 全部通过后状态转 `ACHIEVED`。**权威复核在轮末**：目标为执行型且本轮 `GoalOutcome.hasToolCalls() == false` 时，`ACHIEVED` 被退回 `PURSUING`，`lastResult` 记为「完成声明被拒绝：本轮没有实际工具执行证据……」。
