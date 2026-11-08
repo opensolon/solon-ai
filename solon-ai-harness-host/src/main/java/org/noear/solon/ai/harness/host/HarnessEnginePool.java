@@ -13,8 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.ai.harness;
+package org.noear.solon.ai.harness.host;
 
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,11 +38,14 @@ import java.util.function.LongSupplier;
  * HarnessEnginePool pool = HarnessEnginePool.builder(tenantId -> HarnessEngine.of(...).build())
  *         .idleTtl(Duration.ofMinutes(30))
  *         .build();
- * HarnessEngine engine = pool.get(tenantId);
+ * HarnessHost host = HarnessHost.builder().engines(pool::get).sink(sink).build();
  * }</pre>
  *
- * <p>注意：有活跃 goal / 定时任务的引擎不会被回收（扩展经 {@link HarnessExtension#isQuiescent} 声明），
+ * <p>注意：有活跃 goal / 定时任务的引擎不会被回收（goal / loop 插件经 {@link HarnessExtension#isQuiescent} 声明），
  * 否则后台工作会随引擎一起消失。进程级 OS 沙盒由宿主启动时统一初始化（SERVER 模式）。</p>
+ *
+ * <p>本类只用引擎的公开方法（{@code isQuiescent} / {@code shutdown}），与 {@link HarnessHost} 没有代码耦合：
+ * 骨架只要一个「租户 → 引擎」函数，池是它最常见的来源。只用 core（L1）的宿主可以按同样的两个方法自行实现。</p>
  *
  * <p>并发约定：刷新与回收（含 {@code shutdown}）在该键的 {@code compute} 里串行完成；<b>构建在锁外</b>——
  * {@code compute} 里只放一个占位 future，由放占位的线程在锁外调用工厂函数，同一个键的其它调用方等这个 future，
@@ -48,8 +53,9 @@ import java.util.function.LongSupplier;
  * 同一个键才可能放下新的占位，旧引擎不会误释放新引擎认领的租约。构建失败时移除占位，下一次调用重试。
  * 扩展的 {@code onDetach} 里不得再调用本池（会抛 Recursive update）。{@code maxEngines} 是软上限，并发创建时可能短暂超出。</p>
  *
- * <p>重启恢复：池是懒建的，没人访问的租户其 goal / loop 不会自动恢复。宿主启动时用 {@link #warmup} 预热
- * 有后台工作的键（键的来源由宿主维护，例如租户表里「有活跃 goal」的标记）。</p>
+ * <p>重启恢复：池是懒建的，没人访问的租户其 goal / loop 不会自动恢复。接了 {@link HarnessHost} 时用
+ * {@link HarnessHost#warmup} 预热（它会先登记后台执行器再恢复 goal）；不接骨架时用本类的 {@link #warmup}。
+ * 预热的键由宿主维护（例如租户表里「有活跃 goal」的标记）。</p>
  *
  * @author noear
  * @since 4.2.0

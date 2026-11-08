@@ -6,7 +6,7 @@
 > 本文是参考手册：隔离模型、作用域、多节点、存储与容量，以及不用骨架、直连 `engine.handle`（L1）时的写法。
 
 > 文中 `TenantStore`、`Authz`、`RedisOwnership`、`ImHost` 等是**宿主自己的类**（示意），harness 不提供；
-> `HarnessEngine`、`HarnessEnginePool`、`InputScope`、`SessionOwnership` 等才是 harness 的 API。
+> `HarnessEngine`、`HarnessEnginePool`、`InputScope`、`SessionOwnership` 等才是 harness 的 API（`HarnessEnginePool` 与 `HarnessHost` 在 `solon-ai-harness-host` 模块，包 `org.noear.solon.ai.harness.host`；其余在 core）。
 > 标 `@Preview("4.2.0")` 的类型（引擎池、作用域、会话归属）在 4.2.x 内可能还有调整。
 >
 > 术语：**input** 是一次 `handle` 的输入（`HarnessInput` / `InputScope`），**run** 是受理后开出的一条流（`RunTicket` / `RunDispatch`），
@@ -55,6 +55,7 @@ public class SaasHarness {
                 .build();
 
         // ③ 重启恢复：只为「有后台工作的租户」预热（清单由宿主维护，如记录 goal / loop 的租户）
+        //    本节是不接骨架（L1）的写法；接了 HarnessHost 时改用 host.warmup(...)，它会先登记后台执行器再恢复 goal
         pool.warmup(tenants.tenantsWithBackgroundWork());
     }
 
@@ -401,8 +402,10 @@ public class AdminController {
 - **有活跃 goal 或启用中的 loop 任务的引擎不会被回收**，它们需要引擎活着才能继续跑；
 - 满额（`maxEngines`）时先回收最久未用的静默引擎；仍满则按 `whenFull`：`REJECT`（缺省，抛 `IllegalStateException`）或 `WAIT`（等 `fullWait` 后再拒绝）；
 - `engine.shutdown()` 幂等：回调扩展 `onDetach`、关闭引擎私有的子代理执行器、LSP 进程与 MCP 连接、释放会话租约；之后的 `handle` 返回 `REJECTED(engine_closed)`；
-- 引擎池是懒建的：进程重启后，没人访问的租户不会自动创建引擎。用 `pool.warmup(keys)` 预热有后台工作的租户（单个键失败只记日志）；
+- 引擎池是懒建的：进程重启后，没人访问的租户不会自动创建引擎。用 `pool.warmup(keys)` 预热有后台工作的租户（单个键失败只记日志；接了 `HarnessHost` 时改用 `host.warmup`）；
 - 租户下线：`pool.removeWhenQuiescent(key, timeout)` 等任务跑完再移除，超时返回 false。
+
+池在 host 模块，只用引擎的公开方法 `isQuiescent()` / `shutdown()`；只引 core 的宿主可按同样两个方法自行实现。
 
 池的并发约定：引擎在锁外构建，构建失败不留占位、下次可重试；同一个键的回收（含 `shutdown`）在该键的 `computeIfPresent` 里完成，因此扩展的 `onDetach` 里**不得再调用本池**，也不宜长时间阻塞。
 

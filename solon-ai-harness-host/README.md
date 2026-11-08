@@ -1,6 +1,6 @@
 # solon-ai-harness-host
 
-solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终态 → 续发积压」整套编排收进框架，宿主只实现一个输出通道 `HostSink`。
+solon-ai harness 的**宿主骨架（L0）与部署层**：把「受理 → 开流 → 终态 → 续发积压」整套编排收进框架，宿主只实现一个输出通道 `HostSink`；多租户时用引擎池 `HarnessEnginePool` 按租户托管引擎。
 
 - 包名：`org.noear.solon.ai.harness.host`
 - 起始版本：4.2.0（全部类型标注 `@Preview("4.2.0")`，4.2.x 内可能还有调整）
@@ -67,7 +67,7 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
         (loop, s) -> HarnessResult.ok(loop.list(sid)));               // 管理态
 ```
 
-## 4. 类型一览（7 个）
+## 4. 类型一览
 
 | 类型 | 作用 |
 |---|---|
@@ -75,9 +75,9 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 | `HostSink` | 输出通道：`reply`、`event` 必须实现；`runStarted`、`runFinished`、`hitl`、`forward` 有缺省实现 |
 | `HostRun` | 一条运行流的只读描述：租户、会话、来源、代理名、是否队列派发、是否后台轮次、后台轮次的最终文本 |
 | `Submitted` | `submit` / `decide` 的结果，只用于映射状态码（内容已经经 sink 发出） |
-| `InterruptMode` | `INTERRUPT` / `CANCEL_STREAM` |
 | `AdminGateway` | 管理入口：`call(sid, op, 扩展类型, 操作)` 与 `interrupt(sid, mode)` |
 | `AdminAuthorizer` | 管理入口的统一鉴权钩子 |
+| `HarnessEnginePool` | 引擎池：按租户懒建、空闲且静默才回收、满额策略（`WhenFull.REJECT / WAIT`）；通常作为 `engines(pool::get)` 的来源。只用引擎公开的 `isQuiescent()` / `shutdown()`，与 `HarnessHost` 无代码耦合 |
 
 结果类型 `HarnessResult` 在 core（`org.noear.solon.ai.harness.HarnessResult`），插件的写门面直接返回它，所以管理入口不用做任何翻译。
 
@@ -173,4 +173,5 @@ admin.call(sid, "steer.cancel", SteerExtension.class, (steer, s) -> {
 | host 只在最上层 | core 与插件不得 import `org.noear.solon.ai.harness.host` |
 | 插件互不依赖 | goal / loop / queue / steer 之间零 import |
 | 写门面返回 `HarnessResult` | goal / loop / queue 门面的写方法不得返回 `int` / `boolean` 哨兵值 |
+| 引擎池在 host | core 不得再有 `HarnessEnginePool`（core 的 `HarnessPackageBoundaryTest.enginePoolLivesInHost`） |
 | 主代码无弃用标记 | 未发布前不留兼容层（`HarnessEngine` 的 `prompt` / `resume` 为登记在案的例外） |

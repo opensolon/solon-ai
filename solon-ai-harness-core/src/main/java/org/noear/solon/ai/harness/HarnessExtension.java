@@ -346,7 +346,7 @@ public interface HarnessExtension extends AiSwitchable {
     /**
      * 是否没有需要本引擎继续存活的后台工作（事实收集）
      *
-     * <p><b>调用点</b>：{@code HarnessEngine.isQuiescent()}——引擎池按空闲回收前询问。
+     * <p><b>调用点</b>：{@code HarnessEngine.isQuiescent()}——宿主按空闲回收引擎前询问（如 host 模块的引擎池）。
      * 返回 false 的典型情形：还有活跃的 goal、已登记的定时任务。</p>
      *
      * <p><b>注意</b>：不判 {@code isEnabled()}（事实类：停用前建的定时任务仍然存在）；

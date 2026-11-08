@@ -91,6 +91,8 @@ public class MySink implements HostSink {
 
 ### 3.3 组装骨架
 
+引擎池 `HarnessEnginePool` 与 `HarnessHost` 同在 host 模块（`org.noear.solon.ai.harness.host`）：
+
 ```java
 HarnessEnginePool pool = HarnessEnginePool.builder(this::buildEngine)
         .idleTtl(Duration.ofMinutes(30))

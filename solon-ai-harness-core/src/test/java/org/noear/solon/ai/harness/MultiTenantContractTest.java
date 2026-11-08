@@ -13,18 +13,15 @@ import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
 import org.noear.solon.ai.harness.scope.InputScope;
 
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 多租户契约：请求级作用域解析、会话归属租约、引擎静默判定与引擎池
+ * 多租户契约：请求级作用域解析、会话归属租约、引擎静默判定（引擎池契约在 host 模块的 HarnessEnginePoolTest）
  */
 class MultiTenantContractTest {
     @TempDir
@@ -210,7 +207,7 @@ class MultiTenantContractTest {
         assertSame(SessionOwnership.LOCAL, builder().build().getSessionOwnership());
     }
 
-    // ---------- 静默与引擎池 ----------
+    // ---------- 静默 ----------
 
     static class BusyExtension implements HarnessExtension {
         final AtomicBoolean busy = new AtomicBoolean();
@@ -241,188 +238,5 @@ class MultiTenantContractTest {
             }
         });
         assertFalse(engine.isQuiescent(), "判定异常按不静默处理");
-    }
-
-    @Test
-    void poolCreatesOncePerKeyAndEvictsIdleQuiescent() {
-        AtomicLong now = new AtomicLong(1000);
-        AtomicInteger created = new AtomicInteger();
-        Map<String, BusyExtension> exts = new ConcurrentHashMap<>();
-        List<String> detached = Collections.synchronizedList(new ArrayList<>());
-
-        HarnessEnginePool pool = HarnessEnginePool.builder(key -> {
-                    created.incrementAndGet();
-                    BusyExtension ext = new BusyExtension() {
-                        @Override
-                        public void onDetach(HarnessEngine engine) {
-                            detached.add(key);
-                        }
-                    };
-                    exts.put(key, ext);
-                    return builder(workspace.resolve(key).toString()).extensionAdd(ext).build();
-                })
-                .idleTtl(Duration.ofSeconds(10))
-                .reapInterval(Duration.ZERO)
-                .clock(now::get)
-                .build();
-
-        try {
-            HarnessEngine a1 = pool.get("a");
-            HarnessEngine a2 = pool.get("a");
-            assertSame(a1, a2);
-            pool.get("b");
-            assertEquals(2, created.get());
-
-            // 未到 TTL：不回收
-            now.addAndGet(5_000);
-            assertEquals(0, pool.evictIdle());
-
-            // 到 TTL，但 a 有后台工作（如活跃 goal）：只回收 b
-            now.addAndGet(6_000);
-            exts.get("a").busy.set(true);
-            assertEquals(1, pool.evictIdle());
-            assertEquals(Collections.singleton("a"), pool.keys());
-            assertEquals(Collections.singletonList("b"), detached, "回收即 shutdown（扩展收到 onDetach）");
-
-            // a 的后台工作结束后可回收
-            exts.get("a").busy.set(false);
-            assertEquals(1, pool.evictIdle());
-            assertEquals(0, pool.size());
-        } finally {
-            pool.close();
-        }
-    }
-
-    @Test
-    void acquireDuringEvictionNeverReturnsShutdownEngine() throws Exception {
-        AtomicLong now = new AtomicLong(0);
-        Set<HarnessEngine> shutdown = ConcurrentHashMap.newKeySet();
-        AtomicReference<HarnessEngine> acquired = new AtomicReference<>();
-        AtomicReference<Thread> racer = new AtomicReference<>();
-        AtomicReference<HarnessEnginePool> poolRef = new AtomicReference<>();
-
-        HarnessEnginePool pool = HarnessEnginePool.builder(key -> {
-                    HarnessEngine[] self = new HarnessEngine[1];
-                    self[0] = builder(workspace.resolve(key + "-" + System.nanoTime()).toString())
-                            .extensionAdd(new HarnessExtension() {
-                                @Override
-                                public boolean isQuiescent(HarnessEngine e) {
-                                    // 回收判定期间，另一线程恰好 acquire 同一个键
-                                    if (racer.get() == null) {
-                                        Thread t = new Thread(() -> acquired.set(poolRef.get().get(key)));
-                                        racer.set(t);
-                                        t.start();
-                                        try {
-                                            Thread.sleep(200);
-                                        } catch (InterruptedException ignored) {
-                                        }
-                                    }
-                                    return true;
-                                }
-
-                                @Override
-                                public void onDetach(HarnessEngine e) {
-                                    shutdown.add(e);
-                                }
-                            })
-                            .build();
-                    return self[0];
-                })
-                .idleTtl(Duration.ofSeconds(10))
-                .reapInterval(Duration.ZERO)
-                .clock(now::get)
-                .build();
-        poolRef.set(pool);
-
-        try {
-            pool.get("a");
-            now.addAndGet(20_000);
-            pool.evictIdle();
-            racer.get().join(5_000);
-
-            assertNotNull(acquired.get());
-            assertFalse(shutdown.contains(acquired.get()), "并发 acquire 拿到的引擎不得是已关闭的");
-            assertSame(acquired.get(), pool.getIfPresent("a"));
-        } finally {
-            pool.close();
-        }
-    }
-
-    @Test
-    void rebuildDuringShutdownKeepsNewEngineLease() throws Exception {
-        AtomicLong now = new AtomicLong(0);
-        FakeOwnership own = new FakeOwnership("node-a", Collections.emptyMap());
-        AgentSession s = InMemoryAgentSession.of();
-        AtomicBoolean raced = new AtomicBoolean();
-        AtomicReference<Thread> racer = new AtomicReference<>();
-        AtomicReference<HarnessEnginePool> poolRef = new AtomicReference<>();
-
-        HarnessEnginePool pool = HarnessEnginePool.builder(key -> builder(workspace.resolve(key + "-" + System.nanoTime()).toString())
-                        .sessionOwnership(own)
-                        .extensionAdd(new HarnessExtension() {
-                            @Override
-                            public void onDetach(HarnessEngine e) {
-                                // 旧引擎关闭途中：另一线程重建同一个键并认领同一会话
-                                if (raced.compareAndSet(false, true)) {
-                                    Thread t = new Thread(() -> poolRef.get().get(key).handle(HarnessInput.of(s, "again")).discard());
-                                    racer.set(t);
-                                    t.start();
-                                    try {
-                                        Thread.sleep(200);
-                                    } catch (InterruptedException ignored) {
-                                    }
-                                }
-                            }
-                        })
-                        .build())
-                .idleTtl(Duration.ofSeconds(10))
-                .reapInterval(Duration.ZERO)
-                .clock(now::get)
-                .build();
-        poolRef.set(pool);
-
-        try {
-            pool.get("a").handle(HarnessInput.of(s, "hello")).discard();
-            now.addAndGet(20_000);
-            assertEquals(1, pool.evictIdle());
-            racer.get().join(5_000);
-
-            assertEquals("node-a", own.ownerOf(s.getSessionId()), "旧引擎关闭不得释放新引擎认领的租约");
-            assertNotNull(pool.getIfPresent("a"));
-        } finally {
-            pool.close();
-        }
-    }
-
-    @Test
-    void poolMaxEnginesEvictsLruQuiescentOrRejects() {
-        AtomicLong now = new AtomicLong(0);
-        Map<String, BusyExtension> exts = new ConcurrentHashMap<>();
-        HarnessEnginePool pool = HarnessEnginePool.builder(key -> {
-                    BusyExtension ext = new BusyExtension();
-                    exts.put(key, ext);
-                    return builder(workspace.resolve(key).toString()).extensionAdd(ext).build();
-                })
-                .maxEngines(2)
-                .reapInterval(Duration.ZERO)
-                .clock(now::get)
-                .build();
-
-        try {
-            pool.get("a");
-            now.incrementAndGet();
-            pool.get("b");
-            now.incrementAndGet();
-
-            pool.get("c"); // a 最久未用且静默 → 腾位
-            assertEquals(new HashSet<>(Arrays.asList("b", "c")), pool.keys());
-
-            exts.get("b").busy.set(true);
-            exts.get("c").busy.set(true);
-            assertThrows(IllegalStateException.class, () -> pool.get("d"), "全部忙时拒绝而不是误杀");
-        } finally {
-            pool.close();
-        }
-        assertThrows(IllegalStateException.class, () -> pool.get("x"), "关闭后不可再取");
     }
 }

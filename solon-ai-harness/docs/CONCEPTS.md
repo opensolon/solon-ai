@@ -34,7 +34,7 @@
 
 | 层 | 载体 | 隔离什么 |
 |---|---|---|
-| 引擎 | `HarnessEngine`（每租户一个，`HarnessEnginePool` 管理） | 文件系统、MCP / LSP 连接、模型配置、扩展实例 |
+| 引擎 | `HarnessEngine`（每租户一个，host 模块的 `HarnessEnginePool` 管理） | 文件系统、MCP / LSP 连接、模型配置、扩展实例 |
 | 会话 | `AgentSession` | 对话历史、主体、审批挂起、goal / queue / steer / loop 状态 |
 | 输入 | `InputScope` | 这次输入能用哪些工具、技能、MCP、命令 |
 

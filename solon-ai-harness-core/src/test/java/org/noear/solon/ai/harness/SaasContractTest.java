@@ -26,12 +26,9 @@ import reactor.core.Disposable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -476,78 +473,7 @@ class SaasContractTest {
         assertTrue(r.getText().contains("out of policy"), r.getText());
     }
 
-    // ---------- M5a ----------
-
-    @Test
-    void poolBuildsOutsideLockAndRetriesAfterFailure() throws Exception {
-        CountDownLatch slowStarted = new CountDownLatch(1);
-        CountDownLatch releaseSlow = new CountDownLatch(1);
-        AtomicInteger failOnce = new AtomicInteger();
-        HarnessEnginePool pool = HarnessEnginePool.builder(key -> {
-            if ("slow".equals(key)) {
-                slowStarted.countDown();
-                try {
-                    releaseSlow.await(10, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            if ("flaky".equals(key) && failOnce.getAndIncrement() == 0) {
-                throw new IllegalStateException("boom");
-            }
-            return builder().build();
-        }).reapInterval(Duration.ZERO).build();
-
-        try {
-            Thread slow = new Thread(() -> pool.get("slow"));
-            slow.start();
-            assertTrue(slowStarted.await(5, TimeUnit.SECONDS));
-
-            long t0 = System.nanoTime();
-            assertNotNull(pool.get("fast"));
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0) < 3000, "慢构建不阻塞其它键");
-            assertNull(pool.getIfPresent("slow"), "构建中不可见");
-            assertFalse(pool.remove("slow"), "构建中不回收");
-
-            releaseSlow.countDown();
-            slow.join(5000);
-            assertNotNull(pool.getIfPresent("slow"));
-
-            assertThrows(IllegalStateException.class, () -> pool.get("flaky"));
-            assertNull(pool.getIfPresent("flaky"), "失败不留占位");
-            assertNotNull(pool.get("flaky"), "下一次重试成功");
-
-            assertEquals(2, pool.warmup(Arrays.asList("w1", "w2", null)));
-            assertTrue(pool.removeWhenQuiescent("w1", Duration.ofSeconds(2)));
-            assertNull(pool.getIfPresent("w1"));
-        } finally {
-            releaseSlow.countDown();
-            pool.close();
-        }
-    }
-
-    @Test
-    void poolWhenFullRejectOrWait() throws Exception {
-        HarnessEnginePool reject = HarnessEnginePool.builder(k -> builder().build())
-                .maxEngines(1).reapInterval(Duration.ZERO).build();
-        HarnessEnginePool wait = HarnessEnginePool.builder(k -> builder().build())
-                .maxEngines(1).reapInterval(Duration.ZERO)
-                .whenFull(HarnessEnginePool.WhenFull.WAIT, Duration.ofMillis(300)).build();
-        try {
-            // 静默引擎可被 LRU 腾位：两种策略都能放下新键
-            reject.get("a");
-            assertNotNull(reject.get("b"));
-            assertNull(reject.getIfPresent("a"));
-
-            wait.get("a");
-            long t0 = System.nanoTime();
-            assertNotNull(wait.get("b"));
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0) < 300, "可腾位时不等待");
-        } finally {
-            reject.close();
-            wait.close();
-        }
-    }
+    // ---------- M5a（引擎池契约已迁到 host 模块的 HarnessEnginePoolTest） ----------
 
     @Test
     void sharedTaskExecutorIsNotClosedByEngine() {

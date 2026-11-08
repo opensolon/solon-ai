@@ -86,6 +86,20 @@ class HarnessPackageBoundaryTest {
         assertFalse(Files.exists(ROOT.resolve("agent/task")), "agent.task 已并回 agent（子代理的定义、注册、构建、委派同处一包；TaskTalent/GenerateTalent/TaskWrapEvent 回到 4.1.1 的发布位置）");
     }
 
+    /** 部署层类型归 host 模块：core 只管单个引擎，对外只给 isQuiescent() / shutdown() 这两个回收判定点。 */
+    @Test
+    void enginePoolLivesInHost() throws IOException {
+        assertFalse(Files.exists(ROOT.resolve("HarnessEnginePool.java")), "HarnessEnginePool 已迁到 solon-ai-harness-host（org.noear.solon.ai.harness.host）");
+        List<String> violations = new ArrayList<>();
+        for (Path file : javaFiles(ROOT)) {
+            String content = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            if (content.contains("HarnessEnginePool")) {
+                violations.add(ROOT.relativize(file).toString());
+            }
+        }
+        assertTrue(violations.isEmpty(), "core 不得再提及 host 的 HarnessEnginePool（含注释，改成泛指「宿主的回收判定」）：" + violations);
+    }
+
     /** 子包不得依赖流生命周期类型（原 turn/run 包的约束，并入根包后保留；javadoc 里的全类名链接不算依赖）。 */
     @Test
     void subPackagesDoNotDependOnRunLifecycle() throws IOException {

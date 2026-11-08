@@ -10,6 +10,7 @@
   * **steer**：`SteerLimits` 与 `getLimits()` 收为包内，门面改 `getMaxBoxSize()` / `getMaxTextLength()` / `getMaxIdLength()`
   * **插件内部键**：`QueueAttrs` / `GoalAttrs` / `SteerAttrs` 改为包内可见，键名由插件测试守住
   * **聚合包**：`solon-ai-harness` 只引 `solon-ai-harness-host`（core 与四插件经 host 传递），依赖清单只维护一处
+  * **引擎池迁到 host**：`org.noear.solon.ai.harness.HarnessEnginePool` → `org.noear.solon.ai.harness.host.HarnessEnginePool`（类名与 API 不变，嵌套的 `Builder` / `WhenFull` 随行；4.2.0 新增、未发布，不留桥接）。它管「一个进程怎么托管多个引擎」，属于部署层；core 只保留回收判定点 `engine.isQuiescent()` / `shutdown()`，注释里不再反向提及池。池的 6 个契约测试从 core 的 `MultiTenantContractTest` / `SaasContractTest` 迁到 host 的 `HarnessEnginePoolTest`，`engineQuiescenceFollowsExtensions` 留在 core；`HarnessPackageBoundaryTest.enginePoolLivesInHost` 禁止池回到 core。soloncode-cli 未引用，无需修改
   * **守卫**：`HarnessPackageBoundaryTest` 增加「spi 只放接口、SessionOwnership 不回 spi、session 不依赖 spi」；`HarnessStructureGuardTest` 的插件内部类规则扩展到 `*Attrs` / `*Limits`，聚合包规则改为「只引 host、host 引全部」
   * **soloncode-cli 同步**：停流调用改 `interrupt(…, InterruptMode)`；`WebChatInputHandler.interruptSession` 去掉冗余的 `queue.cancelPending`（`prepareInterrupt` 已先清队列），非持有节点按 `plan.isNotOwner()` 拒绝；`CliShell` 改用三参 `claimNext`；`ChatWebController` 插话端点按 `HarnessResult` 映射（INVALID→400，其余 409，应答码取细分码）
   * **验证**：core 671 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor 既有用例），goal 232 / queue 99 / steer 73 / loop 102 / host 25 全绿，soloncode-cli 1224 例 3F（settings 既有）

@@ -52,7 +52,7 @@ import java.util.function.UnaryOperator;
  *
  * <pre>{@code
  * HarnessHost host = HarnessHost.builder()
- *         .engines(pool::get)                 // 租户 → 引擎（通常是 HarnessEnginePool）
+ *         .engines(pool::get)                 // 租户 → 引擎（通常是同包的 {@link HarnessEnginePool}）
  *         .sink(mySink)                       // 只需实现 reply / event
  *         .build();
  *

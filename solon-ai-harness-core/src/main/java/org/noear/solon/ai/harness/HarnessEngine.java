@@ -390,7 +390,7 @@ public class HarnessEngine {
 
     /**
      * 是否静默（可安全回收）：没有正在执行的请求，且所有扩展都没有需要本引擎继续存活的后台工作
-     * （见 {@link HarnessExtension#isQuiescent}，如活跃的 goal、定时任务）。供引擎池按空闲回收。
+     * （见 {@link HarnessExtension#isQuiescent}，如活跃的 goal、定时任务）。供宿主按空闲回收引擎（如 host 模块的引擎池）。
      *
      * @since 4.2.0
      */
