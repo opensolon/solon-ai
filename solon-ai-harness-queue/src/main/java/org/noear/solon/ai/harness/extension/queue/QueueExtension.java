@@ -71,7 +71,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     private QueueExtension(Limits limits) {
         this.limits = limits;
-        this.queueCommand = new QueueCommand(limits);
+        // 命令写队列后回到本扩展同步积压索引（与门面同一口径）
+        this.queueCommand = new QueueCommand(limits, this::syncIndex);
     }
 
     /** @since 4.2.0 */
@@ -159,7 +160,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
     }
 
     /**
-     * 为已有积压的会话补登索引（索引上线之前的存量数据、绕过门面写入的队列用；幂等）。
+     * 为已有积压的会话补登索引（索引上线之前的存量数据用；幂等）。
+     *
+     * <p>门面、{@code /queue} 命令与忙时积压（{@link #offer}）都会自动登记，正常使用不需要调用。</p>
      *
      * @since 4.2.0
      */
@@ -170,7 +173,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
     }
 
-    /** 入队成功后登记、队列已空时注销 */
+    /** 入队成功后登记、队列已空时注销（门面与 /queue 命令共用） */
     private void syncIndex(AgentSession session) {
         QueueIndex i = index;
         if (i == null || session == null) {

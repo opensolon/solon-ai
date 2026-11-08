@@ -348,7 +348,7 @@ queue.drainLoop(session, s -> !engine.status(s).isOccupied(), claim -> {
 - 来源取宿主透传的 `origin`（`HarnessInput.origin(...)`），为 null 时用 `InputOrigin.NONE`，不兜底渠道名；
 - 命令只负责入队与管理（`list` / `cancel` / `clear`），**不负责续发**；
 - **命令文本与门面调用是同一个动作，返回值不同**：`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到 `Kind.REPLY` + 人读回执；`queue.enqueue(s, "跑测试")` 得到 `HarnessResult<Integer>`（OK 时值为位置）。要程序判定走门面，要现成文案走命令文本；**两条都走会入队两次**（命令路径没有 `id` 幂等保护）。三条路径的对照见 [ENGINE-L1 §3.3](../solon-ai-harness-core/docs/ENGINE-L1.md)；
-- 命令直接写队列：不经门面的归属检查，也不登记积压索引（见 6.3）。
+- 命令直接写队列，不经门面的归属检查；积压索引与门面同一口径维护（入队登记，`cancel` / `clear` 后队列为空则注销，见 6.3），经命令入队、未执行就重启的会话也会被续发。
 
 ### 5.3 宿主接入：完整示例（自己接线（L1））
 
@@ -642,7 +642,7 @@ int pending = engine.status(session).get(QueueExtension.STATUS_PENDING); // 不�
 
 **用 L0 时**：骨架首次取到引擎时按积压索引自动续发，宿主什么都不用写（见第三章）。
 
-**自己接线（L1）时**：引擎有状态来源（`getStateSource()`）时，插件在其下 `queue/pending`（`QueueExtension.INDEX_PATH`）维护积压索引，每个可能有积压的会话一个空标记文件。索引是超集：门面 `enqueue` 与 `offer` 入队成功时登记，`cancelItem` / `clearPending` / `importItems` / 中断清空后按队列是否为空同步，`drainLoop` 观察到队空（`NO_TASK`）时注销，会话删除时注销。启动时据此续发，不需要枚举会话目录：
+**自己接线（L1）时**：引擎有状态来源（`getStateSource()`）时，插件在其下 `queue/pending`（`QueueExtension.INDEX_PATH`）维护积压索引，每个可能有积压的会话一个空标记文件。索引是超集：门面 `enqueue`、`offer` 与 `/queue <消息>` 入队成功时登记，`cancelItem` / `clearPending` / `importItems` / `/queue cancel` / `/queue clear` / 中断清空后按队列是否为空同步（运行中的那条也算），`drainLoop` 观察到队空（`NO_TASK`）时注销，会话删除时注销。启动时据此续发，不需要枚举会话目录：
 
 ```java
 for (String sid : queue.pendingSessions()) {        // 未挂接或引擎没有状态来源时为空
@@ -654,7 +654,7 @@ for (String sid : queue.pendingSessions()) {        // 未挂接或引擎没有�
 }
 ```
 
-`/queue` 命令与绕过门面写入的队列不登记索引；索引上线之前的存量数据也没有索引。对这类会话可用 `queue.markPending(sessionId)` 补登（幂等），或用快照探测：
+门面、`/queue` 命令与忙时积压都会自动登记，正常使用不用管索引。只有索引上线之前的存量数据没有索引，对这类会话可用 `queue.markPending(sessionId)` 补登（幂等），或用快照探测：
 
 ```java
 // 会话快照里是否有队列（静态，按 FlowContext 探测，不需要扩展实例）
@@ -875,7 +875,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).g
 | `clearPending(session)` | `HarnessResult<Integer>` | 否 | 管理 | 清空待执行（不动运行中那条、不递增代际），值为清掉的条数 |
 | `importItems(session, rows)` | `HarnessResult<Integer>` | 否 | 运维 | 旧数据迁移，值为实际导入条数 |
 | `pendingSessions()` | `List<String>` | — | 运维 | 积压索引中的会话（超集）；未挂接或没有状态来源时为空。L0 骨架首次取到引擎时自动使用 |
-| `markPending(sessionId)` | `void` | — | 运维 | 为已有积压的会话补登索引（存量数据、绕过门面写入的队列用；幂等） |
+| `markPending(sessionId)` | `void` | — | 运维 | 为索引上线前的存量积压补登索引（幂等）；门面、`/queue` 命令与忙时积压已自动登记 |
 | `static isPersisted(FlowContext)` | `boolean` | — | 运维 | 快照中是否有队列投影 |
 | `getMaxSize()` | `int` | — | — | 本实例的待执行条数上限（缺省 `20`） |
 | `getMaxTextLength()` | `int` | — | — | 本实例的单条文本上限（缺省 `4096`） |

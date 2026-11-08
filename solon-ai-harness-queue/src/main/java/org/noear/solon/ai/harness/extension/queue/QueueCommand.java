@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.util.Assert;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * /queue 命令 - 排队：把消息挂起，等当前任务结束后自动作为新任务发送。
@@ -45,19 +46,31 @@ import java.util.List;
  * <p>{@link #runnableWhenBusy()} 返回 true，使其可穿透忙碌检查、在任务执行中被受理。
  * 会话空闲时入队后由命令收尾的 drain 立即发起，效果等同于普通发送。</p>
  *
+ * <p>写队列（入队、取消、清空）后回调所属扩展同步积压索引，与门面 {@code enqueue} / {@code cancelItem} /
+ * {@code clearPending} 同一口径：经命令入队、尚未执行就重启的会话，L0 骨架也能按索引续发。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
 class QueueCommand extends AbsCommand {
     /** 实例上限（由所属 QueueExtension 注入） */
     final QueueExtension.Limits limits;
+    /** 队列变更回调（所属扩展同步积压索引；null = 不维护索引，仅单测用） */
+    private final Consumer<AgentSession> onChanged;
 
     QueueCommand() {
-        this(QueueExtension.Limits.DEFAULT);
+        this(QueueExtension.Limits.DEFAULT, null);
     }
 
-    QueueCommand(QueueExtension.Limits limits) {
+    QueueCommand(QueueExtension.Limits limits, Consumer<AgentSession> onChanged) {
         this.limits = limits;
+        this.onChanged = onChanged;
+    }
+
+    private void changed(AgentSession session) {
+        if (onChanged != null) {
+            onChanged.accept(session);
+        }
     }
 
 
@@ -105,6 +118,7 @@ class QueueCommand extends AbsCommand {
             doList(ctx, session);
         } else if (words.length == 1 && "clear".equals(words[0])) {
             int n = QueueStore.clearPending(session);
+            changed(session);
             ctx.println(n > 0 ? "已清空 " + n + " 条待执行（正在执行的不受影响）" : "队列里没有待执行的消息");
         } else if (words.length == 2 && "cancel".equals(words[0])) {
             doCancel(ctx, session, words[1]);
@@ -132,6 +146,7 @@ class QueueCommand extends AbsCommand {
         if (n < 0) {
             ctx.println("排队失败（队列已满，上限 " + limits.maxSize + " 条），请稍后再试");
         } else {
+            changed(session);
             ctx.println("已加入队列（第 " + n + " 位），将按顺序在任务空闲后自动发送");
         }
     }
@@ -167,6 +182,7 @@ class QueueCommand extends AbsCommand {
             }
         }
         if (QueueStore.cancelItem(session, id)) {
+            changed(session);
             ctx.println("已取消：" + id);
         } else {
             ctx.println("未找到待执行的消息：" + idOrIndex);
