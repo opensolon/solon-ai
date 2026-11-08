@@ -16,6 +16,11 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.noear.solon.ai.agent.react.ReActResponse;
+import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.talents.memory.MemoryTalent;
 
 /**
  * goal 执行器一轮的结论（与 loop 的 {@code LoopOutcome} 同语义，类型各自独立）。
@@ -64,15 +69,51 @@ public final class GoalOutcome {
      * 执行完成：工具证据取自响应轨迹、token 取自响应指标（缺省执行器与经 {@code engine.handle(...).call()}
      * 跑一轮的自定义执行器共用这一口径）。
      *
+     * <p>证据口径与 {@link #done(String, boolean, long)} 一致：只数成功、且不是内部工具的调用
+     * （见 {@link #isEvidenceTool(String)}）。只调了 goal / task / memory 的一轮不算「做了事」。</p>
+     *
      * @since 4.2.0
      */
     public static GoalOutcome done(ReActResponse response) {
         if (response == null) {
             return failed("no response");
         }
-        boolean hasToolCalls = response.getTrace() != null && response.getTrace().getToolCallCount() > 0;
         long tokens = response.getMetrics() != null ? response.getMetrics().getTotalTokens() : 0L;
-        return done(response.getContent(), hasToolCalls, tokens);
+        return done(response.getContent(), hasEvidence(response.getTrace()), tokens);
+    }
+
+    /**
+     * 一次工具调用能否作为行动证据：内部工具（goal 自身、子代理委派 task / multitask、记忆）不算。
+     *
+     * <p>这是框架规则，不是宿主选项：自定义执行器从流事件里数证据时也用它（再加上「只数成功调用」），
+     * 与 {@link #done(ReActResponse)} 同一口径。</p>
+     *
+     * @since 4.2.0
+     */
+    public static boolean isEvidenceTool(String toolName) {
+        if (toolName == null || toolName.isEmpty()) {
+            return false;
+        }
+        return GoalTalent.isGoalTool(toolName) == false
+                && TaskTalent.TOOL_TASK.equals(toolName) == false
+                && TaskTalent.TOOL_MULTITASK.equals(toolName) == false
+                && MemoryTalent.isMemoryTool(toolName) == false;
+    }
+
+    /** 工作记忆里是否有成功的非内部工具调用 */
+    static boolean hasEvidence(ReActTrace trace) {
+        if (trace == null || trace.getToolCallCount() <= 0 || trace.getWorkingMemory() == null) {
+            return false;
+        }
+        for (ChatMessage m : trace.getWorkingMemory().getMessages()) {
+            if (m instanceof ToolMessage) {
+                ToolMessage tm = (ToolMessage) m;
+                if (tm.isError() == false && isEvidenceTool(tm.getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** 本通道认领，但此刻不宜执行：本轮跳过，不计错误。@param reason 日志用原因 */

@@ -4,15 +4,19 @@
  */
 package org.noear.solon.ai.harness.host;
 
+import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * {@link HarnessHost#submit} / {@link HarnessHost#decide} 的结果。
  *
- * <p>只用来给调用方（如 HTTP 控制器、网关）判断「已经发生了什么」：要给用户看的内容已经经 {@link HostSink}
- * 发出，调用方不需要再按结果做任何收尾。</p>
+ * <p>推送型宿主只用它映射状态码（内容已经经 {@link HostSink} 发出）；一问一答型宿主可以直接读结果：
+ * 开了流时 {@link #getRun()} 等终态，只有回执时 {@link #getReplyText()}。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -20,79 +24,110 @@ import org.noear.solon.lang.Preview;
 @Preview("4.2.0")
 public final class SubmitResult {
     /**
-     * 结果类型
-     *
-     * <p>只描述「已经发生了什么」，不描述「接下来该做什么」（后者是引擎层的
-     * {@code InputOutcome.Kind}，两者除了 TASK / STARTED 一一对应）。
-     * 常量顺序与 {@code InputOutcome.Kind} 对齐，便于对照阅读。</p>
+     * 结果类型（只描述「已经发生了什么」）。
      */
     public enum Kind {
         /**
-         * 本轮已交给执行器执行（流经 {@link HostSink#event} / {@link HostSink#runFinished} 推送）。
+         * 本轮已交给执行器执行（{@link #getRun()} 非空）。
          *
          * <p>含义是「已经交出去了」，不保证流已真的跑起来：调度空档里被取消、启动失败时也是本值，
-         * 失败会经 {@link HostSink#runFinished} 以 error 收尾。调用方不要把它当成「必有输出」。
+         * 终态见 {@link RunOutcome}。</p>
          */
         STARTED,
-        /**
-         * 只有回执，没有任务（回执已经 {@link HostSink#reply}）。
-         *
-         * <p>包括「命令已执行」与「命令在本渠道不可用、未执行」两种事实，调用方动作相同。
-         */
+        /** 只有回执，没有任务（{@link #getReplyText()}；命令无输出时为 null） */
         REPLY,
-        /**
-         * 审批已记录但未续流：本批仍有未决卡（卡已 {@link HostSink#hitl}），或审批卡已失效。
-         */
+        /** 审批已记录但未续流：本批仍有未决卡（{@link #getHitlCards()}），或审批卡已失效（卡为空） */
         HITL,
         /** 空输入（无文本也无附件），未做任何处理 */
         IGNORED,
-        /** 会话忙，已入积压，空闲后由宿主续发（位置见 {@link #getBacklogPosition()}） */
+        /** 会话忙，已入积压，空闲后自动续发（位置见 {@link #getBacklogPosition()}） */
         DEFERRED,
-        /**
-         * 未受理（原因见 {@link #getRejectReason()}）。
-         *
-         * <p>提示与转发都已由对应的结构化回调交给宿主：{@link HostSink#rejected}（一般拒绝）、
-         * {@link HostSink#notOwner}（多节点未持有，持有者见 {@link #getOwner()}）。</p>
-         */
+        /** 会话忙，已作为插话交给正在运行的那一轮（{@code SubmitSpec.steerWhenBusy}） */
+        STEERED,
+        /** 未受理（原因见 {@link #getRejectReason()}，持有者见 {@link #getOwner()}） */
         REJECTED
     }
 
     private final Kind kind;
     private final RejectReason rejectReason;
+    private final String rejectDetail;
     private final int backlogPosition;
     private final String owner;
+    private final RunHandle run;
+    private final String replyText;
+    private final List<HitlCard> hitlCards;
 
-    private SubmitResult(Kind kind, @Nullable RejectReason rejectReason, int backlogPosition, @Nullable String owner) {
+    private SubmitResult(Kind kind, RejectReason rejectReason, String rejectDetail, int backlogPosition, String owner,
+                         RunHandle run, String replyText, List<HitlCard> hitlCards) {
         this.kind = kind;
         this.rejectReason = rejectReason;
+        this.rejectDetail = rejectDetail;
         this.backlogPosition = backlogPosition;
         this.owner = owner;
+        this.run = run;
+        this.replyText = replyText;
+        this.hitlCards = hitlCards == null ? Collections.emptyList() : hitlCards;
     }
 
     static SubmitResult of(Kind kind) {
-        return new SubmitResult(kind, null, 0, null);
+        return new SubmitResult(kind, null, null, 0, null, null, null, null);
+    }
+
+    static SubmitResult started(RunHandle run) {
+        return new SubmitResult(Kind.STARTED, null, null, 0, null, run, null, null);
+    }
+
+    static SubmitResult reply(@Nullable String text) {
+        return new SubmitResult(Kind.REPLY, null, null, 0, null, null, text, null);
+    }
+
+    static SubmitResult hitl(List<HitlCard> cards) {
+        return new SubmitResult(Kind.HITL, null, null, 0, null, null, null, cards);
     }
 
     static SubmitResult deferred(int position) {
-        return new SubmitResult(Kind.DEFERRED, null, position, null);
+        return new SubmitResult(Kind.DEFERRED, null, null, position, null, null, null, null);
     }
 
-    static SubmitResult rejected(RejectReason reason) {
-        return new SubmitResult(Kind.REJECTED, reason, 0, null);
+    static SubmitResult rejected(RejectReason reason, @Nullable String detail) {
+        return new SubmitResult(Kind.REJECTED, reason, detail, 0, null, null, null, null);
     }
 
     static SubmitResult notOwner(@Nullable String owner) {
-        return new SubmitResult(Kind.REJECTED, RejectReason.NOT_OWNER, 0, owner);
+        return new SubmitResult(Kind.REJECTED, RejectReason.NOT_OWNER, owner, 0, owner, null, null, null);
     }
 
     public Kind getKind() {
         return kind;
     }
 
-    /** 拒绝原因（仅 REJECTED；与引擎同一张码表，会话不存在为 {@code SESSION_NOT_FOUND}） */
+    /** 本次请求开出的那一轮（仅 STARTED） */
+    @Nullable
+    public RunHandle getRun() {
+        return run;
+    }
+
+    /** 回执文本（仅 REPLY，命令无输出时为 null） */
+    @Nullable
+    public String getReplyText() {
+        return replyText;
+    }
+
+    /** 尚未决策的审批卡（仅 HITL；卡已失效时为空） */
+    public List<HitlCard> getHitlCards() {
+        return hitlCards;
+    }
+
+    /** 拒绝原因（仅 REJECTED；与引擎同一张码表） */
     @Nullable
     public RejectReason getRejectReason() {
         return rejectReason;
+    }
+
+    /** 拒绝详情（仅 REJECTED，可空） */
+    @Nullable
+    public String getRejectDetail() {
+        return rejectDetail;
     }
 
     /** 排队位置（仅 DEFERRED，从 1 计） */
@@ -100,23 +135,16 @@ public final class SubmitResult {
         return backlogPosition;
     }
 
-    /**
-     * 持有者节点标识（仅 {@code NOT_OWNER}，可空）：网关据此把请求转发过去，不必自己去解析拒绝详情。
-     *
-     * @since 4.2.0
-     */
+    /** 持有者节点标识（仅 {@code NOT_OWNER}，可空）：网关据此转发 */
     @Nullable
     public String getOwner() {
         return owner;
     }
 
     /**
-     * 建议的 HTTP 状态码：STARTED / REPLY / HITL / IGNORED → 200，DEFERRED → 202，
+     * 建议的 HTTP 状态码：STARTED / REPLY / HITL / IGNORED / STEERED → 200，DEFERRED → 202，
      * REJECTED 按 {@link RejectReason}：SESSION_NOT_FOUND → 404，NOT_OWNER → 307，
-     * SCOPE_UNAVAILABLE → 403，ENGINE_CLOSED → 503，其余（BUSY / HITL_PENDING /
-     * ATTACHMENTS_NOT_DEFERRABLE / BACKLOG_UNAVAILABLE / SCOPE_NOT_DEFERRABLE）→ 409。
-     *
-     * <p>与 {@code HarnessResult.Code#httpStatus()} 同一套口径：不采用 HTTP 的宿主（IM 网关、RPC）忽略即可。</p>
+     * SCOPE_UNAVAILABLE → 403，ENGINE_CLOSED → 503，其余 → 409。
      */
     public int httpStatus() {
         switch (kind) {

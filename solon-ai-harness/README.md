@@ -44,7 +44,7 @@
 | 坐标 | 内容 | 适用 |
 |---|---|---|
 | `solon-ai-harness` | **聚合包**：只做引用（没有任何源码），引入核心 + 四个会话插件（goal / queue / steer / loop）+ 宿主骨架 `-host` | 应用宿主（推荐） |
-| `solon-ai-harness-host` | 宿主骨架（L0）：`HarnessHost` / `HostSink` / `SubmitResult` / `SessionAdmin` / `HarnessEnginePool`，依赖核心与四个插件，见 [host README](../solon-ai-harness-host/README.md) | SaaS / IM 网关 / 普通 Web 服务 |
+| `solon-ai-harness-host` | 宿主骨架（L0）：`HarnessHost` / `HostSink` / `RunSink` / `SubmitResult` / `SessionAdmin`，依赖核心与四个插件（引擎池 `HarnessEnginePool` 在 core），见 [host README](../solon-ai-harness-host/README.md) | SaaS / IM 网关 / 普通 Web 服务 |
 | `solon-ai-harness-core` | 只有核心（引擎、输入、命令、权限、作用域、SPI） | 只需核心、或自己写插件 |
 | `solon-ai-harness-goal` / `-queue` / `-steer` / `-loop` | 单个插件（各自只依赖 core） | 按需挑选插件 |
 
@@ -906,7 +906,7 @@ HarnessEngine.of("/data/work", ".solon/")
 | `HarnessExtension#contributeSessionStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
 | `spi.InputBacklog` | 能力接口（`offer(session, HarnessInput)` / `hasPending`） | queue | 引擎 `handle` 受理判定（有无积压能力、忙时 `offer` 入积压、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
 | `spi.RunDispatch` | 会话槽位（`session.run.dispatch`） | queue 派发 | 引擎 `handle` 受理判定（识别派发轮次）、`RunTicket` |
-| `HarnessExtension#isQuiescent` | 钩子（汇集） | goal（有活跃 goal）、loop（有启用任务） | `engine.isQuiescent()` → 宿主的空闲回收判定（如 host 模块的 `HarnessEnginePool`） |
+| `HarnessExtension#isQuiescent` | 钩子（汇集） | goal（有活跃 goal）、loop（有启用任务） | `engine.isQuiescent()` → 宿主的空闲回收判定（如 core 的 `HarnessEnginePool`） |
 | `HarnessExtension#getToolNames` | 声明 | goal、loop（取自各自 Talent 的工具表） | 作用域守卫：已声明的工具不受 `InputScope.tools` 名单约束 |
 
 **内核没有 queue**：`SessionStatus` 不含排队数，`InputOutcome` 的延后结局叫 `Kind.DEFERRED`（不是 QUEUE），程序派发判定叫 `isDispatched()`。入积压由引擎经 `InputBacklog#offer(session, HarnessInput)` 完成，宿主域属性（`HarnessInput#attr`）由实现方原样保存。内核自身依赖积压的判定（受理先进先出、空闲判定）走能力方法 `InputBacklog#hasPending`——由类型系统保证实现方提供，而不是「必须贡献某个状态键」的约定。goal 调度与宿主定时任务判断「能否注入」统一用 `engine.isIdle(session)`（不占用且无积压，同一把会话锁内读取）。
@@ -2332,7 +2332,7 @@ solon-ai-harness            聚合包（只做引用，没有源码）
 ├── solon-ai-harness-loop    │ 各自只依赖 core；插件之间零 import，
 ├── solon-ai-harness-queue   │ 只经核心钩子 / spi / 会话槽位协作
 ├── solon-ai-harness-steer  ─┘
-└── solon-ai-harness-host   宿主骨架与部署层：HarnessHost、HarnessEnginePool（引擎池），依赖 core + 四个插件，位于最上层（任何模块不得反向依赖）
+└── solon-ai-harness-host   宿主骨架：HarnessHost / HostSink / RunSink，依赖 core + 四个插件（引擎池 HarnessEnginePool 在 core），位于最上层（任何模块不得反向依赖）
 ```
 
 依赖方向、聚合包无源码、插件内部类不得 public、插件主代码无废弃标记、goal / loop / queue 写门面必须返回 `HarnessResult` 等约束由 `solon-ai-harness-host` 的 `HarnessStructureGuardTest` 守护。

@@ -1,7 +1,7 @@
 # SaaS 快速上手：HarnessHost
 
-本文只讲宿主骨架 `HarnessHost`（L0）：用它搭一个多租户服务端，只需要实现两个输出回调。
-隔离模型、作用域、多节点、存储等细节见 [SAAS.md](SAAS.md)；术语见 [CONCEPTS.md](CONCEPTS.md)。
+本文只讲宿主骨架 `HarnessHost`（L0）：用它搭一个多租户服务端。一问一答型接口不用写任何回调，推送型只需覆盖两个。
+隔离模型、作用域、多节点、存储等细节见 [harness README](../../solon-ai-harness/README.md)；术语见 [CONCEPTS.md](../../solon-ai-harness/docs/CONCEPTS.md)。
 
 > 本文的代码与 `src/test/java/features/ai/harness/all/QuickstartSampleTest.java` 保持一致，并随构建编译运行。
 > `HarnessHost` 及相关类型标注 `@Preview("4.2.0")`，在 4.2.x 内可能还有调整。
@@ -12,8 +12,8 @@
 
 | 层 | 入口 | 适用 |
 |---|---|---|
-| **L0 宿主骨架** | `HarnessHost` + `HostSink` | 框架拥有输出通道：SaaS、IM 网关、普通 Web 服务（本文） |
-| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 自带终态门、要自定义「回执与流的先后」或序号回放的宿主（CLI、桌面端），见 README §四 |
+| **L0 宿主骨架** | `HarnessHost` + `SubmitSpec`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE 接口、多会话推送的 Web 应用（本文） |
+| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件依赖，或要完全自己掌握编排的宿主，见 harness README |
 | L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 |
 
 用 L0 时，下面这些都由框架代办，宿主不需要知道：`RunTicket`、`afterRun`、`drainLoop`、`discard`、
@@ -31,7 +31,7 @@
 </dependency>
 ```
 
-`HarnessHost` 等类型在独立模块 `solon-ai-harness-host`（包 `org.noear.solon.ai.harness.host`）。不想要聚合包时，直接引 `solon-ai-harness-host` 也一样：它依赖核心与四个插件。模块说明见 [solon-ai-harness-host/README.md](../solon-ai-harness-host/README.md)。
+`HarnessHost` 等类型在独立模块 `solon-ai-harness-host`（包 `org.noear.solon.ai.harness.host`）。不想要聚合包时，直接引 `solon-ai-harness-host` 也一样：它依赖核心与四个插件。模块说明见 [solon-ai-harness-host/README.md](../README.md)。
 
 ---
 
@@ -63,38 +63,43 @@ HarnessEngine buildEngine(String tenantId) {
 goal 的重启恢复不用自己调：`HarnessHost` 首次取到引擎时先登记后台执行器，再 `goal.recover()`（见 §七）。
 
 SERVER 模式还要求：启动时 `SandboxBootstrap.initOnce(...)` 一次；`stateSource` 显式配置且不在工作区内；
-至少一个模型。详见 SAAS.md §2.1。
+至少一个模型。详见 [harness README](../../solon-ai-harness/README.md)。
 
-### 3.2 实现输出通道
+### 3.2 选一种输出写法
 
-`HostSink` 的**每个方法都有缺省实现**（不传 sink 也能跑通一轮，事件只记日志）。接入时通常只需覆盖两个投递出口：
+`HostSink` 与 `RunSink` 的**每个方法都有缺省实现**，按宿主形态三选一（可混用）：
 
 ```java
+// ① 一问一答（HTTP / SSE）：不写 sink，按请求拿结果
+RunOutcome o = host.submit(tenant, sid, SubmitSpec.of(text).principal(p)).getRun().await(Duration.ofMinutes(5));
+Flux<HostSignal> sse = host.stream(tenant, sid, SubmitSpec.of(text).principal(p));
+
+// ② 推送型（WebSocket / IM）：覆盖两个投递出口
 public class MySink implements HostSink {
     @Override
-    public void reply(InputOrigin origin, String text) {        // 命令回执、排队提示、拒绝提示
-        channels.send(origin, text);
+    public void reply(HostInput input, String text) {             // 命令回执
+        channels.send(input.getSessionId(), input.getOrigin(), text);
     }
 
     @Override
-    public void event(HostRun run, AgentEvent event) {          // 流事件，投递给 run.getOrigin()
-        channels.push(run.getOrigin(), event);
+    public void event(HostRun run, AgentEvent event) {          // 流事件
+        channels.push(run.getSessionId(), run.getInput().getOrigin(), event);
     }
 
-    // 可选：运行类
-    // runStarted(run) / runFinished(run, error)   每个 started 恰好配一个 finished
-    // hitl(origin, cards)                         有待审批的工具调用
-    // 可选：结构化事实（文案、要不要提示用户，由你决定）
-    // rejected(origin, reason, detail)            未受理（reason 是 RejectReason 枚举）
-    // deferred(origin, position)                  会话忙，已排队
-    // hitlExpired(origin)                         审批卡已失效
-    // notOwner(origin, owner)                     多节点：会话由其它节点持有
+    // 可选：会话级事实（文案、要不要提示用户，由你决定；input 带租户、会话、来源与输入文本）
+    // admitted(input)                  已受理（持久化本次选择、命令无输出时兜底提示）
+    // deferred(input, position)        会话忙，已排队          steered(input)      已插话给运行中的那一轮
+    // rejected(input, reason, detail)  未受理                  notOwner(input, owner) 会话由其它节点持有
+    // hitl(input, cards)               有待审批的工具调用      hitlExpired(input)  审批卡已失效
+    // runFinished(run, outcome)       一轮结束（COMPLETED / FAILED / CANCELLED，附用量）
 }
+
+// ③ 每轮有状态：覆盖 open，每轮返回自己的 RunSink（prepare / reply / event / finished）
 ```
 
 ### 3.3 组装骨架
 
-引擎池 `HarnessEnginePool` 与 `HarnessHost` 同在 host 模块（`org.noear.solon.ai.harness.host`）：
+引擎池 `HarnessEnginePool` 在 core（`org.noear.solon.ai.harness.HarnessEnginePool`），不用 `HarnessHost` 的 L1 宿主也能单独使用：
 
 ```java
 HarnessEnginePool pool = HarnessEnginePool.builder(this::buildEngine)
@@ -105,6 +110,7 @@ HarnessEnginePool pool = HarnessEnginePool.builder(this::buildEngine)
 HarnessHost host = HarnessHost.builder()
         .engines(pool::get)                       // 租户 → 引擎
         .sink(new MySink())                       // 可选：不传则用缺省 sink（只记日志）
+        .wrap((tenant, r) -> withMdc(tenant, r))  // 可选：开流、续发、后台轮次都经过它
         .build();
 
 host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / loop 的租户（经 host，不要自己取引擎）
@@ -117,9 +123,19 @@ host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / l
 @Post 
 @Mapping("/chat/{tenant}/{sid}")
 public String chat(String tenant, String sid, String text, Context ctx) {
-    SubmitResult r = host.submit(tenant, sid, text, InputOrigin.of("web", userOf(ctx), null, null));
+    SubmitResult r = host.submit(tenant, sid, SubmitSpec.of(text)
+            .origin(InputOrigin.of("web", userOf(ctx), null, null))
+            .principal(tenant + "/" + userOf(ctx)));   // sessionId 来自客户端：必须校验主体
     ctx.status(r.httpStatus());                  // 内容已经经 sink 发出，这里只回状态
     return r.getKind().name();
+}
+
+// 或一问一答：SSE 直接返回信号流（客户端断开会停掉本轮）
+@Get
+@Produces(MimeType.TEXT_EVENT_STREAM_VALUE)
+@Mapping("/chat/{tenant}/{sid}/sse")
+public Flux<HostSignal> sse(String tenant, String sid, String text, Context ctx) {
+    return host.stream(tenant, sid, SubmitSpec.of(text).principal(tenant + "/" + userOf(ctx)).rejectWhenBusy(true));
 }
 
 // 审批（协议字符串 → 枚举，脏值直接报错）
@@ -160,21 +176,32 @@ if (host.closeSession(tenant, sid, () -> store.delete(sid)) == false) {
 
 | Kind | 发生了什么 | sink 收到 | `httpStatus()` |
 |---|---|---|---|
-| `STARTED` | 已开流 | `runStarted` →（命令回执）→ `event`* → `hitl`（若挂起）→ `runFinished` | 200 |
-| `REPLY` | 命令已执行，只有回执 | `reply` | 200 |
-| `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `deferred(origin, position)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
-| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `rejected(origin, reason, detail)`；`NOT_OWNER` 时为 `notOwner(origin, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
-| `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `hitlExpired(origin)` | 200 |
-| `IGNORED` | 空输入 | — | 200 |
+| `STARTED` | 已开流（`getRun()`） | `admitted` → `open` →（命令回执）→ `event`* → `runFinished` → `hitl`（若挂起） | 200 |
+| `REPLY` | 命令已执行，只有回执（`getReplyText()`） | `admitted` → `reply` | 200 |
+| `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `deferred(input, position)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
+| `STEERED` | 已插话给运行中的那一轮（`steerWhenBusy`） | `steered(input)` | 200 |
+| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `rejected(input, reason, detail)`；`NOT_OWNER` 时为 `notOwner(input, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
+| `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(input, cards)` 或 `hitlExpired(input)` | 200 |
+| `IGNORED` | 空输入 | `admitted` | 200 |
 
-拒绝原因码：`session_not_found`（会话不存在，骨架只查不建）、`not_owner`、`scope_unavailable`、`busy`、
+拒绝原因码：`session_not_found`（会话不存在，骨架只查不建）、`not_owner`、`scope_unavailable`（含主体不符）、`busy`、
 `hitl_pending`、`attachments_not_deferrable`、`backlog_unavailable`、`scope_not_deferrable`。
 `engine_closed`（引擎刚被池回收）由骨架换新引擎自动重试一次，一般不会出现。
 
 需要补充输入参数（附件、显式模型 / 子代理、宿主域属性）时：
 
 ```java
-host.submit(tenant, sid, text, origin, in -> in.attachments(files).selectedModel("gpt-4o").attr("effort", "high"));
+host.submit(tenant, sid, SubmitSpec.of(text).origin(origin)
+        .customize(in -> in.attachments(files).selectedModel("gpt-4o").attr("effort", "high")));
+
+// 每条输入都要补的（用户提交、审批、队列续发、后台轮次）：放在 Builder.input
+HarnessHost.builder().input((tenant, in) -> in.commandContextFactory(myFactory));
+```
+
+IM 类入口常用「忙时先插话、插不进再排队」：`SubmitSpec.of(text).steerWhenBusy(true)`（需装 steer 插件，命令不插话）。
+一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`SubmitSpec.of(text).rejectWhenBusy(true)`。
+
+```java
 ```
 
 ---
@@ -243,11 +270,15 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 
 ## 七、goal / loop 后台轮次
 
-`HarnessHost` 首次取到某个引擎时，先为它的 goal / loop 登记执行器（通道名 `host`），再恢复 goal 调度：后台轮次同样走
-`runStarted` / `runFinished`（`run.isProgram()` 为 true，`run.getOrigin()` 为 `channel("goal")` / `channel("loop")`，
-最终文本在 `run.getResultText()`），结束后自动续发积压。后台轮次同步执行，不推送流事件。
+`HarnessHost` 首次取到某个引擎时，先为它的 goal / loop 登记执行器（通道名 `host`），再恢复 goal 调度。后台轮次与用户轮次
+**同一条链**：`open` → `prepare` → `event`* → `finished`（`run.isProgram()` 为 true，`run.getInput().getOrigin()` 为 `channel("goal")` /
+`channel("loop")`，最终文本在 `RunOutcome.getResultText()`），可被 `interrupt` 停止，结束后自动续发积压。
 
-不想接入时 `HarnessHost.builder().programRuns(false)`，沿用插件自带的缺省执行器。
+goal 的完成证据由框架判定：只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`）。
+出错抛给插件参与熔断；被中断或没有最终回答时本轮跳过。
+
+同一引擎上挂了多个宿主时，用 `programRuns(sid -> ...)` 只接管自己的会话；不想接入时 `programRuns(false)`，沿用插件自带的缺省执行器。
+宿主自己的恢复动作（按目录枚举恢复、旧数据迁移）放在 `host.warmup(...)` 之后。
 
 ---
 
@@ -256,7 +287,7 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 | 配置 | 说明 |
 |---|---|
 | `executor(Executor)` | 开流动作在哪里执行，缺省 Reactor `boundedElastic`；Agent 管道的同步部分在这里跑 |
-| `wrap(UnaryOperator<Runnable>)` | 包装开流动作：注入 MDC、日志作用域、租户上下文 |
+| `wrap(BiFunction<String, Runnable, Runnable>)` | 包装框架代跑的动作（开流、续发、后台轮次）：注入 MDC、日志作用域、租户上下文 |
 
 sink 回调可能在任意线程上执行，实现需线程安全；回调抛出的异常只记日志，不影响运行。
 
@@ -265,7 +296,7 @@ sink 回调可能在任意线程上执行，实现需线程安全；回调抛出
 ## 九、上线检查清单（L0）
 
 - [ ] 引擎：`profile(SERVER)`、`stateSource` 在工作区之外、`SandboxBootstrap.initOnce`、插件经 `Builder.extensionAdd` 在构建期挂上
-- [ ] 权限：用 `host.openSession` 建会话并写入主体；`scopeResolver` 用 `byPrincipal` 并做短期缓存（SERVER 下缺失会在 `build()` 报错）
+- [ ] 权限：用 `host.openSession` 建会话并写入主体；提交时 `SubmitSpec.principal(...)` 校验主体；`scopeResolver` 用 `byPrincipal` 并做短期缓存（SERVER 下缺失会在 `build()` 报错）
 - [ ] 骨架：`engines(pool::get)`；预热用 `host.warmup`；sink 线程安全
 - [ ] 管理态：鉴权放在控制器 / 拦截器层；按 `HarnessResult.Code` 映射状态码
 - [ ] 多节点：`SessionOwnership.namespaced(tenantId, impl)`；实现 `HostSink.notOwner` 与 `NOT_OWNER` 的网关转发

@@ -4,11 +4,18 @@
  */
 package org.noear.solon.ai.harness.host;
 
-import org.noear.solon.ai.harness.*;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActResponse;
+import org.noear.solon.ai.agent.react.AbsReActEvent;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
+import org.noear.solon.ai.agent.react.task.ToolCallEndEvent;
+import org.noear.solon.ai.agent.trace.Metrics;
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessResult;
+import org.noear.solon.ai.harness.InterruptMode;
+import org.noear.solon.ai.harness.InterruptPlan;
+import org.noear.solon.ai.harness.RunTicket;
 import org.noear.solon.ai.harness.extension.goal.GoalExecutor;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.goal.GoalOutcome;
@@ -17,68 +24,77 @@ import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopOutcome;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueItem;
+import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
 import org.noear.solon.ai.harness.session.OwnerCheck;
+import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.spi.RunDispatch;
-
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.FluxSink;
+import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
+import java.util.function.Predicate;
 
 /**
- * 宿主骨架（L0）：把「受理 → 开流 → 终态 → 续发积压」整套编排收进框架，宿主只实现 {@link HostSink} 投递输出。
+ * 宿主骨架（L0）：把「受理 → 开流 → 终态 → 续发积压」整套编排收进框架，宿主只决定输出怎么呈现。
  *
+ * <p><b>三档用法</b>（按需加深，后一档不影响前一档）：</p>
  * <pre>{@code
- * HarnessHost host = HarnessHost.builder()
- *         .engines(pool::get)                 // 租户 → 引擎（通常是同包的 {@link HarnessEnginePool}）
- *         .sink(mySink)                       // 可选：不传则用缺省 sink（事件只记日志）
- *         .build();
+ * HarnessHost host = HarnessHost.builder().engines(pool::get).build();   // pool：core 的 HarnessEnginePool
+ * host.openSession(tenant, sid, principal);
  *
- * AgentSession session = host.openSession(tenant, sessionId, principal);      // 建会话（一次带主体）
- * SubmitResult r = host.submit(tenant, sessionId, text, origin);              // 使用态
- * host.decide(tenant, sessionId, callId, HITLAction.APPROVE, null, origin);   // 审批
- * host.interrupt(tenant, sessionId, InterruptMode.INTERRUPT_ALL);             // 停止
- * host.admin(tenant).call(sessionId, LoopExtension.class,
- *         (loop, s) -> HarnessResult.ok(loop.list(sessionId)));               // 管理态（任意扩展同一写法）
+ * // ① 一个请求一轮：不写 sink
+ * RunOutcome o = host.submit(tenant, sid, SubmitSpec.of("hello").principal(principal))
+ *                    .getRun().await(Duration.ofMinutes(5));
+ * Flux<HostSignal> sse = host.stream(tenant, sid, SubmitSpec.of(text).principal(principal));
+ *
+ * // ② 推送型（WebSocket / IM）：覆盖 HostSink 的 reply / event
+ * // ③ 每轮有状态：覆盖 HostSink#open，每轮返回自己的 RunSink
  * }</pre>
  *
- * <p><b>框架代办的事</b>（使用 {@code engine.handle} 直连时宿主必须自己写对的约定）：</p>
+ * <p><b>框架代办的事</b>（直连 {@code engine.handle} 时宿主必须自己写对的约定）：</p>
  * <ul>
- *   <li>按会话 ID 只查不建（不存在时回执并返回 {@code session_not_found}）；多节点先查归属再加载会话；</li>
+ *   <li>按会话 ID 只查不建；多节点先查归属再加载会话；传了主体时校验会话主体（防止用别人的 sessionId 提交）；</li>
  *   <li>订阅之前领取 {@link RunTicket}；调度窗口内被取消则放弃开流；开流前失败则 {@code discard} 并收口派发；</li>
- *   <li>积压续发登记在 {@code afterRun}（运行句柄注销之后），判定口径固定为 {@code !isOccupied}；
- *       回执、排队、审批、空输入之后也会续发；</li>
- *   <li>队列续发的一轮按当初排队那条消息的来源投递，领取回调的返回值（同步 / 异步）由框架保证正确；</li>
- *   <li>审批决策与续流一次完成，过期卡提示失效、未齐备时推送剩余未决卡；</li>
- *   <li>{@code engine_closed}（引擎刚被池回收）自动换新引擎重试一次；{@code not_owner} 转交 {@link HostSink#notOwner}；</li>
- *   <li>goal / loop 的后台轮次也走同一套终态与续发（不推送流事件，最终文本见 {@link HostRun#getResultText()}）；
- *       首次取到引擎时先登记执行器、再恢复 goal 调度（宿主不必自己调 {@code goal.recover()}）。</li>
+ *   <li>每轮 {@link HostSink#open} 恰好配一次 {@link RunSink#finished}，结束方式为 COMPLETED / FAILED / CANCELLED；</li>
+ *   <li>积压续发登记在 {@code afterRun}（运行句柄注销之后）；回执、排队、审批、空输入之后也会续发；
+ *       队列续发的一轮按当初排队那条消息的来源投递；</li>
+ *   <li>同一轮的 {@link RunSink} 回调串行（不并发）；停止就是停止：中断受理后不再投递事件、终态一定是 CANCELLED；
+ *       用户停止（{@code INTERRUPT_ALL}）走两段式：先立屏障、落取消消息、再停流；</li>
+ *   <li>审批决策与续流一次完成，过期卡回调 {@link HostSink#hitlExpired}、未齐备时推送剩余未决卡；</li>
+ *   <li>{@code engine_closed}（引擎刚被池回收）自动换新引擎重试一次；</li>
+ *   <li>goal / loop 的后台轮次与用户轮次走同一条链（推流事件、终态、续发、可被停止）；
+ *       首次取到引擎时依次登记执行器、恢复 goal 调度、按 queue 积压索引续发；</li>
+ *   <li>DEBUG 日志按轮次 id（{@link HostRun#getId()}）记录每轮的 open / reply / prepare / stream / cancel / finished。</li>
  * </ul>
  *
- * <p><b>与宿主的边界</b>：本类只表达「发生了什么」（{@link HostSink} 的结构化回调 + {@link SubmitResult}），
- * 不决定文案、鉴权、协议状态码与多节点转发方式——那四件都是宿主的决定。</p>
- *
- * <p><b>适用边界</b>：本类拥有输出通道与终态去重。自带终态门、需要自定义回执与流的先后时序、
- * 或需要序号回放的宿主（如 soloncode 的 Web / 桌面端）请继续直接使用 {@code engine.handle}（L1）。</p>
+ * <p><b>与宿主的边界</b>：本类只表达「发生了什么」，不决定文案、鉴权、协议状态码与多节点转发方式。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -93,16 +109,23 @@ public final class HarnessHost {
     private final Function<String, HarnessEngine> engines;
     private final HostSink sink;
     private final Executor executor;
-    private final UnaryOperator<Runnable> wrap;
+    private final BiFunction<String, Runnable, Runnable> wrap;
+    private final BiConsumer<String, HarnessInput> inputDecorator;
     private final boolean programRuns;
+    private final Predicate<String> programFilter;
     private final Set<HarnessEngine> bound = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+    /** 活跃轮次（租户 + 会话 → 本轮），中断时据此把本轮标记为 CANCELLED */
+    private final Map<String, ActiveRun> active = new ConcurrentHashMap<>();
+    private final AtomicBoolean warnedNoPrincipal = new AtomicBoolean();
 
     private HarnessHost(Builder b) {
         this.engines = b.engines;
         this.sink = b.sink;
         this.executor = b.executor;
         this.wrap = b.wrap;
+        this.inputDecorator = b.input;
         this.programRuns = b.programRuns;
+        this.programFilter = b.programFilter;
     }
 
     public static Builder builder() {
@@ -114,8 +137,7 @@ public final class HarnessHost {
     /**
      * 取租户的引擎（首次取到某个引擎实例时，为它的 goal / loop 登记后台轮次执行器，然后恢复 goal 调度）。
      *
-     * <p>包内可见：宿主需要的会话生命周期见 {@link #openSession} / {@link #closeSession}，
-     * 绕过本类直接取引擎会让这些引擎上的后台轮次不经过 {@link HostSink}、结束后也不续发积压。</p>
+     * <p>包内可见：绕过本类直接取引擎会让这些引擎上的后台轮次不经过 {@link HostSink}、结束后也不续发积压。</p>
      */
     HarnessEngine engine(String tenant) {
         Objects.requireNonNull(tenant, "tenant");
@@ -123,6 +145,7 @@ public final class HarnessHost {
         if (bound.add(engine)) {
             bindProgramRuns(tenant, engine);
             recoverGoals(tenant, engine);
+            recoverBacklog(tenant, engine);
         }
         return engine;
     }
@@ -130,8 +153,9 @@ public final class HarnessHost {
     /**
      * 预热：逐个取引擎（单个失败只记日志）。
      *
-     * <p>重启后要恢复后台工作的租户用本方法，而不是自己取引擎：它会先登记后台执行器、再恢复 goal 调度。
-     * 预热的租户清单由宿主维护（例如租户表里「有活跃 goal」的标记）。</p>
+     * <p>重启后要恢复后台工作的租户用本方法：首次取到某个引擎时，框架依次登记后台执行器、
+     * 按 goal 活跃索引恢复调度、按 queue 积压索引续发（任何入口首次用到该租户时也会做同样的事，
+     * 本方法只是把它提前）。宿主的旧数据迁移没有顺序要求。</p>
      *
      * @return 成功的数量
      */
@@ -150,34 +174,33 @@ public final class HarnessHost {
         return ok;
     }
 
-    // ==================== 会话生命周期（宿主该做的事，给窄门面） ====================
+    // ==================== 会话生命周期 ====================
 
     /**
-     * 开通会话并写入会话主体（登录身份），是一次调用完成——不给「先建后写主体」留窗口。
+     * 开通会话并写入会话主体（登录身份），一次调用完成——不给「先建后写主体」留窗口。
      *
-     * <p>SERVER 模式下 {@code scopeRequired} 为真：没有主体的会话提交输入会被拒（{@code scope_unavailable}），
-     * 所以宿主应当在登录后立即用本方法建会话。</p>
-     *
-     * @param principal 会话主体（登录身份，非空；设置后不可改）
+     * @param principal 会话主体（设置后不可改）。引擎要求作用域（SERVER 模式）时必填；
+     *                  单用户 / 本地部署可为 null（不写主体）
      * @return 会话实例
-     * @throws SecurityException 该会话已有不同主体（防止把 A 的会话交给 B 继续用）
+     * @throws IllegalArgumentException 引擎要求作用域，但没给主体
+     * @throws SecurityException        该会话已有不同主体（防止把 A 的会话交给 B 继续用）
      */
-    public AgentSession openSession(String tenant, String sessionId, String principal) {
+    public AgentSession openSession(String tenant, String sessionId, @Nullable String principal) {
         Objects.requireNonNull(sessionId, "sessionId");
-        if (principal == null || principal.isEmpty()) {
-            throw new IllegalArgumentException("principal is required");
-        }
         HarnessEngine engine = engine(tenant);
+        boolean hasPrincipal = principal != null && principal.isEmpty() == false;
+        if (hasPrincipal == false && engine.isScopeRequired()) {
+            throw new IllegalArgumentException("principal is required (the engine requires an input scope)");
+        }
         AgentSession session = engine.getSession(sessionId);
-        engine.setSessionPrincipal(session, principal);
+        if (hasPrincipal) {
+            engine.setSessionPrincipal(session, principal);
+        }
         return session;
     }
 
     /**
      * 关闭（永久删除）会话：判忙 → 通知全部扩展（撤掉定时任务等）→ 删除存储。
-     *
-     * <p>顺序由框架保证：{@code engine.removeSession} 必须在删除存储之前调用，否则定时任务可能在中间时段触发、
-     * 把会话重新建出来。存储删除由宿主提供的 {@code storageCleanup} 完成（框架不知道宿主的存储形态）。</p>
      *
      * @param storageCleanup 删除存储（可空：宿主自行在返回值之后删除）
      * @return true = 已关闭或本来就不存在；false = 会话忙（有运行流 / 待审批 / 受理窗口），未做任何事
@@ -194,7 +217,7 @@ public final class HarnessHost {
         }
         engine.removeSession(sessionId);
         if (storageCleanup != null) {
-            safe(storageCleanup);
+            HostSinkSupport.safe(storageCleanup);
         }
         return true;
     }
@@ -207,29 +230,108 @@ public final class HarnessHost {
     // ==================== 使用态 ====================
 
     /**
-     * 提交一条用户输入（含斜杠命令）。
+     * 提交一条用户输入（含斜杠命令）。等价于 {@code submit(tenant, sid, SubmitSpec.of(text).origin(origin))}。
      *
      * @param origin 来源（回复路由；可空）
      */
     public SubmitResult submit(String tenant, String sessionId, @Nullable String text, @Nullable InputOrigin origin) {
-        return submit(tenant, sessionId, text, origin, null);
+        return submit(tenant, sessionId, SubmitSpec.of(text).origin(origin));
     }
 
     /**
-     * 提交一条用户输入，并补充输入参数（附件、显式模型 / 子代理、宿主域属性等）。
-     *
-     * @param customizer 对 {@code HarnessInput.of(session, text).origin(origin)} 的补充（可空）
+     * 提交一条用户输入（主体校验、忙时策略、输入补充、本次监听见 {@link SubmitSpec}）。
      */
-    public SubmitResult submit(String tenant, String sessionId, @Nullable String text, @Nullable InputOrigin origin,
-                               @Nullable Consumer<HarnessInput> customizer) {
-        final InputOrigin o = origin == null ? InputOrigin.NONE : origin;
-        return admit(tenant, sessionId, o, session -> {
-            HarnessInput in = HarnessInput.of(session, text).origin(o);
-            if (customizer != null) {
-                customizer.accept(in);
+    public SubmitResult submit(String tenant, String sessionId, SubmitSpec spec) {
+        Objects.requireNonNull(spec, "spec");
+        return submit(tenant, sessionId, spec, spec.getObserver());
+    }
+
+    /** 提交（本次监听显式传入：{@link #stream} 不改写调用方的 spec，同一个 spec 可被并发复用） */
+    private SubmitResult submit(String tenant, String sessionId, SubmitSpec spec, @Nullable RunSink observer) {
+        final InputOrigin o = spec.getOrigin();
+        return admit(tenant, sessionId, o, spec.getText(), spec, observer, session -> {
+            HarnessInput in = HarnessInput.of(session, spec.getText()).origin(o);
+            if (spec.getCustomizer() != null) {
+                spec.getCustomizer().accept(in);
             }
             return in;
         });
+    }
+
+    /**
+     * 提交一条用户输入，并把本次请求「发生了什么」作为信号流返回（适合直接转成 SSE）。
+     *
+     * <p>开了流时为 {@code REPLY?} → {@code EVENT*} → {@code HITL?} → {@code FINISHED}；没开流时只有一个结局信号。
+     * 下游取消（客户端断开）会停掉本轮（{@link RunHandle#cancel()}）。全局 sink 照常收到全部回调。</p>
+     */
+    public Flux<HostSignal> stream(String tenant, String sessionId, SubmitSpec spec) {
+        Objects.requireNonNull(spec, "spec");
+        return Flux.create(fs -> {
+            RunSink signals = new RunSink() {
+                @Override
+                public void reply(String text) {
+                    fs.next(HostSignal.reply(text));
+                }
+
+                @Override
+                public void event(AgentEvent event) {
+                    fs.next(HostSignal.event(event));
+                }
+
+                @Override
+                public void finished(RunOutcome outcome) {
+                    if (outcome.getHitlCards().isEmpty() == false) {
+                        fs.next(HostSignal.hitl(outcome.getHitlCards()));
+                    }
+                    fs.next(HostSignal.finished(outcome));
+                    fs.complete();
+                }
+            };
+            RunSink prev = spec.getObserver();
+            List<RunSink> observers = new ArrayList<>();
+            if (prev != null) {
+                observers.add(prev);
+            }
+            observers.add(signals);
+
+            SubmitResult r;
+            try {
+                r = submit(tenant, sessionId, spec, RunSink.compose(observers));
+            } catch (Throwable e) {
+                fs.error(e);
+                return;
+            }
+
+            switch (r.getKind()) {
+                case STARTED: {
+                    RunHandle handle = r.getRun();
+                    fs.onCancel(handle::cancel);
+                    return;
+                }
+                case REPLY:
+                    if (r.getReplyText() != null) {
+                        fs.next(HostSignal.reply(r.getReplyText()));
+                    }
+                    break;
+                case DEFERRED:
+                    fs.next(HostSignal.deferred(r.getBacklogPosition()));
+                    break;
+                case REJECTED:
+                    fs.next(HostSignal.rejected(r.getRejectReason(), r.getRejectDetail()));
+                    break;
+                case HITL:
+                    fs.next(HostSignal.hitl(r.getHitlCards()));
+                    break;
+                case STEERED:
+                    fs.next(HostSignal.of(HostSignal.Type.STEERED));
+                    break;
+                case IGNORED:
+                default:
+                    fs.next(HostSignal.of(HostSignal.Type.IGNORED));
+                    break;
+            }
+            fs.complete();
+        }, FluxSink.OverflowStrategy.BUFFER);
     }
 
     /**
@@ -242,7 +344,7 @@ public final class HarnessHost {
                                @Nullable String note, @Nullable InputOrigin origin) {
         Objects.requireNonNull(action, "action");
         final InputOrigin o = origin == null ? InputOrigin.NONE : origin;
-        return admit(tenant, sessionId, o, session -> {
+        return admit(tenant, sessionId, o, null, null, null, session -> {
             HarnessInput in = HarnessInput.of(session, null).origin(o).hitl(action, callId).resume(true);
             if (note != null) {
                 in.hitlOutput(note);
@@ -255,10 +357,30 @@ public final class HarnessHost {
      * 中断会话的运行（方式见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT_ALL}，
      * 只停当前运行、保留排队用 {@code CANCEL_STREAM}）。
      *
-     * @return OK（值为「确有运行中的流被停掉」）、NOT_FOUND、NOT_OWNER
+     * <p>停止就是停止：受理之后本轮不再把事件交给宿主，终态一定是 {@link RunOutcome.End#CANCELLED}
+     * （原因见 {@link RunOutcome#getCancelCause()}）。宿主不需要在调用前做任何准备。</p>
+     *
+     * @return OK 时值为 true = 有一轮被停掉（本骨架的轮次——含还在调度窗口里、尚未开流的——会以
+     *         {@code finished(CANCELLED)} 收尾）；false = 没有在跑的轮次。另有 NOT_FOUND、NOT_OWNER
      */
     public HarnessResult<Boolean> interrupt(String tenant, String sessionId, InterruptMode mode) {
         Objects.requireNonNull(mode, "mode");
+        return interrupt(tenant, sessionId, mode, causeOf(mode));
+    }
+
+    private static RunOutcome.CancelCause causeOf(InterruptMode mode) {
+        switch (mode) {
+            case INTERRUPT_ALL:
+                return RunOutcome.CancelCause.INTERRUPT_ALL;
+            case PREEMPT_STREAM:
+                return RunOutcome.CancelCause.PREEMPT_STREAM;
+            default:
+                return RunOutcome.CancelCause.CANCEL_STREAM;
+        }
+    }
+
+    private HarnessResult<Boolean> interrupt(String tenant, String sessionId, InterruptMode mode,
+                                             RunOutcome.CancelCause cause) {
         HarnessEngine engine = engine(tenant);
         // 先查归属再加载会话：非持有节点不把会话装进内存
         OwnerCheck owner = engine.checkOwner(sessionId);
@@ -269,7 +391,43 @@ public final class HarnessHost {
         if (session == null) {
             return HarnessResult.fail(HarnessResult.Code.NOT_FOUND, "session not found");
         }
-        return engine.interrupt(session, mode);
+        ActiveRun run = active.get(key(tenant, sessionId));
+
+        if (mode == InterruptMode.INTERRUPT_ALL) {
+            // 两段式：先落取消消息、标记本轮为 CANCELLED（用量在停流前取快照），再停流
+            try (InterruptPlan plan = engine.prepareInterrupt(session)) {
+                if (plan == null) {
+                    return HarnessResult.ok(false);
+                }
+                if (plan.isNotOwner()) {
+                    return HarnessResult.notOwner(plan.getOwner());
+                }
+                // 先立屏障（本轮不再向宿主投递事件），再落取消消息、停流
+                boolean marked = requestCancel(run, cause);
+                if (plan.hasActiveRun() == false) {
+                    // 无活跃流：取消代数已推进，调度窗口里的那一轮会自己放弃开流（以 CANCELLED 收尾）
+                    return HarnessResult.ok(marked);
+                }
+                plan.writeCancelEarly();
+                boolean stopped = plan.commit();
+                return HarnessResult.ok(marked || stopped);
+            }
+        }
+
+        boolean marked = requestCancel(run, cause);
+        HarnessResult<Boolean> r = engine.interrupt(session, mode);
+        boolean stopped = Boolean.TRUE.equals(r.getValue());
+        if (mode == InterruptMode.PREEMPT_STREAM && stopped == false) {
+            // 腾位不推进取消代数：没停到流时，窗口里的那一轮会照常跑，不能算作被取消
+            if (run != null) {
+                run.revokeCancel(cause);
+            }
+            return r;
+        }
+        if (r.isOk() == false) {
+            return r;
+        }
+        return HarnessResult.ok(marked || stopped);
     }
 
     /**
@@ -283,16 +441,14 @@ public final class HarnessHost {
         }
         AgentSession session = engine.getSessionOrNull(sessionId);
         if (session != null) {
-            drain(new Ctx(tenant, engine, session));
+            drainWrapped(new Ctx(tenant, engine, session));
         }
     }
 
     // ==================== 管理态 ====================
 
     /**
-     * 会话管理态（控制台 / 后台 API）。
-     *
-     * <p>鉴权不在本类：请在控制器 / 拦截器层完成后，再调用它。</p>
+     * 会话管理态（控制台 / 后台 API）。鉴权不在本类：请在控制器 / 拦截器层完成后，再调用它。
      */
     public SessionAdmin admin(String tenant) {
         return new SessionAdmin(this, tenant);
@@ -300,7 +456,8 @@ public final class HarnessHost {
 
     // ==================== 编排 ====================
 
-    private SubmitResult admit(String tenant, String sessionId, InputOrigin origin,
+    private SubmitResult admit(String tenant, String sessionId, InputOrigin origin, @Nullable String text,
+                               @Nullable SubmitSpec spec, @Nullable RunSink observer,
                                Function<AgentSession, HarnessInput> inputOf) {
         Objects.requireNonNull(sessionId, "sessionId");
         for (int attempt = 0; ; attempt++) {
@@ -310,24 +467,111 @@ public final class HarnessHost {
             OwnerCheck owner = engine.checkOwner(sessionId);
             if (owner.isOwned() == false) {
                 final String o = owner.getOwner();
-                safe(() -> sink.notOwner(origin, o));
+                HostInput input = HostInput.early(tenant, sessionId, origin, null, text, null, null);
+                HostSinkSupport.safe(() -> sink.notOwner(input, o));
                 return SubmitResult.notOwner(o);
             }
 
             // 只查不建：getSession 会凭空新建会话
             AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) {
-                safe(() -> sink.rejected(origin, RejectReason.SESSION_NOT_FOUND, null));
-                return SubmitResult.rejected(RejectReason.SESSION_NOT_FOUND);
+                return rejectEarly(tenant, sessionId, origin, null, text, null, RejectReason.SESSION_NOT_FOUND, null);
             }
 
-            InputOutcome outcome = engine.handle(inputOf.apply(session));
+            if (spec != null) {
+                SubmitResult denied = checkPrincipal(tenant, engine, session, origin, text, spec.getPrincipal());
+                if (denied != null) {
+                    return denied;
+                }
+            }
+
+            HarnessInput in = inputOf.apply(session);
+            decorate(tenant, in);
+
+            if (spec != null && spec.isSteerWhenBusy()) {
+                SubmitResult steered = trySteer(tenant, engine, session, origin, in);
+                if (steered != null) {
+                    return steered;
+                }
+            }
+            if (spec != null && spec.isRejectWhenBusy() && isBusyFor(engine, session, in)) {
+                return rejectEarly(tenant, sessionId, origin, session, text, in, RejectReason.BUSY, null);
+            }
+
+            InputOutcome outcome = engine.handle(in);
             if (attempt == 0 && outcome.getKind() == InputOutcome.Kind.REJECTED
                     && outcome.getRejectReason() == RejectReason.ENGINE_CLOSED) {
                 // 引擎刚被池回收：持有的是过期引用，换新引擎重试一次
                 continue;
             }
-            return route(new Ctx(tenant, engine, session), outcome, origin, false);
+            return route(new Ctx(tenant, engine, session), outcome, origin, text, null, in, observer, false);
+        }
+    }
+
+    private SubmitResult rejectEarly(String tenant, String sessionId, InputOrigin origin, @Nullable AgentSession session,
+                                     @Nullable String text, @Nullable HarnessInput in, RejectReason reason,
+                                     @Nullable String detail) {
+        HostInput input = HostInput.early(tenant, sessionId, origin, session, text, null, in);
+        HostSinkSupport.safe(() -> sink.rejected(input, reason, detail));
+        return SubmitResult.rejected(reason, detail);
+    }
+
+    /** 主体校验：传了主体就必须与会话主体一致；没传且引擎要求作用域时只告警一次 */
+    @Nullable
+    private SubmitResult checkPrincipal(String tenant, HarnessEngine engine, AgentSession session, InputOrigin origin,
+                                        @Nullable String text, @Nullable String principal) {
+        if (principal == null || principal.isEmpty()) {
+            if (engine.isScopeRequired() && warnedNoPrincipal.compareAndSet(false, true)) {
+                LOG.warn("[HarnessHost] submit without principal under scopeRequired: sessionId comes from the client, "
+                        + "pass SubmitSpec.principal(...) to stop one user from submitting into another user's session");
+            }
+            return null;
+        }
+        if (principal.equals(engine.getSessionPrincipal(session))) {
+            return null;
+        }
+        return rejectEarly(tenant, session.getSessionId(), origin, session, text, null,
+                RejectReason.SCOPE_UNAVAILABLE, "principal mismatch");
+    }
+
+    /** 忙时插话：会话有运行流、输入是纯文本且不是命令、装了 steer 插件 */
+    @Nullable
+    private SubmitResult trySteer(String tenant, HarnessEngine engine, AgentSession session, InputOrigin origin,
+                                  HarnessInput in) {
+        String text = in.getText();
+        if (text == null || text.trim().isEmpty() || in.hasAttachments() || in.isHitlDecision() || in.isResume()) {
+            return null;
+        }
+        SteerExtension steer = engine.getExtension(SteerExtension.class).orElse(null);
+        if (steer == null || engine.resolveCommand(text) != null) {
+            return null;
+        }
+        SessionStatus st = engine.status(session);
+        if (st.isBusy() == false || st.hasPendingHitl()) {
+            // 待审批时不插话：交给引擎受理，由它给出 HITL_PENDING（提示先处理审批）
+            return null;
+        }
+        HarnessResult<?> r = steer.steer(session, text, origin);
+        if (r.isOk() == false) {
+            return null; // 插不进（盒满、运行刚结束等）：回落到正常受理
+        }
+        HostInput input = HostInput.early(tenant, session.getSessionId(), origin, session, text, null, in);
+        HostSinkSupport.safe(() -> sink.steered(input));
+        return SubmitResult.of(SubmitResult.Kind.STEERED);
+    }
+
+    /** rejectWhenBusy 的忙判定：不空闲（运行中 / 受理窗口 / 有积压），且不是待审批（那由引擎给出 HITL_PENDING） */
+    private static boolean isBusyFor(HarnessEngine engine, AgentSession session, HarnessInput in) {
+        SessionStatus st = engine.status(session);
+        if (st.hasPendingHitl() || engine.isIdle(session)) {
+            return false;
+        }
+        return engine.isRunnableWhenBusy(in) == false;
+    }
+
+    private void decorate(String tenant, HarnessInput in) {
+        if (inputDecorator != null) {
+            inputDecorator.accept(tenant, in);
         }
     }
 
@@ -336,26 +580,38 @@ public final class HarnessHost {
      *
      * @param inClaim 是否在队列领取回调里（此时外层 drainLoop 会继续领取，这里不再嵌套续发）
      */
-    private SubmitResult route(Ctx c, InputOutcome outcome, InputOrigin origin, boolean inClaim) {
+    private SubmitResult route(Ctx c, InputOutcome outcome, InputOrigin origin, @Nullable String text,
+                               @Nullable QueueItem item, @Nullable HarnessInput in, @Nullable RunSink observer,
+                               boolean inClaim) {
         InputOrigin routeIn = origin;
         RunDispatch dispatch = outcome.getDispatch();
         if (dispatch != null && dispatch.getOrigin() != null && dispatch.getOrigin().isEmpty() == false) {
             routeIn = dispatch.getOrigin();
         }
-        final InputOrigin route = routeIn;
+        final HostInput input = HostInput.of(c.tenant, c.session, routeIn, text, outcome, item, in);
 
         switch (outcome.getKind()) {
             case TASK:
-                return startRun(c, outcome, route, inClaim);
-            case REPLY:
-                if (outcome.hasReply()) {
-                    reply(route, outcome.getCommandOutput());
+                if (outcome.isBesideRunning()) {
+                    // 忙时可执行命令触发了任务：会话已有流在跑，再开一条会与它共享同一 trace（新流立即空转结束）
+                    outcome.discard();
+                    HostSinkSupport.safe(() -> sink.rejected(input, RejectReason.BUSY, "another run is in progress"));
+                    return SubmitResult.rejected(RejectReason.BUSY, "another run is in progress");
+                }
+                HostSinkSupport.safe(() -> sink.admitted(input));
+                return startRun(c, outcome, input, null, observer, inClaim);
+            case REPLY: {
+                HostSinkSupport.safe(() -> sink.admitted(input));
+                final String out = outcome.getCommandOutput();
+                if (out != null) {
+                    HostSinkSupport.safe(() -> sink.reply(input, out));
                 }
                 drainUnless(c, inClaim);
-                return SubmitResult.of(SubmitResult.Kind.REPLY);
+                return SubmitResult.reply(out);
+            }
             case DEFERRED: {
                 final int position = outcome.getBacklogPosition();
-                safe(() -> sink.deferred(route, position));
+                HostSinkSupport.safe(() -> sink.deferred(input, position));
                 // 会话可能只是「积压未清」而并不忙：立即尝试续发
                 drainUnless(c, inClaim);
                 return SubmitResult.deferred(position);
@@ -364,114 +620,237 @@ public final class HarnessHost {
                 RejectReason reason = outcome.getRejectReason();
                 final String detail = outcome.getRejectDetail();
                 if (reason == RejectReason.NOT_OWNER) {
-                    safe(() -> sink.notOwner(route, detail));
+                    HostSinkSupport.safe(() -> sink.notOwner(input, detail));
                     return SubmitResult.notOwner(detail);
                 }
-                safe(() -> sink.rejected(route, reason, detail));
-                return SubmitResult.rejected(reason);
+                HostSinkSupport.safe(() -> sink.rejected(input, reason, detail));
+                return SubmitResult.rejected(reason, detail);
             }
-            case HITL:
+            case HITL: {
+                HostSinkSupport.safe(() -> sink.admitted(input));
+                List<HitlCard> cards = Collections.emptyList();
                 if (Boolean.FALSE.equals(outcome.isHitlApplied())) {
-                    safe(() -> sink.hitlExpired(route));
+                    HostSinkSupport.safe(() -> sink.hitlExpired(input));
                 } else {
-                    pushHitl(c.session, route);
+                    cards = pushHitl(c.session, input);
                 }
                 drainUnless(c, inClaim);
-                return SubmitResult.of(SubmitResult.Kind.HITL);
+                return SubmitResult.hitl(cards);
+            }
             case IGNORED:
             default:
+                HostSinkSupport.safe(() -> sink.admitted(input));
                 drainUnless(c, inClaim);
                 return SubmitResult.of(SubmitResult.Kind.IGNORED);
         }
     }
 
-    private SubmitResult startRun(Ctx c, InputOutcome outcome, InputOrigin route, boolean inClaim) {
-        // ① 订阅之前（调用线程内）领取凭据：取消代数基准 + 本轮派发事务
+    /** 打开本轮：领凭据、建通道、登记续发与活跃表；返回的轮次尚未开流 */
+    private ActiveRun openRun(Ctx c, InputOutcome outcome, HostInput input, @Nullable String programChannel,
+                              @Nullable RunSink observer) {
+        // 订阅之前（调用线程内）领取凭据：取消代数基准 + 本轮派发事务
         final RunTicket ticket = RunTicket.begin(c.session);
-        final HostRun run = new HostRun(c.tenant, c.session.getSessionId(), route, outcome.getAgentName(),
-                outcome.isDispatched() || ticket.dispatch() != null, null);
-        final AtomicBoolean finished = new AtomicBoolean();
+        final HostRun run = new HostRun(input, c.session, outcome.getAgentName(), outcome.getModelName(), programChannel);
 
-        // ② 续发积压登记在运行句柄注销之后（宿主 doFinally 里会话仍算忙）
-        outcome.afterRun(() -> drain(c));
-
-        safe(() -> sink.runStarted(run));
-        if (outcome.hasReply()) {
-            reply(route, outcome.getCommandOutput());
+        List<RunSink> sinks = new ArrayList<>(2);
+        try {
+            RunSink s = sink.open(run);
+            sinks.add(s == null ? RunSink.NONE : s);
+        } catch (Throwable e) {
+            LOG.warn("[HarnessHost] sink.open failed: {}", run, e);
+            sinks.add(RunSink.NONE);
+        }
+        if (observer != null) {
+            sinks.add(observer);
         }
 
-        Runnable action = () -> {
-            try {
-                // ③ 调度窗口内被取消：不开流
-                if (ticket.isCancelled()) {
-                    outcome.discard();
-                    ticket.settle(false);
-                    finish(c, run, finished, null, false);
-                    return;
-                }
+        final ActiveRun ar = new ActiveRun(c, run, ticket, outcome, RunSink.compose(sinks));
+        ar.handle = new RunHandle(run, () -> cancelRun(ar));
+        active.put(ar.key, ar);
 
-                final AtomicReference<Throwable> error = new AtomicReference<>();
-                outcome.stream()
-                        .doOnNext(e -> event(run, e))
-                        .doOnError(error::set)
-                        .doFinally(s -> {
-                            ticket.settle(true); // 幂等；非程序派发时是空操作
-                            finish(c, run, finished, error.get(), true);
-                        })
-                        .subscribe(e -> {
-                        }, e -> {
-                        });
-            } catch (Throwable e) {
-                failStart(c, outcome, ticket, run, finished, e);
-            }
-        };
+        // 续发积压登记在运行句柄注销之后（宿主 doFinally 里会话仍算忙）
+        outcome.afterRun(() -> drainWrapped(c));
+        trace(ar, "open");
+        return ar;
+    }
 
+    private SubmitResult startRun(Ctx c, InputOutcome outcome, HostInput input, @Nullable String programChannel,
+                                  @Nullable RunSink observer, boolean inClaim) {
+        final ActiveRun ar = openRun(c, outcome, input, programChannel, observer);
         try {
-            executor.execute(wrap.apply(action));
+            executor.execute(wrap.apply(c.tenant, () -> runStream(ar)));
         } catch (Throwable e) {
-            if (inClaim && ticket.dispatch() != null) {
+            if (inClaim && ar.ticket.dispatch() != null) {
                 // 队列续发的一轮启动失败：交回领取侧回滚到队首（START_FAILED，不立即重试）
                 outcome.discard();
-                finish(c, run, finished, e, false);
+                finish(ar, RunOutcome.End.FAILED, e, false);
                 throw new IllegalStateException("queued run failed to start", e);
             }
-            failStart(c, outcome, ticket, run, finished, e);
+            failStart(ar, e);
         }
-        return SubmitResult.of(SubmitResult.Kind.STARTED);
+        return SubmitResult.started(ar.handle);
+    }
+
+    /** 执行线程上：回执 → 窗口检查 → prepare → 开流（同一轮的 RunSink 回调由此串行展开） */
+    private void runStream(ActiveRun ar) {
+        try {
+            // 命令已经执行：回执无论本轮是否随后被取消都要发出
+            if (ar.outcome.hasReply()) {
+                final String out = ar.outcome.getCommandOutput();
+                trace(ar, "reply");
+                HostSinkSupport.safe(() -> ar.sink.reply(out));
+            }
+
+            // 调度窗口内被取消：不开流
+            if (cancelBeforeOpen(ar)) {
+                return;
+            }
+            trace(ar, "prepare");
+
+            ar.sink.prepare(new RunPrep(ar.run, ar.ctx.engine, ar.outcome.getRequest(), ar.outcome.getPrompt(),
+                    ar.outcome.getModelName()));
+
+            // prepare 期间被取消（宿主的准备动作可能耗时）：同样不开流
+            if (cancelBeforeOpen(ar)) {
+                return;
+            }
+
+            ar.openedAt = System.currentTimeMillis();
+            ar.streamOpened = true;
+            trace(ar, "stream");
+            ar.outcome.stream()
+                    .doOnNext(e -> {
+                        ar.observe(e);
+                        // 取消屏障：中断受理之后不再把事件交给宿主（用量仍照常统计）
+                        if (ar.cancelCause == null) {
+                            HostSinkSupport.safe(() -> ar.sink.event(e));
+                        }
+                    })
+                    .doOnError(ar.error::set)
+                    .doFinally(s -> {
+                        ar.ticket.settle(true); // 幂等；非程序派发时是空操作
+                        finish(ar, endOf(ar, s), ar.error.get(), true);
+                    })
+                    .subscribe(e -> {
+                    }, e -> {
+                    });
+        } catch (Throwable e) {
+            failStart(ar, e);
+        }
+    }
+
+    private boolean cancelBeforeOpen(ActiveRun ar) {
+        if (ar.ticket.isCancelled() == false && ar.cancelCause == null) {
+            return false;
+        }
+        ar.outcome.discard();
+        ar.ticket.settle(false);
+        finish(ar, RunOutcome.End.CANCELLED, null, false);
+        if (ar.ticket.dispatch() == null) {
+            // 只停当前、保留排队（CANCEL_STREAM）时积压还在：未开流就没有 afterRun，这里补一次续发
+            drainWrapped(ar.ctx);
+        }
+        return true;
+    }
+
+    private static RunOutcome.End endOf(ActiveRun ar, SignalType signal) {
+        if (ar.cancelCause != null || signal == SignalType.CANCEL || ar.ticket.isCancelled()) {
+            return RunOutcome.End.CANCELLED;
+        }
+        return ar.error.get() != null ? RunOutcome.End.FAILED : RunOutcome.End.COMPLETED;
     }
 
     /** 开流前失败：释放占位、回滚派发、补发终态；普通输入失败时续发积压，队列派发的失败已回队首、不立即重试 */
-    private void failStart(Ctx c, InputOutcome outcome, RunTicket ticket, HostRun run, AtomicBoolean finished, Throwable e) {
-        LOG.warn("[HarnessHost] run failed to start: {}", run, e);
-        outcome.discard();
-        boolean rolledBack = ticket.settle(false);
-        finish(c, run, finished, e, false);
-        if (rolledBack == false && ticket.dispatch() == null) {
-            drain(c);
+    private void failStart(ActiveRun ar, Throwable e) {
+        LOG.warn("[HarnessHost] run failed to start: {}", ar.run, e);
+        ar.outcome.discard();
+        boolean rolledBack = ar.ticket.settle(false);
+        finish(ar, RunOutcome.End.FAILED, e, false);
+        if (rolledBack == false && ar.ticket.dispatch() == null) {
+            drainWrapped(ar.ctx);
         }
     }
 
-    /** 终态（恰好一次）：先推送挂起的审批卡，再 runFinished */
-    private void finish(Ctx c, HostRun run, AtomicBoolean finished, @Nullable Throwable error, boolean checkHitl) {
-        if (finished.compareAndSet(false, true) == false) {
-            return;
+    /** 终态（恰好一次）：先推送挂起的审批卡，再 finished。取消已受理时结局一律为 CANCELLED */
+    private void finish(ActiveRun ar, RunOutcome.End end, @Nullable Throwable error, boolean checkHitl) {
+        RunOutcome.CancelCause cause;
+        synchronized (ar) {
+            if (ar.finished) {
+                return;
+            }
+            ar.finished = true;
+            cause = ar.cancelCause;
         }
-        if (checkHitl && error == null) {
-            pushHitl(c.session, run.getOrigin());
+        if (cause != null) {
+            end = RunOutcome.End.CANCELLED;
         }
-        safe(() -> sink.runFinished(run, error));
+        active.remove(ar.key, ar);
+        List<HitlCard> cards = null;
+        if (checkHitl && end == RunOutcome.End.COMPLETED) {
+            cards = pushHitl(ar.ctx.session, ar.run.getInput());
+        }
+        RunUsage usage = ar.cancelUsage != null ? ar.cancelUsage : ar.usage();
+        RunOutcome outcome = new RunOutcome(end, cause, end == RunOutcome.End.FAILED ? error : null, ar.resultText(),
+                usage, ar.streamOpened, cards);
+        trace(ar, "finished " + outcome);
+        HostSinkSupport.safe(() -> ar.sink.finished(outcome));
+        ar.handle.complete(outcome);
     }
 
-    private void pushHitl(AgentSession session, InputOrigin route) {
+    /** 登记取消（本轮尚未结束时）：之后事件不再投递、终态一定是 CANCELLED。已结束或没有轮次时返回 false */
+    private static boolean requestCancel(@Nullable ActiveRun ar, RunOutcome.CancelCause cause) {
+        if (ar == null) {
+            return false;
+        }
+        boolean marked;
+        synchronized (ar) {
+            marked = ar.finished == false;
+            if (marked && ar.cancelCause == null) {
+                ar.cancelUsage = ar.usage();
+                ar.cancelCause = cause;
+            }
+        }
+        if (marked) {
+            trace(ar, "cancel " + cause);
+        }
+        return marked;
+    }
+
+    /** {@link RunHandle#cancel()}：只停仍是本会话当前轮次的那一轮 */
+    private void cancelRun(ActiveRun ar) {
+        if (active.get(ar.key) == ar) {
+            interrupt(ar.ctx.tenant, ar.ctx.session.getSessionId(), InterruptMode.CANCEL_STREAM,
+                    RunOutcome.CancelCause.HANDLE);
+        }
+    }
+
+    /** 生命周期跟踪（DEBUG）：一轮一行一步，按轮次 id 串起来 */
+    private static void trace(ActiveRun ar, String step) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("[HarnessHost] {} {}", ar.run, step);
+        }
+    }
+
+    private List<HitlCard> pushHitl(AgentSession session, HostInput input) {
         List<HitlCard> cards = HitlCard.undecided(session);
         if (cards.isEmpty() == false) {
-            safe(() -> sink.hitl(route, cards));
+            HostSinkSupport.safe(() -> sink.hitl(input, cards));
         }
+        return cards;
     }
 
     private void drainUnless(Ctx c, boolean inClaim) {
         if (inClaim == false) {
-            drain(c);
+            drainWrapped(c);
+        }
+    }
+
+    /** 续发也经过 wrap（日志作用域、租户上下文）；在当前线程执行 */
+    private void drainWrapped(Ctx c) {
+        try {
+            wrap.apply(c.tenant, () -> drain(c)).run();
+        } catch (Throwable e) {
+            LOG.warn("[HarnessHost] drain failed: {}/{}", c.tenant, c.session.getSessionId(), e);
         }
     }
 
@@ -484,8 +863,10 @@ public final class HarnessHost {
         try {
             queue.drainLoop(c.session, s -> c.engine.status(s).isOccupied() == false, claim -> {
                 QueueItem item = claim.getItem();
-                InputOutcome outcome = c.engine.handle(item.toInput(c.session));
-                SubmitResult r = route(c, outcome, item.getOrigin(), true);
+                HarnessInput in = item.toInput(c.session);
+                decorate(c.tenant, in);
+                InputOutcome outcome = c.engine.handle(in);
+                SubmitResult r = route(c, outcome, item.getOrigin(), item.getText(), item, in, null, true);
                 // 开了流 = 异步启动（终态由 RunTicket.settle 收口）；其余结局已同步完成
                 return r.getKind() != SubmitResult.Kind.STARTED;
             });
@@ -502,15 +883,11 @@ public final class HarnessHost {
         }
         try {
             engine.getExtension(GoalExtension.class).ifPresent(goal ->
-                    goal.addExecutor(EXECUTOR_CHANNEL, null, (GoalExecutor) (sid, prompt) -> {
-                        ProgramResult r = runProgram(tenant, engine, sid, prompt, "goal");
-                        return r.skipReason != null ? GoalOutcome.skip(r.skipReason) : GoalOutcome.done(r.response);
-                    }));
+                    goal.addExecutor(EXECUTOR_CHANNEL, programFilter, (GoalExecutor) (sid, prompt) ->
+                            toGoalOutcome(runProgram(tenant, engine, sid, prompt, "goal"))));
             engine.getExtension(LoopExtension.class).ifPresent(loop ->
-                    loop.addExecutor(EXECUTOR_CHANNEL, null, (LoopExecutor) (sid, prompt) -> {
-                        ProgramResult r = runProgram(tenant, engine, sid, prompt, "loop");
-                        return r.skipReason != null ? LoopOutcome.skip(r.skipReason) : LoopOutcome.done(r.response.getContent());
-                    }));
+                    loop.addExecutor(EXECUTOR_CHANNEL, programFilter, (LoopExecutor) (sid, prompt) ->
+                            toLoopOutcome(runProgram(tenant, engine, sid, prompt, "loop"))));
         } catch (Throwable e) {
             // 插件未挂接等：保留插件自带的缺省执行器
             LOG.warn("[HarnessHost] bind program runs failed: {}", tenant, e);
@@ -526,81 +903,141 @@ public final class HarnessHost {
         }
     }
 
-    /** 同步跑一轮后台任务（与插件缺省执行器同口径），并接入 runStarted / runFinished / 续发 */
+    /**
+     * 按 queue 积压索引续发（进程重启、引擎被池回收后重建都走这里）。只续发后台轮次过滤命中的会话
+     * （同一引擎上挂了多个宿主时，各自恢复各自的会话）；非持有节点在 drain 里被归属检查挡下。
+     */
+    private void recoverBacklog(String tenant, HarnessEngine engine) {
+        try {
+            QueueExtension queue = engine.getExtension(QueueExtension.class).orElse(null);
+            if (queue == null) {
+                return;
+            }
+            for (String sessionId : queue.pendingSessions()) {
+                if (programFilter != null && programFilter.test(sessionId) == false) {
+                    continue;
+                }
+                if (engine.checkOwner(sessionId).isOwned() == false) {
+                    continue;
+                }
+                AgentSession session = engine.getSessionOrNull(sessionId);
+                if (session != null) {
+                    drainWrapped(new Ctx(tenant, engine, session));
+                }
+            }
+        } catch (Throwable e) {
+            LOG.warn("[HarnessHost] backlog recover failed: {}", tenant, e);
+        }
+    }
+
+    /**
+     * 跑一轮后台任务：与用户轮次同一条链（open → prepare → event → finished，可被停止），
+     * 在调度线程上阻塞到本轮结束。
+     */
     private ProgramResult runProgram(String tenant, HarnessEngine engine, String sessionId, String prompt, String channel)
-            throws Exception {
+            throws InterruptedException {
         AgentSession session = engine.getSessionOrNull(sessionId);
         if (session == null) {
             return ProgramResult.skip("session not found");
         }
-        InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, channel));
+        HarnessInput in = HarnessInput.ofProgram(session, prompt, channel);
+        decorate(tenant, in);
+        InputOutcome outcome = engine.handle(in);
         if (outcome.getKind() != InputOutcome.Kind.TASK) {
             // 忙 / 待审批等未受理结局：本轮跳过，不计失败
             return ProgramResult.skip(outcome.getRejectReason() != null
                     ? outcome.getRejectReason().code() : "input not admitted: " + outcome.getKind());
         }
 
-        // 同线程同步执行，没有调度窗口，不需要 RunTicket
         Ctx c = new Ctx(tenant, engine, session);
-        HostRun run = new HostRun(tenant, sessionId, InputOrigin.channel(channel), outcome.getAgentName(), false, channel);
-        AtomicBoolean finished = new AtomicBoolean();
-        outcome.afterRun(() -> drain(c)); // call() 返回前执行（句柄已注销）
-
-        safe(() -> sink.runStarted(run));
-
-        Throwable error = null;
+        HostInput input = HostInput.of(tenant, session, InputOrigin.channel(channel), prompt, outcome, null, in);
+        ActiveRun ar = openRun(c, outcome, input, channel, null);
         try {
-            ReActResponse response = outcome.call();
-            run.setResultText(response.getContent());
-            return ProgramResult.done(response);
-        } catch (Exception | Error e) {
-            error = e;
-            throw e;
+            wrap.apply(tenant, () -> runStream(ar)).run();
         } catch (Throwable e) {
-            error = e;
-            throw new IllegalStateException(e.getMessage() != null ? e.getMessage() : e.toString(), e);
-        } finally {
-            outcome.discard(); // 幂等：call 已释放时为空操作
-            finish(c, run, finished, error, true);
+            failStart(ar, e);
+        }
+
+        try {
+            return ProgramResult.of(ar.handle.future().get(), ar.evidenceCalls.get() > 0);
+        } catch (InterruptedException e) {
+            ar.handle.cancel();
+            throw e;
+        } catch (ExecutionException e) {
+            return ProgramResult.failed(e.getCause());
         }
     }
 
-    private static final class ProgramResult {
-        final ReActResponse response;
-        final String skipReason;
+    private static GoalOutcome toGoalOutcome(ProgramResult r) throws Exception {
+        if (r.skipReason != null) {
+            return GoalOutcome.skip(r.skipReason);
+        }
+        r.rethrowFailure();
+        return GoalOutcome.done(r.outcome.getResultText(), r.hasEvidence, r.outcome.getUsage().getTotalTokens());
+    }
 
-        private ProgramResult(ReActResponse response, String skipReason) {
-            this.response = response;
+    private static LoopOutcome toLoopOutcome(ProgramResult r) throws Exception {
+        if (r.skipReason != null) {
+            return LoopOutcome.skip(r.skipReason);
+        }
+        r.rethrowFailure();
+        return LoopOutcome.done(r.outcome.getResultText());
+    }
+
+    /** 一轮后台任务的归类：出错 → 抛给插件（参与错误分级熔断）；被中断、没有最终回答 → 跳过；否则完成 */
+    private static final class ProgramResult {
+        final RunOutcome outcome;
+        final boolean hasEvidence;
+        final String skipReason;
+        final Throwable failure;
+
+        private ProgramResult(RunOutcome outcome, boolean hasEvidence, String skipReason, Throwable failure) {
+            this.outcome = outcome;
+            this.hasEvidence = hasEvidence;
             this.skipReason = skipReason;
+            this.failure = failure;
         }
 
-        static ProgramResult done(ReActResponse response) {
-            return new ProgramResult(response, null);
+        static ProgramResult of(RunOutcome o, boolean hasEvidence) {
+            if (o.isFailed()) {
+                return failed(o.getError());
+            }
+            if (o.isCancelled()) {
+                return skip("cancelled");
+            }
+            if (o.getResultText() == null || o.getResultText().trim().isEmpty()) {
+                return skip("no final answer");
+            }
+            return new ProgramResult(o, hasEvidence, null, null);
         }
 
         static ProgramResult skip(String reason) {
-            return new ProgramResult(null, reason);
+            return new ProgramResult(null, false, reason, null);
+        }
+
+        static ProgramResult failed(@Nullable Throwable error) {
+            return new ProgramResult(null, false, null,
+                    error != null ? error : new IllegalStateException("run failed"));
+        }
+
+        void rethrowFailure() throws Exception {
+            if (failure == null) {
+                return;
+            }
+            if (failure instanceof Exception) {
+                throw (Exception) failure;
+            }
+            if (failure instanceof Error) {
+                throw (Error) failure;
+            }
+            throw new IllegalStateException(failure.getMessage() != null ? failure.getMessage() : failure.toString(), failure);
         }
     }
 
-    // ==================== 安全投递 ====================
+    // ==================== 内部 ====================
 
-    private void reply(InputOrigin origin, @Nullable String text) {
-        if (text != null) {
-            safe(() -> sink.reply(origin, text));
-        }
-    }
-
-    private void event(HostRun run, AgentEvent e) {
-        safe(() -> sink.event(run, e));
-    }
-
-    private static void safe(Runnable r) {
-        try {
-            r.run();
-        } catch (Throwable e) {
-            LOG.warn("[HarnessHost] sink callback failed", e);
-        }
+    private static String key(String tenant, String sessionId) {
+        return tenant + '\u0000' + sessionId;
     }
 
     /** 一次编排的上下文 */
@@ -616,6 +1053,79 @@ public final class HarnessHost {
         }
     }
 
+    /** 一轮运行的内部状态 */
+    private static final class ActiveRun {
+        final Ctx ctx;
+        final HostRun run;
+        final RunTicket ticket;
+        final InputOutcome outcome;
+        final RunSink sink;
+        final String key;
+        final AtomicReference<Throwable> error = new AtomicReference<>();
+        final AtomicInteger toolCalls = new AtomicInteger();
+        final AtomicInteger evidenceCalls = new AtomicInteger();
+        RunHandle handle;
+        /** 终态已认领（与 cancelCause 一起在 synchronized(this) 下读写） */
+        boolean finished;
+        /** 取消原因（非空 = 取消已受理；事件屏障无锁读） */
+        volatile RunOutcome.CancelCause cancelCause;
+        volatile RunUsage cancelUsage;
+        volatile boolean streamOpened;
+        volatile long openedAt;
+        volatile ReActTrace lastTrace;
+
+        ActiveRun(Ctx ctx, HostRun run, RunTicket ticket, InputOutcome outcome, RunSink sink) {
+            this.ctx = ctx;
+            this.run = run;
+            this.ticket = ticket;
+            this.outcome = outcome;
+            this.sink = sink;
+            this.key = key(ctx.tenant, ctx.session.getSessionId());
+        }
+
+        /** 撤回取消（腾位没停到流：窗口里的这一轮照常跑） */
+        synchronized void revokeCancel(RunOutcome.CancelCause cause) {
+            if (finished == false && cancelCause == cause) {
+                cancelCause = null;
+                cancelUsage = null;
+            }
+        }
+
+        void observe(AgentEvent e) {
+            if (e instanceof AbsReActEvent) {
+                ReActTrace trace = ((AbsReActEvent) e).getTrace();
+                if (trace != null) {
+                    lastTrace = trace;
+                }
+            }
+            if (e instanceof ToolCallEndEvent) {
+                ToolCallEndEvent end = (ToolCallEndEvent) e;
+                if (end.isError() == false) {
+                    toolCalls.incrementAndGet();
+                    if (GoalOutcome.isEvidenceTool(end.getToolName())) {
+                        evidenceCalls.incrementAndGet();
+                    }
+                }
+            }
+        }
+
+        RunUsage usage() {
+            ReActTrace trace = lastTrace;
+            Metrics m = trace == null ? null : trace.getMetrics();
+            long elapsed = streamOpened ? Math.max(0L, System.currentTimeMillis() - openedAt) : 0L;
+            if (m == null) {
+                return new RunUsage(0L, 0L, 0L, toolCalls.get(), elapsed);
+            }
+            return new RunUsage(m.getTotalTokens(), m.getPromptTokens(), m.getCompletionTokens(), toolCalls.get(), elapsed);
+        }
+
+        @Nullable
+        String resultText() {
+            ReActTrace trace = lastTrace;
+            return trace == null ? null : trace.getFinalAnswer();
+        }
+    }
+
     // ==================== Builder ====================
 
     /** @since 4.2.0 */
@@ -624,17 +1134,19 @@ public final class HarnessHost {
         private HostSink sink = new HostSink() {
         };
         private Executor executor = r -> Schedulers.boundedElastic().schedule(r);
-        private UnaryOperator<Runnable> wrap = UnaryOperator.identity();
+        private BiFunction<String, Runnable, Runnable> wrap = (tenant, r) -> r;
+        private BiConsumer<String, HarnessInput> input;
         private boolean programRuns = true;
+        private Predicate<String> programFilter;
 
         private Builder() {
         }
 
         /**
-         * 租户 → 引擎（通常传 {@code pool::get}；同一租户应返回同一实例，直到它被回收）。
+         * 租户 → 引擎（通常传 core 的 {@code HarnessEnginePool::get}；同一租户应返回同一实例，直到它被回收）。
          *
-         * <p>这是唯一的引擎入口：不给「单引擎宿主（忽略租户键）」的捷径——多租户共用一个引擎会让不同租户的
-         * 会话互相可见，而那种写法不会报错。单租户部署同样应当给一个返回常量引擎的函数。</p>
+         * <p>这是唯一的引擎入口：多租户共用一个引擎会让不同租户的会话互相可见，而那种写法不会报错。
+         * 单租户部署同样应当给一个返回常量引擎的函数。</p>
          */
         public Builder engines(Function<String, HarnessEngine> engines) {
             this.engines = engines;
@@ -654,18 +1166,44 @@ public final class HarnessHost {
             return this;
         }
 
-        /** 包装开流动作（注入 MDC、日志作用域、租户上下文等） */
-        public Builder wrap(UnaryOperator<Runnable> wrap) {
-            this.wrap = wrap == null ? UnaryOperator.identity() : wrap;
+        /**
+         * 包装框架代跑的动作（开流、续发、后台轮次）：注入 MDC、日志作用域、租户上下文等。
+         *
+         * @param wrap (租户, 动作) → 包装后的动作
+         */
+        public Builder wrap(BiFunction<String, Runnable, Runnable> wrap) {
+            this.wrap = wrap == null ? (tenant, r) -> r : wrap;
             return this;
         }
 
         /**
-         * goal / loop 后台轮次是否接入本骨架（缺省 true：经 {@link HostSink} 通知、结束后续发积压）。
-         * 关闭时沿用插件自带的缺省执行器。
+         * 统一补充每条输入（用户提交、审批决策、队列续发、后台轮次四处都经过它），
+         * 如统一的 {@code commandContextFactory}、租户级属性。单次提交的补充用 {@code SubmitSpec.customize}。
+         *
+         * @param input (租户, 输入) → 就地补充
+         */
+        public Builder input(BiConsumer<String, HarnessInput> input) {
+            this.input = input;
+            return this;
+        }
+
+        /**
+         * goal / loop 后台轮次是否接入本骨架（缺省 true：与用户轮次同一条链）。关闭时沿用插件自带的缺省执行器。
          */
         public Builder programRuns(boolean programRuns) {
             this.programRuns = programRuns;
+            return this;
+        }
+
+        /**
+         * 只接管部分会话的后台工作（同一引擎上挂了多个宿主时用）：goal / loop 轮次不命中的交给后注册的执行器
+         * 或插件缺省执行器；首次绑定引擎时也只续发命中会话的积压。
+         *
+         * @param sessionFilter sessionId → 是否由本骨架执行；null = 全部
+         */
+        public Builder programRuns(@Nullable Predicate<String> sessionFilter) {
+            this.programRuns = true;
+            this.programFilter = sessionFilter;
             return this;
         }
 

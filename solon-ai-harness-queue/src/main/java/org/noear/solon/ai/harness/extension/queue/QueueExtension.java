@@ -15,6 +15,7 @@ import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -131,12 +132,63 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
     }
 
+    /** 积压索引目录（状态来源下；每个可能有积压的会话一个空标记文件） @since 4.2.0 */
+    public static final String INDEX_PATH = "queue/pending";
+
     private volatile HarnessEngine engine;
+    private volatile QueueIndex index;
 
     @Override
     public void onAttach(HarnessEngine engine) {
         this.engine = engine;
+        this.index = engine.getStateSource() == null ? null : new QueueIndex(engine.getStateSource(), INDEX_PATH);
         engine.getCommandRegistry().register(queueCommand);
+    }
+
+    /**
+     * 重启恢复用：可能有积压的会话（索引是超集——入队时登记，观察到队列已空时注销）。
+     *
+     * <p>宿主对这些会话各调一次续发即可，不需要枚举会话目录；HarnessHost 首次绑定引擎时会自动做。
+     * 未挂接或引擎没有状态来源时返回空。</p>
+     *
+     * @since 4.2.0
+     */
+    public List<String> pendingSessions() {
+        QueueIndex i = index;
+        return i == null ? Collections.<String>emptyList() : i.read();
+    }
+
+    /**
+     * 为已有积压的会话补登索引（索引上线之前的存量数据、绕过门面写入的队列用；幂等）。
+     *
+     * @since 4.2.0
+     */
+    public void markPending(String sessionId) {
+        QueueIndex i = index;
+        if (i != null) {
+            i.mark(sessionId);
+        }
+    }
+
+    /** 入队成功后登记、队列已空时注销 */
+    private void syncIndex(AgentSession session) {
+        QueueIndex i = index;
+        if (i == null || session == null) {
+            return;
+        }
+        if (QueueStore.hasItems(session)) {
+            i.mark(session.getSessionId());
+        } else {
+            i.unmark(session.getSessionId());
+        }
+    }
+
+    @Override
+    public void onSessionRemove(HarnessEngine engine, String sessionId) {
+        QueueIndex i = index;
+        if (i != null) {
+            i.unmark(sessionId);
+        }
     }
 
     /** 写门面的归属检查（未挂载时视为持有：单测与无引擎场景） */
@@ -157,6 +209,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
     @Override
     public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
         QueueStore.cancelPending(session);
+        syncIndex(session);
     }
 
     // ==================== InputBacklog（核心能力契约） ====================
@@ -176,6 +229,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         // 输入快照：技能 / MCP 视野、终端标记与显式作用域随积压保存，续发时还原（解析所得的作用域不存，续发时重新解析）
         int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
                 agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
+        if (position > 0) {
+            syncIndex(session);
+        }
         return position > 0 ? position : -1;
     }
 
@@ -255,6 +311,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), id, input.getSelectedModel(),
                 agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
         if (position > 0) {
+            syncIndex(session);
             return HarnessResult.ok(position);
         }
         switch (position) {
@@ -363,6 +420,10 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
             QueueClaimStatus status = QueueStore.claimNext(session, canDrain, handler);
             if (status != QueueClaimStatus.STARTED) {
+                if (status == QueueClaimStatus.NO_TASK) {
+                    // 队列已空（运行中的那条也已收口）：注销索引
+                    syncIndex(session);
+                }
                 return status;
             }
 
@@ -380,7 +441,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (owner != null) {
             return owner;
         }
-        return QueueStore.cancelItem(session, itemId) ? HarnessResult.<Void>ok() : HarnessResult.<Void>notFound("queue item not found");
+        boolean removed = QueueStore.cancelItem(session, itemId);
+        syncIndex(session);
+        return removed ? HarnessResult.<Void>ok() : HarnessResult.<Void>notFound("queue item not found");
     }
 
     /** 置顶单条待执行任务。 */
@@ -406,7 +469,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (owner != null) {
             return owner;
         }
-        return HarnessResult.ok(QueueStore.clearPending(session));
+        int cleared = QueueStore.clearPending(session);
+        syncIndex(session);
+        return HarnessResult.ok(cleared);
     }
 
     /** 旧版 queue-tasks.json 的一次性迁移入口。OK 时值为实际导入条数 */
@@ -415,7 +480,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (owner != null) {
             return owner;
         }
-        return HarnessResult.ok(QueueStore.importItems(session, rows, limits.maxSize));
+        int imported = QueueStore.importItems(session, rows, limits.maxSize);
+        syncIndex(session);
+        return HarnessResult.ok(imported);
     }
 
     /** 写门面的归属检查：本节点持有时返回 null，否则返回 NOT_OWNER（未挂载时视为持有：单测与无引擎场景） */

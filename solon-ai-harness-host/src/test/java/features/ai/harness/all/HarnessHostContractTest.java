@@ -20,6 +20,9 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
+import org.noear.solon.ai.harness.host.HostInput;
+import org.noear.solon.ai.harness.host.RunOutcome;
+import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.SubmitResult;
@@ -57,23 +60,38 @@ class HarnessHostContractTest {
     /** 记录型输出通道 */
     static final class RecordingSink implements HostSink {
         final List<String> replies = new CopyOnWriteArrayList<>();
-        final List<InputOrigin> replyOrigins = new CopyOnWriteArrayList<>();
+        final List<HostInput> replyInputs = new CopyOnWriteArrayList<>();
         final List<HostRun> started = new CopyOnWriteArrayList<>();
         final List<HostRun> finished = new CopyOnWriteArrayList<>();
+        final List<RunOutcome> outcomes = new CopyOnWriteArrayList<>();
         final List<Throwable> errors = new CopyOnWriteArrayList<>();
         final List<String> notOwners = new CopyOnWriteArrayList<>();
-        final List<InputOrigin> notOwnerOrigins = new CopyOnWriteArrayList<>();
+        final List<HostInput> notOwnerInputs = new CopyOnWriteArrayList<>();
         final List<InputOutcome.RejectReason> rejectedReasons = new CopyOnWriteArrayList<>();
+        final List<HostInput> rejectedInputs = new CopyOnWriteArrayList<>();
         final List<Integer> deferredPositions = new CopyOnWriteArrayList<>();
-        final List<InputOrigin> deferredOrigins = new CopyOnWriteArrayList<>();
-        final List<InputOrigin> hitlExpiredOrigins = new CopyOnWriteArrayList<>();
+        final List<HostInput> deferredInputs = new CopyOnWriteArrayList<>();
+        final List<HostInput> admittedInputs = new CopyOnWriteArrayList<>();
+        final List<HostInput> steeredInputs = new CopyOnWriteArrayList<>();
+        final List<HostInput> hitlExpiredInputs = new CopyOnWriteArrayList<>();
         final List<List<HitlCard>> hitls = new CopyOnWriteArrayList<>();
         final List<AgentEvent> events = new CopyOnWriteArrayList<>();
 
         @Override
-        public void reply(InputOrigin origin, String text) {
-            replyOrigins.add(origin);
+        public void admitted(HostInput input) {
+            admittedInputs.add(input);
+        }
+
+        @Override
+        public void reply(HostInput input, String text) {
+            replyInputs.add(input);
             replies.add(text);
+        }
+
+        @Override
+        public RunSink open(HostRun run) {
+            started.add(run);
+            return RunSink.forwardTo(this, run);
         }
 
         @Override
@@ -82,43 +100,45 @@ class HarnessHostContractTest {
         }
 
         @Override
-        public void runStarted(HostRun run) {
-            started.add(run);
-        }
-
-        @Override
-        public void runFinished(HostRun run, Throwable error) {
+        public void runFinished(HostRun run, RunOutcome outcome) {
             finished.add(run);
-            if (error != null) {
-                errors.add(error);
+            outcomes.add(outcome);
+            if (outcome.getError() != null) {
+                errors.add(outcome.getError());
             }
         }
 
         @Override
-        public void hitl(InputOrigin origin, List<HitlCard> cards) {
+        public void hitl(HostInput input, List<HitlCard> cards) {
             hitls.add(cards);
         }
 
         @Override
-        public void notOwner(InputOrigin origin, String owner) {
-            notOwnerOrigins.add(origin);
+        public void notOwner(HostInput input, String owner) {
+            notOwnerInputs.add(input);
             notOwners.add(owner);
         }
 
         @Override
-        public void rejected(InputOrigin origin, InputOutcome.RejectReason reason, String detail) {
+        public void rejected(HostInput input, InputOutcome.RejectReason reason, String detail) {
+            rejectedInputs.add(input);
             rejectedReasons.add(reason);
         }
 
         @Override
-        public void deferred(InputOrigin origin, int position) {
-            deferredOrigins.add(origin);
+        public void deferred(HostInput input, int position) {
+            deferredInputs.add(input);
             deferredPositions.add(position);
         }
 
         @Override
-        public void hitlExpired(InputOrigin origin) {
-            hitlExpiredOrigins.add(origin);
+        public void steered(HostInput input) {
+            steeredInputs.add(input);
+        }
+
+        @Override
+        public void hitlExpired(HostInput input) {
+            hitlExpiredInputs.add(input);
         }
     }
 
@@ -249,14 +269,15 @@ class HarnessHostContractTest {
         try {
             SubmitResult r = host.submit("t", "s1", "hello", InputOrigin.channel("web"));
             assertEquals(SubmitResult.Kind.STARTED, r.getKind());
-            assertEquals(1, sink.started.size(), "runStarted 在 submit 返回前已调用");
+            assertEquals(1, sink.started.size(), "open 在 submit 返回前已调用");
+            assertSame(sink.started.get(0), r.getRun().getRun(), "RunHandle 指向同一轮");
 
             await(() -> sink.finished.size() == 1, "流终止后 runFinished 必须调用");
             await(() -> engine.status(session).isOccupied() == false, "终态后会话不再被占用");
             Thread.sleep(200);
             assertEquals(1, sink.finished.size(), "runFinished 恰好一次");
             assertSame(sink.started.get(0), sink.finished.get(0));
-            assertEquals("web", sink.finished.get(0).getOrigin().getChannel());
+            assertEquals("web", sink.finished.get(0).getInput().getOrigin().getChannel());
         } finally {
             engine.shutdown();
         }
@@ -277,7 +298,7 @@ class HarnessHostContractTest {
             assertEquals(SubmitResult.Kind.DEFERRED, second.getKind());
             assertEquals(1, second.getBacklogPosition());
             assertEquals(202, second.httpStatus());
-            assertEquals("b", sink.deferredOrigins.get(sink.deferredOrigins.size() - 1).getChannel(), "排队回调回给 b");
+            assertEquals("b", sink.deferredInputs.get(sink.deferredInputs.size() - 1).getOrigin().getChannel(), "排队回调回给 b");
 
             // 执行第一条 → 终止后 afterRun 续发第二条（又一次开流动作）
             assertTrue(executor.runNext(5_000));
@@ -286,8 +307,8 @@ class HarnessHostContractTest {
             await(() -> sink.finished.size() == 2, "第二条结束");
 
             HostRun dispatched = sink.started.get(1);
-            assertTrue(dispatched.isDispatched(), "第二条是队列续发");
-            assertEquals("b", dispatched.getOrigin().getChannel(), "续发的一轮按当初排队那条的来源投递");
+            assertTrue(dispatched.getInput().isDispatched(), "第二条是队列续发");
+            assertEquals("b", dispatched.getInput().getOrigin().getChannel(), "续发的一轮按当初排队那条的来源投递");
             await(() -> engine.status(session).isOccupied() == false, "全部结束后会话空闲");
             assertEquals(0, engine.getExtension(QueueExtension.class).get().pendingSize(session));
         } finally {
@@ -311,6 +332,8 @@ class HarnessHostContractTest {
 
             assertEquals(1, sink.finished.size(), "被取消的一轮同样恰好收尾一次");
             assertTrue(sink.errors.isEmpty(), "停止不是错误");
+            assertEquals(RunOutcome.End.CANCELLED, sink.outcomes.get(0).getEnd());
+            assertFalse(sink.outcomes.get(0).isStreamOpened(), "窗口内被取消：从未开流");
             assertTrue(sink.events.isEmpty(), "不开流");
             assertFalse(engine.status(session).isOccupied(), "discard 已释放受理占位");
         } finally {
@@ -332,6 +355,7 @@ class HarnessHostContractTest {
 
             assertEquals(1, sink.finished.size());
             assertEquals(1, sink.errors.size(), "启动失败以错误收尾");
+            assertEquals(RunOutcome.End.FAILED, sink.outcomes.get(0).getEnd());
             assertFalse(engine.status(session).isOccupied(), "开流前失败必须 discard，否则会话长期被判忙");
         } finally {
             engine.shutdown();
@@ -386,7 +410,7 @@ class HarnessHostContractTest {
             SubmitResult r = host.decide("t", "s1", "no-such-call", HITLAction.APPROVE, null, null);
             assertEquals(SubmitResult.Kind.HITL, r.getKind(), "过期卡不得续流（否则会把上一轮问题重跑）");
             assertTrue(sink.started.isEmpty());
-            assertEquals(1, sink.hitlExpiredOrigins.size(), "提示卡已失效（文案由宿主决定）");
+            assertEquals(1, sink.hitlExpiredInputs.size(), "提示卡已失效（文案由宿主决定）");
         } finally {
             engine.shutdown();
         }
@@ -429,7 +453,9 @@ class HarnessHostContractTest {
             // 同一主体重复开通是空操作；不同主体必须被拒绝（防止把 A 的会话交给 B 用）
             host.openSession("t", "s1", "u1");
             assertThrows(SecurityException.class, () -> host.openSession("t", "s1", "u2"));
-            assertThrows(IllegalArgumentException.class, () -> host.openSession("t", "s9", ""));
+            // 引擎不要求作用域（本地 / 单用户部署）：主体可空
+            assertNotNull(host.openSession("t", "s9", null));
+            assertNull(engine.getSessionPrincipal(engine.getSessionOrNull("s9")));
         } finally {
             engine.shutdown();
         }
@@ -510,7 +536,7 @@ class HarnessHostContractTest {
             assertTrue(r.isOk(), r.toString());
 
             await(() -> sink.finished.size() == 1, "空闲会话入队后应立即续发执行");
-            assertEquals("console", sink.started.get(0).getOrigin().getChannel());
+            assertEquals("console", sink.started.get(0).getInput().getOrigin().getChannel());
             await(() -> engine.status(session).isOccupied() == false, "执行结束");
         } finally {
             engine.shutdown();
@@ -558,7 +584,7 @@ class HarnessHostContractTest {
             await(() -> sink.finished.stream().anyMatch(HostRun::isProgram), "loop 后台轮次经骨架收尾");
             HostRun run = sink.finished.stream().filter(HostRun::isProgram).findFirst().get();
             assertEquals("loop", run.getProgramChannel());
-            assertEquals("loop", run.getOrigin().getChannel());
+            assertEquals("loop", run.getInput().getOrigin().getChannel());
         } finally {
             engine.shutdown();
         }

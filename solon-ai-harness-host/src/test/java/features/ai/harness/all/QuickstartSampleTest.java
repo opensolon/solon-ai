@@ -18,6 +18,9 @@ import org.noear.solon.ai.harness.HarnessEnginePool;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
+import org.noear.solon.ai.harness.host.HostInput;
+import org.noear.solon.ai.harness.host.RunOutcome;
+import org.noear.solon.ai.harness.host.SubmitSpec;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -89,7 +92,7 @@ class QuickstartSampleTest {
         final List<HostRun> finished = new CopyOnWriteArrayList<>();
 
         @Override
-        public void reply(InputOrigin origin, String text) {
+        public void reply(HostInput input, String text) {
             replies.add(text);
         }
 
@@ -98,7 +101,7 @@ class QuickstartSampleTest {
         }
 
         @Override
-        public void runFinished(HostRun run, Throwable error) {
+        public void runFinished(HostRun run, RunOutcome outcome) {
             finished.add(run);
         }
     }
@@ -122,13 +125,17 @@ class QuickstartSampleTest {
             host.openSession("acme", "s1", "acme/u1");
 
             // §3.4 使用态
-            SubmitResult r = host.submit("acme", "s1", "hello", InputOrigin.of("web", "u1", null, null));
+            SubmitResult r = host.submit("acme", "s1", SubmitSpec.of("hello")
+                    .origin(InputOrigin.of("web", "u1", null, null))
+                    .principal("acme/u1"));
             assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
-            long deadline = System.currentTimeMillis() + 30_000;
-            while (sink.finished.isEmpty() && System.currentTimeMillis() < deadline) {
-                Thread.sleep(20);
-            }
-            assertEquals(1, sink.finished.size());
+            RunOutcome outcome = r.getRun().await(Duration.ofSeconds(30));   // 按请求拿结果，不必轮询 sink
+            assertNotNull(outcome);
+            assertEquals(1, sink.finished.size(), "全局 sink 同样收到终态");
+
+            // 用别人的主体提交：拒绝（sessionId 来自客户端，不校验就能用别人的会话）
+            SubmitResult idor = host.submit("acme", "s1", SubmitSpec.of("hello").principal("acme/u2"));
+            assertEquals(403, idor.httpStatus());
 
             // 别的租户的主体：解析不到作用域 → SERVER 下拒绝受理
             host.openSession("acme", "s2", "other/u1");

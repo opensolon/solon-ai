@@ -4,51 +4,64 @@
  */
 package org.noear.solon.ai.harness.host;
 
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
- * 一条运行流（run）的只读描述，随 {@link HostSink} 的运行类回调一起传给宿主。
+ * 一轮运行（run）的只读描述，随轮次级回调（{@link HostSink#open} / {@link RunSink}）一起交给宿主。
+ *
+ * <p>与 {@link HostInput} 的分工：一次输入开出 0 或 1 轮运行。输入是「用户这次输入了什么」（文本、命令、来源、
+ * 队列项、选择），受理那一刻就定下来；运行只放「跑起来以后才知道」的信息（生效的子代理与模型、是否后台轮次、轮次 id）。
+ * 输入相关的一律经 {@link #getInput()} 取。</p>
  *
  * @author noear
  * @since 4.2.0
  */
 @Preview("4.2.0")
 public final class HostRun {
-    private final String tenant;
-    private final String sessionId;
-    private final InputOrigin origin;
-    private final String agentName;
-    private final boolean dispatched;
-    private final String programChannel;
-    private volatile String resultText;
+    private static final AtomicLong SEQ = new AtomicLong();
 
-    HostRun(String tenant, String sessionId, InputOrigin origin, @Nullable String agentName,
-            boolean dispatched, @Nullable String programChannel) {
-        this.tenant = tenant;
-        this.sessionId = sessionId;
-        this.origin = origin == null ? InputOrigin.NONE : origin;
+    private final long id = SEQ.incrementAndGet();
+    private final HostInput input;
+    private final AgentSession session;
+    private final String agentName;
+    private final String modelName;
+    private final String programChannel;
+    private final long createdAt = System.currentTimeMillis();
+
+    HostRun(HostInput input, AgentSession session, @Nullable String agentName, @Nullable String modelName,
+            @Nullable String programChannel) {
+        this.input = input;
+        this.session = session;
         this.agentName = agentName;
-        this.dispatched = dispatched;
+        this.modelName = modelName;
         this.programChannel = programChannel;
+    }
+
+    /** 轮次 id（进程内递增，日志与排查用；不持久化） */
+    public long getId() {
+        return id;
+    }
+
+    /** 发起本轮的那次输入（来源、文本、命令、队列项、用户选择都在这里） */
+    public HostInput getInput() {
+        return input;
     }
 
     /** 引擎键（多租户时为租户标识） */
     public String getTenant() {
-        return tenant;
+        return input.getTenant();
     }
 
     public String getSessionId() {
-        return sessionId;
+        return input.getSessionId();
     }
 
-    /**
-     * 回复路由：用户输入时为本次输入的来源；队列续发时为当初排队那条消息的来源；
-     * goal / loop 后台轮次为 {@code InputOrigin.channel("goal" / "loop")}。永不为 null。
-     */
-    public InputOrigin getOrigin() {
-        return origin;
+    public AgentSession getSession() {
+        return session;
     }
 
     /** 生效的子代理名（主代理为 null） */
@@ -57,12 +70,13 @@ public final class HostRun {
         return agentName;
     }
 
-    /** 是否由队列续发而来 */
-    public boolean isDispatched() {
-        return dispatched;
+    /** 生效的模型名（未显式选择为 null） */
+    @Nullable
+    public String getModelName() {
+        return modelName;
     }
 
-    /** 是否为 goal / loop 的后台轮次（这类轮次同步执行，不推送流事件，最终文本见 {@link #getResultText()}） */
+    /** 是否为 goal / loop 的后台轮次 */
     public boolean isProgram() {
         return programChannel != null;
     }
@@ -73,21 +87,16 @@ public final class HostRun {
         return programChannel;
     }
 
-    /** 后台轮次的最终文本（仅 {@link #isProgram()} 且成功时，在 {@code runFinished} 时可读） */
-    @Nullable
-    public String getResultText() {
-        return resultText;
-    }
-
-    void setResultText(String resultText) {
-        this.resultText = resultText;
+    /** 本轮创建时刻（毫秒） */
+    public long getCreatedAt() {
+        return createdAt;
     }
 
     @Override
     public String toString() {
-        return "HostRun{" + tenant + "/" + sessionId
-                + (agentName != null ? ", agent=" + agentName : "")
-                + (dispatched ? ", dispatched" : "")
-                + (programChannel != null ? ", program=" + programChannel : "") + "}";
+        return getTenant() + "/" + getSessionId() + "#" + id
+                + (agentName != null ? "(agent=" + agentName + ")" : "")
+                + (input.isDispatched() ? "(dispatched)" : "")
+                + (programChannel != null ? "(program=" + programChannel + ")" : "");
     }
 }
