@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.lang.Preview;
+
 /**
  * 引擎运行模式预设
  *
@@ -24,14 +26,18 @@ package org.noear.solon.ai.harness;
  * @author noear
  * @since 4.2.0
  */
+@Preview("4.2.0")
 public enum HarnessProfile {
     /**
-     * 本地编码代理（CLI / 桌面 / 单用户 Web）：保持现有缺省值
+     * 本机单用户（CLI / 桌面 / 单用户 Web），也是<b>缺省值</b>：不调 {@code profile(...)} 时即为此值。
+     *
+     * <p>预设不改变任何字段：全部沿用引擎的常规缺省（缺省允许运行期修改引擎级全局配置，
+     * 允许引擎自行初始化 OS 沙盒，记忆不按会话隔离）。</p>
      */
-    CODING,
+    STANDALONE,
 
     /**
-     * 多租户服务端：缺省值偏保守，放宽必须显式声明。
+     * 多租户服务端：同一引擎被多个用户共用，缺省值偏保守，放宽必须显式声明。
      *
      * <ul>
      *   <li>OS 沙盒强制开启，不放行用户主目录；进程级沙盒由宿主统一引导（引擎不自行初始化）</li>

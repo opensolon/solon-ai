@@ -290,7 +290,7 @@ if (r.hasReason(SteerExtension.REASON_NOT_RUNNING) || r.hasReason(SteerExtension
 }
 
 // 场景 B：必须停下来重来 —— 中断后排队（不要再 steer）
-if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getValue())) {
+if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue())) {
     queue.enqueue(session, "回到上一个方案");
 }
 ```
@@ -464,7 +464,7 @@ engine.setExtensionEnabled(steer, true);
 2. **降级由界面决定**：插件不代为排队或直接发送。`NOT_RUNNING` 一般回落为普通发送，`RUN_CHANGED` / `BOX_FULL` 一般转排队（调 queue 的管理接口）。
 3. **撤销以返回值为准**：`pending` 只是快照，读到的下一刻就可能被推理线程消费；`cancelOnRun` 返回 `NOT_PENDING` 时不能把气泡删掉，要等 applied / dropped 事件给出终态。
 4. **orphans 不比对轮次**：转排队失败的残留与轮次无关，任务结束后也能撤；批量撤销（`cancelPending`）同样不比对轮次。
-5. **"停止"按钮不是插话**：要停下当前任务用宿主的停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT)`，之后只能排队，不能再插话。
+5. **"停止"按钮不是插话**：要停下当前任务用宿主的停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`，之后只能排队，不能再插话。
 6. **能力缺失与状态不允许分开报**：扩展没装配时返回 503（示例的 `STEER_UNAVAILABLE`），不要和 409 的状态码混在一起，前端才能区分"隐藏入口"和"这次没投进去"。
 
 ---

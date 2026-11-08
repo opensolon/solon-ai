@@ -135,7 +135,7 @@ class SaasContractTest {
         assertTrue(plan.isNotOwner());
         assertEquals("node-b", plan.getOwner());
         assertFalse(plan.hasActiveRun());
-        assertEquals(HarnessResult.Code.NOT_OWNER, engine.interrupt(s, InterruptMode.INTERRUPT).getCode());
+        assertEquals(HarnessResult.Code.NOT_OWNER, engine.interrupt(s, InterruptMode.INTERRUPT_ALL).getCode());
     }
 
     /** 三种中断方式在非持有节点上一律什么都不做，并显式返回 NOT_OWNER（此前 cancel/preempt 不查归属） */
@@ -327,7 +327,7 @@ class SaasContractTest {
         assertTrue(gen.generate("general", "d", "x", null, null, false, null, "s1").startsWith("ERROR"));
         assertEquals("explore", engine.getAgentManager().getAgent("explore").getName());
 
-        // 全局（CODING 缺省允许持久化）
+        // 全局（STANDALONE 缺省允许持久化）
         String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1");
         assertTrue(g.startsWith("[OK]"), g);
         assertNotNull(engine.resolveAgent(sessions.get("s2"), "reviewer"), "全局对所有会话可见");

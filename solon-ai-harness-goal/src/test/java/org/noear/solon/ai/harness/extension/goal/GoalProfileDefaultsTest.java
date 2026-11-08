@@ -16,7 +16,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * goal 验证器缺省值随引擎模式：SERVER 不注册内置验证器、无法判定按未通过；CODING 保持原有体验
+ * goal 验证器缺省值随引擎模式：SERVER 不注册内置验证器、无法判定按未通过；STANDALONE 保持原有体验
  */
 class GoalProfileDefaultsTest {
 
@@ -54,7 +54,7 @@ class GoalProfileDefaultsTest {
 
     @Test
     void codingProfileKeepsDefaults() throws Exception {
-        GoalExtension goal = attach(engine(HarnessProfile.CODING), GoalExtension.builder());
+        GoalExtension goal = attach(engine(HarnessProfile.STANDALONE), GoalExtension.builder());
         assertEquals(2, goal.getGoalRuntime().validatorCount());
         assertEquals(ValidatorPolicy.FAIL_OPEN, goal.getGoalRuntime().getValidatorPolicy());
     }
@@ -72,9 +72,9 @@ class GoalProfileDefaultsTest {
 
     @Test
     void validationCommandGoesThroughEngineTerminal() throws Exception {
-        HarnessEngine engine = engine(HarnessProfile.CODING);
+        HarnessEngine engine = engine(HarnessProfile.STANDALONE);
         GoalExtension goal = attach(engine, GoalExtension.builder());
-        // SERVER/CODING 都走 TerminalTalent.exec：CODING 下关掉沙盒只为在测试机上可执行
+        // SERVER/STANDALONE 都走 TerminalTalent.exec：STANDALONE 下关掉沙盒只为在测试机上可执行
         engine.getTalents().getTerminal().setSandboxEnabled(false);
         CommandResult r = goal.getGoalRuntime().runValidationCommand("echo ok", engine.getWorkspace());
         assertEquals(CommandResult.Status.COMPLETED, r.getStatus());

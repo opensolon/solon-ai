@@ -58,7 +58,7 @@ import java.util.function.UnaryOperator;
  *
  * Submitted r = host.submit(tenant, sessionId, text, origin);   // 使用态
  * host.decide(tenant, sessionId, callId, HITLAction.APPROVE, null, origin);   // 审批
- * host.interrupt(tenant, sessionId, InterruptMode.INTERRUPT);             // 停止
+ * host.interrupt(tenant, sessionId, InterruptMode.INTERRUPT_ALL);             // 停止
  * host.admin(tenant, principal).call(sessionId, "loop.list", LoopExtension.class,
  *         (loop, s) -> HarnessResult.ok(loop.list(sessionId)));  // 管理态（任意扩展同一写法）
  * }</pre>
@@ -196,7 +196,7 @@ public final class HarnessHost {
     }
 
     /**
-     * 中断会话的运行（方式见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT}，
+     * 中断会话的运行（方式见 {@link InterruptMode}：用户点「停止」用 {@code INTERRUPT_ALL}，
      * 只停当前运行、保留排队用 {@code CANCEL_STREAM}）。
      *
      * @return OK（值为「确有运行中的流被停掉」）、NOT_FOUND、NOT_OWNER

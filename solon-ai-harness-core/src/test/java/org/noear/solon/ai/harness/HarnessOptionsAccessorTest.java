@@ -383,7 +383,7 @@ class HarnessOptionsAccessorTest {
     @Test
     void serverFacingAccessorsAndProfile() {
         HarnessOptions o = new HarnessOptions("work", ".solon");
-        assertEquals(HarnessProfile.CODING, o.getProfile());
+        assertEquals(HarnessProfile.STANDALONE, o.getProfile());
         assertFalse(o.isMemorySessionIsolation());
         assertTrue(o.isSandboxSelfBootstrap());
         assertTrue(o.isRuntimeMutable());

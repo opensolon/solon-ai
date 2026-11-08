@@ -114,7 +114,7 @@ final class SessionControl {
             return HarnessResult.ok(false);
         }
 
-        if (mode == InterruptMode.INTERRUPT) {
+        if (mode == InterruptMode.INTERRUPT_ALL) {
             InterruptPlan plan = prepareInterrupt(session);
             if (plan.isNotOwner()) {
                 return HarnessResult.notOwner(plan.getOwner());

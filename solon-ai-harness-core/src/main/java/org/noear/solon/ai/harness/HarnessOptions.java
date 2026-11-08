@@ -111,7 +111,7 @@ class HarnessOptions implements NonSerializable {
     private volatile boolean bashAsyncEnabled = false;
 
     // ========== 多租户 / 服务端 ==========
-    private volatile HarnessProfile profile = HarnessProfile.CODING;
+    private volatile HarnessProfile profile = HarnessProfile.STANDALONE;
     /** 记忆是否按会话隔离（SERVER 缺省 true） */
     private volatile boolean memorySessionIsolation = false;
     /** 是否由引擎自行初始化进程级 OS 沙盒（SERVER 缺省 false，由宿主 SandboxBootstrap.initOnce） */

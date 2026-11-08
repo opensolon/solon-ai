@@ -3,6 +3,7 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidationResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,11 +51,11 @@ class GoalValidatorIsolationTest {
         List<String> seen = new ArrayList<>();
         runtime.registerValidator(c -> c.contains("lint"), (c, dir) -> {
             seen.add("a:" + dir);
-            return GoalValidator.ValidationResult.passed();
+            return ValidationResult.passed();
         });
         runtime.registerValidator(c -> c.contains("lint"), (c, dir) -> {
             seen.add("b:" + dir);
-            return GoalValidator.ValidationResult.passed();
+            return ValidationResult.passed();
         });
 
         assertTrue(runtime.resolveValidator("Lint ok").validate("Lint ok", "/proj/p").isPassed());

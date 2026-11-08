@@ -62,7 +62,7 @@ HarnessHost host = HarnessHost.builder()
 
 Submitted r = host.submit(tenant, sid, text, origin);                 // 使用态
 host.decide(tenant, sid, callId, HITLAction.APPROVE, null, origin);  // 审批
-host.interrupt(tenant, sid, InterruptMode.INTERRUPT);                      // 停止
+host.interrupt(tenant, sid, InterruptMode.INTERRUPT_ALL);                      // 停止
 host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
         (loop, s) -> HarnessResult.ok(loop.list(sid)));               // 管理态
 ```
@@ -109,14 +109,17 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 
 | Kind | 含义 | `httpStatus()` |
 |---|---|---|
-| `STARTED` | 已开流 | 200 |
-| `REPLY` | 命令已执行，只有回执 | 200 |
-| `DEFERRED` | 会话忙，已排队（`getBacklogPosition()`），空闲后自动续发 | 202 |
+| `STARTED` | 本轮已交给执行器（结果经 `event` / `runFinished` 推送） | 200 |
+| `REPLY` | 只有回执（命令已执行，或在本渠道不可用而未执行） | 200 |
+| `DEFERRED` | 会话忙，已排队（`getBacklogPosition()`），空闲后由宿主续发 | 202 |
 | `REJECTED` | 未受理（`getRejectReason()`，`RejectReason` 枚举） | 404（`SESSION_NOT_FOUND`）/ 307（`NOT_OWNER`）/ 403（`SCOPE_UNAVAILABLE`）/ 503（`ENGINE_CLOSED`）/ 409（其余） |
 | `HITL` | 审批已记录但本批未齐备，或卡已失效 | 200 |
 | `IGNORED` | 空输入 | 200 |
 
-`Kind` 与 core 的 `InputOutcome.Kind` 一一对应，只有 `TASK` 在骨架层叫 `STARTED`（骨架已经替你开了流）。拒绝原因统一为 `InputOutcome.RejectReason` 枚举（`Submitted.getRejectReason()` 与 core 同一类型），其中 `SESSION_NOT_FOUND` 只由宿主层给出；分流写 `switch (r.getRejectReason()) { case NOT_OWNER: ... }`，线上值（如 `busy`、`not_owner`、`session_not_found`）用 `getRejectReason().code()`。文案由 `HostSink.rejectText(RejectReason reason, String detail)` 定制。
+`STARTED` 的含义是「已经交出去了」，不保证流已真的跑起来（调度空档里被取消、启动失败也是它，失败会经 `runFinished` 以 error 收尾）。
+`REJECTED` 一般已经经 `rejectText` 发过提示，唯一例外是 `NOT_OWNER`：那时由 `forward` 转给持有者，不发提示。
+
+`Kind` 与 core 的 `InputOutcome.Kind` 一一对应（枚举顺序也一致，便于对照），只有 `TASK` 在骨架层叫 `STARTED`（骨架已经替你交出去了）。拒绝原因统一为 `InputOutcome.RejectReason` 枚举（`Submitted.getRejectReason()` 与 core 同一类型），其中 `SESSION_NOT_FOUND` 只由宿主层给出；分流写 `switch (r.getRejectReason()) { case NOT_OWNER: ... }`，线上值（如 `busy`、`not_owner`、`session_not_found`）用 `getRejectReason().code()`。文案由 `HostSink.rejectText(RejectReason reason, String detail)` 定制。
 
 ### 4.4 InterruptMode
 
@@ -124,7 +127,7 @@ host.admin(tenant, principal).call(sid, "loop.list", LoopExtension.class,
 
 | 值 | 行为 |
 |---|---|
-| `INTERRUPT` | 用户点「停止」：清空排队、停当前流、在历史里补写取消消息 |
+| `INTERRUPT_ALL` | 用户点「停止」：清空排队、停当前流、在历史里补写取消消息 |
 | `CANCEL_STREAM` | 只停当前流，保留排队（结束后续发下一条），不写历史 |
 | `PREEMPT_STREAM` | 为新一轮腾位：只停流，不推进取消代数（骨架宿主一般用不到） |
 

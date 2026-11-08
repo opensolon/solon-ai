@@ -227,7 +227,7 @@ class HandleAdmissionContractTest {
         InputOutcome outcome = engine.handle(HarnessInput.of(session, "hello"));
         assertTrue(engine.status(session).isAdmitting());
 
-        engine.interrupt(session, InterruptMode.INTERRUPT);
+        engine.interrupt(session, InterruptMode.INTERRUPT_ALL);
         assertFalse(engine.status(session).isAdmitting(), "用户中断兜底清除占位（宿主看到已取消就不再订阅）");
         outcome.discard();
     }

@@ -395,7 +395,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
     /**
      * 清空全部待执行（不动正在执行的那条、不递增代际）。
      *
-     * <p>「连同运行中那条一起作废」是停止语义，不在本门面：宿主调 {@code engine.interrupt(session, InterruptMode.INTERRUPT)}
+     * <p>「连同运行中那条一起作废」是停止语义，不在本门面：宿主调 {@code engine.interrupt(session, InterruptMode.INTERRUPT_ALL)}
      * 或 {@code engine.prepareInterrupt(session)}，引擎先回调本扩展的 {@link #onSessionInterrupt}（清空并递增代际）再停流。</p>
      *
      * @return OK 时值为清掉的条数

@@ -24,7 +24,7 @@ import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.CommandRunner;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
-import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator.ValidationResult;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidationResult;
 import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.util.ErrorClassifier;

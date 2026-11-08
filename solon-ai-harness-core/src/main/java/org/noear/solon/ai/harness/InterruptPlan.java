@@ -23,7 +23,7 @@ package org.noear.solon.ai.harness;
  * 需要自定义终态时序的宿主（如 Web 要求「先落库 → 发 error 帧 → 发 done → 最后停流」，
  * 停流提前会让本轮流终结、前端收尾并丢掉后续帧）在此窗口内自由发送渠道事件，
  * 结束时调 {@link #commit()}；不需要自定义时序的宿主直接用
- * {@code engine.interrupt(session, InterruptMode.INTERRUPT)}（一步到位）。</p>
+ * {@code engine.interrupt(session, InterruptMode.INTERRUPT_ALL)}（一步到位）。</p>
  *
  * <p><b>必须闭合</b>：认领意味着运行句柄已从会话登记表上摘下，忘记提交会留下一条
  * 「再也无法取消」的孤儿流。本接口实现 {@link AutoCloseable}，宿主用 try-with-resources

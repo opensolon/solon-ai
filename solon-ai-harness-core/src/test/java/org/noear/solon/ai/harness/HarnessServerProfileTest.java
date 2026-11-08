@@ -72,10 +72,10 @@ class HarnessServerProfileTest {
         // 后写的 profile 生效，前一个不留痕迹
         HarnessEngine last = HarnessEngine.of(tmp.resolve("w-last").toString(), ".solon/")
                 .profile(HarnessProfile.SERVER)
-                .profile(HarnessProfile.CODING)
+                .profile(HarnessProfile.STANDALONE)
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        assertEquals(HarnessProfile.CODING, last.getProfile());
+        assertEquals(HarnessProfile.STANDALONE, last.getProfile());
         assertTrue(last.getTalents().getTerminal().isSandboxSelfBootstrap());
         assertFalse(last.isScopeRequired());
 
@@ -87,7 +87,7 @@ class HarnessServerProfileTest {
         HarnessEngine engine = HarnessEngine.of(tmp.toString(), ".solon/")
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .build();
-        assertEquals(HarnessProfile.CODING, engine.getProfile());
+        assertEquals(HarnessProfile.STANDALONE, engine.getProfile());
         assertTrue(engine.getTalents().getTerminal().isSandboxSelfBootstrap());
         engine.allowTool("bash"); // 运行期修改仍允许
         // 状态目录保护在所有模式下都开启

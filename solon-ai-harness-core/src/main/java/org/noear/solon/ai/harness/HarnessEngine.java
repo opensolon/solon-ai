@@ -2227,7 +2227,7 @@ public class HarnessEngine {
 
     /**
      * 全局子代理持久化策略（{@code generate(saveToFile=true)} 前判定）。缺省按 {@code runtimeMutable}：
-     * CODING 允许、SERVER 拒绝（持久化等于修改同引擎所有用户可见的全局配置）。
+     * STANDALONE 允许、SERVER 拒绝（持久化等于修改同引擎所有用户可见的全局配置）。
      *
      * @since 4.2.0
      */
@@ -2407,24 +2407,24 @@ public class HarnessEngine {
      * 中断会话当前的运行（唯一的一步式停流入口；三种方式见 {@link InterruptMode}）。
      *
      * <ul>
-     *   <li>{@link InterruptMode#INTERRUPT}：用户停止。回调扩展的中断参与（如积压插件清待执行项）、
+     *   <li>{@link InterruptMode#INTERRUPT_ALL}：用户停止。回调扩展的中断参与（如积压插件清待执行项）、
      *       释放运行流句柄、补写取消消息（带 runId 元数据）与快照。{@code /interrupt} 命令也走这里，
      *       不存在第二套中断逻辑；等价于 {@link #prepareInterrupt} + {@link InterruptPlan#commit()}。</li>
      *   <li>{@link InterruptMode#CANCEL_STREAM}：程序取消。只停流并推进取消代数，不清积压、不写历史。</li>
      *   <li>{@link InterruptMode#PREEMPT_STREAM}：为新一轮腾位。只停流，不推进取消代数。</li>
      * </ul>
      *
-     * <p><b>先清积压再停流</b>（INTERRUPT）：{@link HarnessExtension#onSessionInterrupt} 保证在认领/停流之前回调。
+     * <p><b>先清积压再停流</b>（INTERRUPT_ALL）：{@link HarnessExtension#onSessionInterrupt} 保证在认领/停流之前回调。
      * 停流后宿主常在终态回调里续发队首，顺序颠倒会把刚被停掉的任务重新推起来。</p>
      *
      * <p>三种方式都先做归属检查：非持有节点什么都不做（不清积压、不推进代数），返回 {@code NOT_OWNER}，
      * 宿主按 {@link HarnessResult#getOwner()} 转发。</p>
      *
-     * <p>值为 false 不代表什么都没发生：INTERRUPT / CANCEL_STREAM 的取消代数依然推进，
+     * <p>值为 false 不代表什么都没发生：INTERRUPT_ALL / CANCEL_STREAM 的取消代数依然推进，
      * 「已创建、尚未订阅」的流也会被随后拦住。</p>
      *
      * <pre>{@code
-     * if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT).getValue())) {
+     * if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue())) {
      *     engine.handle(HarnessInput.of(session, "改用 PostgreSQL 方言重写迁移脚本"));
      * }
      * }</pre>
@@ -2442,7 +2442,7 @@ public class HarnessEngine {
      *
      * <p>给需要自定义终态时序的宿主（如 Web 的「先落库 → error → done → 最后停流」）留出
      * 编排窗口；编排完调用 {@link InterruptPlan#commit()} 提交。不需要自定义时序的宿主
-     * 用 {@code interrupt(session, InterruptMode.INTERRUPT)} 即可（等价于 prepare + commit）。</p>
+     * 用 {@code interrupt(session, InterruptMode.INTERRUPT_ALL)} 即可（等价于 prepare + commit）。</p>
      *
      * <p>非持有节点返回 {@link InterruptPlan#isNotOwner()} 为 true 的空计划。</p>
      *
@@ -2900,7 +2900,7 @@ public class HarnessEngine {
         }
 
         /**
-         * 记忆是否按会话隔离（CODING 缺省 false，SERVER 缺省 true）
+         * 记忆是否按会话隔离（STANDALONE 缺省 false，SERVER 缺省 true）
          *
          * @since 4.2.0
          */
@@ -2910,7 +2910,7 @@ public class HarnessEngine {
         }
 
         /**
-         * 是否由引擎自行初始化进程级 OS 沙盒（CODING 缺省 true；SERVER 缺省 false，宿主启动时
+         * 是否由引擎自行初始化进程级 OS 沙盒（STANDALONE 缺省 true；SERVER 缺省 false，宿主启动时
          * 调用一次 {@code SandboxBootstrap.initOnce}）。网络白名单是进程级的，不按引擎区分。
          *
          * @since 4.2.0
@@ -2922,7 +2922,7 @@ public class HarnessEngine {
 
         /**
          * 运行期是否允许修改引擎级全局配置（工具、模型、MCP、沙盒、HITL 开关）。
-         * CODING 缺省 true；SERVER 缺省 false：这些修改会影响共用本引擎的所有用户。
+         * STANDALONE 缺省 true；SERVER 缺省 false：这些修改会影响共用本引擎的所有用户。
          *
          * @since 4.2.0
          */
@@ -2989,7 +2989,7 @@ public class HarnessEngine {
 
         /**
          * 全局子代理持久化策略：{@code generate(saveToFile=true)} 会把子代理写进工作区代理目录、对本引擎所有会话可见，
-         * 按本策略判定是否允许（缺省：runtimeMutable 为 true 时允许，即 CODING 允许、SERVER 拒绝）。
+         * 按本策略判定是否允许（缺省：runtimeMutable 为 true 时允许，即 STANDALONE 允许、SERVER 拒绝）。
          * 不持久化的（{@code saveToFile=false}）只对创建它的会话可见，不受本策略约束。
          *
          * <pre>{@code

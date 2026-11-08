@@ -55,9 +55,12 @@ public enum ToolName {
     TOOL_SKILL("skill"),
     TOOL_MEMORY("memory"),
 
-    TOOL_PI("pi"), //代表四个终端工具：read,write,edit,bash
-    TOOL_ALL_PUBLIC("*"), //全部公有的
-    TOOL_ALL_FULL("**"), // 全部完整的（包括公有，私有）
+    /** 终端工具组（read / write / edit / bash），对应 {@code pi} 这个势力名 */
+    TOOL_PI("pi"),
+    /** 全部公有工具组（{@code *}）：不含 task / generate 等私有工具 */
+    TOOL_ALL_PUBLIC("*"),
+    /** 完整工具组（{@code **}）：公有 + 私有（含 task / generate / mcp / hitl 等） */
+    TOOL_ALL_FULL("**"),
     ;
 
     private final String name;

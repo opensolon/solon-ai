@@ -115,7 +115,7 @@ engine.setSessionPrincipal(session, tenantId + "/" + userId);    // 随快照持
 
 预设在 `build()` 时合成，规则是**显式值 > 预设值 > 默认值**，与调用顺序无关：
 
-| 配置 | CODING（缺省） | SERVER |
+| 配置 | STANDALONE（缺省） | SERVER |
 |---|---|---|
 | `sandboxEnabled` / `sandboxSystemRestrict` | `true` / `true` | `true` / `true` |
 | `sandboxAllowUserHome` | `false` | `false` |
@@ -234,7 +234,7 @@ public class RedisOwnership implements SessionOwnership {
 |---|---|
 | queue / goal / loop 的全部写门面（`enqueue`、`cancelItem`、`create`、`pause`、`schedule` 等） | 返回 `HarnessResult` 的 `NOT_OWNER`（`getOwner()` 为持有者；与「不存在」的 `NOT_FOUND` 可区分） |
 | `steer.steer` / `steerOnRun` / `cancelOnRun` / `cancelPending` | 同样返回 `HarnessResult` 的 `NOT_OWNER`（所有插件门面统一返回 `HarnessResult`，不带细分码） |
-| `InterruptMode.INTERRUPT` | 返回 false；`engine.prepareInterrupt(session).isNotOwner()` 可与「没有在跑」区分 |
+| `InterruptMode.INTERRUPT_ALL` | 返回 false；`engine.prepareInterrupt(session).isNotOwner()` 可与「没有在跑」区分 |
 
 - **后台派发**：goal / loop 调度在**加载会话之前**先查归属，非持有节点不会把会话加载进内存。goal 没拿到租约时按 `GoalExtension.builder().ownerProbeIntervalMs(...)`（缺省 15 秒）退避，持有节点宕机、租约过期后在一个探测间隔内接管；建议探测间隔不超过租期的一半。
 - **租约由实现自行保活**（节点心跳批量续期、Redisson watchdog 等），只应在节点失联后过期：一次运行可能远长于租期（goal 长轮次、慢工具），引擎不在运行中续约。
@@ -334,7 +334,7 @@ private void drain(HarnessEngine engine, AgentSession session) {
 
 ### 6.2 管理态（控制台 / 后台 API）
 
-门面（`queue.enqueue`、`steer.steer`、`goal.create/update/pause`、`loop.schedule`、`InterruptMode.INTERRUPT` 等）是对象路径，**不经过 `handle` 的受理判定**：
+门面（`queue.enqueue`、`steer.steer`、`goal.create/update/pause`、`loop.schedule`、`InterruptMode.INTERRUPT_ALL` 等）是对象路径，**不经过 `handle` 的受理判定**：
 
 | 检查 | `handle` 路径 | 门面路径 | 宿主要做的 |
 |---|---|---|---|
@@ -366,19 +366,18 @@ public class AdminController {
     @Post @Mapping("goal/pause")
     public Result pauseGoal(String tenant, String sid) {
         GoalExtension goal = saas.engineOf(tenant).getExtension(GoalExtension.class).orElse(null);
-        if (goal == null) return Result.failure(501, "goal not installed");
+        if (goal == null) return Result.failure(503, "goal not installed");
         HarnessResult<Void> r = goal.pause(sid);
         switch (r.getCode()) {
             case OK:        return Result.succeed();
-            case NOT_OWNER: return Result.failure(307, r.getOwner());   // 网关转发
-            case NOT_FOUND: return Result.failure(404, r.getDetail());
-            default:        return Result.failure(409, r.getDetail());  // CONFLICT：当前状态不可暂停
+            case NOT_OWNER: return Result.failure(r.httpStatus(), r.getOwner());   // 307：网关转发
+            default:        return Result.failure(r.httpStatus(), r.getDetail());   // 404 / 409 …
         }
     }
 }
 ```
 
-> `InterruptMode.INTERRUPT` 会**连带清空队列**；只想停当前流、保留排队用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`。改 goal 配置时 `goal.update(..., stopper)` 的 `stopper` 不要传 `InterruptMode.INTERRUPT`（会清队列）。
+> `InterruptMode.INTERRUPT_ALL` 会**连带清空队列**；只想停当前流、保留排队用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`。改 goal 配置时 `goal.update(..., stopper)` 的 `stopper` 不要传 `InterruptMode.INTERRUPT_ALL`（会清队列）。
 
 ---
 

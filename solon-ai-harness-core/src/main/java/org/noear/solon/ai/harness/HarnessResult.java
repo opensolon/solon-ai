@@ -29,16 +29,19 @@ import org.noear.solon.lang.Preview;
  *       由各门面自己定义并在其 javadoc 列出，取值即线上应答码，宿主原样透传给前端即可，不需要自己翻译。</li>
  * </ul>
  *
+ * <p>每个粗码自带建议的 HTTP 状态码（{@link Code#httpStatus()}，结果上也有 {@link #httpStatus()} 转发），
+ * 宿主不需要自己维护映射表：</p>
+ *
  * <table>
- *   <tr><th>Code</th><th>含义</th><th>建议的 HTTP 映射</th></tr>
- *   <tr><td>OK</td><td>成功，{@link #getValue()} 为结果</td><td>200</td></tr>
- *   <tr><td>NOT_FOUND</td><td>会话、队列项或任务不存在</td><td>404</td></tr>
- *   <tr><td>NOT_OWNER</td><td>多节点：会话由其它节点持有（{@link #getOwner()} 为持有者）</td><td>307 / 网关转发</td></tr>
- *   <tr><td>DISABLED</td><td>对应插件未装配或已停用</td><td>501 / 503</td></tr>
- *   <tr><td>FULL</td><td>容量已满（队列满、loop 任务数达上限、插话邮箱满）</td><td>429</td></tr>
- *   <tr><td>INVALID</td><td>参数不合法（空文本、超长、格式错），重试同样的请求不会成功</td><td>400</td></tr>
- *   <tr><td>CONFLICT</td><td>参数合法但当前状态不允许（goal 已是终态、轮次已切换、没有运行中的任务、ID 重复）</td><td>409</td></tr>
- *   <tr><td>FORBIDDEN</td><td>宿主鉴权拒绝</td><td>403</td></tr>
+ *   <tr><th>Code</th><th>含义</th></tr>
+ *   <tr><td>{@link Code#OK}</td><td>成功，{@link #getValue()} 为结果</td></tr>
+ *   <tr><td>{@link Code#NOT_FOUND}</td><td>会话、队列项或任务不存在</td></tr>
+ *   <tr><td>{@link Code#NOT_OWNER}</td><td>多节点：会话由其它节点持有（{@link #getOwner()} 为持有者）</td></tr>
+ *   <tr><td>{@link Code#DISABLED}</td><td>对应插件未装配或已停用</td></tr>
+ *   <tr><td>{@link Code#FULL}</td><td>容量已满（队列满、loop 任务数达上限、插话邮箱满）</td></tr>
+ *   <tr><td>{@link Code#INVALID}</td><td>参数不合法，重试同样的请求不会成功</td></tr>
+ *   <tr><td>{@link Code#CONFLICT}</td><td>参数合法但当前状态不允许</td></tr>
+ *   <tr><td>{@link Code#FORBIDDEN}</td><td>宿主鉴权拒绝</td></tr>
  * </table>
  *
  * @author noear
@@ -46,9 +49,50 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.2.0")
 public final class HarnessResult<T> {
-    /** 结果码（粗码） */
+    /**
+     * 结果码（粗码）
+     *
+     * <p>每个值都带建议的 HTTP 状态码（{@link #httpStatus()}）：不同宿主可以自行决定是否采用
+     * （如 RPC 、消息队列、IM 网关不用 HTTP），但需要映射时不必自己再写一张表。细分码不改粗码，
+     * 所以映射只看粗码即可。</p>
+     */
     public enum Code {
-        OK, NOT_FOUND, NOT_OWNER, DISABLED, FULL, INVALID, CONFLICT, FORBIDDEN
+        /** 成功，{@link #getValue()} 为结果 */
+        OK(200),
+        /** 会话、队列项或任务不存在 */
+        NOT_FOUND(404),
+        /**
+         * 多节点：会话由其它节点持有（{@link #getOwner()} 为持有者），由网关转发。
+         *
+         * <p>307 而不是 302：跳转后仍用原方法与原请求体，网关无需重写请求。</p>
+         */
+        NOT_OWNER(307),
+        /**
+         * 对应插件未装配，或引擎已关闭/已停用。
+         *
+         * <p>用 503 而不是 501：对调用方而言这是「暂时不可用」，不是「不支持这个功能」，
+         * 且同一张码表里不需要为两种情形分两个值。</p>
+         */
+        DISABLED(503),
+        /** 容量已满（队列满、loop 任务数达上限、插话邮箱满），过会儿再来可能成功 */
+        FULL(429),
+        /** 参数不合法（空文本、超长、格式错），重试同样的请求不会成功 */
+        INVALID(400),
+        /** 参数合法但当前状态不允许（goal 已是终态、轮次已切换、没有运行中的任务、ID 重复） */
+        CONFLICT(409),
+        /** 宿主鉴权拒绝 */
+        FORBIDDEN(403);
+
+        private final int httpStatus;
+
+        Code(int httpStatus) {
+            this.httpStatus = httpStatus;
+        }
+
+        /** 建议的 HTTP 状态码 */
+        public int httpStatus() {
+            return httpStatus;
+        }
     }
 
     private final Code code;
@@ -66,6 +110,7 @@ public final class HarnessResult<T> {
         this.detail = detail;
     }
 
+    /** 成功结果，携带结果值 */
     public static <T> HarnessResult<T> ok(@Nullable T value) {
         return new HarnessResult<>(Code.OK, value, null, null, null);
     }
@@ -93,6 +138,7 @@ public final class HarnessResult<T> {
         return new HarnessResult<>(code, null, null, reason, detail);
     }
 
+    /** 会话、队列项或任务不存在 */
     public static <T> HarnessResult<T> notFound(@Nullable String detail) {
         return fail(Code.NOT_FOUND, detail);
     }
@@ -107,12 +153,19 @@ public final class HarnessResult<T> {
         return fail(Code.CONFLICT, detail);
     }
 
+    /** 容量已满 */
     public static <T> HarnessResult<T> full(@Nullable String detail) {
         return fail(Code.FULL, detail);
     }
 
+    /** 插件未装配或已停用 */
     public static <T> HarnessResult<T> disabled(@Nullable String detail) {
         return fail(Code.DISABLED, detail);
+    }
+
+    /** 宿主鉴权拒绝 */
+    public static <T> HarnessResult<T> forbidden(@Nullable String detail) {
+        return fail(Code.FORBIDDEN, detail);
     }
 
     /** 多节点：会话由其它节点持有 */
@@ -128,10 +181,17 @@ public final class HarnessResult<T> {
         return new HarnessResult<>(code, null, owner, reason, detail);
     }
 
+    /** 结果码（粗码，决定宿主怎么处置） */
     public Code getCode() {
         return code;
     }
 
+    /** 建议的 HTTP 状态码（转自 {@link Code#httpStatus()}，不采用 HTTP 的宿主可忽略） */
+    public int httpStatus() {
+        return code.httpStatus();
+    }
+
+    /** 是否成功 */
     public boolean isOk() {
         return code == Code.OK;
     }

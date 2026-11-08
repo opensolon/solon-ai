@@ -143,7 +143,7 @@ class QuickstartSampleTest {
                     .call("s1", "goal.get", GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get("s1"))).isOk());
 
             // §六 停止
-            assertTrue(host.admin("acme", "acme/admin").interrupt("s1", InterruptMode.INTERRUPT).isOk());
+            assertTrue(host.admin("acme", "acme/admin").interrupt("s1", InterruptMode.INTERRUPT_ALL).isOk());
         } finally {
             pool.close();
         }

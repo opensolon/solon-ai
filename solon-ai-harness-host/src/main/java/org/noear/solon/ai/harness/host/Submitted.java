@@ -19,20 +19,42 @@ import org.noear.solon.lang.Preview;
  */
 @Preview("4.2.0")
 public final class Submitted {
-    /** 结果类型 */
+    /**
+     * 结果类型
+     *
+     * <p>只描述「已经发生了什么」，不描述「接下来该做什么」（后者是引擎层的
+     * {@code InputOutcome.Kind}，两者除了 TASK / STARTED 一一对应）。
+     * 常量顺序与 {@code InputOutcome.Kind} 对齐，便于对照阅读。</p>
+     */
     public enum Kind {
-        /** 已开流（结果经 {@link HostSink#event} / {@link HostSink#runFinished} 推送） */
+        /**
+         * 本轮已交给执行器执行（流经 {@link HostSink#event} / {@link HostSink#runFinished} 推送）。
+         *
+         * <p>含义是「已经交出去了」，不保证流已真的跑起来：调度空档里被取消、启动失败时也是本值，
+         * 失败会经 {@link HostSink#runFinished} 以 error 收尾。调用方不要把它当成「必有输出」。
+         */
         STARTED,
-        /** 只有回执（命令已执行），已经 {@link HostSink#reply} */
+        /**
+         * 只有回执，没有任务（回执已经 {@link HostSink#reply}）。
+         *
+         * <p>包括「命令已执行」与「命令在本渠道不可用、未执行」两种事实，调用方动作相同。
+         */
         REPLY,
-        /** 会话忙，已排队，空闲后自动续发 */
-        DEFERRED,
-        /** 未受理（原因见 {@link #getRejectReason()}，提示已经发出） */
-        REJECTED,
-        /** 审批已记录，本批仍有未决卡（已经 {@link HostSink#hitl}），或审批卡已失效 */
+        /**
+         * 审批已记录但未续流：本批仍有未决卡（卡已 {@link HostSink#hitl}），或审批卡已失效。
+         */
         HITL,
-        /** 空输入，无需处理 */
-        IGNORED
+        /** 空输入（无文本也无附件），未做任何处理 */
+        IGNORED,
+        /** 会话忙，已入积压，空闲后由宿主续发（位置见 {@link #getBacklogPosition()}） */
+        DEFERRED,
+        /**
+         * 未受理（原因见 {@link #getRejectReason()}）。
+         *
+         * <p>绝大多数情况下提示已经经 {@link HostSink#rejectText} 发出；唯一例外是
+         * {@code NOT_OWNER}：那时由 {@link HostSink#forward} 将请求转给持有者，不会发提示。
+         */
+        REJECTED
     }
 
     private final Kind kind;
@@ -74,7 +96,9 @@ public final class Submitted {
 
     /**
      * 建议的 HTTP 状态码：STARTED / REPLY / HITL / IGNORED → 200，DEFERRED → 202，
-     * REJECTED → 404（会话不存在）/ 307（not_owner）/ 403（作用域）/ 503（引擎已关闭）/ 409（其余）。
+     * REJECTED 按 {@link RejectReason}：SESSION_NOT_FOUND → 404，NOT_OWNER → 307，
+     * SCOPE_UNAVAILABLE → 403，ENGINE_CLOSED → 503，其余（BUSY / HITL_PENDING /
+     * ATTACHMENTS_NOT_DEFERRABLE / BACKLOG_UNAVAILABLE / SCOPE_NOT_DEFERRABLE）→ 409。
      */
     public int httpStatus() {
         switch (kind) {

@@ -274,7 +274,7 @@ public interface HarnessExtension extends AiSwitchable {
     /**
      * 用户级会话中断（中断参与）
      *
-     * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session, InterruptMode.INTERRUPT)} / {@code prepareInterrupt(session)}
+     * <p><b>调用点</b>：{@code HarnessEngine.interrupt(session, InterruptMode.INTERRUPT_ALL)} / {@code prepareInterrupt(session)}
      * （{@code /interrupt} 命令也经此）。仅用户级完整中断会回调；只停流的程序行为
      * （{@code CANCEL_STREAM} / {@code PREEMPT_STREAM}，如新轮次顶掉旧轮次）<b>不</b>回调。</p>
      *

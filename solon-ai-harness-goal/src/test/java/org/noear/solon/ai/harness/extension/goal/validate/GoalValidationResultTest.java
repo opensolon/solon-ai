@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link GoalValidator.ValidationResult} 值对象（随 goal 插件独立，原在核心 TaskValueObjectsTest）。
+ * {@link ValidationResult} 值对象（随 goal 插件独立，原在核心 TaskValueObjectsTest）。
  */
 class GoalValidationResultTest {
 
@@ -16,14 +16,14 @@ class GoalValidationResultTest {
 
     @Test
     void passedResultCarriesEmptyDetail() {
-        GoalValidator.ValidationResult r = GoalValidator.ValidationResult.passed();
+        ValidationResult r = ValidationResult.passed();
         assertTrue(r.isPassed());
         assertEquals("", r.getDetail());
     }
 
     @Test
     void failedResultCarriesDetail() {
-        GoalValidator.ValidationResult r = GoalValidator.ValidationResult.failed("测试未通过：3 个用例失败");
+        ValidationResult r = ValidationResult.failed("测试未通过：3 个用例失败");
         assertFalse(r.isPassed());
         assertNotNull(r.getDetail());
         assertTrue(r.getDetail().contains("3 个用例失败"));

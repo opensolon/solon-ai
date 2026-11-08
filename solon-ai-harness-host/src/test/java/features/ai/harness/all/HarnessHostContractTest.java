@@ -418,11 +418,11 @@ class HarnessHostContractTest {
                     admin.call("s1", "x", QueueExtension.class, (q, s) -> {
                         throw new IllegalArgumentException("bad");
                     }).getCode(), "扩展抛参数异常译为 INVALID");
-            assertEquals(HarnessResult.Code.NOT_FOUND, admin.interrupt("ghost", InterruptMode.INTERRUPT).getCode());
+            assertEquals(HarnessResult.Code.NOT_FOUND, admin.interrupt("ghost", InterruptMode.INTERRUPT_ALL).getCode());
             assertTrue(admin.call("s1", "queue.list", QueueExtension.class, (q, s) -> HarnessResult.ok(q.list(s))).isOk());
 
             assertEquals(HarnessResult.Code.FORBIDDEN, enqueue(host.admin("t", "guest"), "s1", "x", null).getCode());
-            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("t", "guest").interrupt("s1", InterruptMode.INTERRUPT).getCode());
+            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("t", "guest").interrupt("s1", InterruptMode.INTERRUPT_ALL).getCode());
         } finally {
             engine.shutdown();
         }

@@ -6,6 +6,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidationResult;
 import org.noear.solon.scheduling.scheduled.JobHandler;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 
@@ -137,7 +138,7 @@ class GoalSessionRemoveTest {
         List<String> seen = new java.util.concurrent.CopyOnWriteArrayList<>();
         ext.registerValidator(c -> c.contains("lint"), (c, dir) -> {
             seen.add(dir);
-            return GoalValidator.ValidationResult.passed();
+            return ValidationResult.passed();
         });
         Path project = java.nio.file.Files.createDirectories(workspace.resolve("other-project"));
 

@@ -133,7 +133,7 @@ public String decide(String tenant, String sid, String callId, String action, Co
 @Post 
 @Mapping("/chat/{tenant}/{sid}/stop")
 public Result stop(String tenant, String sid) {
-    HarnessResult<Boolean> r = host.interrupt(tenant, sid, InterruptMode.INTERRUPT);
+    HarnessResult<Boolean> r = host.interrupt(tenant, sid, InterruptMode.INTERRUPT_ALL);
     return r.isOk() ? Result.succeed(r.getValue()) : Result.failure(r.getCode().name());
 }
 ```
@@ -188,30 +188,34 @@ HarnessResult<Integer> r = admin.call(sid, "queue.enqueue", QueueExtension.class
         (queue, s) -> queue.enqueue(s, text, InputOrigin.channel("console")));
 switch (r.getCode()) {
     case OK:        return Result.succeed(r.getValue());          // 队列位置
-    case NOT_OWNER: return Result.failure(307, r.getOwner());     // 网关转发
-    case NOT_FOUND: return Result.failure(404, r.getDetail());
-    case FORBIDDEN: return Result.failure(403, r.getDetail());
-    case CONFLICT:  return Result.failure(409, r.getDetail());   // 参数合法但状态不允许（如 id 重复）
-    default:        return Result.failure(400, r.getDetail());   // DISABLED / FULL / INVALID
+    case NOT_OWNER: return Result.failure(r.httpStatus(), r.getOwner()); // 307：网关转发
+    default:        return Result.failure(r.httpStatus(), r.getDetail()); // 404 / 403 / 409 / 429 / 503 / 400
 }
 
-admin.interrupt(sid, InterruptMode.INTERRUPT);
+// 或直接（粗码自带建议状态码，不必自己维护映射表）
+return r.isOk() ? Result.succeed(r.getValue())
+                : Result.failure(r.httpStatus(), r.getDetail());
+
+admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 ```
 
 `call` 按同一顺序检查：鉴权（`AdminAuthorizer`，未配置时不鉴权；操作名由你自定）→ 扩展是否装配（`DISABLED`）→
 会话归属（`NOT_OWNER`）→ 会话是否存在（`NOT_FOUND`，只查不建）→ 执行。扩展抛的 `NotOwnerException` 译为 `NOT_OWNER`，
 `IllegalArgumentException` 译为 `INVALID`，`IllegalStateException` 译为 `CONFLICT`。成功之后自动续发积压（入队、置顶后会话空闲就立即执行）。
 
-| Code | 含义 |
-|---|---|
-| `OK` | 成功，`getValue()` 为结果 |
-| `NOT_FOUND` | 会话、队列项或任务不存在 |
-| `NOT_OWNER` | 会话由其它节点持有，`getOwner()` 为持有者 |
-| `DISABLED` | 插件未装配或已停用 |
-| `FULL` | 队列满、loop 任务数或会话配额达上限 |
-| `INVALID` | 参数不合法（重试同样的请求不会成功），`getDetail()` 为原因 |
-| `CONFLICT` | 参数合法但当前状态不允许（goal 已是终态、轮次已切换、ID 重复等） |
-| `FORBIDDEN` | `AdminAuthorizer` 拒绝（授权服务抛异常时同样拒绝） |
+| Code | 含义 | `httpStatus()` |
+|---|---|---|
+| `OK` | 成功，`getValue()` 为结果 | 200 |
+| `NOT_FOUND` | 会话、队列项或任务不存在 | 404 |
+| `NOT_OWNER` | 会话由其它节点持有，`getOwner()` 为持有者 | 307 |
+| `DISABLED` | 插件未装配或已停用 | 503 |
+| `FULL` | 队列满、loop 任务数或会话配额达上限 | 429 |
+| `INVALID` | 参数不合法（重试同样的请求不会成功），`getDetail()` 为原因 | 400 |
+| `CONFLICT` | 参数合法但当前状态不允许（goal 已是终态、轮次已切换、ID 重复等） | 409 |
+| `FORBIDDEN` | `AdminAuthorizer` 拒绝（授权服务抛异常时同样拒绝） | 403 |
+
+状态码由粗码自带（每个 `Code` 值上就有，`r.httpStatus()` 是同一份的转发），宿主不用另维护一张表；
+`NOT_OWNER` 用 307 而不是 302，是为了让网关跳转后仍用原方法与原请求体。
 
 以上是粗码，决定怎么处置；失败时还可能带细分码 `getReason()`（可空，大写下划线，如 steer 的 `BOX_FULL`），判定用 `hasReason(...)`；透传给前端的应答码用 `getReasonOrCode()`（有细分码返回细分码，否则粗码名）。
 
@@ -221,7 +225,7 @@ admin.interrupt(sid, InterruptMode.INTERRUPT);
 
 | InterruptMode | 行为 |
 |---|---|
-| `INTERRUPT` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息 |
+| `INTERRUPT_ALL` | 用户点「停止」：先清空排队任务，再停当前流，并在历史里写取消消息 |
 | `CANCEL_STREAM` | 只停当前流，保留排队任务（结束后续发下一条），不写历史 |
 | `PREEMPT_STREAM` | 为新一轮腾位：只停流，不推进取消代数（一般用不到） |
 

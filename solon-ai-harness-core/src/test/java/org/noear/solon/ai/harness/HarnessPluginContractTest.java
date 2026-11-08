@@ -173,7 +173,7 @@ class HarnessPluginContractTest {
         backlog.offer(session, "排队一");
         AtomicInteger disposed = busy(session);
 
-        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT).getValue());
+        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue());
         assertEquals(1, backlog.interrupts);
         assertTrue(backlog.busyAtInterrupt, "必须先清积压再停流（回调时流仍在）");
         assertEquals(1, disposed.get());
@@ -189,7 +189,7 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         backlog.offer(session, "排队一");
 
-        assertFalse(engine.interrupt(session, InterruptMode.INTERRUPT).getValue(), "无运行流时返回 false");
+        assertFalse(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue(), "无运行流时返回 false");
         assertEquals(1, backlog.interrupts, "没有流也要清积压");
 
         backlog.offer(session, "排队二");
@@ -216,7 +216,7 @@ class HarnessPluginContractTest {
         AgentSession session = InMemoryAgentSession.of();
         AtomicInteger disposed = busy(session);
 
-        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT).getValue(), "单个扩展异常不得阻止中断生效");
+        assertTrue(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue(), "单个扩展异常不得阻止中断生效");
         assertEquals(1, disposed.get());
         assertEquals(1, backlog.interrupts, "后续扩展仍被回调");
     }
@@ -239,7 +239,7 @@ class HarnessPluginContractTest {
 
     @Test
     void interruptWithNullSessionIsSafe() {
-        assertFalse(engine().interrupt(null, InterruptMode.INTERRUPT).getValue());
+        assertFalse(engine().interrupt(null, InterruptMode.INTERRUPT_ALL).getValue());
         assertNull(engine().prepareInterrupt(null));
     }
 

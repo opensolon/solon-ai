@@ -35,7 +35,7 @@ import java.util.function.BiFunction;
  *     return queue.enqueue(s, text, InputOrigin.channel("console"));   // 插件门面直接返回 HarnessResult
  * });
  *
- * admin.interrupt(sid, InterruptMode.INTERRUPT);
+ * admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
  * }</pre>
  *
  * @author noear

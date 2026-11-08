@@ -3,10 +3,7 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
-import org.noear.solon.ai.harness.extension.goal.validate.BuildPassValidator;
-import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
-import org.noear.solon.ai.harness.extension.goal.validate.NoopValidator;
-import org.noear.solon.ai.harness.extension.goal.validate.TestsPassValidator;
+import org.noear.solon.ai.harness.extension.goal.validate.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -647,7 +644,7 @@ class GoalRoundExecutionTest {
     @Test
     void testsValidatorFailsWhenNoBuildToolDetected() {
         // 未检测到项目类型时保守失败（明确的 FAILED，不是无法判定）
-        GoalValidator.ValidationResult r = new TestsPassValidator(NEVER)
+        ValidationResult r = new TestsPassValidator(NEVER)
                 .validate("test", System.getProperty("java.io.tmpdir"));
         assertFalse(r.isPassed());
         assertFalse(r.isInconclusive());
@@ -665,7 +662,7 @@ class GoalRoundExecutionTest {
         }).validate("build", wd).isPassed());
         assertEquals("mvn compile -q -o@" + wd, ran.get(0), "命令在本轮工作目录下经执行口运行");
 
-        GoalValidator.ValidationResult failed = new BuildPassValidator((c, d) ->
+        ValidationResult failed = new BuildPassValidator((c, d) ->
                 org.noear.solon.ai.talents.cli.CommandResult.completed(1, "ERROR x")).validate("build", wd);
         assertFalse(failed.isPassed());
         assertFalse(failed.isInconclusive());
@@ -685,13 +682,13 @@ class GoalRoundExecutionTest {
         GoalRuntime rt = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 3, true);
         rt.registerValidator(c -> c.contains("x"),
-                (c, d) -> GoalValidator.ValidationResult.inconclusive("timeout"));
+                (c, d) -> ValidationResult.inconclusive("timeout"));
 
         // 缺省 FAIL_OPEN（本地编码体验不变）
         assertTrue(rt.validate("x", "/w").isPassed());
 
         rt.configureValidation(org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy.FAIL_CLOSED, 0);
-        GoalValidator.ValidationResult r = rt.validate("x", "/w");
+        ValidationResult r = rt.validate("x", "/w");
         assertFalse(r.isPassed());
         assertFalse(r.isInconclusive(), "策略处理后只剩通过/未通过");
         assertTrue(r.getDetail().contains("timeout"));
@@ -713,8 +710,8 @@ class GoalRoundExecutionTest {
 
     @Test
     void validationResultValueSemantics() {
-        GoalValidator.ValidationResult passed = GoalValidator.ValidationResult.passed();
-        GoalValidator.ValidationResult failed = GoalValidator.ValidationResult.failed("原因");
+        ValidationResult passed = ValidationResult.passed();
+        ValidationResult failed = ValidationResult.failed("原因");
 
         assertTrue(passed.isPassed());
         assertEquals("", passed.getDetail());

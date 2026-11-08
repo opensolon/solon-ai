@@ -236,8 +236,8 @@ goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
 goal.registerValidator(
         cond -> cond.contains("lint"),                  // 入参为已转小写的目标文本
         (condition, workDir) -> runLint(workDir)        // 目标原文 + 本轮会话工作目录（可能为 null）
-                ? GoalValidator.ValidationResult.passed()
-                : GoalValidator.ValidationResult.failed("lint 未通过"));
+                ? ValidationResult.passed()
+                : ValidationResult.failed("lint 未通过"));
 ```
 
 `workDir` 取自本轮工具上下文的 `__cwd`，取不到时用 `engine.getSessionCwd(session)`。它可以不是引擎工作区（例如桌面端 goal 把会话目录设为目标项目），验证器应以它为准，不要自行读取 `engine.getWorkspace()`。
@@ -424,7 +424,7 @@ public class ImGoalHost {
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
 4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
 5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）由 `handle` 入积压并返回 `DEFERRED`。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
-6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
+6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
 7. **单槽冲突在回执里**：已有非终态 goal 时命令只回执 `WARN`；管理态 `create` 返回 `HarnessResult.Code.CONFLICT`。
 8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；续流完成后 goal 才继续。
 
@@ -560,7 +560,7 @@ goal.update(sid, GoalPatch.create().objective(newPrompt), () -> {
 });
 ```
 
-`stopper` 里不要用 `InterruptMode.INTERRUPT`：它会回调各扩展的 `onSessionInterrupt`，顺带清空 queue 里用户排队的消息。
+`stopper` 里不要用 `InterruptMode.INTERRUPT_ALL`：它会回调各扩展的 `onSessionInterrupt`，顺带清空 queue 里用户排队的消息。
 
 ### 5.4 状态推送：监听器
 
@@ -644,7 +644,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 1. **会话只取不建**：门面按 sessionId 经 `engine.getSessionOrNull` 取会话，不存在时 `get` 返回 null、写方法返回 `NOT_FOUND`，不会把外部传入的 ID 建成新会话；宿主仍需做自己的用户归属校验。
 2. **不需要判忙**：管理接口随时可调。会话忙时 `create` 照常建目标，首轮由调度器等到会话空闲再跑；`update` 自己负责停流与等待。
-3. **立即停下当前一轮**：`pause` 只阻止下一轮。界面上的「停止」按钮应先调宿主的停止入口（如 `engine.interrupt(session, InterruptMode.INTERRUPT)`），再 `goal.pause(sid)`。
+3. **立即停下当前一轮**：`pause` 只阻止下一轮。界面上的「停止」按钮应先调宿主的停止入口（如 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`），再 `goal.pause(sid)`。
 4. **终态只能清除**：`ACHIEVED` / `BUDGET_LIMITED` / `ITERATION_LIMITED` 不能 `update`、不能恢复，想扩大预算只能清除后重建；界面上对终态行只保留「清除」按钮。
 5. **列表与 loop 混排**：`GoalSnapshot.toMap()` 只输出 goal 自己的字段（`id`、`type = "GOAL"`、`prompt`、`running`、`currentIteration`、预算与 `goal` 子对象），不再带 loop 的 `enabled` / `intervalMinutes` / `runNow` / `cancelled`；混排列表需要这些列时由宿主补齐。分流时用 `goal.get(sid)` 取快照，比较行 id 是否等于 `getId()`，是则走 goal 门面，否则走 loop。
 6. **删除会话先调 `engine.removeSession`**：它回调 `onSessionRemove` 注销该会话的 job；调度轮次只用 `getSessionOrNull`，会话不存在时 job 自行注销，不会把会话重新建出来。
@@ -661,8 +661,8 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `stagnation(threshold)` | `int` | `3` | 连续无进展轮数达到该值后注入进展质疑段 |
 | `maxErrors(count)` | `int` | `3` | 连续错误达到该值转 `BLOCKED` |
 | `validatorEnabled(enabled)` | `boolean` | `true` | 是否执行完成前验证（第 4 道闸） |
-| `defaultValidators(enabled)` | `boolean` | 按引擎模式：CODING 注册、SERVER 不注册 | 是否注册内置的构建 / 测试验证器（会执行真实命令） |
-| `validatorPolicy(policy)` | `ValidatorPolicy` | 按引擎模式：CODING `FAIL_OPEN`、SERVER `FAIL_CLOSED` | 验证「无法判定」（超时 / 执行失败）时放行还是拒绝 |
+| `defaultValidators(enabled)` | `boolean` | 按引擎模式：STANDALONE 注册、SERVER 不注册 | 是否注册内置的构建 / 测试验证器（会执行真实命令） |
+| `validatorPolicy(policy)` | `ValidatorPolicy` | 按引擎模式：STANDALONE `FAIL_OPEN`、SERVER `FAIL_CLOSED` | 验证「无法判定」（超时 / 执行失败）时放行还是拒绝 |
 | `validatorTimeoutMs(timeoutMs)` | `int` | `180000` | 内置验证命令超时，超时后整树终止并返回「无法判定」；必须 > 0 |
 | `roundConcurrency(n)` | `int` | `4` | 本扩展实例的 goal 轮次并发上限；必须 ≥ 1；引擎池里每个引擎各有一份 |
 | `jobManager(jobManager)` | `IJobManager` | `JobManager.getInstance()` | 显式传 null = 关闭调度；未显式设置且取不到时 warn |

@@ -24,6 +24,7 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.goal.validate.ValidationResult;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
@@ -183,7 +184,7 @@ public class GoalTalent extends AbsTalent {
 
             if (goalRuntime.isValidatorEnabled()) {
                 // 已按 ValidatorPolicy 处理「无法判定」：这里只会拿到通过/未通过
-                GoalValidator.ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir);
+                ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.getDetail());
                     return errJson("VALIDATION_FAILED",

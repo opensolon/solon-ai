@@ -350,7 +350,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * 非活跃（PAUSED/BLOCKED）时只改写、不改状态。</p>
      *
      * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧）；null = {@code InterruptMode.CANCEL_STREAM}。
-     *                不要用 {@code InterruptMode.INTERRUPT}：那会清空用户的排队
+     *                不要用 {@code InterruptMode.INTERRUPT_ALL}：那会清空用户的排队
      * @return OK 时值为修改后的快照；NOT_FOUND（无 goal）/ INVALID（补丁不合法）/ CONFLICT（已是终态，或旧轮次未能及时停稳——此时 goal 保持暂停，可重试）
      */
     public HarnessResult<GoalSnapshot> update(String sessionId, GoalPatch patch, Runnable stopper) {

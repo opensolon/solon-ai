@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 覆盖：运行句柄释放恰一次 + 追加取消消息 + runId 元数据、
  * 无任务时的友好回执、runnableWhenBusy 契约、session 为 null 的静默路径。
  *
- * <p>命令只是 {@code engine.interrupt(session, InterruptMode.INTERRUPT)} 的薄壳，因此一律用真实引擎执行（不存在绕开引擎的第二套中断）。</p>
+ * <p>命令只是 {@code engine.interrupt(session, InterruptMode.INTERRUPT_ALL)} 的薄壳，因此一律用真实引擎执行（不存在绕开引擎的第二套中断）。</p>
  *
  * <p>句柄一律经 {@link SessionRuns#attach} 注入：早期版本直接写
  * {@code attrs("disposable")}，那个约定已随运行句柄上收到框架而废弃。</p>

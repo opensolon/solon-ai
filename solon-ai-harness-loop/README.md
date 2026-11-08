@@ -219,7 +219,7 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 
 间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务。`/loop list` 与创建回执里打印完整任务 ID，`remove` / `pause` / `resume` 需要传完整 ID。
 
-**停止为什么不用 `InterruptMode.INTERRUPT`**：`interrupt` 是用户级中断，会清空会话的排队消息、并在历史里补写「用户已取消」。定时轮次是程序发起的，删除任务时只应停掉这一轮，所以命令用 `CANCEL_STREAM`：排队消息保留，历史里也不留取消记录。
+**停止为什么不用 `InterruptMode.INTERRUPT_ALL`**：`interrupt` 是用户级中断，会清空会话的排队消息、并在历史里补写「用户已取消」。定时轮次是程序发起的，删除任务时只应停掉这一轮，所以命令用 `CANCEL_STREAM`：排队消息保留，历史里也不留取消记录。
 
 用户也可以直接用自然语言，例如"明天下午 6 点提醒我提交周报"、"每 10 分钟看一下部署好了没"：模型会调用 `loop_add`（支持 `at` 一次性时刻）、`loop_list`、`loop_control`，参数规则见 6.7。工具只挂在顶层请求上，子代理委派中不可用。
 
@@ -360,8 +360,8 @@ public class ImLoopHost {
 2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
 3. **会话忙由插件判**：到点时插件先判 `engine.isIdle(session)`，忙（含有积压）则本轮放弃、不计错误；执行器只回答"本通道此刻能不能跑"，不能就返回 `skip`。判空闲与开轮之间仍有窗口：`ofProgram` 的程序轮次忙时返回 `REJECTED("busy")`、不进积压，执行器在非 `TASK` 时返回 `skip`（缺省执行器即如此；它用 `engine.getSessionOrNull(sessionId)` 取会话，会话不存在时也 skip）。
 4. **轮次结束要续发队列**：loop 的一轮会占用会话，期间用户发来的消息由 `handle` 入积压并返回 `DEFERRED`；执行器结束时必须 `drain`，否则这些消息要等下一次用户输入才会发出。
-5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop remove <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务。要立刻停掉正在跑的一轮，宿主先 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`（程序级取消，不清排队），再 `loop.remove(sid, taskId)`；用户要连排队一起清掉时才用 `InterruptMode.INTERRUPT` 或 `/interrupt`。命令里"正在执行就停流"的分支只是防御性兜底。
-6. **中断不删任务**：`INTERRUPT` / `CANCEL_STREAM` 只停当前一轮，定时任务照常保留，下次到点继续。
+5. **`/loop` 在忙时被延后**：它不是忙态旁路命令。任务（包括 loop 自己的一轮）运行中输入的 `/loop remove <id>` 会排队，等这一轮结束后才执行，此时任务已不在运行，命令只删除任务。要立刻停掉正在跑的一轮，宿主先 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`（程序级取消，不清排队），再 `loop.remove(sid, taskId)`；用户要连排队一起清掉时才用 `InterruptMode.INTERRUPT_ALL` 或 `/interrupt`。命令里"正在执行就停流"的分支只是防御性兜底。
+6. **中断不删任务**：`INTERRUPT_ALL` / `CANCEL_STREAM` 只停当前一轮，定时任务照常保留，下次到点继续。
 7. **删除会话要先调 `engine.removeSession`**：它回调 `onSessionRemove`，删除该会话的全部任务并注销 job；顺序颠倒时，定时任务可能在删除过程中触发并把会话重新建出来。
 8. **一次性任务不能用命令建**：`/loop` 只支持间隔与 cron；一次性提醒让模型用 `loop_add` 的 `at` 参数，或走管理态 `LoopSpec.at(...)`。
 
@@ -603,7 +603,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 1. **先校验会话**：门面只做多节点归属检查（`NOT_OWNER`），不检查会话是否存在，给任意 sessionId 都能建任务。缺省执行器到点时用 `engine.getSessionOrNull(sessionId)` 取会话，不存在就 skip，任务会一直空转。管理接口应先确认会话存在，并校验宿主自己的用户归属。
 2. **不需要判忙**：管理接口随时可调。会话忙时到点的一轮会被放弃（不计错误），等下一次到点。
 3. **立即执行可能被放弃**：`trigger` 是异步的，仍经守卫：任务已暂停或会话正忙时，这一轮直接放弃；返回 `OK` 只表示任务存在。
-4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)` 再 `remove`（示例的 `stopRunning`）。不要用 `InterruptMode.INTERRUPT`：它会清空该会话 queue 里的排队消息，并在历史里写「用户已取消」。
+4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)` 再 `remove`（示例的 `stopRunning`）。不要用 `InterruptMode.INTERRUPT_ALL`：它会清空该会话 queue 里的排队消息，并在历史里写「用户已取消」。
 5. **自动停用后需手动恢复**：连续失败达阈值后任务 `enabled = false`，面板上应显示为"已停用"，`resume` 会清零计数并重新调度。
 6. **修改不会立即执行**：`LoopPatch.runNow` 只更新记录上的标志，立即首轮只在创建时生效；想立刻跑一轮用 `trigger`。
 7. **一次性任务只能通过 `schedule` 或 `loop_add` 创建**：`LoopPatch` 不能把普通任务改成一次性。
