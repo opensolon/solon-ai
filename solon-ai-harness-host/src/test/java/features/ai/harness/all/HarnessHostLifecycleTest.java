@@ -18,6 +18,9 @@ import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SubmitResult;
+import org.noear.solon.ai.harness.host.SubmitSpec;
+import reactor.core.Disposable;
+import reactor.core.scheduler.Schedulers;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +28,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -288,6 +292,86 @@ class HarnessHostLifecycleTest {
             assertEquals(Collections.singletonList("s1"),
                     engine.getExtension(QueueExtension.class).get().pendingSessions(), "积压原样保留给负责它的入口");
         } finally {
+            engine.shutdown();
+        }
+    }
+
+    /** 受理中（submit 还没返回）的停止不会丢：开出的那一轮以 CANCELLED 收尾，宿主不必自己处理句柄发布前的竞态 */
+    @Test
+    void interruptDuringAdmissionCancelsTheRunItOpens() throws Exception {
+        HarnessEngine engine = engine();
+        engine.getSession("s1");
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ManualExecutor executor = new ManualExecutor();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).executor(executor)
+                .input((t, in) -> {
+                    entered.countDown();
+                    try {
+                        release.await(10, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                })
+                .build();
+        try {
+            CompletableFuture<SubmitResult> f = CompletableFuture.supplyAsync(
+                    () -> host.submit("t", "s1", "hello", null));
+            assertTrue(entered.await(10, TimeUnit.SECONDS));
+
+            HarnessResult<Boolean> stopped = host.interrupt("t", "s1");
+            assertEquals(Boolean.TRUE, stopped.getValue(), "受理中的输入也算：它开出的那一轮会以 CANCELLED 收尾");
+            release.countDown();
+
+            SubmitResult r = f.get(10, TimeUnit.SECONDS);
+            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
+            assertTrue(executor.runNext(5_000));
+            RunOutcome o = r.getRun().await(Duration.ofSeconds(10));
+            assertEquals(RunOutcome.End.CANCELLED, o.getEnd());
+            assertEquals(RunOutcome.CancelCause.INTERRUPT_ALL, o.getCancelCause());
+            assertFalse(o.isStreamOpened());
+        } finally {
+            release.countDown();
+            engine.shutdown();
+        }
+    }
+
+    /** stream() 在受理期间就被下游取消（客户端断开）：拿到句柄后补做取消，本轮不开流 */
+    @Test
+    void streamCancelledDuringAdmissionStopsTheRun() throws Exception {
+        HarnessEngine engine = engine();
+        engine.getSession("s1");
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        RecordingSink sink = new RecordingSink();
+        ManualExecutor executor = new ManualExecutor();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor)
+                .input((t, in) -> {
+                    entered.countDown();
+                    try {
+                        release.await(10, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                })
+                .build();
+        try {
+            Disposable d = host.stream("t", "s1", SubmitSpec.of("hello"))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .subscribe();
+            assertTrue(entered.await(10, TimeUnit.SECONDS));
+            d.dispose();
+            release.countDown();
+
+            await(() -> sink.started.size() == 1, "受理照常开出一轮");
+            assertTrue(executor.runNext(5_000));
+            await(() -> sink.outcomes.size() == 1, "本轮收尾");
+            RunOutcome o = sink.outcomes.get(0);
+            assertEquals(RunOutcome.End.CANCELLED, o.getEnd());
+            assertEquals(RunOutcome.CancelCause.HANDLE, o.getCancelCause());
+            assertFalse(o.isStreamOpened());
+        } finally {
+            release.countDown();
             engine.shutdown();
         }
     }

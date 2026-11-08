@@ -49,16 +49,18 @@ public final class RunOutcome {
     private final String resultText;
     private final RunUsage usage;
     private final boolean streamOpened;
+    private final boolean abnormal;
     private final List<HitlCard> hitlCards;
 
     RunOutcome(End end, @Nullable CancelCause cancelCause, @Nullable Throwable error, @Nullable String resultText,
-               RunUsage usage, boolean streamOpened, @Nullable List<HitlCard> hitlCards) {
+               RunUsage usage, boolean streamOpened, boolean abnormal, @Nullable List<HitlCard> hitlCards) {
         this.end = end;
         this.cancelCause = end == End.CANCELLED ? (cancelCause == null ? CancelCause.EXTERNAL : cancelCause) : null;
         this.error = error;
         this.resultText = resultText;
         this.usage = usage == null ? RunUsage.EMPTY : usage;
         this.streamOpened = streamOpened;
+        this.abnormal = abnormal;
         this.hitlCards = hitlCards == null ? Collections.emptyList() : hitlCards;
     }
 
@@ -109,6 +111,14 @@ public final class RunOutcome {
         return streamOpened;
     }
 
+    /**
+     * ReAct 是否异常结束（如超出 maxTurns 被强制收尾）。流本身正常结束，所以结束方式仍是 COMPLETED；
+     * 此时 {@link #getResultText()} 可能是半成品，宿主通常应改用安全文案、按失败计费或提示用户。
+     */
+    public boolean isAbnormal() {
+        return abnormal;
+    }
+
     /** 本轮因审批挂起时尚未决策的卡（同时已经 {@link HostSink#hitl} 推送；决策经 {@link HarnessHost#decide} 提交） */
     public List<HitlCard> getHitlCards() {
         return hitlCards;
@@ -117,6 +127,7 @@ public final class RunOutcome {
     @Override
     public String toString() {
         return "RunOutcome{" + end + (cancelCause != null ? "(" + cancelCause + ")" : "")
+                + (abnormal ? ", abnormal" : "")
                 + (error != null ? ", error=" + error : "") + ", opened=" + streamOpened + ", " + usage + "}";
     }
 }

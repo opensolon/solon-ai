@@ -121,7 +121,7 @@ class ReferenceHostsTest {
             r.getRun().await(Duration.ofSeconds(30));
             await(() -> c.frames.get("w1").stream().anyMatch(f -> f.startsWith("done:")), "每轮以 done 收尾");
             List<String> frames = c.frames.get("w1");
-            assertEquals("reset", frames.get(0), "open 时流门复位");
+            assertEquals("reset", frames.get(0), "第一次输出时流门复位");
             assertEquals(1, frames.stream().filter(f -> f.startsWith("done:")).count(), "done 恰好一次");
         } finally {
             shutdownAll();

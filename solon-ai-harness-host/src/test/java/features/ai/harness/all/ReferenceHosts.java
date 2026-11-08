@@ -259,17 +259,27 @@ final class ReferenceHosts {
         @Override
         public RunSink open(HostRun run) {
             final String sid = run.getSessionId();
-            push(sid, "reset");                                              // 流门复位：新一轮开始
-            return new RunSink() {
+            return new RunSink() {                                           // open 里只建对象、不输出
                 private int seq;                                             // 按轮状态
+                private boolean begun;
+
+                /** 流门复位放在第一次输出时：本轮可能在调度窗口内就被取消 */
+                private void begin() {
+                    if (begun == false) {
+                        begun = true;
+                        push(sid, "reset");
+                    }
+                }
 
                 @Override
                 public void prepare(RunPrep prep) {
+                    begin();
                     prep.request().options(o -> o.maxTurns(30));
                 }
 
                 @Override
                 public void reply(String text) {
+                    begin();
                     push(sid, "reply:" + text);
                 }
 

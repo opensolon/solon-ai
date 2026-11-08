@@ -201,8 +201,7 @@ HarnessHost.builder().input((tenant, in) -> in.commandContextFactory(myFactory))
 IM 类入口常用「忙时先插话、插不进再排队」：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.STEER)`（需装 steer 插件，命令不插话）。
 一问一答型入口忙时不该排队（请求结束了，排队的那一轮没人接）：`SubmitSpec.of(text).whenBusy(SubmitSpec.BusyPolicy.REJECT)`。
 
-```java
-```
+每种用况（一问一答、SSE、IM、Web 推送、审批、停止）的完整示例见 [README §4](../README.md#4-使用态用户在对话里输入)。
 
 ---
 

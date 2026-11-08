@@ -226,3 +226,34 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
   `ExceptionInInitializerError`。迁移前后表现一致（迁移后以一个 error 终态收尾），需要补上提示词文件。
 - 验证：host 70 例全绿并已 install；soloncode-cli 全量 1226 例，失败 3 例（settings 既有），跳过 3 例。
 
+
+## 十一、第四轮：只修语义缺口，复杂度回到呈现层（2026-11-08）
+
+### 11.1 核实（P0）结论
+
+| 项 | 结论 | 依据 |
+|---|---|---|
+| F2 受理窗口的停止 | 成立，但**不能**把 `RunTicket.begin` 提到 `engine.handle` 之前 | handle 内执行的命令可能自己推进取消代数，提前取基准会把本轮误判为已取消。改为骨架内登记「受理中」占位（见 11.2） |
+| F3 残留决策 | 框架口径（`HitlCard.undecided`）正确，宿主的 `HitlCard.next` 兜底多余 | 「整批已决策但没续流」时 `pendingCount=0`，引擎不判 HITL_PENDING；下一轮 `HITLInterceptor.onAgentStart` 见全部已决策会直接路由到 ACTION 消化掉。残留只出现在被中断的续流之后，那一轮是 CANCELLED，本就不推卡 |
+| 会话忙口径 | Web 的删除 / 批量清理 / 回退应当用「占用」（含待审批），插话与「运行中」展示用「有运行流」 | `SessionWebController` 三处删除 / 回退原用 `isBusy`，会放过正在等审批的会话（回退会写坏挂起的 trace）；桌面端与 `HarnessHost.closeSession` 早已用 `isOccupied` |
+| `emitToClient` 读盘 | 成立：每个事件（含流式分片）都 `SessionMeta.load` 一次，哪怕没开对话隔离 | 只在隔离开启时读 |
+| F1 生效模型名 | 不做 | 桌面端在 `prepare` 里已拿到实际模型（`DesktopRunSink.modelName`），Web 不用；没有第二个使用方 |
+| F1 异常结束 | 做 | 只用 `submit().getRun().await()` 的 SaaS（第一档用法）拿不到「超出 maxTurns」这一事实，只能自己解析事件 |
+| F4 受理时写入选择 | 不进框架 | Web 与桌面的语义不同：Web 的子代理是「没带就保持」，桌面是「每条消息显式、没带就是主代理」；桌面的 goal 路径不经受理、仍要自己写。放进框架既要开关又删不掉宿主代码。改为桌面两份合一 |
+| F5 RecordingSink | 不做 | 上次说的两个使用方（`WebHostFlowContractTest` / `DesktopHostFlowContractTest`）并不自写记录器，它们观测的是协议输出 |
+| F6 拆分 | 只拆 `ProgramResult` | 后台轮次的执行仍要用 `openRun` / `runStream` / `ActiveRun` 等私有状态，整段搬走只会多一层包内耦合；把「终态 → 插件结局」的翻译拆成包内类即可 |
+| S1 IM 投递按轮状态 | 暂缓 | 现在是正确的（第九节的屏障已消除当初的竞态），收益只是可读性；而这条链还服务于不开流的命令回执、忙时命令的独立路由、受理时（开流之前）就启动的心跳，5 个测试类约 2800 行锁定了它的时序（含「落库卡住期间 IM 收不到」）。本环境无真实 IM 渠道，回归无法实测，等有渠道联调时单独做 |
+| S7 命令行 | 只统一证据口径 | `ReActRequest.stream()` 在装配时已自取取消代数，命令行不缺 `RunTicket` |
+
+### 11.2 执行记录
+
+- 框架（host）：
+  - **受理中也能停**：`admit` 一开始就登记「受理中」占位（队列续发的领取回调同样登记），`interrupt` 的用户停止与 `CANCEL_STREAM` 会给它记上停止请求；`openRun` 先登记活跃轮次、再读占位上的请求（与 `interrupt`「先记占位、再读活跃」相对，至少一边看得到对方），开出的那一轮在执行线程上以 CANCELLED 收尾。腾位（为新输入让路）与句柄取消（只管自己那一轮）不记占位。`interrupt` 返回 true 的含义扩到「有输入正在受理」。
+  - **`stream()` 先登记下游取消**：受理期间客户端就断开时，拿到句柄后补做取消。
+  - **`RunOutcome.isAbnormal()`**：ReAct 异常结束（如超出 maxTurns），流本身正常结束、结局仍是 COMPLETED。
+  - `ProgramResult` 拆为包内类（`toGoalOutcome` / `toLoopOutcome`）。
+  - 新增用例：`interruptDuringAdmissionCancelsTheRunItOpens`、`streamCancelledDuringAdmissionStopsTheRun`。
+- soloncode 桌面端：`DesktopRunSink` 的终态只在 `finished` 里、只看 `RunOutcome`（审批卡取 `getHitlCards()` 第一张，done 带 `getUsage()` 的 token 与耗时）；删除 `onRunEnd`、`start_time`、`terminalSent`。停止与 Web 同一写法：用户停止的那一轮由 `finished(CANCELLED, INTERRUPT_ALL)` 发 reason + done，入口只在 `interrupt` 返回 false 时兜底（`DesktopRunSink.stopped` 共用）。会话选择写入合为 `DesktopHostSink.applySelection` 一处（受理后与 goal 创建前共用）。
+- soloncode 无头模式：删除 `currentRun`、`turnRunning`、`PrintResult.trace`；只剩 `turnSessionId` 与 `turnInterrupted`，停止直接 `host.interrupt(会话)`；`maxTurnsExceeded` 取 `RunOutcome.isAbnormal()`。
+- soloncode 其它：`WorkspaceRuntimePort` 新增 `isSessionOccupied`，删除 / 批量清理 / 回退改用它；`emitToClient` 只在对话隔离开启时读会话主人；`/rewind` 回执条数的解析合为 `SessionRewindService.rewindReceiptCount`；命令行「这一轮是否做了事」改用 `GoalOutcome.isEvidenceTool`。
+- 验证：host 72 例全绿并已 install；soloncode-cli 全量 1226 例，失败 3 例（settings 既有），跳过 3 例。
