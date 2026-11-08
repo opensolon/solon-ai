@@ -10,6 +10,7 @@ import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.InterruptPlan;
@@ -180,7 +181,7 @@ class QueueEngineIntegrationTest {
 
         InputOutcome outcome = engine.handle(HarnessInput.of(session, "看看附件").reference("a.txt"));
         assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
-        assertEquals(InputOutcome.RejectReason.ATTACHMENTS_NOT_DEFERRABLE, outcome.getRejectReason());
+        assertEquals(RejectReason.ATTACHMENTS_NOT_DEFERRABLE, outcome.getRejectReason());
         assertEquals(0, QueueStore.pendingSize(session));
     }
 
@@ -192,7 +193,7 @@ class QueueEngineIntegrationTest {
 
         InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, "goal 的一轮", "goal"));
         assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
-        assertEquals(InputOutcome.RejectReason.BUSY, outcome.getRejectReason());
+        assertEquals(RejectReason.BUSY, outcome.getRejectReason());
         assertEquals(0, QueueStore.pendingSize(session), "程序轮次不进积压");
     }
 
@@ -209,7 +210,7 @@ class QueueEngineIntegrationTest {
         busy(session);
         InputOutcome outcome = engine.handle(HarnessInput.of(session, "c"));
         assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind(), "积压拒收时明确拒绝，而不是假装排上了");
-        assertEquals(InputOutcome.RejectReason.BACKLOG_UNAVAILABLE, outcome.getRejectReason());
+        assertEquals(RejectReason.BACKLOG_UNAVAILABLE, outcome.getRejectReason());
         assertEquals(1, (int) engine.status(session).get(QueueExtension.STATUS_PENDING), "积压是事实口径，不受开关影响");
         assertTrue(queue.hasPending(session), "hasPending 同为事实口径");
     }

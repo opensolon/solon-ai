@@ -284,3 +284,28 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 - core：`BusyPolicy`（新）、`HarnessInput`、`InputAttachments.copy()`、`SessionControl.deferOrReject`、`InputPipeline` 第 0b 步。新增 `HarnessInputSubmitOptionsTest` 6 例：并发 12 条 REJECT 只有 1 条 TASK、其余 BUSY 且积压为空；QUEUE 与直连的 STEER 照常进积压；主体不符被拒且不占位、一致或不传照常受理、会话无主体时传主体被拒；`copyFor` 反射全字段。
 - 同批：`HarnessProfile` 改名 `DeployMode`（`Builder.deployMode` / `getDeployMode`，校验信息改为 `SERVER deploy mode ...`），goal 与文档同步。
 - host：守卫 `EXTENSION_POINTS` 去掉 `SubmitSpec` 的 4 项，改登记「带本次监听的 `submit` / `stream`」；新增 `submitSpecStaysRetired`。新增 `submittedInputIsCopiedAndHasOneOrigin`（调用方对象不被绑定、不被装饰器改动；回调看到装饰后的来源；会话不一致抛异常）。参考宿主与 README 示例改为平铺写法；README §8.2 改为 `HarnessInput` 表。
+
+## 十三、结果类型不合并，用 host 的人只认一套词（2026-11-08）
+
+### 13.1 决定
+
+四个结果类各答一个问题，不合并：`InputOutcome`（core）回答「这条输入你该怎么执行」，带着执行要用的请求、`stream()`、`discard()`、`afterRun()`，交给 host 的调用方会被重复订阅或误释放占位；`SubmitResult` 回答「已经被怎么处理了」，有 core 给不出的 `RunHandle` 与 `STEERED`；`RunOutcome` 回答「这一轮怎么结束的」，与提交不在同一时刻（一次提交开出 0 或 1 轮）；`ProgramResult` 是包内类，把 `RunOutcome` 换成 goal / loop 要的结局，外部看不到。内部枚举同理：`InputOutcome.Kind` 与 `SubmitResult.Kind` 的差异（`TASK` 与 `STARTED`、`STEERED`）是真实的；`CancelCause` 多出的 `HANDLE` / `EXTERNAL` 不是中断方式，不能用 `InterruptMode` 代替。
+
+真正的问题是用 host 的人两套词都会碰到：`submit` 返回 `SubmitResult.Kind`，而 `HostSink` 回调里的 `HostInput.getKind()` 是 core 的 `InputOutcome.Kind`，受理前结束的输入还是 null；拒绝码也得 `import InputOutcome.RejectReason`。改法：
+
+| 层 | 改动 |
+|---|---|
+| core | `RejectReason` 挪成 `input` 包独立枚举（与 `BusyPolicy` 同属受理口径），取值与 `code()` 不变 |
+| host | `HostInput.getKind()` 返回 `SubmitResult.Kind`，永不为 null，与同一次 `submit` 的返回值一致：`TASK` → `STARTED`（含队列续发、后台轮次），忙时可执行命令触发了任务 → `REJECTED`，会话不存在 / 非持有节点 → `REJECTED`，插话成功 → `STEERED`，其余同名；换算只在 `HarnessHost.kindOf` 一处，与 `route` 的分支一一对应 |
+| soloncode | `WebHostSink`、`DesktopHostSink` 改用 `SubmitResult.Kind`；`rejected` 里「忙时命令触发任务」的判断简化为 `reason == BUSY && isBesideRunning()` |
+
+做完后用 host 的人只认：输入侧 `HarnessInput` / `BusyPolicy` / `RejectReason`，结果侧 `SubmitResult`（含 `Kind`）/ `RunOutcome`（含 `End` / `CancelCause`）。
+
+不做的：`CancelCause.INTERRUPT_ALL` 改名（已与 `InterruptMode` 同名）；删 `SubmitResult.getOwner()`（网关代码读起来更直白）；为 host 另建 `InputKind`（多一个类型，复用 `SubmitResult.Kind` 即可）。
+
+### 13.2 执行记录
+
+- core：新增 `input/RejectReason.java`，`InputOutcome` 删除内部枚举；`InputPipeline`、`SessionControl` 与 core / queue 测试换 import。
+- host：`HostInput.early(kind, …)` / `of(kind, …)` 由骨架传入换算后的 kind（`early` 去掉恒为 null 的队列项参数）；`HostSink.admitted` 注释、README §9.4 / §9.6 与回调时序图改用 `STARTED`。`HarnessHostExtensionPointsTest` 原 `assertNull(getKind())` 改为断言 `REJECTED`，并补断言排队输入为 `DEFERRED`、续发开出的一轮为 `STARTED`。
+- 文档：harness README、host README、QUICKSTART-SAAS 的 `InputOutcome.RejectReason` 改为 `RejectReason`（`input` 包）。
+- 验证：host 79 例全绿（已 install）；core 672 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor），queue 99 / goal 232 / loop 102 / steer 73 全绿；soloncode-cli 1226 例 3F（settings 既有）+3 跳过。

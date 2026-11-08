@@ -37,7 +37,7 @@ import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.annotation.Controller;
 import org.noear.solon.annotation.Get;
 import org.noear.solon.annotation.Inject;

@@ -30,9 +30,9 @@ import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.host.SubmitResult;
+import org.noear.solon.ai.harness.host.SubmitResult.Kind;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome.Kind;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -101,7 +101,7 @@ class HarnessHostExtensionPointsTest {
             HostInput rejected = sink.rejectedInputs.get(0);
             assertEquals("acme", rejected.getTenant());
             assertEquals("ghost", rejected.getSessionId(), "拒绝也知道是哪个会话（按会话推送的宿主才能投递）");
-            assertNull(rejected.getKind(), "受理之前就结束的回合没有引擎结局");
+            assertEquals(Kind.REJECTED, rejected.getKind(), "受理之前就结束的输入也有结果类型，与 submit 返回值一致");
 
             host.submit("acme", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a")));
             host.submit("acme", "s1", HarnessInput.of("second").origin(InputOrigin.channel("b")));
@@ -109,9 +109,10 @@ class HarnessHostExtensionPointsTest {
             assertEquals("acme", deferred.getTenant());
             assertEquals("s1", deferred.getSessionId());
             assertEquals("second", deferred.getText(), "排队时可回放用户消息");
+            assertEquals(Kind.DEFERRED, deferred.getKind());
 
             assertEquals(1, sink.admittedInputs.size(), "admitted 只在 TASK / REPLY / HITL / IGNORED 时调用");
-            assertEquals(Kind.TASK, sink.admittedInputs.get(0).getKind());
+            assertEquals(Kind.STARTED, sink.admittedInputs.get(0).getKind());
 
             // 续发的一轮：回合带上队列项（文本、id、来源）
             assertTrue(executor.runNext(5_000));
@@ -122,6 +123,7 @@ class HarnessHostExtensionPointsTest {
             assertNotNull(dispatched.getInput().getQueueItem(), "续发轮次可取回队列项");
             assertEquals("second", dispatched.getInput().getText());
             assertTrue(dispatched.getInput().isDispatched());
+            assertEquals(Kind.STARTED, dispatched.getInput().getKind(), "续发开出的一轮也是 STARTED");
         } finally {
             engine.shutdown();
         }

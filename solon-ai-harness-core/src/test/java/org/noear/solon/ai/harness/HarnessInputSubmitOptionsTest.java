@@ -11,6 +11,7 @@ import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.scope.InputScope;
 
 import java.lang.reflect.Field;
@@ -80,7 +81,7 @@ class HarnessInputSubmitOptionsTest {
         assertTrue(pool.awaitTermination(20, TimeUnit.SECONDS));
 
         long tasks = outcomes.stream().filter(o -> o.getKind() == InputOutcome.Kind.TASK).count();
-        long busy = outcomes.stream().filter(o -> o.getRejectReason() == InputOutcome.RejectReason.BUSY).count();
+        long busy = outcomes.stream().filter(o -> o.getRejectReason() == RejectReason.BUSY).count();
         assertEquals(1, tasks, outcomes.toString());
         assertEquals(threads - 1, busy, "其余全部当场拒绝");
         assertTrue(backlog.offered.isEmpty(), "REJECT 的输入不得进积压（排着的那一轮没人接）");
@@ -122,7 +123,7 @@ class HarnessInputSubmitOptionsTest {
 
         InputOutcome denied = engine.handle(HarnessInput.of(session, "hi").principal("bob"));
         assertEquals(InputOutcome.Kind.REJECTED, denied.getKind());
-        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, denied.getRejectReason());
+        assertEquals(RejectReason.SCOPE_UNAVAILABLE, denied.getRejectReason());
         assertEquals("principal mismatch", denied.getRejectDetail());
         assertFalse(engine.status(session).isAdmitting(), "被拒的输入不占位");
 
@@ -141,7 +142,7 @@ class HarnessInputSubmitOptionsTest {
         AgentSession session = InMemoryAgentSession.of();
 
         InputOutcome denied = engine.handle(HarnessInput.of(session, "hi").principal("bob"));
-        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, denied.getRejectReason());
+        assertEquals(RejectReason.SCOPE_UNAVAILABLE, denied.getRejectReason());
     }
 
     // ---------- 4. copyFor ----------

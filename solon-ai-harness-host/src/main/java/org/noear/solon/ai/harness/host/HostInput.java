@@ -7,10 +7,10 @@ package org.noear.solon.ai.harness.host;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.extension.queue.QueueItem;
+import org.noear.solon.ai.harness.host.SubmitResult.Kind;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.input.InputOutcome.Kind;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 
@@ -73,16 +73,20 @@ public final class HostInput {
         this.resume = in != null && (in.isResume() || in.isHitlDecision());
     }
 
-    /** 受理之前就结束的输入（会话不存在、非持有节点、主体不符、忙时插话） */
-    static HostInput early(String tenant, String sessionId, InputOrigin origin, @Nullable AgentSession session,
-                           @Nullable String text, @Nullable QueueItem queueItem, @Nullable HarnessInput in) {
-        return new HostInput(tenant, sessionId, origin, session, text, null, null, null, false, false, queueItem, in);
+    /** 交给引擎之前就有了结果的输入（会话不存在、非持有节点 → REJECTED；忙时插话 → STEERED） */
+    static HostInput early(Kind kind, String tenant, String sessionId, InputOrigin origin,
+                           @Nullable AgentSession session, @Nullable String text, @Nullable HarnessInput in) {
+        return new HostInput(tenant, sessionId, origin, session, text, kind, null, null, false, false, null, in);
     }
 
-    /** 引擎已给出结局的输入 */
-    static HostInput of(String tenant, AgentSession session, InputOrigin origin, @Nullable String text,
+    /**
+     * 引擎已给出结局的输入。
+     *
+     * @param kind 框架换算后的结果类型（与同一次 {@code submit} 返回的 {@link SubmitResult#getKind()} 一致）
+     */
+    static HostInput of(Kind kind, String tenant, AgentSession session, InputOrigin origin, @Nullable String text,
                         InputOutcome outcome, @Nullable QueueItem queueItem, @Nullable HarnessInput in) {
-        return new HostInput(tenant, session.getSessionId(), origin, session, text, outcome.getKind(),
+        return new HostInput(tenant, session.getSessionId(), origin, session, text, kind,
                 outcome.getCommandName(), outcome.getCommand(), outcome.isBesideRunning(), outcome.hasReply(), queueItem,
                 in);
     }
@@ -115,8 +119,13 @@ public final class HostInput {
         return text;
     }
 
-    /** 引擎给出的结局（受理之前就结束的输入为 null） */
-    @Nullable
+    /**
+     * 这次输入的结果类型，永不为 null。
+     *
+     * <p>与同一次提交里 {@code submit} 返回的 {@link SubmitResult#getKind()} 一致：
+     * 开了流为 {@code STARTED}；会话不存在、非持有节点、忙时可执行命令触发了任务都是 {@code REJECTED}；
+     * 插话成功为 {@code STEERED}。队列续发、后台轮次开出的一轮也是 {@code STARTED}。</p>
+     */
     public Kind getKind() {
         return kind;
     }
@@ -202,7 +211,7 @@ public final class HostInput {
     @Override
     public String toString() {
         return "HostInput{" + tenant + "/" + sessionId
-                + (kind != null ? ", " + kind : "")
+                + ", " + kind
                 + (commandName != null ? ", cmd=" + commandName : "")
                 + (queueItem != null ? ", dispatched" : "") + "}";
     }

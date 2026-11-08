@@ -5,7 +5,7 @@
 package org.noear.solon.ai.harness.host;
 
 import org.noear.solon.ai.harness.hitl.HitlCard;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 

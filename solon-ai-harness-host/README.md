@@ -976,7 +976,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 | `getRun()` | 本次请求开出的那一轮（仅 `STARTED`，否则 null） |
 | `getReplyText()` | 回执文本（仅 `REPLY`；命令无输出时为 null） |
 | `getHitlCards()` | 尚未决策的审批卡（仅 `HITL`；卡已失效时为空；永不为 null） |
-| `getRejectReason()` / `getRejectDetail()` | 拒绝原因（`InputOutcome.RejectReason`，线上值 `.code()`）/ 引擎给出的说明（仅 `REJECTED`） |
+| `getRejectReason()` / `getRejectDetail()` | 拒绝原因（`RejectReason`，`input` 包，线上值 `.code()`）/ 引擎给出的说明（仅 `REJECTED`） |
 | `getBacklogPosition()` | 排队位置，从 1 计（仅 `DEFERRED`） |
 | `getOwner()` | 持有者节点标识（仅 `NOT_OWNER`，可空） |
 | `httpStatus()` | 建议的 HTTP 状态码，见下表 |
@@ -1011,7 +1011,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 
 | 回调 | 级别 | 何时调用 | 缺省 |
 |---|---|---|---|
-| `admitted(input)` | 会话 | 输入已受理（`TASK` / `REPLY` / `HITL` / `IGNORED`），分派之前 | 无 |
+| `admitted(input)` | 会话 | 输入已受理（`STARTED` / `REPLY` / `HITL` / `IGNORED`），分派之前 | 无 |
 | `reply(input, text)` | 会话 | 没有任务的命令回执；缺省 `RunSink` 也把命令触发的任务的回执转到这里 | 记 INFO |
 | `deferred(input, position)` | 会话 | 会话忙，已进积压 | 记 INFO |
 | `steered(input)` | 会话 | 忙时插话成功 | 无 |
@@ -1043,7 +1043,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 | `getOrigin()` | 回复路由：本次输入的来源；队列续发时为当初排队那条消息的来源；永不为 null |
 | `getSession()` | 会话（会话不存在、非持有节点时为 null） |
 | `getText()` | 输入文本（审批决策等为 null） |
-| `getKind()` | 引擎给出的结局 `InputOutcome.Kind`（受理之前就结束的输入为 null） |
+| `getKind()` | 结果类型 `SubmitResult.Kind`，永不为 null；与同一次 `submit` 返回的 `getKind()` 一致（会话不存在、非持有节点、忙时可执行命令触发了任务都是 `REJECTED`，插话成功是 `STEERED`，队列续发与后台轮次开出的一轮是 `STARTED`） |
 | `isCommand()` / `getCommandName()` / `getCommand()` | 是否斜杠命令 / 命令名 / 解析结果 |
 | `isBesideRunning()` | 是否在正在运行的任务旁边执行（忙时可执行命令）；为 true 时不要改写会话的回复路由与选择 |
 | `hasReply()` | 引擎是否给出了回执文本（命令无输出时为 false，可在 `admitted` 里兜底提示） |
@@ -1117,10 +1117,10 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 submit ─┬─ 会话不存在 / 非持有 / 主体不符 ── rejected / notOwner
         ├─ 忙时插话成功 ───────────────────── steered
         ├─ DEFERRED ───────────────────────── deferred
-        └─ 受理（TASK/REPLY/HITL/IGNORED）── admitted
+        └─ 受理（STARTED/REPLY/HITL/IGNORED）── admitted
                ├─ REPLY ── reply
                ├─ HITL ─── hitl / hitlExpired
-               └─ TASK ─── open(run) → [RunSink.reply] → prepare → event* → finished（恰好一次）→ [hitl]
+               └─ STARTED open(run) → [RunSink.reply] → prepare → event* → finished（恰好一次）→ [hitl]
 ```
 
 | 规则 | 说明 |

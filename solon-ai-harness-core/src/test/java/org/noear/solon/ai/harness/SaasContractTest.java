@@ -14,6 +14,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.talents.cli.CommandResult;
@@ -124,7 +125,7 @@ class SaasContractTest {
 
         InputOutcome o = engine.handle(HarnessInput.of(s, "hi"));
         assertEquals(InputOutcome.Kind.REJECTED, o.getKind());
-        assertEquals(InputOutcome.RejectReason.NOT_OWNER, o.getRejectReason());
+        assertEquals(RejectReason.NOT_OWNER, o.getRejectReason());
         assertEquals("node-b", o.getRejectDetail());
         assertEquals(0, resolverCalls.get(), "非持有节点不调用作用域解析器");
 
@@ -209,7 +210,7 @@ class SaasContractTest {
         busy(s);
 
         InputOutcome o = engine.handle(HarnessInput.of(s, "queued?"));
-        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, o.getRejectReason());
+        assertEquals(RejectReason.SCOPE_UNAVAILABLE, o.getRejectReason());
         assertTrue(backlog.offered.isEmpty(), "解析不到作用域的输入不进积压");
     }
 
@@ -223,7 +224,7 @@ class SaasContractTest {
 
         InputScope withAttr = InputScope.builder("u").attr("k", new Object()).build();
         InputOutcome o = engine.handle(HarnessInput.of(s, "x").scope(withAttr));
-        assertEquals(InputOutcome.RejectReason.SCOPE_NOT_DEFERRABLE, o.getRejectReason());
+        assertEquals(RejectReason.SCOPE_NOT_DEFERRABLE, o.getRejectReason());
         assertTrue(backlog.offered.isEmpty());
 
         InputScope plain = InputScope.builder("u").tools("read").build();
@@ -252,7 +253,7 @@ class SaasContractTest {
 
         // 主体不一致：拒绝
         HarnessInput other = HarnessInput.of(s, "x").restoredScope(InputScope.builder("someone-else").build());
-        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, engine.handle(other).getRejectReason());
+        assertEquals(RejectReason.SCOPE_UNAVAILABLE, engine.handle(other).getRejectReason());
     }
 
     @Test
@@ -408,7 +409,7 @@ class SaasContractTest {
         engine.shutdown();
         assertTrue(engine.isClosed());
         InputOutcome o = engine.handle(HarnessInput.of(session("s1"), "hi"));
-        assertEquals(InputOutcome.RejectReason.ENGINE_CLOSED, o.getRejectReason());
+        assertEquals(RejectReason.ENGINE_CLOSED, o.getRejectReason());
     }
 
     // ---------- M4.1 主体与 cwd ----------
@@ -421,7 +422,7 @@ class SaasContractTest {
                 .build();
         AgentSession s = session("s1");
 
-        assertEquals(InputOutcome.RejectReason.SCOPE_UNAVAILABLE, engine.handle(HarnessInput.of(s, "hi")).getRejectReason(),
+        assertEquals(RejectReason.SCOPE_UNAVAILABLE, engine.handle(HarnessInput.of(s, "hi")).getRejectReason(),
                 "无主体时解析不到作用域");
 
         engine.setSessionPrincipal(s, "tenant-a");

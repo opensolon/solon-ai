@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.spi.InputBacklog;
@@ -463,7 +464,7 @@ class HarnessPluginContractTest {
 
         InputOutcome noBacklog = engine.handle(HarnessInput.of(session, "hello"));
         assertEquals(InputOutcome.Kind.REJECTED, noBacklog.getKind(), "没装积压能力时无处可延");
-        assertEquals(InputOutcome.RejectReason.BUSY, noBacklog.getRejectReason());
+        assertEquals(RejectReason.BUSY, noBacklog.getRejectReason());
         assertEquals("busy", noBacklog.getRejectReason().code(), "线上协议值保持小写");
 
         StubBacklog backlog = new StubBacklog();

@@ -14,7 +14,7 @@ import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.host.HostSignal;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

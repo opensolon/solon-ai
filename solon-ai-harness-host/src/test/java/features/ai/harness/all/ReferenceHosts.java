@@ -18,7 +18,7 @@ import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.RunUsage;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 import reactor.core.publisher.Flux;
 
 import java.util.List;

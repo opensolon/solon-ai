@@ -26,6 +26,7 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.session.SessionStatus;
@@ -240,7 +241,7 @@ final class SessionControl {
                 if (exempt == false) {
                     HitlCard next = HitlCard.next(session);
                     String toolName = next == null ? null : next.getToolName();
-                    return Admission.outcome(InputOutcome.rejected(InputOutcome.RejectReason.HITL_PENDING,
+                    return Admission.outcome(InputOutcome.rejected(RejectReason.HITL_PENDING,
                             toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName));
                 }
             }
@@ -279,16 +280,16 @@ final class SessionControl {
         // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存。
         // 调用方选了 REJECT：与「是否忙」同在会话锁内判定，不会被别的输入抢先开流后错进积压
         if (input.isProgram() || input.isResume() || input.getWhenBusy() == BusyPolicy.REJECT) {
-            return InputOutcome.rejected(InputOutcome.RejectReason.BUSY, busyText);
+            return InputOutcome.rejected(RejectReason.BUSY, busyText);
         }
 
         InputBacklog backlog = engine.getExtension(InputBacklog.class).orElse(null);
         if (backlog == null) {
-            return InputOutcome.rejected(InputOutcome.RejectReason.BUSY, busyText);
+            return InputOutcome.rejected(RejectReason.BUSY, busyText);
         }
 
         if (input.hasAttachments()) {
-            return InputOutcome.rejected(InputOutcome.RejectReason.ATTACHMENTS_NOT_DEFERRABLE,
+            return InputOutcome.rejected(RejectReason.ATTACHMENTS_NOT_DEFERRABLE,
                     "当前任务正在执行，带附件的消息不能排队，请稍后再发");
         }
 
@@ -299,7 +300,7 @@ final class SessionControl {
         // 显式作用域随积压保存（解析所得的不存，续发时重新解析）；含不可保存维度时拒绝，
         // 不能悄悄丢掉模型 / 属性后按更宽的权限执行
         if (input.isScopeExplicit() && input.getScope().isDeferrable() == false) {
-            return InputOutcome.rejected(InputOutcome.RejectReason.SCOPE_NOT_DEFERRABLE,
+            return InputOutcome.rejected(RejectReason.SCOPE_NOT_DEFERRABLE,
                     "当前任务正在执行，该消息带有不可保存的权限范围，请稍后再发");
         }
 
@@ -312,7 +313,7 @@ final class SessionControl {
         }
 
         if (position < 0) {
-            return InputOutcome.rejected(InputOutcome.RejectReason.BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
+            return InputOutcome.rejected(RejectReason.BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
         }
 
         return InputOutcome.deferred(position);

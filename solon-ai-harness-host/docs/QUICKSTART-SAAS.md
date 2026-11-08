@@ -180,7 +180,7 @@ if (host.closeSession(tenant, sid, () -> store.delete(sid)) == false) {
 | `REPLY` | 命令已执行，只有回执（`getReplyText()`） | `admitted` → `reply` | 200 |
 | `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `deferred(input, position)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
 | `STEERED` | 已插话给运行中的那一轮（`whenBusy(STEER)`） | `steered(input)` | 200 |
-| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `rejected(input, reason, detail)`；`NOT_OWNER` 时为 `notOwner(input, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
+| `REJECTED` | 未受理，原因见 `getRejectReason()`（`RejectReason` 枚举（`input` 包），线上值 `.code()`） | `rejected(input, reason, detail)`；`NOT_OWNER` 时为 `notOwner(input, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
 | `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(input, cards)` 或 `hitlExpired(input)` | 200 |
 | `IGNORED` | 空输入 | `admitted` | 200 |
 

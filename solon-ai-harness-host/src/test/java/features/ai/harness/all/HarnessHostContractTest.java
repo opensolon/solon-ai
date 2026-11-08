@@ -29,7 +29,7 @@ import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 
 import java.nio.file.Files;
@@ -69,7 +69,7 @@ class HarnessHostContractTest {
         final List<Throwable> errors = new CopyOnWriteArrayList<>();
         final List<String> notOwners = new CopyOnWriteArrayList<>();
         final List<HostInput> notOwnerInputs = new CopyOnWriteArrayList<>();
-        final List<InputOutcome.RejectReason> rejectedReasons = new CopyOnWriteArrayList<>();
+        final List<RejectReason> rejectedReasons = new CopyOnWriteArrayList<>();
         final List<HostInput> rejectedInputs = new CopyOnWriteArrayList<>();
         final List<Integer> deferredPositions = new CopyOnWriteArrayList<>();
         final List<HostInput> deferredInputs = new CopyOnWriteArrayList<>();
@@ -122,7 +122,7 @@ class HarnessHostContractTest {
         }
 
         @Override
-        public void rejected(HostInput input, InputOutcome.RejectReason reason, String detail) {
+        public void rejected(HostInput input, RejectReason reason, String detail) {
             rejectedInputs.add(input);
             rejectedReasons.add(reason);
         }
@@ -223,7 +223,7 @@ class HarnessHostContractTest {
             SubmitResult r = host.submit("t", "nope", HarnessInput.of("hello").origin(InputOrigin.channel("web")));
 
             assertEquals(SubmitResult.Kind.REJECTED, r.getKind());
-            assertEquals(InputOutcome.RejectReason.SESSION_NOT_FOUND, r.getRejectReason());
+            assertEquals(RejectReason.SESSION_NOT_FOUND, r.getRejectReason());
             assertEquals(404, r.httpStatus());
             assertEquals(1, sink.rejectedReasons.size(), "拒绝原因已经经结构化回调发出");
             assertNull(engine.getSessionOrNull("nope"), "只查不建：不得凭空新建会话");
@@ -388,7 +388,7 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
-            assertEquals(InputOutcome.RejectReason.NOT_OWNER, r.getRejectReason());
+            assertEquals(RejectReason.NOT_OWNER, r.getRejectReason());
             assertEquals("node-b", r.getOwner(), "持有者随结果返回，网关不必自己解析拒绝详情");
             assertEquals(307, r.httpStatus());
             assertEquals("node-b", sink.notOwners.get(0));
@@ -434,7 +434,7 @@ class HarnessHostContractTest {
                 .sink(sink).build();
         try {
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
-            assertNotEquals(InputOutcome.RejectReason.ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
+            assertNotEquals(RejectReason.ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
             assertEquals(SubmitResult.Kind.STARTED, r.getKind());
             await(() -> sink.finished.size() == 1, "新引擎上的一轮正常收尾");
         } finally {

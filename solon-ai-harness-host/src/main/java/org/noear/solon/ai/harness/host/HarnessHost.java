@@ -29,7 +29,7 @@ import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.input.InputOutcome.RejectReason;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
 import org.noear.solon.ai.harness.spi.RunDispatch;
@@ -512,7 +512,7 @@ public final class HarnessHost {
             OwnerCheck owner = engine.checkOwner(sessionId);
             if (owner.isOwned() == false) {
                 final String o = owner.getOwner();
-                HostInput input = HostInput.early(tenant, sessionId, origin, null, text, null, null);
+                HostInput input = HostInput.early(SubmitResult.Kind.REJECTED, tenant, sessionId, origin, null, text, null);
                 HostSinkSupport.safe(() -> sink.notOwner(input, o));
                 return SubmitResult.notOwner(o);
             }
@@ -550,7 +550,7 @@ public final class HarnessHost {
     private SubmitResult rejectEarly(String tenant, String sessionId, InputOrigin origin, @Nullable AgentSession session,
                                      @Nullable String text, @Nullable HarnessInput in, RejectReason reason,
                                      @Nullable String detail) {
-        HostInput input = HostInput.early(tenant, sessionId, origin, session, text, null, in);
+        HostInput input = HostInput.early(SubmitResult.Kind.REJECTED, tenant, sessionId, origin, session, text, in);
         HostSinkSupport.safe(() -> sink.rejected(input, reason, detail));
         return SubmitResult.rejected(reason, detail);
     }
@@ -587,7 +587,8 @@ public final class HarnessHost {
         if (r.isOk() == false) {
             return null; // 插不进（盒满、运行刚结束等）：回落到正常受理
         }
-        HostInput input = HostInput.early(tenant, session.getSessionId(), origin, session, text, null, in);
+        HostInput input = HostInput.early(SubmitResult.Kind.STEERED, tenant, session.getSessionId(), origin, session,
+                text, in);
         HostSinkSupport.safe(() -> sink.steered(input));
         return SubmitResult.of(SubmitResult.Kind.STEERED);
     }
@@ -611,7 +612,7 @@ public final class HarnessHost {
         if (dispatch != null && dispatch.getOrigin() != null && dispatch.getOrigin().isEmpty() == false) {
             routeIn = dispatch.getOrigin();
         }
-        final HostInput input = HostInput.of(c.tenant, c.session, routeIn, text, outcome, item, in);
+        final HostInput input = HostInput.of(kindOf(outcome), c.tenant, c.session, routeIn, text, outcome, item, in);
 
         switch (outcome.getKind()) {
             case TASK:
@@ -665,6 +666,28 @@ public final class HarnessHost {
                 HostSinkSupport.safe(() -> sink.admitted(input));
                 drainUnless(c, inClaim);
                 return SubmitResult.of(SubmitResult.Kind.IGNORED);
+        }
+    }
+
+    /**
+     * 引擎结局换算为宿主结果类型（与 {@link #route} 的分支一一对应，保证回调里的 kind 与 submit 返回值一致）。
+     */
+    private static SubmitResult.Kind kindOf(InputOutcome outcome) {
+        switch (outcome.getKind()) {
+            case TASK:
+                // 忙时可执行命令触发了任务：不开流，按 BUSY 拒绝
+                return outcome.isBesideRunning() ? SubmitResult.Kind.REJECTED : SubmitResult.Kind.STARTED;
+            case REPLY:
+                return SubmitResult.Kind.REPLY;
+            case HITL:
+                return SubmitResult.Kind.HITL;
+            case DEFERRED:
+                return SubmitResult.Kind.DEFERRED;
+            case REJECTED:
+                return SubmitResult.Kind.REJECTED;
+            case IGNORED:
+            default:
+                return SubmitResult.Kind.IGNORED;
         }
     }
 
@@ -999,7 +1022,8 @@ public final class HarnessHost {
         }
 
         Ctx c = new Ctx(tenant, engine, session);
-        HostInput input = HostInput.of(tenant, session, InputOrigin.channel(channel), prompt, outcome, null, in);
+        HostInput input = HostInput.of(SubmitResult.Kind.STARTED, tenant, session, InputOrigin.channel(channel), prompt,
+                outcome, null, in);
         ActiveRun ar = openRun(c, outcome, input, channel, null, null);
         try {
             wrap.apply(tenant, () -> runStream(ar)).run();

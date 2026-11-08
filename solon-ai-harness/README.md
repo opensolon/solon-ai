@@ -294,7 +294,7 @@ switch (outcome.getKind()) {
     case DEFERRED: // 会话忙，已入积压（需装 queue）；位置 getBacklogPosition()
         render("已排队（第 " + outcome.getBacklogPosition() + " 位）");
         break;
-    case REJECTED: // 未受理；原因 getRejectReason()（InputOutcome.RejectReason 枚举，线上值 .code()），文案 getRejectDetail()
+    case REJECTED: // 未受理；原因 getRejectReason()（RejectReason 枚举（input 包），线上值 .code()），文案 getRejectDetail()
         render(outcome.getRejectDetail());
         break;
     case HITL:    // 决策已写入但未续流；后续动作读事实，不只看 kind
@@ -315,7 +315,7 @@ switch (outcome.getKind()) {
 | `HITL` | 决策已写入但未续流；读 `isHitlApplied()` / `getPendingHitlCount()` 决定后续动作（见下） |
 | `IGNORED` | 无事可做 |
 | `DEFERRED` | 会话忙，输入已进积压（`getBacklogPosition()` 从 1 计）；等待续发（§3.6、§5.2） |
-| `REJECTED` | 未受理；按 `getRejectReason()`（`InputOutcome.RejectReason` 枚举）分流：`BUSY` / `HITL_PENDING` / `ATTACHMENTS_NOT_DEFERRABLE` / `BACKLOG_UNAVAILABLE` / `NOT_OWNER` / `SCOPE_UNAVAILABLE` / `SCOPE_NOT_DEFERRABLE` / `ENGINE_CLOSED`；线上值用 `getRejectReason().code()`（如 `busy`、`not_owner`） |
+| `REJECTED` | 未受理；按 `getRejectReason()`（`RejectReason` 枚举（`input` 包））分流：`BUSY` / `HITL_PENDING` / `ATTACHMENTS_NOT_DEFERRABLE` / `BACKLOG_UNAVAILABLE` / `NOT_OWNER` / `SCOPE_UNAVAILABLE` / `SCOPE_NOT_DEFERRABLE` / `ENGINE_CLOSED`；线上值用 `getRejectReason().code()`（如 `busy`、`not_owner`） |
 
 | 成员 | 说明 |
 |---|---|

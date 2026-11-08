@@ -15,6 +15,7 @@ import org.noear.solon.ai.harness.command.builtin.InterruptCommand;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import reactor.core.Disposable;
@@ -145,7 +146,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome second = engine.handle(HarnessInput.of(session, "second"));
         assertEquals(InputOutcome.Kind.REJECTED, second.getKind());
-        assertEquals(InputOutcome.RejectReason.BUSY, second.getRejectReason());
+        assertEquals(RejectReason.BUSY, second.getRejectReason());
 
         first.discard();
         assertFalse(engine.status(session).isAdmitting(), "discard 立即恢复可受理");
@@ -247,7 +248,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome plain = engine.handle(HarnessInput.of(session, "新的问题"));
         assertEquals(InputOutcome.Kind.REJECTED, plain.getKind());
-        assertEquals(InputOutcome.RejectReason.HITL_PENDING, plain.getRejectReason());
+        assertEquals(RejectReason.HITL_PENDING, plain.getRejectReason());
         assertTrue(plain.getRejectDetail().contains("bash"));
 
         InputOutcome decision = engine.handle(HarnessInput.of(session, null).hitl(HITLAction.APPROVE, "call-1"));
@@ -311,7 +312,7 @@ class HandleAdmissionContractTest {
 
         InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, "goal 的一轮", "goal"));
         assertEquals(InputOutcome.Kind.REJECTED, outcome.getKind());
-        assertEquals(InputOutcome.RejectReason.BUSY, outcome.getRejectReason());
+        assertEquals(RejectReason.BUSY, outcome.getRejectReason());
         assertTrue(backlog.offered.isEmpty(), "程序轮次不进积压");
         assertTrue(HarnessInput.ofProgram(session, "x", "loop").isProgram());
     }
