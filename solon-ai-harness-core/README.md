@@ -1,52 +1,42 @@
-# solon-ai-harness — AI 代理编排引擎
+# solon-ai-harness-core — AI 代理编排引擎（核心）
 
-## 简介
+`solon-ai-harness-core` 是 Solon AI 的 **Agent 运行时与编排容器**：把「ReAct 引擎 + 一组 Talent 能力 + 子代理体系 + 命令系统 + 安全策略」装配成一个可直接跑起来的 Agent（默认能力面向编码场景）。
 
-`solon-ai-harness` 是 Solon AI 的 **Agent 运行时与编排容器**：把「ReAct 引擎 + 一组 Talent 能力 + 子代理体系 + 命令系统 + 安全策略」装配成一个可直接跑起来的 Agent（默认能力面向编码场景）。
+- 包名：`org.noear.solon.ai.harness`
+- 本模块不依赖任何会话插件；goal / queue / steer / loop 与宿主骨架是独立模块（见 §10.1）
 
 ### 先选层：多数宿主只需要 L0
 
 | 层 | 入口 | 适用 | 从哪读 |
 |---|---|---|---|
-| **L0 宿主骨架**（推荐） | `HarnessHost` + `HarnessInput`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE、多会话推送、管理控制台 | [host README](../solon-ai-harness-host/README.md) → [QUICKSTART-SAAS.md](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md) → [CONCEPTS.md](docs/CONCEPTS.md) |
-| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件，或要完全自己掌握编排 | [ENGINE-L1.md](docs/ENGINE-L1.md) |
-| L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 | 本文第九章 |
-
-L0 最小写法（引擎构建见 §1.2；受理、排队、停流、审批续流、goal / loop 后台轮次都由骨架代办）：
-
-```java
-HarnessHost host = HarnessHost.builder()
-        .engines(tenant -> engine)          // 单租户：返回同一个引擎
-        .build();
-
-host.openSession("default", sid, null);
-RunOutcome o = host.submit("default", sid, HarnessInput.of("hello")).getRun().await(Duration.ofMinutes(5));
-```
+| **L0 宿主骨架**（推荐） | `HarnessHost` + `HarnessInput`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE、多会话推送、管理控制台 | [host README](../solon-ai-harness-host/README.md) → [QUICKSTART-SAAS.md](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md) → [CONCEPTS.md](../solon-ai-harness-host/docs/CONCEPTS.md) |
+| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件，或要完全自己掌握编排 | [docs/ENGINE-L1.md](docs/ENGINE-L1.md) |
+| L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 | 本文第七章 |
 
 > `HarnessInput.of(text)` 给 L0（骨架负责绑定会话），`HarnessInput.of(session, text)` 给 L1（直接交给 `engine.handle`），两种写法不要混用。
 
-本文是**引擎本身**的参考：构建与配置、命令、子代理、工具权限、扩展点、安全、目录与常见坑，L0 / L1 宿主都适用。
-另有三份专题文档：
+本文是**引擎本身**的参考：构建与配置、两种时态、命令、子代理、工具权限、扩展点、安全、目录与常见坑，L0 / L1 宿主都适用。专题文档：
 
 | 文档 | 内容 |
 |---|---|
-| [docs/ENGINE-L1.md](docs/ENGINE-L1.md) | 自己编排（L1）：`handle` / `InputOutcome` 详解、两段式宿主端到端示例、HITL 续流与受理控制、goal / queue / steer 的接线与停 / 改 / 重排（本文第二、三、五章只留摘要，章节号与它一致） |
+| [docs/ENGINE-L1.md](docs/ENGINE-L1.md) | 自己编排（L1）：`handle` / `InputOutcome` 详解、两段式宿主端到端示例、HITL 续流与受理控制、会话插件接线与停 / 改 / 重排 |
 | [docs/SAAS.md](docs/SAAS.md) | 服务端（多租户）的引擎侧约定：隔离模型、`DeployMode.SERVER`、作用域、会话归属、存储、容量、上线清单与已知限制 |
-| [docs/CONCEPTS.md](docs/CONCEPTS.md) | L0 需要掌握的术语 |
+| [docs/hitl.md](docs/hitl.md) | HITL 人工介入：权限规则、干预策略、决策 API |
+| 插件 README | [goal](../solon-ai-harness-goal/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) · [loop](../solon-ai-harness-loop/README.md)（每份都有 L0 / L1 下使用态与管理态的示例） |
 
 ### 怎么读这份文档
 
 | 你想做什么 | 读哪里 |
 |---|---|
-| 做多租户 / 服务端（SaaS）、IM、HTTP 接口 | **L0**：[host README](../solon-ai-harness-host/README.md) → [QUICKSTART-SAAS.md](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)（四步搭起来 + 上线检查清单）→ [CONCEPTS.md](docs/CONCEPTS.md)（术语）；引擎侧的隔离、作用域、多节点、存储与容量见 [SAAS.md](docs/SAAS.md) |
 | 先跑起来看看 | 第一章（五分钟上手） |
-| 自己编排，接一个真产品 | [ENGINE-L1.md](docs/ENGINE-L1.md) 第二、三章（两段式、事件渲染、HITL 续流、四端时序、受理控制） |
-| 加命令 / 子代理 | 第四章、第六章 |
-| 跑 goal / queue / steer / loop | 第五章（装配摘要）；L0 由骨架代办，见 host README；自己接线见 [ENGINE-L1.md](docs/ENGINE-L1.md) 第五章；完整参考见各插件 README：[goal](../solon-ai-harness-goal/README.md) · [loop](../solon-ai-harness-loop/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) |
-| 分清「命令文本 / `handle(HarnessInput)` / 门面」三条路、运行期开关扩展 | [ENGINE-L1](docs/ENGINE-L1.md) §5 引言 + 本文 §8.2 |
-| 停 / 改 / 重排的干预闭环 | [ENGINE-L1](docs/ENGINE-L1.md) §5.4（`InterruptMode.INTERRUPT_ALL` + `steer` + `queue`，两个互斥场景） |
-| 调优与定制 | 第七～十章（权限、配置、扩展、安全） |
-| 查结构 / 躲坑 | 第十二章（模块图）、第十三章（常见坑） |
+| 分清用户在对话里输入、在界面上管理两类操作 | 第二章（两种时态） |
+| 做多租户 / 服务端（SaaS）、IM、HTTP 接口 | [host README](../solon-ai-harness-host/README.md) → [QUICKSTART-SAAS.md](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)；引擎侧细节见 [SAAS.md](docs/SAAS.md) |
+| 自己编排，接一个真产品 | [ENGINE-L1.md](docs/ENGINE-L1.md) 第一、二章 |
+| 加命令 / 子代理 | 第三章、第四章 |
+| 跑 goal / queue / steer / loop | §1.4（装配）+ 各插件 README |
+| 停 / 改 / 重排的干预闭环 | [ENGINE-L1](docs/ENGINE-L1.md) §3.5 |
+| 调优与定制 | 第五～八章（权限、配置、扩展、安全） |
+| 查结构 / 躲坑 | 第十章（模块）、第十一章（常见坑） |
 
 > **术语**：**input** 是一次 `handle` 的输入（`HarnessInput` / `InputOutcome` / `InputScope`）；**run** 是受理后开出的一条流
 > （`runId` / `RunTicket` / `RunDispatch` / `steerOnRun`）；**step** 是 ReAct 内部的一步推理加工具调用（`maxTurns` 沿用旧名，计的是 step）。
@@ -81,14 +71,14 @@ RunOutcome o = host.submit("default", sid, HarnessInput.of("hello")).getRun().aw
 </dependency>
 ```
 
-> 聚合包**不自动装配**：插件上了类路径不会自己生效，需在构建期装配——逐个 `Builder.extensionAdd(...)`（见 [ENGINE-L1](docs/ENGINE-L1.md) §5）；运行期 `addExtensionIfAbsent` 只在 `runtimeMutable` 时可用（SERVER 下抛 `IllegalStateException`）。写插件的模块请依赖 `solon-ai-harness-core`，不要依赖聚合包。
+> 聚合包**不自动装配**：插件上了类路径不会自己生效，需在构建期装配——逐个 `Builder.extensionAdd(...)`（见 §1.4）；运行期 `addExtensionIfAbsent` 只在 `runtimeMutable` 时可用（SERVER 下抛 `IllegalStateException`）。写插件的模块请依赖 `solon-ai-harness-core`，不要依赖聚合包。
 
 ### 1.2 构建引擎
 
 ```java
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区, 引擎根目录
         .systemPrompt("你是一名 AI 编程助手")
-        .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「九、扩展点」）
+        .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「六、扩展点」）
         .modelAdd(new ChatConfig().then(cfg -> {
             cfg.setName("deepseek");                               // 模型别名
             cfg.setApiUrl("https://api.deepseek.com");
@@ -106,7 +96,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 > （允许构建后再 `addModel`），没补上的话**首次 `handle`** 时由 `ReActAgentConfig` 抛 `chatModel is required`。
 > `deployMode(DeployMode.SERVER)` 会在构建期直接校验状态来源、模型、`defaultModel` 与 `scopeResolver`，不满足抛 `IllegalStateException`。
 
-builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvider` 之外的全部方法；完整语义见 §8.1，运行期可调的见 §8.2）：
+builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvider` 之外的全部方法；完整语义见 §6.1，运行期可调的见 §6.2）：
 
 | 分类 | 方法 | 默认值 | 说明 |
 |---|---|---|---|
@@ -130,31 +120,31 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 沙箱 | `sandboxEnabled(Boolean)` | `true` | 文件系统沙箱 |
 | 沙箱 | `sandboxAllowUserHome(Boolean)` | `false` | 允许访问用户主目录 |
 | 沙箱 | `sandboxSystemRestrict(Boolean)` | `true` | 禁止访问系统路径 |
-| 权限 | `toolsAdd(...)` / `disallowedToolsAdd(...)` | 空 | 主代理工具权限（§7） |
+| 权限 | `toolsAdd(...)` / `disallowedToolsAdd(...)` | 空 | 主代理工具权限（§5） |
 | 权限 | `permissionRuleAdd(PermissionRule)` | 空 | 权限规则 |
-| 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§10.2） |
+| 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§8.2） |
 | 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` |
 | 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
 | 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；模型配了 `AiConfig#concurrency` 以模型为准） |
 | 工具 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
 | 重试 | `apiRetries` / `mcpRetries` / `modelRetries` | 各 `3` | OpenAPI / MCP / 模型调用重试次数 |
 | 资源 | `modelAdd(ChatConfig)` / `defaultModel(String)` | 空 | 模型与默认模型 |
-| 资源 | `extensionAdd(HarnessExtension)` | 空 | 扩展（[ENGINE-L1](docs/ENGINE-L1.md) §5 的 Goal/Queue/Steer 也从这里装，§9） |
+| 资源 | `extensionAdd(HarnessExtension)` | 空 | 扩展（[ENGINE-L1](docs/ENGINE-L1.md) §3 的 Goal/Queue/Steer 也从这里装，§7） |
 | 资源 | `mountAdd(Mount)` | — | 挂载（`@harness-agents` 内置挂载不可替换，会抛 `IllegalArgumentException`） |
 | 资源 | `mcpServerAdd(name, params)` | 空 | MCP 服务器 |
 | 资源 | `apiServerAdd(name, ApiSource)` | 空 | OpenAPI 来源 |
 | 资源 | `lspServerAdd(name, params)` | 空 | LSP 服务器 |
-| 前缀 | `commandPrefix(String)` | `"/"` | 命令前缀，支持多字符（§4.5） |
-| 前缀 | `agentPrefix(String)` | `"@"` | 子代理提及前缀，支持多字符（§4.5） |
+| 前缀 | `commandPrefix(String)` | `"/"` | 命令前缀，支持多字符（§3.5） |
+| 前缀 | `agentPrefix(String)` | `"@"` | 子代理提及前缀，支持多字符（§3.5） |
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
-| 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（[ENGINE-L1](docs/ENGINE-L1.md) §3.6） |
+| 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（[ENGINE-L1](docs/ENGINE-L1.md) §2.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
 | 服务端 | `deployMode(DeployMode)` | `STANDALONE` | 部署模式（本机单用户 / 多租户服务端）；`SERVER` 的缺省见本表「SERVER 为」各项，构建期校验见 §1.2 上方说明，完整对照见 [SAAS.md](docs/SAAS.md) §2.1 |
 | 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
 | 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |
 | 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | 会话工作目录的边界策略：`setSessionCwd` 与终端工具使用端都按真实路径校验，不满足抛 `SecurityException` |
 | 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置；为 `false` 时命令与子代理注册表在 `build()` 末尾封口 |
-| 服务端 | `agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition>)` | 跟随 `runtimeMutable`（STANDALONE 允许，SERVER 拒绝） | `generate(saveToFile=true)` 是否允许创建全局子代理（§6.4） |
+| 服务端 | `agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition>)` | 跟随 `runtimeMutable`（STANDALONE 允许，SERVER 拒绝） | `generate(saveToFile=true)` 是否允许创建全局子代理（§4.4） |
 | 资源 | `taskExecutor(ExecutorService)` | 引擎私有，上限 64 线程 | 子代理执行器；宿主注入的共享执行器由宿主关闭，引擎 `shutdown` 不动它 |
 | 服务端 | `memorySessionIsolation(boolean)` | `false`（SERVER 为 `true`） | 长期记忆按会话隔离 |
 | 服务端 | `sandboxSelfBootstrap(boolean)` | `true`（SERVER 为 `false`） | 是否由引擎自行初始化进程级 OS 沙盒 |
@@ -190,30 +180,143 @@ String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库
         .getContent();
 ```
 
-> 这两段只为验证环境。自己编排真产品时用 [ENGINE-L1](docs/ENGINE-L1.md) §3.1 的骨架——
+> 这两段只为验证环境。自己编排真产品时用 [ENGINE-L1](docs/ENGINE-L1.md) §2.1 的骨架——
 > 它把 `handle` 与 `InputOutcome` 拆成两段并处理了全部六种 `Kind`。
 
+### 1.4 装配会话插件
+
+goal / queue / steer / loop 四个插件**跨轮维护会话级状态**，命令只改状态、只声明意图，执行与投递要有人接线：L0 由 `HarnessHost` 代办（续发积压、goal / loop 后台轮次、停流、管理门面 `host.admin(tenant).call(...)`）；自己接线见 [ENGINE-L1](docs/ENGINE-L1.md) 第三章。各插件的完整用法见其 README：[goal](../solon-ai-harness-goal/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) · [loop](../solon-ai-harness-loop/README.md)。
+
+装配都在**构建期**用 `Builder.extensionAdd` 完成（STANDALONE / SERVER 通用，SERVER 下 build 之后不能再挂扩展）；不要哪个删哪一行，宿主自己的扩展也是同一写法：
+
+```java
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/").stateSource(stateSrc) /* ... */
+        .extensionAdd(QueueExtension.builder().maxSize(20).build())       // 会话忙时排队
+        .extensionAdd(new SteerExtension())                               // 运行中插话
+        .extensionAdd(GoalExtension.builder().roundConcurrency(2).build()) // 按需
+        .extensionAdd(LoopExtension.builder().store("loop").quota(sid -> 20).build())  // 按需；挂接时取引擎状态来源
+        .build();
+```
+
+插件自带的命令（`/goal`、`/queue`、`/steer`、`/loop`）在 `onAttach` 时注册；`/queue`、`/steer` 忙时旁路执行，`/goal`、`/loop` 忙时进积压或被拒绝。运行期 `engine.addExtensionIfAbsent(...)` 只在 `runtimeMutable` 时可用（STANDALONE 缺省；SERVER 下抛 `IllegalStateException`）。
+
 ---
 
-## 二、核心 API：`handle` + `InputOutcome`（L1，已移至 ENGINE-L1）
+## 二、两种时态：用户输入与界面管理
 
-完整内容见 [ENGINE-L1.md 第二章](docs/ENGINE-L1.md)。用 L0（`HarnessHost`）时不需要读。要点：
+同一个会话会被两类操作触及，宿主要分清它们走哪个入口：
 
-- `engine.handle(HarnessInput)` 是唯一输入入口：受理判定、HITL 决策、命令识别执行、子代理解析、Prompt 构建、请求装配在一次调用内**同步**完成，**不自启推理**；
-- `InputOutcome.getKind()` 六态 `TASK` / `REPLY` / `DEFERRED` / `REJECTED` / `HITL` / `IGNORED`，一个值对应一个宿主动作；「是不是命令」是事实，读 `isCommand()`；
-- 取流只有一条路径：`outcome.getRequest().stream()`（简写 `outcome.stream()`，仅 `TASK` 有效）；
-- `HarnessInput` 的常用开关：`commandAware` / `agentAware` / `terminal` / `resume`，以及视野选择 `selectedSkill` / `selectedMcp`。
+| 时态 | 用户在哪里操作 | L0 入口（`HarnessHost`） | L1 入口（直连引擎） | 结果 |
+|---|---|---|---|---|
+| **使用态** | 对话框 / IM 里输入（普通消息、斜杠命令、审批、停止） | `host.submit` / `stream` / `decide` / `interrupt` | `engine.handle(HarnessInput)` → `InputOutcome` | 一轮运行、命令回执、排队位置、审批卡 |
+| **管理态** | 界面上点按钮（切模型、开关能力、看状态、停止、删会话、插件面板） | `host.admin(tenant).call(...)` / `admin.interrupt`、`host.closeSession` | 直接调引擎与插件门面 | `HarnessResult` 或返回值，同步 |
 
-## 三、完整示例：两段式宿主（L1，已移至 ENGINE-L1）
+使用态经过受理判定（忙时排队 / 拒绝、HITL 挂起拦截、作用域）；管理态不经受理、不校验作用域（会话归属照查），**鉴权由宿主在控制器层完成**。插件面板（队列、插话、目标、定时任务）的管理态示例见各插件 README。
 
-完整内容见 [ENGINE-L1.md 第三章](docs/ENGINE-L1.md)：§3.1 最小骨架、§3.2 完整宿主（六态都处理）、§3.3 事件类型一览、§3.4 四端时序对照、
-§3.5 HITL 续流的四条不变量、§3.6 受理控制（占位、HITL 挂起拦截、忙态放行、`isBusy` / `isOccupied` / `hasPendingHitl` 三种口径）。
+### 2.1 使用态：用户在对话里输入
+
+L0（推荐）：普通消息、`/help` 这类命令、审批决策都是同一个提交入口：
+
+```java
+@Post
+@Mapping("/chat/{tenant}/{sid}")
+public Result<String> chat(String tenant, String sid, String text, Context ctx) {
+    SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
+            .origin(InputOrigin.of("web", userOf(ctx), sid, null)));
+    switch (r.getDisposition()) {
+        case STARTED:  return Result.succeed(r.getRun().await(Duration.ofMinutes(5)).getResultText());
+        case REPLY:    return Result.succeed(r.getReplyText());                  // 命令回执（如 /help）
+        case DEFERRED: return Result.succeed("排队中（第 " + r.getBacklogPosition() + " 位）");
+        default:
+            ctx.status(r.httpStatus());
+            return Result.failure(r.httpStatus(), r.getRejectDetail());
+    }
+}
+
+@Post
+@Mapping("/chat/{tenant}/{sid}/hitl")
+public String decide(String tenant, String sid, String callId, String action, Context ctx) {
+    SubmitResult r = host.decide(tenant, sid, callId, HITLAction.of(action), null,
+            InputOrigin.of("web", userOf(ctx), sid, null));                    // 写入决策与续流一次完成
+    ctx.status(r.httpStatus());
+    return r.getDisposition().name();
+}
+```
+
+L1（只引 core）：同一段输入交给 `engine.handle`，按 `getKind()` 分派：
+
+```java
+AgentSession session = engine.getSession(sid);
+InputOutcome o = engine.handle(HarnessInput.of(session, text).origin(origin));
+switch (o.getKind()) {
+    case TASK:     o.getRequest().stream().subscribe(this::render); break;   // 开流由宿主订阅
+    case REPLY:    send(o.getCommandOutput()); break;                       // 命令回执
+    case DEFERRED: send("排队中（第 " + o.getBacklogPosition() + " 位）"); break;
+    case HITL:     showCards(o.getHitlCards()); break;                       // 审批卡
+    case REJECTED: send(o.getRejectDetail()); break;
+    default:       break;                                                   // IGNORED
+}
+```
+
+六种结局的完整处理（含审批续流、取消、续发积压）见 [ENGINE-L1](docs/ENGINE-L1.md) §2.2。
+
+### 2.2 管理态：用户在界面上操作
+
+L0：会话级控制经骨架，插件面板经 `host.admin(tenant).call(...)`（成功后自动续发积压）：
+
+```java
+@Controller
+@Mapping("/admin/{tenant}/{sid}")
+public class SessionAdminController {
+    @Inject
+    HarnessHost host;
+    @Inject
+    Authz authz;                                                        // 你的鉴权
+
+    @Post
+    @Mapping("stop")
+    public Result<Boolean> stop(String tenant, String sid, String mode, Context ctx) {
+        authz.require("run.stop", tenant, userOf(ctx), sid);            // 先鉴权，再进管理态
+        // INTERRUPT_ALL：同用户停止（清排队）；CANCEL_STREAM：只停当前轮、保留排队
+        HarnessResult<Boolean> r = host.admin(tenant).interrupt(sid, InterruptMode.valueOf(mode));
+        ctx.status(r.httpStatus());
+        return r.isOk() ? Result.succeed(r.getValue()) : Result.failure(r.httpStatus(), r.getReasonOrCode());
+    }
+
+    @Post
+    @Mapping("delete")
+    public Result<Boolean> delete(String tenant, String sid, Context ctx) {
+        authz.require("session.delete", tenant, userOf(ctx), sid);
+        return Result.succeed(host.closeSession(tenant, sid, () -> storage.delete(tenant, sid)));  // 忙时返回 false
+    }
+}
+```
+
+切换模型、子代理这类「按次选择」在 L0 下随输入走：`HarnessInput.of(text).selectedModel("gpt-4o").selectedAgent("reviewer")`。
+
+L1：管理接口直接调引擎门面（运行期改引擎级配置只在 `runtimeMutable` 时可用，SERVER 下抛 `IllegalStateException`；会话级方法不受此限）：
+
+```java
+AgentSession session = engine.getSessionOrNull(sid);                      // 管理接口只取不建
+if (session == null) { return Result.failure(404, "session not found"); }
+
+engine.setSessionModel(session, "deepseek");                              // 切本会话模型（会话级）
+SessionStatus st = engine.status(session);                                // 看状态：busy / HITL / 插件事实
+List<HITLTask> cards = HITL.getPendingTasks(session);                     // 刷新后恢复审批卡
+engine.interrupt(session, InterruptMode.INTERRUPT_ALL);                   // 停止（HarnessResult<Boolean>）
+
+engine.setDefaultModel("deepseek");                                       // 引擎级：改缺省模型（重建主代理）
+engine.setExtensionEnabled(goal, false);                                  // 引擎级：关掉某个能力
+engine.disallowTool("bash");                                              // 引擎级：收回工具
+
+engine.removeSession(sid);                                                // 删除会话：先判忙，再 removeSession，最后删存储（第七章）
+```
 
 ---
 
-## 四、完整示例：命令
+## 三、完整示例：命令
 
-### 4.1 引擎不自带命令，宿主负责注册
+### 3.1 引擎不自带命令，宿主负责注册
 
 `harness` 提供了命令框架与一批实现：通用基础命令在 `command.builtin`（`help`/`clear`/`model`/`rewind`/`rerun`/`continue`/`interrupt`），会话类命令随各插件自包含（`extension.goal.GoalCommand`、`extension.loop.LoopCommand`、`extension.queue.QueueCommand`、`extension.steer.SteerCommand`，由各自 Extension 在 `onAttach` 注册），基础命令**不会自动注册**——因为「哪些命令可用」是端特性。裸引擎上 `handle(session, "/help")` 返回 `TASK` 而不是 `REPLY`。
 
@@ -230,7 +333,7 @@ registry.register(new ClearCommand());
 registry.register(new ModelCommand());
 ```
 
-### 4.2 写一个命令（代码方式）
+### 3.2 写一个命令（代码方式）
 
 ```java
 public class StatusCommand implements Command {
@@ -293,7 +396,7 @@ public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin
 「是否续流」由 `prompt` 为空派生（`AgentTaskIntent.isResume()`），不是独立字段——
 引擎侧以 `HarnessInput.resume(true)` 接住，所以宿主不用为续流命令单写分支。
 
-### 4.3 写一个命令（Markdown 方式）
+### 3.3 写一个命令（Markdown 方式）
 
 放在 `<harnessHome>/commands/` 下即自动生效：
 
@@ -318,10 +421,10 @@ $ARGUMENTS
 
 子目录即命名空间：`commands/deploy/staging.md` → `/deploy:staging`。
 
-### 4.4 自定义命令上下文（宿主接管回执）
+### 3.4 自定义命令上下文（宿主接管回执）
 
 `commandContextFactory(...)` **是可选项**：不设时引擎自动用 `new BufferedCommandContextFactory()`，
-回执写内存、从 `getCommandOutput()` 一次取回——[ENGINE-L1](docs/ENGINE-L1.md) §3.1 的最小骨架就是靠这个默认值跑通 `/help` 的。
+回执写内存、从 `getCommandOutput()` 一次取回——[ENGINE-L1](docs/ENGINE-L1.md) §2.1 的最小骨架就是靠这个默认值跑通 `/help` 的。
 **命令内部声明的 Agent 任务同样会真实执行**——`CommandDispatcher` 在 `dispatch` 尾部直接调
 `engine.handle(...)` 完成二段装配，与是否有自定义工厂无关。
 
@@ -341,7 +444,7 @@ InputOutcome outcome = engine.handle(
 > 默认 `terminal=false`。CLI 宿主必须把 `.terminal(true)` 显式打开，否则 `/help` 会裁掉 `terminalOnly` 命令，
 > `/exit` 也会被统一拦截。桌面端虽在本地运行，同样保持默认：它没有命令行终端。
 
-### 4.5 改前缀
+### 3.5 改前缀
 
 ```java
 HarnessEngine.of("/data/work", ".solon/")
@@ -353,33 +456,9 @@ HarnessEngine.of("/data/work", ".solon/")
 
 ---
 
-## 五、goal / queue / steer / loop（+ 中断干预）
+## 四、完整示例：子代理输入
 
-这四个插件**跨轮维护会话级状态**，命令只改状态、只声明意图，真正的执行与投递要有人接线：
-
-- **L0**：`HarnessHost` 代办续发积压、goal / loop 后台轮次、停流与管理门面（`host.admin(tenant).call(...)`），见 [host README](../solon-ai-harness-host/README.md)；
-- **自己接线（L1）**：插件协作契约、「命令文本 / `handle` / 门面」三条到达路径、goal / queue / steer 的宿主责任、停 / 改 / 重排的干预闭环，
-  见 [ENGINE-L1.md 第五章](docs/ENGINE-L1.md)（§5.1 goal、§5.2 queue、§5.3 steer、§5.4 干预）；
-- 完整参考见各插件 README：[goal](../solon-ai-harness-goal/README.md) · [loop](../solon-ai-harness-loop/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md)。
-
-装配都在**构建期**用 `Builder.extensionAdd` 完成（STANDALONE / SERVER 通用，SERVER 下 build 之后不能再挂扩展）；不要哪个删哪一行，宿主自己的扩展也是同一写法：
-
-```java
-HarnessEngine engine = HarnessEngine.of(ws, ".solon/").stateSource(stateSrc) /* ... */
-        .extensionAdd(QueueExtension.builder().maxSize(20).build())       // 会话忙时排队
-        .extensionAdd(new SteerExtension())                               // 运行中插话
-        .extensionAdd(GoalExtension.builder().roundConcurrency(2).build()) // 按需
-        .extensionAdd(LoopExtension.builder().store("loop").quota(sid -> 20).build())  // 按需；挂接时取引擎状态来源
-        .build();
-```
-
-插件自带的命令（`/goal`、`/queue`、`/steer`、`/loop`）在 `onAttach` 时注册；`/queue`、`/steer` 忙时旁路执行，`/goal`、`/loop` 忙时进积压或被拒绝。
-
----
-
-## 六、完整示例：子代理输入
-
-### 6.1 三种指定方式与优先级
+### 4.1 三种指定方式与优先级
 
 ```
 explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent（选择器兜底）
@@ -432,7 +511,7 @@ String agent = mention.getAgentName(); // 无有效提及时为 null
 engine.handle(HarnessInput.of(session, text).explicitAgent(agent).trimContent(true));
 ```
 
-### 6.2 用引擎装配好的请求执行
+### 4.2 用引擎装配好的请求执行
 
 ```java
 InputOutcome outcome = engine.handle(HarnessInput.of(session, "@explore 找一下限流相关的实现")
@@ -447,7 +526,7 @@ outcome.getRequest().stream().blockLast();
 > 不要再用 `request.options(o -> o.toolContextPut(HarnessEngine.ATTR_CWD, ...))` 换目录：它绕过 `cwdPolicy`，
 > 多租户下等于把任意目录加进文件工具根与沙盒白名单。
 
-### 6.3 直接用内置子代理
+### 4.3 直接用内置子代理
 
 内置定义随包发布在 `META-INF/solon/ai/harness/agents/`：
 
@@ -474,7 +553,7 @@ outcome.getRequest().stream().blockLast();
 > 注意 该路径的 `call()` 声明的异常是 `Throwable`，需自行捕获；
 > 走 `handle` 路径时异常从流的 `doOnError` / `blockLast()` 出来。
 
-### 6.4 运行时创建子代理
+### 4.4 运行时创建子代理
 
 面向模型的 `generate` 工具按是否持久化分两级：
 
@@ -512,7 +591,7 @@ engine.getAgentManager().addAgent(definition);
 engine.handle(HarnessInput.of(session, "分析 src/main.js").explicitAgent("frontend"));
 ```
 
-### 6.5 主代理委派（`task` / `multitask`）
+### 4.5 主代理委派（`task` / `multitask`）
 
 主代理通过工具自动委派，宿主无需写代码：
 
@@ -572,7 +651,7 @@ config.setConcurrency(2);
 
 `task` 默认不在 `*`（公有）里，只有 `**`（完整）才包含——这是为了让子代理不能再委派子代理，天然防止无限嵌套。
 
-### 6.6 把子代理定义成文件
+### 4.6 把子代理定义成文件
 
 `<harnessHome>/agents/*.md` 或挂载到 `MountType.AGENTS` 的目录：
 
@@ -614,10 +693,9 @@ enabled: true
 > 子代理同样只能用一层委派（不能再 `task` / `multitask`），且**不能使用 `hitl`**（装配期就不会挂载）。
 
 ---
+## 五、工具权限
 
-## 七、工具权限
-
-### 7.1 三级快捷权限
+### 5.1 三级快捷权限
 
 | 权限 | 标识 | 实际展开 |
 |---|---|---|
@@ -627,7 +705,7 @@ enabled: true
 
 以上标识均定义在 `ToolName`（`@Preview("4.0.4")`），如 `ToolName.TOOL_ALL_PUBLIC`。
 
-### 7.2 运行时调整
+### 5.2 运行时调整
 
 ```java
 engine.allowTool("bash");            // 触发主代理重建
@@ -636,10 +714,9 @@ engine.toolPermissionReset(tools, disallowedTools);
 ```
 
 ---
+## 六、配置项参考
 
-## 八、配置项参考
-
-### 8.1 构造期
+### 6.1 构造期
 
 > 与 §1.2 的 builder 配置表同源，此处为完整语义参考。`deployMode(SERVER)` 会改变部分缺省值（显式值 > 预设 > 默认，与调用顺序无关）。
 
@@ -682,7 +759,7 @@ engine.toolPermissionReset(tools, disallowedTools);
 | `commandPrefix(String)` | `"/"` | 支持多字符 |
 | `agentPrefix(String)` | `"@"` | 支持多字符 |
 
-### 8.2 运行期
+### 6.2 运行期
 
 ```java
 engine.getSettings().setSandboxEnabled(false);   // 运行期配置统一经 engine.getSettings()；内置能力经 engine.getTalents()
@@ -710,9 +787,7 @@ engine.addMount(Mount.builder()
         .build());
 ```
 
----
-
-## 九、扩展点
+## 七、扩展点
 
 ```java
 public interface HarnessExtension extends AiSwitchable {
@@ -858,25 +933,23 @@ AgentSessionProvider provider = (id, create) -> create
 > 注意：`addExtension` 会触发一次 `onAttach`，此刻引擎已装配完毕，任意引擎方法都可安全调用。
 > `shutdown()` 会遍历回调 `onDetach`（逐个 try/catch，清理期异常不会打断其余扩展与执行器回收）。
 
----
+## 八、安全机制
 
-## 十、安全机制
-
-### 10.1 门控总览：一次工具调用要过哪几道关
+### 8.1 门控总览：一次工具调用要过哪几道关
 
 门控分散在三个包（`scope` / `permission` / `hitl`）和几个引擎配置项里，各管一件事。按生效顺序：
 
 | 顺序 | 关卡 | 所在 | 管什么 | 宿主怎么配 |
 |---|---|---|---|---|
-| 1 | 工具可见性 | `agent.ToolName`、代理定义 `tools` / `disallowedTools` | 模型能看到哪些工具（看不到就调不了） | §7：`Builder.toolsAdd / disallowedToolsAdd`、`engine.allowTool / disallowTool` |
+| 1 | 工具可见性 | `agent.ToolName`、代理定义 `tools` / `disallowedTools` | 模型能看到哪些工具（看不到就调不了） | §5：`Builder.toolsAdd / disallowedToolsAdd`、`engine.allowTool / disallowTool` |
 | 2 | 输入级作用域 | `scope.InputScope`（由常驻的 `ScopeGuardInterceptor` 执行，优先级最高） | 这一次输入能用哪些工具 / 技能 / MCP / 模型；越界调用在执行前预填拒绝结果，HITL 也不会为它弹卡 | 引擎级 `scopeResolver`（推荐 `InputScopeResolver.byPrincipal`）或 `HarnessInput.scope(...)` |
 | 3 | 权限规则 | `permission.PermissionEngine` / `PermissionRule` | 对工具参数（命令、路径、域名）判 `ALLOW / DENY / ASK` | 由 hitl 策略内部调用；全局规则在策略上配 |
-| 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.SessionPermissions` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §10.2、`hitlEnabled(true)` |
-| 5 | 执行环境 | `TerminalTalent` 沙箱、`protectedStatePaths`、`cwdPolicy` | 工具真正执行时能碰哪些目录、哪些状态文件 | §8 配置项、§10.3、[SAAS.md](docs/SAAS.md) §5.1 / §5.2 |
+| 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.SessionPermissions` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §8.2、`hitlEnabled(true)` |
+| 5 | 执行环境 | `TerminalTalent` 沙箱、`protectedStatePaths`、`cwdPolicy` | 工具真正执行时能碰哪些目录、哪些状态文件 | §6 配置项、§8.3、[SAAS.md](docs/SAAS.md) §5.1 / §5.2 |
 
 前两关是「能不能用」，后三关是「用的时候允不允许」。会话归属（`session.SessionOwnership`）不属于工具门控：它在受理之前就决定「这个节点能不能跑这个会话」。
 
-### 10.2 三套策略
+### 8.2 三套策略
 
 `hitl` 包提供三套内置干预策略：
 
@@ -902,15 +975,15 @@ engine.getHitlInterceptor()
 2. `hitlEnabled(true)`；
 3. 把 `HITLInterceptor` 绑定到具体工具策略。
 
-详见 [`docs/hitl.md`](../solon-ai-harness-core/docs/hitl.md)。
+详见 [`docs/hitl.md`](docs/hitl.md)。
 
-### 10.3 服务端安全底线
+### 8.3 服务端安全底线
 
 多租户部署时，除 HITL 外还有三道引擎级防线：请求级作用域（`InputScope`，工具执行前否决越界调用）、
 受保护状态路径（`protectedStatePaths`，文件工具与 OS 沙盒同时拒绝）、会话工作目录策略（`cwdPolicy`）。
 各项缺省与语义见 §1.2 配置表「服务端」各行，隔离模型、作用域、会话归属与容量见 [SAAS.md](docs/SAAS.md)；L0 上线前对照 [QUICKSTART-SAAS.md §九 上线检查清单](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)。
 
-### 10.4 宿主侧拿到审批请求
+### 8.4 宿主侧拿到审批请求
 
 拦截触发时，事件流会推 `HITLPendingEvent`；也可凭会话直接查：
 
@@ -926,11 +999,9 @@ if (e instanceof HITLPendingEvent) {
 List<HITLTask> pending = HITL.getPendingTasks(session);
 ```
 
-审批与续流的宿主写法见 [ENGINE-L1](docs/ENGINE-L1.md) §3.5（一次 `handle` + `switch (kind)`）。
+审批与续流的宿主写法见 [ENGINE-L1](docs/ENGINE-L1.md) §2.5（一次 `handle` + `switch (kind)`）。
 
----
-
-## 十一、运行时目录
+## 九、运行时目录
 
 ```
 {harnessHome}/          # 默认 .solon/
@@ -948,11 +1019,9 @@ List<HITLTask> pending = HITL.getPendingTasks(session);
 > 会话快照的存放位置由 `sessionProvider` 决定。`protectedStatePaths`（缺省 `sessions, memory, channels, tasks.json, loop, goal`，
 > 相对 harnessHome）对模型的文件工具与 bash 不可读写。
 
----
+## 十、模块结构
 
-## 十二、模块结构
-
-### 12.1 模块与依赖方向
+### 10.1 模块与依赖方向
 
 ```
 solon-ai-harness            聚合包（只做引用，没有源码）
@@ -966,7 +1035,7 @@ solon-ai-harness            聚合包（只做引用，没有源码）
 
 依赖方向、聚合包无源码、插件内部类不得 public、插件主代码无废弃标记、goal / loop / queue 写门面必须返回 `HarnessResult` 等约束由 `solon-ai-harness-host` 的 `HarnessStructureGuardTest` 守护。
 
-### 12.2 核心包结构（`solon-ai-harness-core`）
+### 10.2 核心包结构（`solon-ai-harness-core`）
 
 ```
 org.noear.solon.ai.harness
@@ -992,7 +1061,7 @@ org.noear.solon.ai.harness
 
 插件包为 `org.noear.solon.ai.harness.extension.{goal,loop,queue,steer}`，宿主只接触各自的 `XxxExtension` 门面与只读数据类。
 
-### 12.3 依赖包（能力来源）
+### 10.3 依赖包（能力来源）
 
 | 依赖 | 提供 |
 |---|---|
@@ -1006,10 +1075,9 @@ org.noear.solon.ai.harness
 | `solon-ai-talent-gateway` | `McpGatewayTalent` / `OpenApiGatewayTalent` |
 | `solon-lib` | IoC / 配置 / 生命周期 |
 | `solon-serialization-snack4` | JSON 序列化 |
-
 ---
 
-## 十三、常见坑
+## 十一、常见坑
 
 1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先注册：构建期 `Builder.commandAdd(...)` / `commandLoad(source, dir)`（SERVER 模式只能这样，build 末尾注册表封口），或运行期 `getCommandRegistry().register(...)`（仅 `runtimeMutable` 时）；注册后**不需要**配 `commandContextFactory`，默认 `BufferedCommandContextFactory` 已经能把回执交给 `getCommandOutput()`。
 2. **HITL 续流必须显式，但一次调用就够**——`Kind.HITL` 不携带请求。三端统一写 `.hitl(action, callId).resume(true)`，引擎自检「决策命中 + 本批齐备 + 显式要求」三项，全成立返回 `TASK`，否则返回 `HITL`（并携带 `isHitlApplied()` / `getPendingHitlCount()` 供宿主判断）。续流时**不要**传正文。
@@ -1021,26 +1089,14 @@ org.noear.solon.ai.harness
 8. **`STANDALONE` 模式下 `build()` 只校验 `sessionProvider`**——缺模型时 `build()` 只告警，构建后仍没补上的话要到首次 `handle` 才报 `chatModel is required`；`SERVER` 模式在构建期就报。
 9. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
 10. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
-11. **自定义 goal 执行器在挂接后注册**——挂接（构建期 `Builder.extensionAdd(goal)` 的 `build()` 返回后，或运行期 `engine.addExtension(goal)` 之后）再 `goal.addExecutor(channel, claim, executor)`；挂接前调用直接抛异常。**SERVER 模式下 build 之后不能再 `addExtension`**（抛 `IllegalStateException`）。没有宿主执行器时走内置缺省（同步 `engine.handle(...).call()`）。
-12. **`/queue` 入队不等于会发送**——宿主必须在任务终态调 `queue.drainLoop(...)` / `claimNext(...)`（`QueueExtension` 实例上）；并且不要自己 `poll`，claim / ack / requeue 全在 harness 内，重复实现会丢任务。
-13. **`/steer` 不挂拦截器就永不生效**——返回 `OK` 只代表已入邮箱。`SteerExtension` 在 `onRequestAssemble` 已代劳挂载，**宿主无需请求级挂载**；未注入的残留在任务结束或下一轮开始时经 `InputBacklog` 转排队。
-14. **goal / loop 的 job 名带实例序号前缀**——`JobManager` 是 JVM 单例，同名 job 已存在时会静默沿用旧 job；插件按扩展实例自动生成进程内唯一的前缀（goal 每实例一个节拍 `goal-<序号>:tick`；loop 每任务一个 `loop-<序号>:<sessionId>:<taskId>`），宿主无需传任何标识。job 不跨重启、名字不落盘。
-15. **builder 只给有可配点的能力**——goal / loop 参数多，只有 builder；queue 与 steer 只有容量类旋钮（queue 的 `maxSize` / `maxTextLength`，steer 的 `maxBoxSize` / `maxTextLength` / `maxIdLength`），无参构造与 `builder().build()` 等价。
-16. **`resume` 会立即跑一轮，重启恢复用 `recover`**——`goal.recover()` 按状态来源的 `goal/active/` 索引恢复（无需枚举会话），`recover(sessionIds, statusReader)` 由宿主枚举；二者都只挂调度、不立即跑。
-17. **改 goal 配置走 `update(sid, patch, stopper)`**——停流时序由门面完成，`stopper` 只负责「怎么停」（渠道侧终态帧）；停不稳返回 `CONFLICT`（goal 保持暂停，可重试）。
-18. **`InterruptMode.INTERRUPT_ALL` 会连带清队列**——它不是「只停当前流」。早期 `/interrupt` 保留队列，现在「停」是彻底的（这也补上了「停了要清队列」那条旧待办）。若你需要「停当前、留队列」，用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`：只停流、不写取消消息、不动队列，不再是手动复刻内部约定的权衡题。各方式差别见 [ENGINE-L1](docs/ENGINE-L1.md) §5.4 的对照表。
-19. **`outcome.call()` / `outcome.stream()` 只在 `TASK` 上有意义**——它们在 `REPLY` / `HITL` / `IGNORED` 上会立即失败（前者抛 `IllegalStateException`、后者返回 `Flux.error`）。不要用它们取代 `switch (kind)`：先判 kind 再取流，顺序不能颠倒。
-20. **`GoalSpec` 的负数会被夹到 0**——`maxTokens(-1)` 不是「报错」而是「不限制」；命令行的 `--max-tokens -1` 也一样（`Long.parseLong` 通过后交给 `GoalSpec` 再夹到 0）。想表达「非法参数」请在调用前/解析层自己校验。
-21. **四个扩展都没有「只关命令」的开关**——`QueueExtension` / `SteerExtension` 只有 `()` / `builder()`，`GoalExtension` / `LoopExtension` 只有 builder且无 `commandEnabled`；`onAttach` 里一律 `register`（幂等）。要下线只有 `engine.setExtensionEnabled(ext, false)` 一条路，它是「命令 + 门面」一起关；且**未加入引擎的扩展会先被加入再直接返回**，初始状态请在 `addExtension` 前用 `ext.setEnabled(false)`。
-22. **`interrupt` 之后不要再 `steer`**——`activeRunId` 已随任务结束被清掉，此时只能拿到 `NOT_RUNNING`；「停下来重来」请直接用 `queue.enqueue`。「运行中改主意」才用 steer，两者是互斥场景而非串行步骤。
-23. **`.jobManager(null)` 之后 goal 不会自动推进**——`hasScheduler()` 为 false，`trigger` 仍可手动跑一轮。
-24. **goal 对外只有只读快照**——`GoalSnapshot` 没有修改方法，一切状态转移经门面；运行态是包内实现。
-25. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是 `HarnessResult<Integer>`（OK 时值为位置）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
-26. **`steer` 取消了也可能已经生效**——`cancelOnRun(session, runId, steerId)` 返回细分码 `NOT_PENDING`（`CONFLICT`）不代表出错，只代表那条已被推理线程取走（已经或即将注入）。同理 `pending(session)` 是快照，读到的下一瞬就可能被消费；宿主不要用它做“一定还能取消”的保证，只能作为 UI 展示依据。
-27. **门面不经受理、不经作用域**——`queue.enqueue`、`steer.steer`、`goal.create/update`、`loop.schedule`、`InterruptMode.INTERRUPT_ALL` 会先查会话归属（非持有节点返回 `NOT_OWNER`，宿主按 `getOwner()` 转发），但不校验作用域；多租户的管理接口先自行鉴权（L0 见 [host README [ENGINE-L1](docs/ENGINE-L1.md) §5](../solon-ai-harness-host/README.md)）。
-28. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`engine.getSession(id)` 不存在就新建；`engine.requireSession(id)` 不存在时抛 `IllegalArgumentException`。goal 门面已改为不新建会话。
-29. **引擎 `shutdown()` 之后不要再用旧引用**——`shutdown` 幂等，会关闭 LSP 进程与 MCP 连接；之后的 `handle` 返回 `REJECTED(engine_closed)`，引擎池模式下重新 `pool.get(key)` 即可。
-30. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`），不会悄悄丢掉这些维度。服务端请用引擎级 `scopeResolver`（`InputScopeResolver.byPrincipal`），不要只靠显式传入。`selectedSkill` / `selectedMcp` 视野随积压保存（见 [ENGINE-L1](docs/ENGINE-L1.md) §2.2）。
+11. **`InterruptMode.INTERRUPT_ALL` 会连带清队列**——它不是「只停当前流」。早期 `/interrupt` 保留队列，现在「停」是彻底的（这也补上了「停了要清队列」那条旧待办）。若你需要「停当前、留队列」，用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`：只停流、不写取消消息、不动队列，不再是手动复刻内部约定的权衡题。各方式差别见 [ENGINE-L1](docs/ENGINE-L1.md) §3.5 的对照表。
+12. **`outcome.call()` / `outcome.stream()` 只在 `TASK` 上有意义**——它们在 `REPLY` / `HITL` / `IGNORED` 上会立即失败（前者抛 `IllegalStateException`、后者返回 `Flux.error`）。不要用它们取代 `switch (kind)`：先判 kind 再取流，顺序不能颠倒。
+13. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是 `HarnessResult<Integer>`（OK 时值为位置）。宿主要程序判定就走门面，要现成文案就走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
+14. **门面不经受理、不经作用域**——`queue.enqueue`、`steer.steer`、`goal.create/update`、`loop.schedule`、`InterruptMode.INTERRUPT_ALL` 会先查会话归属（非持有节点返回 `NOT_OWNER`，宿主按 `getOwner()` 转发），但不校验作用域；多租户的管理接口先自行鉴权（L0 见 [host README §5](../solon-ai-harness-host/README.md)，L1 见 [ENGINE-L1](docs/ENGINE-L1.md) §3.3）。
+15. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`engine.getSession(id)` 不存在就新建；`engine.requireSession(id)` 不存在时抛 `IllegalArgumentException`。goal 门面已改为不新建会话。
+16. **引擎 `shutdown()` 之后不要再用旧引用**——`shutdown` 幂等，会关闭 LSP 进程与 MCP 连接；之后的 `handle` 返回 `REJECTED(engine_closed)`，引擎池模式下重新 `pool.get(key)` 即可。
+17. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`），不会悄悄丢掉这些维度。服务端请用引擎级 `scopeResolver`（`InputScopeResolver.byPrincipal`），不要只靠显式传入。`selectedSkill` / `selectedMcp` 视野随积压保存（见 [ENGINE-L1](docs/ENGINE-L1.md) §1.2）。
+18. **插件相关的坑在各插件 README 的「注意事项」**——goal 执行器注册时机、queue 续发、steer 拦截器与「interrupt 之后不要再 steer」、job 名前缀、没有「只关命令」的开关等，见 [goal](../solon-ai-harness-goal/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) · [loop](../solon-ai-harness-loop/README.md)。
 
 ---
 

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>只核对布尔类配置（表格第三列形如 {@code `true`} / {@code `false`}，可带「（SERVER 为 ...）」说明）。</p>
  */
 class ReadmeFactsTest {
-    private static final Path README = Paths.get("..", "solon-ai-harness", "README.md");
+    private static final Path README = Paths.get("README.md");
 
     /** 表格行：| 分组 | `name(Type)` | `默认值`... | 说明 | */
     private static final Pattern ROW = Pattern.compile("^\\|[^|]*\\|\\s*`(\\w+)\\([^)]*\\)`\\s*\\|\\s*`(true|false)`");
@@ -37,9 +37,7 @@ class ReadmeFactsTest {
 
     @Test
     void booleanDefaultsMatchCode() throws Exception {
-        if (Files.exists(README) == false) {
-            return; // 非聚合仓库布局（单独构建 core）时跳过
-        }
+        assertTrue(Files.exists(README), "core 模块缺少 README.md（引擎配置表就在这里）：" + README.toAbsolutePath());
         Map<String, Boolean> doc = documentedDefaults();
         HarnessOptions o = new HarnessOptions("work", null);
 

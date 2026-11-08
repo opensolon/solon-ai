@@ -8,12 +8,16 @@
 
 包名：`org.noear.solon.ai.harness.extension.goal`（验证器在子包 `validate`）。本模块只依赖核心契约 `solon-ai-harness-core`，不依赖其它插件。
 
-**两种时态**（第三章总览，第四、五章分别给出完整示例）：
+**两种时态**：同一份 goal 状态，用户可以从对话里改，也可以在界面上改。两种接法（L0 宿主骨架 / 自己接线 L1）下都有完整示例：
 
-| 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
-|---|---|---|---|
-| 使用态 | 对话框 / IM 里输入 `/goal 让测试全绿` | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/goal` 命令（引擎内分派） |
-| 管理态 | 任务面板里点「新建 / 编辑 / 暂停 / 删除」 | 宿主自己的管理接口（HTTP 等） | `GoalExtension` 门面方法 |
+| 时态 | 用户在哪里操作 | L0 入口（`HarnessHost`，推荐） | L1 入口（直连引擎） | 本插件的入口 |
+|---|---|---|---|---|
+| 使用态 | 对话框 / IM 里输入 `/goal 让测试全绿` | `host.submit(tenant, sid, HarnessInput.of(text))`（3.3） | `engine.handle(HarnessInput.of(session, text))`（第五章） | `/goal` 命令（引擎内分派） |
+| 管理态 | 任务面板里点「新建 / 编辑 / 暂停 / 删除」 | `host.admin(tenant).call(sid, GoalExtension.class, ...)`（3.4） | 宿主管理接口直接调门面（第六章） | `GoalExtension` 门面方法 |
+
+之后每一轮由调度器驱动（后台态）：L0 下由骨架代跑并走 `HostSink`，L1 下由宿主注册的执行器跑（4.4）。
+
+相关文档：引擎构建与配置见 [core README](../solon-ai-harness-core/README.md)；L0 骨架见 [host README](../solon-ai-harness-host/README.md)；自己编排见 [ENGINE-L1.md](../solon-ai-harness-core/docs/ENGINE-L1.md)；服务端约定见 [SAAS.md](../solon-ai-harness-core/docs/SAAS.md)。
 
 ---
 
@@ -125,41 +129,198 @@ stateDiagram-v2
 </dependency>
 ```
 
-本模块传递依赖 `solon-ai-harness-core` 与 `solon-scheduling-simple`（调度使用 `JobManager`）。聚合包 `solon-ai-harness` 已包含本模块；聚合包只聚合依赖、不自动装配，仍需宿主显式挂载扩展。
+本模块传递依赖 `solon-ai-harness-core` 与 `solon-scheduling-simple`（调度使用 `JobManager`）。聚合包 `solon-ai-harness` 与宿主骨架 `solon-ai-harness-host` 已包含本模块；引入不等于装配，仍需在构建引擎时 `extensionAdd`（4.1）。
 
 ---
 
-## 三、装配与两种时态
+## 三、用 L0 时（HarnessHost）
 
-### 3.1 最小装配
+用宿主骨架 `HarnessHost`（模块 `solon-ai-harness-host`）时，goal 的执行、恢复与输出都由骨架代办，宿主只做装配、呈现与鉴权。
+
+### 3.1 骨架代办了什么
+
+| 事项 | 骨架的做法 |
+|---|---|
+| 执行器 | 首次取到引擎时为 goal 登记执行器（通道名 `host`），只认领 `Builder.programRuns(...)` 命中的会话；宿主不用 `addExecutor` |
+| 重启恢复 | 随后调 `goal.recover(programRuns 的谓词)`：按状态来源的 `goal/active/` 索引只恢复命中的会话（只挂调度、不立即跑） |
+| 每一轮怎么跑 | 与用户轮次走同一条链：`HostSink#open` → `prepare` → `event*` → `finished`，`run.isProgram()` 为 true，`run.getProgramChannel()` 为 `goal`，来源为 `InputOrigin.channel("goal")` |
+| 每一轮的结论 | 出错 → 抛给插件参与熔断；被中断 → `skip("cancelled")`；没有最终回答 → `skip("no final answer")`；会话不存在 → `skip("session not found")`；未受理（忙、待审批）→ `skip`，不计失败；其余按 `done(结果文本, 有无证据工具调用, token)` |
+| 完成证据 | 只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`） |
+| 停止 | `host.interrupt` / `admin.interrupt` 同样能停 goal 的那一轮 |
+| 续发 | 每轮结束后自动续发积压（goal 一轮占用期间用户发来的 `/goal pause` 等会先于下一轮执行） |
+| 管理态 | `host.admin(tenant).call(...)` 依次检查：`sessionId` 为空 → `INVALID`；扩展未装配 → `DISABLED`；非持有节点 → `NOT_OWNER`；会话不存在 → `NOT_FOUND`；成功后自动续发积压 |
+
+### 3.2 宿主还要做什么
+
+1. **构建期装配**：`HarnessEngine.Builder.extensionAdd(GoalExtension.builder()....build())`（4.1）。SERVER 模式下 build 之后不能再挂扩展。
+2. **可选**：`Builder.listener(...)` 或挂接后 `addListener` 推状态；`registerValidator` 加自定义验证器（4.5）。**不要**再 `addExecutor` 认领骨架负责的会话，宿主注册的执行器会优先于骨架。
+3. **呈现后台轮次**：后台轮次没人在线等，在 `HostSink#runFinished` 里按 `run.isProgram()` 发通知；要流式展示就在 `open` 里返回 `RunSink`。
+4. **管理接口先鉴权**：框架拿不到角色与租户成员关系，在控制器层鉴权后再调 `host.admin(tenant)`。
+
+### 3.3 使用态示例：用户在对话里输入 `/goal`
+
+`/goal` 只是一条普通输入，宿主不写任何 goal 专属代码：
 
 ```java
+@Post
+@Mapping("/chat/{tenant}/{sid}")
+public Result<String> chat(String tenant, String sid, String text, Context ctx) {
+    // text 例如："/goal --max-iterations 10 让测试全绿"、"/goal pause"、"/goal"
+    SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
+            .origin(InputOrigin.of("web", userOf(ctx), sid, null)));
+    switch (r.getDisposition()) {
+        case REPLY:                                        // /goal 的回执（命令不开流）
+            return Result.succeed(r.getReplyText());
+        case DEFERRED:                                     // goal 的一轮正在跑：本轮结束后执行
+            return Result.succeed("排队中（第 " + r.getBacklogPosition() + " 位）");
+        case STARTED:                                      // 普通消息开出的一轮
+            return Result.succeed(r.getRun().await(Duration.ofMinutes(5)).getResultText());
+        default:
+            ctx.status(r.httpStatus());
+            return Result.failure(r.httpStatus(), r.getRejectDetail());
+    }
+}
+```
+
+推送型宿主（IM、WebSocket）不看返回值，回执从 `HostSink#reply(input, text)` 出、排队从 `deferred(input, position)` 出。之后每一轮的输出：
+
+```java
+final class GoalAwareSink implements HostSink {
+    @Override
+    public void reply(HostInput input, String text) {
+        push(input.getSessionId(), text);                  // /goal 的回执
+    }
+
+    @Override
+    public void runFinished(HostRun run, RunOutcome o) {
+        if (run.isProgram() && "goal".equals(run.getProgramChannel()) && o.getResultText() != null) {
+            push(run.getSessionId(), "[goal] " + o.getResultText());   // 后台轮次的结果
+        }
+    }
+}
+```
+
+`push` 为宿主自有逻辑。达成、阻塞、预算耗尽等状态变化用监听器推（6.4）。
+
+### 3.4 管理态示例：任务面板上的按钮
+
+与 [host README §5.1](../solon-ai-harness-host/README.md) 同一写法：先鉴权，再经 `host.admin(tenant).call(...)` 调门面。
+
+```java
+@Controller
+@Mapping("/admin/{tenant}/{sid}/goal")
+public class GoalAdminController {
+    @Inject
+    HarnessHost host;
+    @Inject
+    Authz authz;                                                    // 你的鉴权
+
+    private SessionAdmin admin(String action, String tenant, String sid, Context ctx) {
+        authz.require(action, tenant, userOf(ctx), sid);
+        return host.admin(tenant);
+    }
+
+    static <T> Result<T> reply(HarnessResult<T> r, Context ctx) {
+        if (r.isOk()) {
+            return Result.succeed(r.getValue());
+        }
+        ctx.status(r.httpStatus());                                 // 粗码自带状态码
+        return Result.failure(r.httpStatus(), r.getReasonOrCode());
+    }
+
+    @Get
+    @Mapping("")
+    public Result<GoalSnapshot> get(String tenant, String sid, Context ctx) {
+        return reply(admin("goal.read", tenant, sid, ctx)
+                .call(sid, GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get(sid))), ctx);
+    }
+
+    @Post
+    @Mapping("create")
+    public Result<GoalSnapshot> create(String tenant, String sid, String objective, int maxIterations, Context ctx) {
+        return reply(admin("goal.write", tenant, sid, ctx)
+                .call(sid, GoalExtension.class, (goal, s) ->
+                        goal.create(sid, GoalSpec.of(objective).maxIterations(maxIterations))), ctx);
+    }
+
+    @Post
+    @Mapping("update")
+    public Result<GoalSnapshot> update(String tenant, String sid, String objective, Context ctx) {
+        SessionAdmin admin = admin("goal.write", tenant, sid, ctx);
+        // 停在跑轮次走骨架（只停当前轮、保留排队）；不要用 INTERRUPT_ALL，那会清空用户的排队
+        return reply(admin.call(sid, GoalExtension.class, (goal, s) -> goal.update(sid,
+                GoalPatch.create().objective(objective),
+                () -> admin.interrupt(sid, InterruptMode.CANCEL_STREAM))), ctx);
+    }
+
+    @Post
+    @Mapping("pause")
+    public Result<Void> pause(String tenant, String sid, Context ctx) {
+        return reply(admin("goal.write", tenant, sid, ctx)
+                .call(sid, GoalExtension.class, (goal, s) -> goal.pause(sid)), ctx);
+    }
+
+    // resume / trigger / remove 同理：goal.resume(sid)、goal.trigger(sid)、goal.remove(sid)
+
+    @Post
+    @Mapping("stop")
+    public Result<Boolean> stop(String tenant, String sid, Context ctx) {
+        // 界面「立即停止」：pause 只拦下一轮，要停当前这一轮先 interrupt 再 pause
+        SessionAdmin admin = admin("goal.write", tenant, sid, ctx);
+        HarnessResult<Boolean> r = admin.interrupt(sid, InterruptMode.CANCEL_STREAM);
+        admin.call(sid, GoalExtension.class, (goal, s) -> goal.pause(sid));
+        return reply(r, ctx);
+    }
+}
+```
+
+界面动作与门面的对照、结果码见 6.1；状态推送见 6.4。
+
+---
+
+## 四、装配与两种时态
+
+L0 与 L1 的装配写法相同；本章之后的执行器（4.4）与第五、六章是**自己接线（L1）**的写法，用 L0 时由骨架代办（第三章）。
+
+### 4.1 最小装配
+
+```java
+GoalExtension goal = GoalExtension.builder().build();
+
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")
         .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 生产环境应缓存实例
         .modelAdd(chatConfig)
         .defaultModel("deepseek")
+        .extensionAdd(goal)              // 构建期挂接：onAttach 内装配运行态、调度、/goal 命令与模型工具
         .build();
+```
 
-// 按类型幂等挂载；onAttach 内装配运行态、调度、/goal 命令与模型工具
-GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder().build());
+运行期挂接（仅 `runtimeMutable` 时可用，即 STANDALONE 缺省；SERVER 模式 build 之后调用抛 `IllegalStateException`）：
+
+```java
+GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder().build()); // 按类型幂等，同类已挂载时返回已有实例
 ```
 
 装配完成后两种时态都已可用：用户输入 `/goal ...` 会被引擎识别（使用态），宿主也可以直接调用 `goal.create(...)`（管理态）。不注册执行器时，每一轮走内置缺省执行器 `engine.handle(HarnessInput.ofProgram(session, prompt, "goal")).call()`，结果只记进 `lastResult`。
 
 需要 Solon 容器提供 `JobManager`（`solon-scheduling-simple` 已启动）；取不到且未显式 `jobManager(null)` 时会打印 warn：goal 只存不跑。
 
-### 3.2 Builder 全配置
+### 4.2 Builder 全配置
 
 ```java
-GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder()
+GoalExtension goal = GoalExtension.builder()
         .budget(70, 85)            // 预算提示阈值：警告% / 紧急%
         .stagnation(3)             // 连续无进展多少轮注入进展质疑
         .maxErrors(3)              // 连续错误多少次熔断
         .validatorEnabled(true)    // 完成前验证（验证器在本轮会话工作目录下执行）
+        .roundConcurrency(4)       // 本实例 goal 轮次并发上限
         .jobManager(JobManager.getInstance()) // 缺省即取此单例；显式 null = 关闭调度
         .listener((sid, t, removed) -> log.info("goal {} -> {}", sid, t.getStatus()))
-        .build());
+        .build();
+// 再交给 HarnessEngine.Builder.extensionAdd(goal)
 ```
+
+调度 job 名带实例序号前缀（`goal-<序号>:tick`）：`JobManager` 是 JVM 单例，同名 job 已存在时会静默沿用旧 job，插件按扩展实例自动生成进程内唯一的前缀，宿主无需传标识；job 不跨重启、名字不落盘。
 
 测试中不依赖 Solon 容器、也不让 goal 自动推进：
 
@@ -175,7 +336,7 @@ assert ext.hasScheduler() == false;   // 不会自动推进
 assert ext.hasActiveGoals() == false; // 无调度器时恒为 false
 ```
 
-### 3.3 两种时态
+### 4.3 两种时态
 
 ```mermaid
 flowchart LR
@@ -200,9 +361,9 @@ flowchart LR
 | 结果怎么返回 | 回执文本：`outcome.getCommandOutput()` | 返回值：`GoalSnapshot` 快照 / `boolean` / 异常 |
 | 只有这一态能做的 | — | 编辑目标与预算（`update`）、立即跑一轮（`trigger`）、`runNow(false)`、`displayObjective` |
 
-两种时态操作的是**同一份状态**：对话里 `/goal` 建的目标会出现在任务面板里；面板上暂停后，对话里 `/goal` 打印的也是 `PAUSED`。之后每一轮怎么跑、输出回到哪里，由执行器决定（3.4），与目标是哪种时态创建的无关。
+两种时态操作的是**同一份状态**：对话里 `/goal` 建的目标会出现在任务面板里；面板上暂停后，对话里 `/goal` 打印的也是 `PAUSED`。之后每一轮怎么跑、输出回到哪里，由执行器决定（4.4），与目标是哪种时态创建的无关。
 
-### 3.4 执行器：每一轮怎么跑、输出回到哪
+### 4.4 执行器：每一轮怎么跑、输出回到哪
 
 `addExecutor` 必须在扩展挂接到引擎之后调用（之前调用抛 `IllegalStateException`）。认领谓词应互斥；多个同时命中时取首个并告警（每个命中组合一次）。谓词抛异常按不命中处理；`claim` 传 null 表示认领全部。
 
@@ -228,9 +389,9 @@ goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
 // 抛异常、返回 GoalOutcome.failed(...) 或 null 都按失败处理，参与熔断
 ```
 
-`webRuntimeReady`、`pushToClient` 为宿主自有逻辑。会话忙由插件在调用执行器前统一判定（`engine.isIdle`），执行器无需再判。统计工具证据时可用 `GoalTalent.isGoalTool(toolName)` 排除 `goal_*` 自身工具。执行器结束后要续发队列，见 4.3。
+`webRuntimeReady`、`pushToClient` 为宿主自有逻辑。会话忙由插件在调用执行器前统一判定（`engine.isIdle`），执行器无需再判。统计工具证据时可用 `GoalTalent.isGoalTool(toolName)` 排除 `goal_*` 自身工具。执行器结束后要续发队列，见 5.3。
 
-### 3.5 自定义验证器
+### 4.5 自定义验证器
 
 ```java
 goal.registerValidator(
@@ -246,9 +407,11 @@ goal.registerValidator(
 
 ---
 
-## 四、使用态：用户在对话中输入
+## 五、使用态：用户在对话中输入（自己接线，L1）
 
-### 4.1 用户能输入什么
+5.1、P2 的命令语法与边界对 L0 同样适用；5.3 的宿主代码只在直连 `engine.handle` 时需要，L0 写法见 3.3。
+
+### 5.1 用户能输入什么
 
 ```
 /goal                                   # 打印当前目标状态
@@ -286,9 +449,9 @@ goal.registerValidator(
 | 正文为空 / 数值非法 | 错误信息 + `Usage: /goal [--max-tokens N] [--max-duration 30m] [--max-iterations N] <objective>` + 示例 |
 | `pause` / `resume` / `clear` | `Goal paused.` / `Goal resumed.` / `Goal cleared.`；无 goal 时 `No goal in this session.`；状态不允许时 `Cannot pause/resume goal in state: <状态>` |
 
-目标创建之后，模型在每一轮里通过 `goal_get` / `goal_update` 两个工具查看进度、声明完成或阻塞（见 6.8）。模型**不能**创建目标：工具只在会话已有非终态 goal 时可见。
+目标创建之后，模型在每一轮里通过 `goal_get` / `goal_update` 两个工具查看进度、声明完成或阻塞（见 7.8）。模型**不能**创建目标：工具只在会话已有非终态 goal 时可见。
 
-### 4.2 命令的边界
+### 5.2 命令的边界
 
 | 项 | 说明 |
 |---|---|
@@ -300,7 +463,7 @@ goal.registerValidator(
 | 开关 | `engine.setExtensionEnabled(goal, false)` 后命令回执 `/goal 已停用。发送 /help 查看可用命令。` |
 | 回执格式 | 缺省缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
 
-### 4.3 宿主接入：完整示例
+### 5.3 宿主接入：完整示例（L1）
 
 `/goal` 只负责"立目标"；之后每一轮由调度器调用**执行器**完成，执行器的输出由宿主送回渠道。宿主要接三处：输入入口（命令能执行）、执行器（每一轮有去处）、监听器（状态变化能推给渠道）。
 
@@ -325,10 +488,13 @@ public class ImGoalHost {
     /** 会话最近一次的回复路由（调度轮次没有入站消息，只能回到这里） */
     private final Map<String, InputOrigin> routes = new ConcurrentHashMap<>();
 
+    /** engine 构建时已 extensionAdd(new QueueExtension()) 与 extensionAdd(GoalExtension.builder().build()) */
     public ImGoalHost(HarnessEngine engine) {
         this.engine = engine;
-        this.queue = engine.addExtensionIfAbsent(new QueueExtension());
-        this.goal = engine.addExtensionIfAbsent(GoalExtension.builder().build()); // 注册 /goal
+        this.queue = engine.getExtension(QueueExtension.class)
+                .orElseThrow(() -> new IllegalStateException("queue extension not attached"));
+        this.goal = engine.getExtension(GoalExtension.class)
+                .orElseThrow(() -> new IllegalStateException("goal extension not attached"));
 
         // 执行器：挂接后注册；谓词应与其它通道互斥
         goal.addExecutor("im", sid -> sid.startsWith("im-"), (sid, prompt) -> {
@@ -417,24 +583,26 @@ public class ImGoalHost {
 }
 ```
 
-### 4.4 使用态要点
+### 5.4 使用态要点
 
 1. **命令立目标，调度器跑轮次**：`/goal <目标>` 与管理态的 `goal.create(...)` 是同一条路径；创建后首轮由调度器异步发起（命令解析出的 `GoalSpec` 保持缺省 `runNow = true`）。首轮开始时如果会话仍被占用（例如另一条输入的占位尚未随请求释放），或队列里还有积压，`engine.isIdle` 为假，这一轮会被跳过，下一次到期再跑，属正常现象。
 2. **执行器决定输出去向**：内置缺省执行器只把结果记进 `lastResult`，不会推送给任何渠道；需要让用户看到每一轮的宿主必须按通道注册执行器，并自行保存会话到渠道的回复路由。
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
 4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
 5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）由 `handle` 入积压并返回 `DEFERRED`。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
-6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（5.3）。
+6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（6.3）。
 7. **单槽冲突在回执里**：已有非终态 goal 时命令只回执 `WARN`；管理态 `create` 返回 `HarnessResult.Code.CONFLICT`。
 8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；续流完成后 goal 才继续。
 
 ---
 
-## 五、管理态：用户在界面上操作
+## 六、管理态：用户在界面上操作（自己接线，L1）
 
-管理态不经过 `handle`：界面上的每个按钮对应一个宿主接口，接口直接调用 `GoalExtension` 门面。状态变化经监听器推回界面。
+管理态不经过 `handle`：界面上的每个按钮对应一个宿主接口，接口直接调用 `GoalExtension` 门面。状态变化经监听器推回界面。门面不经受理、不校验作用域（只查会话归属），多租户的管理接口先自行鉴权。
 
-### 5.1 界面动作与门面对照
+6.1 的对照表、6.3 之后的语义对 L0 同样适用；6.2 的控制器是直连引擎的写法，L0 下用 3.4（经 `host.admin`，成功后自动续发积压）。
+
+### 6.1 界面动作与门面对照
 
 | 界面动作 | 门面调用 | 成功返回 | 失败时（建议的 HTTP 映射） |
 |---|---|---|---|
@@ -448,7 +616,7 @@ public class ImGoalHost {
 
 每个会话永远只有一个 goal，门面一律按 `sessionId` 定位，不需要任务 id。写方法统一返回 `HarnessResult<T>`（core 的 `org.noear.solon.ai.harness.HarnessResult`），业务失败只用结果码表达、不抛异常；多节点部署时非持有节点返回 `NOT_OWNER`（`getOwner()` 为持有者）。门面只取已有会话（`getSessionOrNull`），不会把不存在的会话建出来。
 
-### 5.2 完整示例：管理接口
+### 6.2 完整示例：管理接口（L1）
 
 ```java
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -473,14 +641,12 @@ public class GoalAdminController {
                 .orElseThrow(() -> new IllegalStateException("goal extension not attached"));
     }
 
-    /** 统一码表：门面只用结果码表达失败（宿主自己的归属校验另做） */
+    /** 门面只用结果码表达失败；粗码自带建议的 HTTP 状态码（NOT_FOUND 404 / CONFLICT 409 / INVALID 400 / DISABLED 503 / NOT_OWNER 307） */
     private static <T> Result<T> toHttp(HarnessResult<?> r) {
-        switch (r.getCode()) {
-            case OK:        return Result.succeed();
-            case NOT_FOUND: return Result.failure(404, r.getDetail());
-            case DISABLED:  return Result.failure(503, r.getDetail());
-            default:        return Result.failure(409, r.getDetail()); // CONFLICT / NOT_OWNER 等（INVALID 可单独映射 400）
+        if (r.isOk()) {
+            return Result.succeed();
         }
+        return Result.failure(r.httpStatus(), r.getReasonOrCode());
     }
 
     @Get
@@ -547,7 +713,7 @@ public class GoalAdminController {
 }
 ```
 
-### 5.3 编辑：update 与停流时序
+### 6.3 编辑：update 与停流时序
 
 goal 为 `PURSUING` 时，`update` 的固定时序：暂停并摘调度 → 执行 `stopper`（null 时用 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)`；`stopper` 抛异常只记日志）→ 最多等 2 秒让旧轮次停稳 → 改写（一次落盘、一次广播）→ 恢复并重挂调度、立即跑一轮。goal 为 `PAUSED` / `BLOCKED` 时只改写、不改状态、不调用 `stopper`。补丁为空时直接返回当前快照。
 
@@ -562,7 +728,7 @@ goal.update(sid, GoalPatch.create().objective(newPrompt), () -> {
 
 `stopper` 里不要用 `InterruptMode.INTERRUPT_ALL`：它会回调各扩展的 `onSessionInterrupt`，顺带清空 queue 里用户排队的消息。
 
-### 5.4 状态推送：监听器
+### 6.4 状态推送：监听器
 
 界面需要实时看到状态（每轮的轮次、Token、达成、阻塞），用监听器推送，不必轮询：
 
@@ -580,7 +746,7 @@ goal.addListener((sessionId, task, removed) -> {
 GoalStatus st = engine.status(session).get(GoalExtension.STATUS_GOAL); // 无 goal 为 null
 ```
 
-### 5.5 重启恢复：recover
+### 6.5 重启恢复：recover
 
 调度只在内存，重启后需宿主恢复。`recover` 只对活跃态挂调度、**不立即跑**，已调度的幂等跳过；无调度器或扩展停用时返回 0。有两种写法：
 
@@ -588,6 +754,9 @@ GoalStatus st = engine.status(session).get(GoalExtension.STATUS_GOAL); // 无 go
 // 推荐：按状态来源下的活跃索引 goal/active/ 恢复，无需宿主枚举会话
 // （已不存在或已非活跃的会话在首次到期时自动注销；多节点共用来源时，非持有节点的轮次被 not_owner 拒绝）
 int n = goal.recover();
+
+// 或：只恢复本入口负责的会话（HarnessHost 就是按 programRuns 的谓词这样调）
+int k = goal.recover(sid -> sid.startsWith("web-"));
 
 // 或：宿主自己枚举会话
 int m = goal.recover(listSessionIds(), sid -> {
@@ -602,7 +771,7 @@ int m = goal.recover(listSessionIds(), sid -> {
 
 `listSessionIds` / `loadSnapshotContext` 为宿主自有逻辑；`statusReader` 返回 null 或抛异常按无 goal 处理。
 
-### 5.6 历史数据迁移：GoalProjection
+### 6.6 历史数据迁移：GoalProjection
 
 ```java
 FlowContext context = session.getContext();
@@ -631,7 +800,7 @@ session.updateSnapshot();           // 由调用方决定是否落盘
 
 注意：status 为 null 的投影在读取时会被视为「无 goal」；运行态在首次访问后缓存于 `attrs()`，迁移应在该会话首次访问 goal 之前完成。
 
-### 5.7 开关
+### 6.7 开关
 
 ```java
 engine.setExtensionEnabled(goal, false); // 关闭模型工具与 /goal 命令，并停止全部调度
@@ -640,7 +809,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 关闭只停未来的调度，不打断正在执行的那一轮。重新开启后，已有的活跃 goal 需经 `recover` / `trigger` / `resume` 重新挂调度。
 
-### 5.8 管理态要点
+### 6.8 管理态要点
 
 1. **会话只取不建**：门面按 sessionId 经 `engine.getSessionOrNull` 取会话，不存在时 `get` 返回 null、写方法返回 `NOT_FOUND`，不会把外部传入的 ID 建成新会话；宿主仍需做自己的用户归属校验。
 2. **不需要判忙**：管理接口随时可调。会话忙时 `create` 照常建目标，首轮由调度器等到会话空闲再跑；`update` 自己负责停流与等待。
@@ -651,9 +820,9 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 ---
 
-## 六、配置说明
+## 七、配置说明
 
-### 6.1 GoalExtension.Builder
+### 7.1 GoalExtension.Builder
 
 | 选项 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -671,7 +840,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 内置验证器仅在 `engine.getWorkspace()` 非空、且 `defaultValidators` 生效值为 true 时注册。
 
-### 6.2 GoalSpec（创建参数）
+### 7.2 GoalSpec（创建参数）
 
 入口 `GoalSpec.of(objective)`：正文 null 或空白抛 `IllegalArgumentException("goal objective must not be empty")`，正文会被 `trim`。
 
@@ -685,7 +854,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `displayObjective(String)` | `String` | `null` | 展示正文；null、空白或与正文相同时不区分（见注意事项） |
 | `runNow(boolean)` | `boolean` | `true` | true = 首轮立即跑；false = 只挂调度，等一个间隔（5 秒） |
 
-### 6.3 GoalPatch（修改补丁）
+### 7.3 GoalPatch（修改补丁）
 
 入口 `GoalPatch.create()`，null = 保持原值。
 
@@ -696,7 +865,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `maxDurationMs(Long)` | `Long` | 保持 | 0 = 不限制，负数按 0 |
 | `maxIterations(Integer)` | `Integer` | 保持 | 0 = 不限制，负数按 0 |
 
-### 6.4 GoalStatus
+### 7.4 GoalStatus
 
 | 值 | 含义 | `isActive` | `isTerminal` | `isResumable` |
 |---|---|---|---|---|
@@ -709,7 +878,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 单槽判定：已有**非终态** goal 时 `create` 返回 `CONFLICT`（detail 为「当前会话已有进行中的 Goal，请先清除后再创建」）；已是终态时可直接覆盖创建。
 
-### 6.5 GoalSnapshot.toMap 字段
+### 7.5 GoalSnapshot.toMap 字段
 
 | 键 | 值 | 说明 |
 |---|---|---|
@@ -730,7 +899,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `goal.maxTokens` | long | Token 预算 |
 | `goal.startedAt` | String | ISO-8601，仅 > 0 时出现 |
 
-### 6.6 GoalOutcome（执行器结论）
+### 7.6 GoalOutcome（执行器结论）
 
 | 结论 | 构造 | goal 的处理 |
 |---|---|---|
@@ -740,11 +909,11 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 判定方法：`isDone()` / `isSkipped()` / `isFailed()`；取值：`getText()`、`hasToolCalls()`、`getTokensUsed()`。
 
-### 6.7 /goal 命令
+### 7.7 /goal 命令
 
-语法、flag 与回执见 4.1，命令边界见 4.2。
+语法、flag 与回执见 5.1，命令边界见 5.2。
 
-### 6.8 模型工具（GoalTalent）
+### 7.8 模型工具（GoalTalent）
 
 仅挂到顶层请求（子代理委派不挂），且仅当会话存在**非终态** goal 时对模型可见（`isSupported`）。
 
@@ -753,7 +922,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `goal_get` | 无 | 返回 `{goal:{taskId, objective, status(小写), iteration, maxIterations?, remainingIterations?, elapsedSeconds, consumedTokens, maxTokens?, budgetExceeded, maxDurationMs?, remainingDurationSeconds?}, remaining_tokens, completionBudgetReport}`；无 goal 返回 `NO_GOAL` |
 | `goal_update` | `status`：`complete` 或 `blocked` | `complete` 过闸后标记 `ACHIEVED`，返回含预算摘要的 `completionBudgetReport`；`blocked` 转 `BLOCKED` |
 
-### 6.9 完成判定与工具错误码
+### 7.9 完成判定与工具错误码
 
 错误统一返回 `{"error":true,"code":"...","message":"..."}`。
 
@@ -767,7 +936,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `TODO_UNFINISHED` | TODO 清单有 `- [ ]` / `- [/]` 项 |
 | `VALIDATION_FAILED` | 验证器未通过（message 含验证器 detail） |
 
-### 6.10 内置验证器
+### 7.10 内置验证器
 
 | 验证器 | 匹配关键词（目标小写包含） | 行为 |
 |---|---|---|
@@ -777,7 +946,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 失败 detail 附带输出末尾 500 字符。
 
-### 6.11 状态键
+### 7.11 状态键
 
 | 常量 | 键名 | 类型 | 说明 |
 |---|---|---|---|
@@ -785,7 +954,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 ---
 
-## 七、存储
+## 八、存储
 
 存储介质是会话实现的细节（文件 / 内存 / Redis / JDBC），goal 只依赖 `AgentSession` 接口。
 
@@ -812,7 +981,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 ---
 
-## 八、API 速查
+## 九、API 速查
 
 | 方法 | 返回 | 时态 | 说明 |
 |---|---|---|---|
@@ -827,6 +996,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `resume(sessionId)` | `HarnessResult<Void>` | 管理（`/goal resume` 同路径） | `PAUSED` / `BLOCKED`，否则 `CONFLICT` |
 | `trigger(sessionId)` | `HarnessResult<Void>` | 管理 | 仅活跃态；扩展停用 `DISABLED` |
 | `remove(sessionId)` | `HarnessResult<Void>` | 管理（`/goal clear` 同路径） | 先摘调度再清除；无 goal `NOT_FOUND` |
+| `recover()` / `recover(sessionFilter)` | `int` | 运维 | 按 `goal/active/` 索引恢复（可按会话过滤），只挂调度不立即跑 |
 | `recover(sessionIds, statusReader)` | `int` | 运维 | 实际挂上调度的会话数 |
 | `hasActiveGoals()` | `boolean` | 运维 | 是否仍有 goal 在调度（闲置回收判定） |
 | `hasScheduler()` | `boolean` | 运维 | 是否装配了调度器 |
@@ -838,17 +1008,22 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 ---
 
-## 九、注意事项
+## 十、注意事项
 
 1. **执行器注册时机**：`addExecutor` / `addListener` / `registerValidator` 须在扩展挂接到引擎后调用，否则抛 `IllegalStateException("GoalExtension is not attached; ...")`。宿主注册的执行器恒优先于内置缺省执行器，与注册先后无关。
 2. **done 必须带真实证据**：执行型目标的完成复核依赖 `hasToolCalls`，没有「从文本推测」的降级入口；`hasToolCalls = false` 时执行型目标永远无法达成。
 3. **会话忙不要在执行器里判**：插件在调用执行器前已按 `engine.isIdle` 跳过；执行器只判断本通道此刻能否执行，不能则返回 `skip`。
-4. **门面会解析会话**：`create`、`get`、`pause` 等门面方法经 `engine.getSession(sessionId)` 解析会话，由 `sessionProvider` 决定是否新建；而调度轮次只用 `getSessionOrNull`，会话被删后 job 自行注销，不会重建会话。管理接口应先确认会话存在（5.8）。
+4. **门面只取不建会话**：`create`、`get`、`pause` 等门面经 `engine.getSessionOrNull(sessionId)` 取会话，不存在时 `get` 返回 null、写方法返回 `NOT_FOUND`；调度轮次同样只用 `getSessionOrNull`，会话被删后 job 自行注销（6.8）。
 5. **停用期间**：`create` 仍会写入状态但不挂调度；`trigger` / `recover` 返回 false / 0。重新启用不会自动恢复调度，需要 `recover`、`trigger` 或 `resume`。
 6. **恢复不清零错误计数**：`resume` 只改状态，连续错误数（持久化）要等一轮 `done` 才清零；因错误熔断的 goal 恢复后若立即再失败，可能马上再次熔断。
 7. **预算耗尽的收尾轮**：Token / 时长耗尽时会额外执行一轮收尾总结提示词，该轮的 token 不计入 `consumedTokens`，收尾轮失败只记 warn。轮次耗尽没有收尾轮。终态 goal 不能 `update`，无法通过补丁扩容预算，只能清除后重建。
 8. **时长预算只在轮前检查**：单轮执行时间可能超出 `maxDurationMs`，下一轮开始前才转 `BUDGET_LIMITED`。
 9. **displayObjective 的实际效果**：按当前源码，设置了不同的展示正文后，运行态只保存展示正文；后续每轮提示词、执行型关键词判定与验证器匹配均基于展示正文，执行正文（如拼入的附件全文）不会被保存。
 10. **默认验证器会执行真实构建命令**：`mvn test` 等命令在本轮会话工作目录同步执行，可能耗时较长；不需要时用 `validatorEnabled(false)`，或注册更精确的自定义验证器（注意内置验证器按 AND 与自定义验证器一起生效）。
-11. **装配用 `addExtensionIfAbsent`**：同一实例重复挂载只算一次（按引用查重）。`/goal` 命令注册幂等，引擎上已有同名命令时保持原实例。**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）：改在构建期用 `Builder.extensionAdd(...)`。
-12. **`BudgetThresholds` 为包内类型**：宿主只能通过 `Builder.budget(...)` 配置阈值。
+11. **装配用构建期 `extensionAdd`**：同一实例重复 `extensionAdd` / `addExtension` 只算一次（按引用查重）；运行期 `addExtensionIfAbsent` 按类型查重并返回已有实例，仅 `runtimeMutable` 时可用；**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）。`/goal` 命令注册幂等，引擎上已有同名命令时保持原实例。
+12. **没有「只关命令」的开关**：`GoalExtension` 构造器私有，builder 不提供 `commandEnabled`，`onAttach` 里一律注册 `/goal`。要下线只有 `engine.setExtensionEnabled(goal, false)`（命令、工具、调度一起关；同样受 `runtimeMutable` 约束）；未加入引擎的扩展会先被加入再直接返回，初始停用请在挂接前 `goal.setEnabled(false)`。
+13. **`jobManager(null)` 之后不会自动推进**：`hasScheduler()` 为 false，`trigger` 仍可手动跑一轮。
+14. **`GoalSpec` 的负数会被夹到 0**：`maxTokens(-1)` 表示「不限制」而不是报错；命令行 `--max-tokens -1` 同理。需要拒绝非法参数时在调用前自行校验。
+15. **重启恢复用 `recover`，不要用 `resume`**：`resume` 会立即跑一轮；`recover()` / `recover(Predicate)` / `recover(sessionIds, statusReader)` 只挂调度。用 `HarnessHost` 时由骨架按 `programRuns` 代办。
+16. **`stopper` 只负责「怎么停」**：`update` 的停流时序由门面完成；停不稳返回 `CONFLICT`（goal 保持暂停，可重试）。
+17. **`BudgetThresholds` 为包内类型**：宿主只能通过 `Builder.budget(...)` 配置阈值。

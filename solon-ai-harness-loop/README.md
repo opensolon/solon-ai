@@ -8,12 +8,14 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 - 起始版本：4.2.0（独立模块）
 - 宿主只需接触一个类：`LoopExtension`（门面 + Builder）
 
-**两种时态**（第 3 章总览，第 4、5 章分别给出完整示例）：
+**两种时态**（第 4 章总览，第 5、6 章分别给出自己接线时的完整示例；用 L0 宿主骨架时见第 3 章）：
 
-| 时态 | 用户在哪里操作 | 宿主入口 | 本插件的入口 |
-|---|---|---|---|
-| 使用态 | 对话框 / IM 里输入 `/loop --every 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/loop` 命令；模型调用 `loop_add` 等工具 |
-| 管理态 | 定时任务面板里点「新建 / 编辑 / 启停 / 立即执行 / 删除」 | 宿主自己的管理接口（HTTP 等） | `LoopExtension` 门面方法 |
+| 时态 | 用户在哪里操作 | 宿主入口：L0（`HarnessHost`） | 宿主入口：自己接线（L1） | 本插件的入口 |
+|---|---|---|---|---|
+| 使用态 | 对话框 / IM 里输入 `/loop --every 30m 检查 CI`，或对模型说"每天 9 点提醒我" | `host.submit` / `host.stream`（骨架内部调 `engine.handle`） | `engine.handle`（唯一执行入口，第 0 步受理判定） | `/loop` 命令；模型调用 `loop_add` 等工具 |
+| 管理态 | 定时任务面板里点「新建 / 编辑 / 启停 / 立即执行 / 删除」 | 宿主管理接口里先鉴权，再 `host.admin(tenant).call(sid, LoopExtension.class, 操作)` | 宿主管理接口里直接调门面 | `LoopExtension` 门面方法 |
+
+任务到点后的那一轮（后台态）：L0 下由骨架登记的执行器接管，与用户轮次走同一条 `HostSink` 回调链（第 3 章）；自己接线时由宿主注册的执行器或本插件的缺省执行器执行（4.4、5.4）。
 
 ---
 
@@ -54,16 +56,18 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 - **错误计数是任务级、瞬态的**：一个任务失败不影响其它任务；成功一轮即清零；不持久化。阈值经 `maxErrors` 的 `IntSupplier` 每次实时读取，实际取值 `Math.max(1, supplier.getAsInt())`。
 - **退避**：第 n 次连续失败后延迟 `5 × n` 秒重试（5s、10s、15s……），重试不经调度器，不消耗一次性配额。
 - **版本与身份**：`update` 会产出同 id 的新版本替换旧版本，新旧版本共享运行锁与错误计数，因此修改执行中的任务不会与在途一轮并发，本轮结果记到新版本上。
-- **job 名**：`loop-<实例序号>:<sessionId>:<taskId>`。实例序号在进程内递增，多个扩展实例共用 JVM 单例 `JobManager` 也不会撞名；job 名不落盘。
+- **job 名**：`loop-<实例序号>:<sessionId>:<taskId>`。`JobManager` 是 JVM 单例，同名 job 已存在时会静默沿用旧 job（新回调被丢弃），所以插件按扩展实例自动生成进程内唯一的序号前缀，多个扩展实例（多引擎、重建引擎）共用 `JobManager` 也不会撞名，宿主无需传任何标识；job 只在内存、不跨重启，job 名不落盘。
+- **多节点**：到点时先查会话归属，非持有节点静默放弃（不加载会话、不调用执行器），同一任务不会在多个节点上同时执行。
 
 ### 1.3 引擎钩子
 
 | 钩子 | 行为 |
 |---|---|
-| `onAttach` | 绑定引擎；启用时设置缺省执行器；注册 `/loop` 命令；加载并调度存储中的任务 |
+| `onAttach` | 绑定引擎；`store(dir)` 形式此时取引擎状态来源；启用时设置缺省执行器；注册 `/loop` 命令（总是注册，幂等）；加载并调度存储中的任务 |
 | `onRequestAssemble` | 仅顶层请求挂 `LoopTalent`（委派请求不挂：子代理走临时会话，建出的任务会成为孤儿） |
 | `contributeSessionStatus` | 贡献 `STATUS_TASKS`（只读内存计数） |
-| `onSessionRemove` | 停止并删除该会话全部任务（幂等） |
+| `onSessionRemove` | 停止并删除该会话全部任务（幂等；非持有节点不动别人的任务） |
+| `isQuiescent` | 无启用任务时为 true（`hasActiveTasks()` 为 false）：只剩暂停任务的引擎可被引擎池闲置回收，记录保留，下次挂接时恢复 |
 | `onDetach` | 卸载全部 job，保留存储记录；此后不再写盘、不再注册 job、不再放行触发，直到下次加载 |
 
 不实现 `onSessionInterrupt`：用户中断不会删除或暂停定时任务。
@@ -80,40 +84,174 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 </dependency>
 ```
 
-本模块依赖 `solon-ai-harness-core`、`solon-scheduling-simple`、`java-cron`（cron 预校验，与 `solon-scheduling-simple` 内部同一解析器）。聚合包 `solon-ai-harness` 已包含本模块；**引入不等于装配**，仍需 `addExtensionIfAbsent`。
+本模块依赖 `solon-ai-harness-core`、`solon-scheduling-simple`、`java-cron`（cron 预校验，与 `solon-scheduling-simple` 内部同一解析器）。聚合包 `solon-ai-harness` 已包含本模块。**引入不等于装配**：插件上了类路径不会自己生效，要在构建引擎时用 `HarnessEngine.Builder.extensionAdd(...)` 挂上（写法见 3.2 与 4.1；引擎构建见 [harness-core README 一 上手](../solon-ai-harness-core/README.md) 的 1.2、1.4）。
 
 调度依赖 `JobManager.getInstance()`（需 `solon-scheduling-simple` 已启动）。未显式 `jobManager(null)` 却取不到 JobManager 时，构建时会打 WARN 日志：任务会被存储但永远不会触发。
 
 ---
 
-## 3. 装配与两种时态
+## 3. 用 L0 时（HarnessHost）
 
-### 3.1 最小装配
+用宿主骨架 `solon-ai-harness-host`（L0）时，到点那一轮的执行、输出回调、结束后的积压续发都由骨架代办：宿主不写执行器、不直接调 `engine.handle`、不手写 `drain`。骨架整体见 [host README](../solon-ai-harness-host/README.md)（[§5 管理态](../solon-ai-harness-host/README.md#5-管理态用户在界面上操作)、[§6 后台态](../solon-ai-harness-host/README.md#6-后台态goal--loop-自己跑)、[§7 运维态](../solon-ai-harness-host/README.md#7-运维态启动会话生命周期多节点)）；多租户上线见 [QUICKSTART-SAAS.md](../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)。
+
+第 4~6 章里的命令语法（5.1）、命令边界（5.2）、门面语义与结果码（6.1、6.3~6.7）在 L0 下同样适用；只有「执行器怎么写、谁来 drain」这部分（4.4、5.4）是自己接线才需要的。
+
+### 3.1 骨架代办了什么
+
+| 方面 | 骨架的做法 |
+|---|---|
+| 登记执行器 | 首次取到某个引擎时（`host.warmup`，或任一入口首次用到该租户），为已挂接的 `LoopExtension` 登记通道名为 `host` 的执行器。认领范围由 `HarnessHost.Builder.programRuns(...)` 决定：缺省接管全部会话；`programRuns(sid -> ...)` 只接管命中的会话，不命中的交给后注册的执行器或本插件缺省执行器；`programRuns(false)` 不登记，沿用缺省执行器 |
+| 跑一轮 | 只取已存在的会话（取不到 → `skip("session not found")`）；以 `HarnessInput.ofProgram(session, prompt, "loop")` 进入引擎（`Builder.input(...)` 同样作用于它）；未受理（忙、待审批等非 `TASK` 结局）→ `skip`，不计错误 |
+| 回调 | 与用户轮次走同一条链：`HostSink#open` → `prepare` → `event*` → `finished`；`run.isProgram()` 为 true，`run.getProgramChannel()` 为 `loop`，`run.getInput().getOrigin()` 为 `channel("loop")` |
+| 结论 | 在调度线程上阻塞到本轮结束，再翻译成 `LoopOutcome`：本轮出错 → 把异常抛给插件（计错误、退避重试、达阈值自动停用）；被中断 → `skip("cancelled")`；没有最终回答（结果文本为空白）→ `skip("no final answer")`；否则 `done(RunOutcome.getResultText())`，记入 `lastResult` |
+| 停止 | `host.interrupt` / `admin.interrupt` 同样能停掉到点的一轮（被停的一轮按 skip 计，不计错误） |
+| 续发 | 本轮结束后自动续发积压（本轮占用期间用户发来的消息、延后的 `/loop` 命令） |
+| 管理态 | `host.admin(tenant).call(sid, LoopExtension.class, 操作)` 按固定顺序检查：`sessionId` 为空 → `INVALID`；扩展未装配 → `DISABLED`；会话不归本节点 → `NOT_OWNER`；会话不存在 → `NOT_FOUND`（只查不建）；再执行操作。成功后自动续发积压 |
+| 删除会话 | `host.closeSession(tenant, sid, ...)`：判忙 → 通知扩展（本插件由 `onSessionRemove` 删掉该会话全部任务）→ 删存储 |
+
+### 3.2 宿主还要做什么
+
+1. **构建期挂上插件**。骨架只给已挂接的 `LoopExtension` 登记执行器，而且只在首次取到引擎时登记一次：
+
+```java
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
+        .stateSource(stateSrc)
+        /* ... */
+        .extensionAdd(QueueExtension.builder().maxSize(20).build())                    // 建议同装：到点那一轮期间的用户输入进积压
+        .extensionAdd(LoopExtension.builder().store("loop").quota(sid -> 20).build()) // 挂接时取引擎状态来源
+        .build();
+```
+
+2. **不要再为骨架接管的会话注册自己的执行器**。执行器按注册顺序认领：在骨架登记之前注册、谓词又命中同一批会话时，它会抢先认领，这一轮就不经 `HostSink`、结束后也不续发积压。同一引擎挂了多个入口时，用 `programRuns(sid -> ...)` 划分接管范围。同理，不要绕过 host 自己取引擎。
+
+3. **在 `HostSink.runFinished` 里按 `run.isProgram()` 发通知**。到点的一轮没人在线等，常见做法是给会话主人发站内信 / 邮件 / IM。回复目标从会话 ID 推出来，不要从 `run.getInput().getOrigin()` 取（来源是 `channel("loop")`，没有聊天 ID）：
+
+```java
+final class ProgramAwareSink implements HostSink {
+    @Override
+    public void runFinished(HostRun run, RunOutcome o) {
+        if (run.isProgram() && "loop".equals(run.getProgramChannel())
+                && o.isCompleted() && o.getResultText() != null) {
+            notices.add(run.getSessionId(), "[定时任务] " + o.getResultText());   // 按会话 ID 找到接收人
+        }
+    }
+}
+```
+
+4. **使用态不用写 loop 专属代码**。用户在对话里输入 `/loop` 只是一条普通提交，回执在 `SubmitResult.getReplyText()`（推送型宿主在 `HostSink#reply`）；模型调用 `loop_*` 工具建的任务也一样由骨架到点代跑：
+
+```java
+@Post
+@Mapping("/chat/{tenant}/{sid}")
+public Result<String> chat(String tenant, String sid, String text, Context ctx) {
+    // text 例如："/loop --every 30m 检查线上告警"、"/loop list"、"每天 9 点提醒我看日报"（模型用 loop_* 工具建任务）
+    SubmitResult r = host.submit(tenant, sid, HarnessInput.of(text)
+            .origin(InputOrigin.of("web", userOf(ctx), sid, null)));
+    switch (r.getDisposition()) {
+        case REPLY:    return Result.succeed(r.getReplyText());                       // /loop 的回执
+        case STARTED:  return Result.succeed(r.getRun().await(Duration.ofMinutes(5)).getResultText());
+        case DEFERRED: return Result.succeed("排队中（第 " + r.getBacklogPosition() + " 位）");  // 忙时 /loop 进积压
+        default:
+            ctx.status(r.httpStatus());
+            return Result.failure(r.httpStatus(), r.getRejectDetail());
+    }
+}
+```
+
+5. **管理接口先鉴权，再 `host.admin`**。鉴权不在框架里（它拿不到角色、租户成员关系等上下文），门面本身也不校验作用域（6.7）。写法与 [host README §5.1](../solon-ai-harness-host/README.md#51-完整示例管理接口) 一致（`reply` 把 `HarnessResult` 转成应答，见该节）：
+
+```java
+@Controller
+@Mapping("/admin/{tenant}/{sid}")
+public class LoopAdminController {
+    @Inject
+    HarnessHost host;
+    @Inject
+    Authz authz;                                                // 你的鉴权
+
+    private SessionAdmin admin(String action, String tenant, String sid, Context ctx) {
+        authz.require(action, tenant, userOf(ctx), sid);        // 先鉴权，再进管理态
+        return host.admin(tenant);
+    }
+
+    @Get
+    @Mapping("loop")
+    public Result<List<LoopTask>> loopList(String tenant, String sid, Context ctx) {
+        return reply(admin("loop.read", tenant, sid, ctx)
+                .call(sid, LoopExtension.class, (loop, s) -> HarnessResult.ok(loop.list(sid))), ctx);
+    }
+
+    @Post
+    @Mapping("loop/add")
+    public Result<LoopTask> loopAdd(String tenant, String sid, String prompt, Integer intervalMinutes, String cron, Context ctx) {
+        return reply(admin("loop.write", tenant, sid, ctx)
+                .call(sid, LoopExtension.class, (loop, s) ->
+                        loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(intervalMinutes).cron(cron))), ctx);
+    }
+
+    @Post
+    @Mapping("loop/trigger")
+    public Result<Void> loopTrigger(String tenant, String sid, String taskId, Context ctx) {
+        return reply(admin("loop.write", tenant, sid, ctx)
+                .call(sid, LoopExtension.class, (loop, s) -> loop.trigger(sid, taskId)), ctx);
+    }
+
+    // loop/pause、loop/resume、loop/remove 同理：loop.pause / resume / remove(sid, taskId)
+}
+```
+
+会话是否存在由 `admin.call` 检查（6.7 第 1 条的「先校验会话」在 L0 下不用自己写），宿主自己的用户归属仍在鉴权里做。要「停止并删除」正在跑的一轮时，先 `admin.interrupt(sid, InterruptMode.CANCEL_STREAM)`（只停当前轮、保留排队），再 `call(... loop.remove(sid, taskId))`。
+
+---
+
+## 4. 自己接线（L1）：装配与两种时态
+
+本章及第 5、6 章面向不用 `HarnessHost`、直接调 `engine.handle` 自己编排的宿主。`handle` + `InputOutcome` 的用法见 [ENGINE-L1 一 核心 API](../solon-ai-harness-core/docs/ENGINE-L1.md)，两段式宿主骨架见 ENGINE-L1 二（2.1 最小骨架、2.2 完整宿主），会话插件的接线见 ENGINE-L1 三。
+
+### 4.1 最小装配
+
+推荐在构建期装配（STANDALONE / SERVER 通用）：
 
 ```java
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 
-// 任务按会话分存到引擎状态来源的 loop/ 目录（每会话一个 <encode(sid)>.json）；
+// store("loop")：挂接时取引擎的状态来源，任务按会话分存到 loop/<encode(sid)>.json；
 // 不注册执行器则走缺省执行器（engine.handle 同步跑一轮）
+LoopExtension loop = LoopExtension.builder().store("loop").quota(sid -> 20).build();
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
+        .stateSource(stateSrc)
+        /* ... */
+        .extensionAdd(loop)
+        .build();
+
+// 自己的执行器在 build() 返回后（挂接后）注册，写法见 4.4
+loop.addExecutor("web", id -> id.startsWith("web-"), executor);
+```
+
+运行期装配只作为另一种写法：`engine.addExtensionIfAbsent(...)` **仅 `runtimeMutable` 时可用（STANDALONE 缺省），SERVER 模式 build 之后调用抛 `IllegalStateException`**：
+
+```java
 LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
         .store(engine.getStateSource(), "loop")
         .build());
-
-// 构建期装配（SERVER 模式必须如此）：还没有 engine，用 store("loop")，挂接时取引擎的状态来源
-LoopExtension loop = LoopExtension.builder().store("loop").build();
-HarnessEngine engine = HarnessEngine.of(ws, ".solon/") /* ... */ .extensionAdd(loop).build();
 ```
+
+装配要点：
+
+- `store("loop")` 在挂接时才取 `engine.getStateSource()`，所以构建期不必先拿到引擎；挂接时引擎没有状态来源则只在内存。它不带旧单文件迁移参数，需要迁移时用 `store(stateSrc, "loop", "tasks.json")`（4.2）。
+- `addExtensionIfAbsent` 按类型幂等：引擎上已有 `LoopExtension` 时返回已挂载的那个实例，入参及其配置不生效。同一实例重复 `extensionAdd` / `addExtension` 只算一次（按引用查重，不会二次 `onAttach`）；同类的另一个实例经 `addExtension` 照常挂载。
+- `addExecutor` 统一在挂接后调用（构建期装配即 `build()` 返回后）。loop 的 `addExecutor` 在挂接前调用不会抛异常（与 goal 不同），但与 goal 保持同一时机最不容易出错。
+- 装配与插件协作契约见 [ENGINE-L1 三](../solon-ai-harness-core/docs/ENGINE-L1.md)（3.1 插件协作契约、3.2 装配）。
 
 装配完成后两种时态都已可用：用户输入 `/loop ...` 或让模型调用 `loop_add`（使用态），宿主也可以直接调用 `loop.schedule(...)`（管理态）。
 
-### 3.2 Builder 全配置
+### 4.2 Builder 全配置
 
 ```java
-import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.scheduling.simple.JobManager;
 
-LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-        .store(engine.getStateSource(), "loop", "tasks.json")    // 目录 + 可选的旧单文件（首次加载拆分迁移）；不设 = 只在内存
+LoopExtension loop = LoopExtension.builder()
+        .store(stateSrc, "loop", "tasks.json")                   // 来源 + 目录 + 可选的旧单文件（首次加载拆分迁移）；不设 = 只在内存
         .sessionAlive(id -> Files.isDirectory(sessionsRoot.resolve(id))) // 加载时孤儿清理
         .maxErrors(() -> settings.getLoopMaxErrors())            // 连续失败阈值，每次实时读
         .maxTasks(500)                                           // 本实例任务总量上限（跨全部会话）
@@ -121,10 +259,12 @@ LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()
         .triggerWrapper(r -> () -> withLogScope(r))              // 包装调度线程（如日志归属）
         .defaultExecutor(true)                                   // 是否启用缺省执行器
         .jobManager(JobManager.getInstance())                    // 自备调度器；传 null 关闭调度
-        .build());
+        .build();
+
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/").stateSource(stateSrc) /* ... */ .extensionAdd(loop).build();
 ```
 
-`store` 接收任意 `MountSource`。测试或演示可用内存来源，并关闭调度与缺省执行器：
+`store` 的三个重载互相覆盖，以最后一次调用为准。`store(source, dir[, legacyFile])` 接收任意 `MountSource`。测试或演示可用内存来源，并关闭调度与缺省执行器：
 
 ```java
 import org.noear.solon.ai.mount.source.InMemoryMountSource;
@@ -136,9 +276,9 @@ LoopExtension loop = LoopExtension.builder()
         .build();
 ```
 
-远端（db、http 等）存储：自行实现 `org.noear.solon.ai.mount.source.MountSource` 并传入 `store(...)` 即可。本插件对来源的使用包括 `normalize`、`readStringOrNull`、`writeString`（整体写入）以及损坏备份时的 `move`；写入原子性取决于该来源的 `capabilities().isAtomicWrite()`。
+远端（db、http 等）存储：自行实现 `MountSource`（包 `org.noear.solon.ai.mount.source`）并传入 `store(...)` 即可。本插件对来源的使用包括 `normalize`、`isDirectory`、`list`、`exists`、`readStringOrNull`、`writeString`（整体写入）、`deleteIfExists`，以及损坏备份与旧文件迁移时的 `move`；写入原子性取决于该来源的 `capabilities().isAtomicWrite()`。
 
-### 3.3 两种时态
+### 4.3 两种时态
 
 ```mermaid
 flowchart LR
@@ -165,9 +305,9 @@ flowchart LR
 | 结果怎么返回 | 命令：回执文本 `outcome.getCommandOutput()`；工具：JSON 交给模型 | 写操作返回 `HarnessResult`（按 `getCode()` 判定，不抛业务异常）；读操作返回 `LoopTask` 快照 |
 | 只有这一态能做的 | `loop_add` 可建一次性任务 | 修改任务（`update`）、宿主扩展字段（`extra`）、跨会话列表（`listAll`） |
 
-两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop list` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（3.4），与任务是哪种时态创建的无关。
+两种时态操作的是**同一张任务表**：对话里 `/loop` 或 `loop_add` 建的任务会出现在面板里；面板上暂停后，对话里 `/loop list` 看到的也是 `paused`。任务到点后怎么跑、输出回到哪里，由执行器决定（4.4；L0 下由骨架接管，见第 3 章），与任务是哪种时态创建的无关。
 
-### 3.4 执行器：到点的一轮怎么跑、输出回到哪
+### 4.4 执行器：到点的一轮怎么跑、输出回到哪
 
 ```java
 // 按注册顺序认领，先于缺省执行器；谓词为 null 表示认领全部
@@ -183,13 +323,15 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
                        : LoopOutcome.failed("runtime not ready")); // 与抛异常等价
 ```
 
-执行器不得返回 `null`，否则按失败计（`lastResult` 中可见）。缺省执行器只把结果写进 `lastResult`，不推给任何渠道；需要让用户看到每一轮的宿主必须注册自己的执行器（完整写法见 4.4）。
+执行器不得返回 `null`，否则按失败计（`lastResult` 中可见）。缺省执行器只把结果写进 `lastResult`，不推给任何渠道；需要让用户看到每一轮的宿主必须注册自己的执行器（完整写法见 5.4），或改用 L0 骨架在 `HostSink` 里拿到每一轮（第 3 章）。
 
 ---
 
-## 4. 使用态：用户在对话中输入
+## 5. 自己接线（L1）：使用态，用户在对话中输入
 
-### 4.1 用户能输入什么
+5.1、5.2 的命令语法与边界在 L0 下同样适用（骨架内部同样走 `engine.handle`）；5.3、5.4 的接线在 L0 下由骨架代办（第 3 章）。
+
+### 5.1 用户能输入什么
 
 ```text
 /loop --every 30m --now 检查 CI 是否通过     # 每 30 分钟，并立即跑首轮
@@ -219,11 +361,11 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 
 间隔单位：`s` / `sec` / `seconds`（向上取整为分钟，至少 1 分钟）、`m` / `min` / `minutes`、`h` / `hour` / `hours`；结果收敛到 [1, 1440] 分钟。命令没有 `trigger` 子命令，也不能创建一次性任务。`/loop list` 与创建回执里打印完整任务 ID，`remove` / `pause` / `resume` 需要传完整 ID。
 
-**停止为什么不用 `InterruptMode.INTERRUPT_ALL`**：`interrupt` 是用户级中断，会清空会话的排队消息、并在历史里补写「用户已取消」。定时轮次是程序发起的，删除任务时只应停掉这一轮，所以命令用 `CANCEL_STREAM`：排队消息保留，历史里也不留取消记录。
+**停止为什么不用 `InterruptMode.INTERRUPT_ALL`**：`interrupt` 是用户级中断，会清空会话的排队消息、并在历史里补写「用户已取消」。定时轮次是程序发起的，删除任务时只应停掉这一轮，所以命令用 `CANCEL_STREAM`：排队消息保留，历史里也不留取消记录。各停止方式的对照见 [ENGINE-L1 3.4 取消语义与运行期开关](../solon-ai-harness-core/docs/ENGINE-L1.md)；命令文本与直接调门面是同一动作的两条路径（前者得到人读回执，后者得到可判定的 `HarnessResult`，不要两条都走），见 ENGINE-L1 3.3。
 
-用户也可以直接用自然语言，例如"明天下午 6 点提醒我提交周报"、"每 10 分钟看一下部署好了没"：模型会调用 `loop_add`（支持 `at` 一次性时刻）、`loop_list`、`loop_control`，参数规则见 6.7。工具只挂在顶层请求上，子代理委派中不可用。
+用户也可以直接用自然语言，例如"明天下午 6 点提醒我提交周报"、"每 10 分钟看一下部署好了没"：模型会调用 `loop_add`（支持 `at` 一次性时刻）、`loop_list`、`loop_control`，参数规则见 7.7。工具只挂在顶层请求上，子代理委派中不可用。
 
-### 4.2 命令的边界
+### 5.2 命令的边界
 
 | 项 | 说明 |
 |---|---|
@@ -232,19 +374,31 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 | 结局 | 恒为 `Kind.REPLY`：命令只改任务表并回执，不在本次 `handle` 里开流 |
 | 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用；不需要 `.terminal(true)` |
 | 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.handle` 由引擎入积压并返回 `DEFERRED`（空闲后执行）；没装 queue 时返回 `REJECTED("busy")` |
-| 开关 | `loop.setEnabled(false)` 只关模型工具，`/loop` 照常可用 |
+| 开关 | `loop.setEnabled(false)` 只关模型工具，`/loop` 照常可用；没有「只关命令」的开关（见 10 第 11 条） |
 | 回执格式 | 缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `outcome.getCommandOutput()` 取回 |
 
-### 4.3 命令与工具共用的流程
+### 5.3 命令与工具共用的流程
 
 1. 用户输入 → 宿主 `engine.handle`（第 0 步受理判定：忙时可排队输入由引擎入积压并返回 `DEFERRED`）；
 2. `/loop ...`：引擎识别命令，`LoopCommand` 直接操作调度器（与门面同一张任务表；会话归属已在 `handle` 受理时校验过），结局 `REPLY`；
 3. 普通消息：结局 `TASK`，模型在这一轮里调用 `loop_add` 等工具，工具同样走 `schedule` 等门面；
 4. 到点后调度器调用执行器跑一轮，执行器把输出送回渠道。
 
-### 4.4 宿主接入：完整示例
+### 5.4 宿主接入：完整示例
 
-`/loop` 只负责"建任务"；任务到点后由**执行器**跑一轮，执行器的输出要由宿主送回渠道。所以宿主要接两处：输入入口（让命令能执行）与执行器（让到点的那一轮有去处）。
+`/loop` 只负责"建任务"；任务到点后由**执行器**跑一轮，执行器的输出要由宿主送回渠道。所以宿主要接两处：输入入口（让命令能执行）与执行器（让到点的那一轮有去处）。同一套「受理 → 开流 → 终态 → 续发积压」的通用写法见 [ENGINE-L1 二](../solon-ai-harness-core/docs/ENGINE-L1.md)（2.2 完整宿主、2.6 受理控制）。插件在构建期已装配：
+
+```java
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
+        .stateSource(stateSrc)
+        /* ... */
+        .extensionAdd(new QueueExtension())
+        .extensionAdd(LoopExtension.builder()
+                .store("loop")                                     // 任务随引擎状态来源持久化（按会话分存）
+                .sessionAlive(ImLoopHost::sessionExists)           // 按会话存储判断（勿用内存会话表，重启后会误删）
+                .build())
+        .build();
+```
 
 ```java
 import org.noear.solon.ai.agent.AgentSession;
@@ -266,13 +420,13 @@ public class ImLoopHost {
     /** 会话最近一次的回复路由（定时轮次没有入站消息，只能回到这里） */
     private final Map<String, InputOrigin> routes = new ConcurrentHashMap<>();
 
+    /** engine 已在构建期挂好 queue 与 loop（见上）；执行器在 build() 返回后注册 */
     public ImLoopHost(HarnessEngine engine) {
         this.engine = engine;
-        this.queue = engine.addExtensionIfAbsent(new QueueExtension());
-        this.loop = engine.addExtensionIfAbsent(LoopExtension.builder()
-                .store(engine.getStateSource(), "loop")             // 任务随引擎状态来源持久化（按会话分存）
-                .sessionAlive(this::sessionExists)                   // 按会话存储判断（勿用内存会话表，重启后会误删）
-                .build());
+        this.queue = engine.getExtension(QueueExtension.class)
+                .orElseThrow(() -> new IllegalStateException("queue extension not attached"));
+        this.loop = engine.getExtension(LoopExtension.class)
+                .orElseThrow(() -> new IllegalStateException("loop extension not attached"));
 
         // 执行器：认领 IM 会话（谓词应互斥），把到点的一轮跑完并送回渠道
         loop.addExecutor("im", id -> id.startsWith("im-"), (sid, prompt) -> {
@@ -349,12 +503,12 @@ public class ImLoopHost {
         // ... 移出内存、删除存储
     }
 
-    private boolean sessionExists(String sessionId) { /* 查会话存储 */ return true; }
+    static boolean sessionExists(String sessionId) { /* 查会话存储 */ return true; }
     private void reply(InputOrigin origin, String text) { /* 按 origin 回投渠道 */ }
 }
 ```
 
-### 4.5 使用态要点
+### 5.5 使用态要点
 
 1. **命令建任务，执行器跑任务**：`/loop`、`loop_add` 与管理态的 `loop.schedule(...)` 建出的是同一种任务；到点后统一经执行器执行，命令本身从不开流。
 2. **执行器决定输出去向**：缺省执行器只把结果写进 `lastResult`，不会推给任何渠道。需要把每一轮推给用户的宿主必须注册自己的通道执行器，并自行保存会话到渠道的回复路由。
@@ -367,11 +521,13 @@ public class ImLoopHost {
 
 ---
 
-## 5. 管理态：用户在界面上操作
+## 6. 自己接线（L1）：管理态，用户在界面上操作
+
+用 L0 时，管理接口改为先鉴权、再 `host.admin(tenant).call(sid, LoopExtension.class, 操作)`（3.2 第 4 条），会话存在性与归属由骨架检查；本章的门面语义、结果码、`LoopSpec` / `LoopPatch` / `extra` 的写法照样适用。
 
 管理态不经过 `handle`：面板上的每个按钮对应一个宿主接口，接口直接调用 `LoopExtension` 门面。loop 门面只按 `sessionId` 字符串寻址，不需要会话对象。
 
-### 5.1 界面动作与门面对照
+### 6.1 界面动作与门面对照
 
 写操作统一返回 `org.noear.solon.ai.harness.HarnessResult<T>`：`isOk()` 时 `getValue()` 为结果，失败时按 `getCode()` 映射状态、`getDetail()` 为原因。业务失败不再抛异常，也没有 `boolean` / `null` 哨兵值。
 
@@ -389,7 +545,7 @@ public class ImLoopHost {
 
 所有写操作在多节点部署下还可能返回 `NOT_OWNER`（会话由其它节点持有，`getOwner()` 为持有者，宿主转发）。界面上的「启停开关」由宿主按 `isEnabled()` 选择 `pause` 或 `resume`，插件不提供 `toggle`。
 
-### 5.2 完整示例：管理接口
+### 6.2 完整示例：管理接口
 
 ```java
 import org.noear.solon.ai.agent.AgentSession;
@@ -531,7 +687,7 @@ public class LoopAdminController {
 }
 ```
 
-### 5.3 新建：LoopSpec 的几种调度
+### 6.3 新建：LoopSpec 的几种调度
 
 ```java
 // 固定间隔：[1, 1440] 分钟；everyMinutes(null) = 缺省 5 分钟
@@ -552,11 +708,11 @@ loop.schedule(sid, LoopSpec.of("remind me").at(LocalDateTime.of(2026, 12, 5, 18,
 
 调度方式优先级 `at > cron > everyMinutes`。校验失败返回 `INVALID`，任务总数或会话配额达上限返回 `FULL`，失败时不会留下半个任务。
 
-### 5.4 编辑：update + LoopPatch
+### 6.4 编辑：update + LoopPatch
 
 ```java
 // null = 保持原值；启停、迭代、最近结果、一次性属性与扩展字段都保留
-LoopTask u = loop.update(sid, taskId, LoopPatch.create()
+HarnessResult<LoopTask> u = loop.update(sid, taskId, LoopPatch.create()
         .prompt(req.prompt)            // null 或空白 = 保持
         .everyMinutes(req.interval)    // null = 保持；越界时 update 返回 INVALID
         .cron(req.cron)                // null = 保持；"" = 清除 cron，回到固定间隔
@@ -568,14 +724,14 @@ loop.update(sid, taskId, LoopPatch.create().cron("").everyMinutes(30));
 
 非法补丁返回 `INVALID`，原任务保持不变（先校验、后替换）。任务正在执行时也可以修改：新版本不会与在途那一轮并发，本轮结果记到新版本上，不需要先停。
 
-### 5.5 宿主扩展字段（extra）
+### 6.5 宿主扩展字段（extra）
 
 面板常需要给任务挂上自己的元数据（如所属自动化、显示名），用扩展字段：
 
 ```java
 import org.noear.snack4.ONode;
 
-LoopTask t = loop.schedule(sid, LoopSpec.of("日报")
+LoopTask t = loop.schedule(sid, LoopSpec.of("日报")      // 写操作返回 HarnessResult，此处按 OK 取值
         .cron("0 0 18 * * ?")
         .extra("automation", new ONode().set("id", "a1").set("name", "日报")));
 
@@ -589,7 +745,7 @@ loop.update(sid, t.getId(), LoopPatch.create()
 
 扩展字段随任务原样持久化（插件不解析），`toMap()` 不含扩展字段，需要展示时由宿主自行追加；键为空或与核心字段同名时抛 `IllegalArgumentException`。
 
-### 5.6 刷新界面
+### 6.6 刷新界面
 
 loop 没有状态监听器。面板刷新靠重新读取：`list` / `listAll` 返回的快照里有 `running`（是否正在执行）、`enabled`（被连续失败自动停用后为 false）、`currentIteration`、`lastResult`、`lastExecutedAt`。徽章计数可用状态键：
 
@@ -598,9 +754,9 @@ int count = engine.status(session).get(LoopExtension.STATUS_TASKS); // 本会话
 boolean active = loop.hasActiveTasks();                             // 是否有启用中的任务（闲置回收判定用）
 ```
 
-### 5.7 管理态要点
+### 6.7 管理态要点
 
-1. **先校验会话**：门面只做多节点归属检查（`NOT_OWNER`），不检查会话是否存在，给任意 sessionId 都能建任务。缺省执行器到点时用 `engine.getSessionOrNull(sessionId)` 取会话，不存在就 skip，任务会一直空转。管理接口应先确认会话存在，并校验宿主自己的用户归属。
+1. **先校验会话、先鉴权**：门面不经 `handle` 受理、不校验作用域，只做多节点归属检查（`NOT_OWNER`，宿主按 `getOwner()` 转发），也不检查会话是否存在，给任意 sessionId 都能建任务。多租户的管理接口要先自行鉴权（引擎侧的隔离、作用域与会话归属见 [SAAS.md](../solon-ai-harness-core/docs/SAAS.md)；L0 下见第 3 章）。缺省执行器到点时用 `engine.getSessionOrNull(sessionId)` 取会话，不存在就 skip，任务会一直空转。管理接口应先确认会话存在，并校验宿主自己的用户归属。
 2. **不需要判忙**：管理接口随时可调。会话忙时到点的一轮会被放弃（不计错误），等下一次到点。
 3. **立即执行可能被放弃**：`trigger` 是异步的，仍经守卫：任务已暂停或会话正忙时，这一轮直接放弃；返回 `OK` 只表示任务存在。
 4. **删除不会中断正在跑的一轮**：`remove` 只删任务；需要"停止并删除"时，先 `engine.interrupt(session, InterruptMode.CANCEL_STREAM)` 再 `remove`（示例的 `stopRunning`）。不要用 `InterruptMode.INTERRUPT_ALL`：它会清空该会话 queue 里的排队消息，并在历史里写「用户已取消」。
@@ -610,13 +766,14 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ---
 
-## 6. 配置说明
+## 7. 配置说明
 
-### 6.1 Builder 选项
+### 7.1 Builder 选项
 
 | 方法 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `store(source, dir[, legacyFile])` | `MountSource`, `String`, `String` | 不设置（只在内存） | 任务存储来源与来源内**目录**，按会话分存为 `<dir>/<encode(sessionId)>.json`，变更只重写该会话的文件；建议 `dir = "loop"`（在引擎缺省受保护名单内，其它名字要加进 `protectedStatePaths`）；`legacyFile`（如 `"tasks.json"`）存在时首次加载拆分迁移，旧文件改名为 `.migrated-<时间戳>`；`source` 为 null = 只在内存；`source` 非 null 时 `dir` 不可为空 |
+| `store(source, dir[, legacyFile])` | `MountSource`, `String`, `String` | 不设置（只在内存） | 任务存储来源与来源内**目录**，按会话分存为 `<dir>/<encode(sessionId)>.json`，变更只重写该会话的文件；建议 `dir = "loop"`（在引擎缺省受保护名单内，其它名字要加进 `protectedStatePaths`）；`legacyFile`（如 `"tasks.json"`）存在时首次加载拆分迁移，旧文件改名为 `.migrated-<时间戳>`；`source` 为 null = 只在内存；`source` 非 null 而 `dir` 为空时 `build()` 抛 `IllegalArgumentException` |
+| `store(dir)` | `String` | 不设置（只在内存） | 存到引擎状态来源（`engine.getStateSource()`）内的 `dir` 目录，**挂接时才取来源**，构建期装配不必先拿到引擎；引擎没有状态来源时只在内存；不支持旧单文件迁移；`dir` 为空或空白时立即抛 `IllegalArgumentException`。与上一行互相覆盖，以最后一次调用为准 |
 | `quota(sessionIdToLimit)` | `ToIntFunction<String>` | 不限 | 按会话（租户）的任务数上限，≤0 = 不限；异常按不限处理，`maxTasks` 总量仍生效 |
 | `sessionAlive(predicate)` | `Predicate<String>` | 恒 `true` | 加载时孤儿判定：返回 false 的会话其任务不再恢复并从存储删除；谓词抛异常按存在处理；传 null 忽略 |
 | `maxErrors(supplier)` | `IntSupplier` | `() -> 3`（`DEFAULT_MAX_ERRORS`） | 任务级连续失败阈值，每次实时读取，实际取值不小于 1；传 null 忽略 |
@@ -625,15 +782,15 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `defaultExecutor(enabled)` | `boolean` | `true` | 是否启用缺省执行器：`engine.handle(HarnessInput.ofProgram(session, prompt, "loop")).call()`，取最终文本 |
 | `jobManager(jobManager)` | `IJobManager` | `JobManager.getInstance()` | 自备调度器；显式传 null = 关闭调度（任务仅作元数据，不告警） |
 
-### 6.2 LoopSpec（创建参数）
+### 7.2 LoopSpec（创建参数）
 
 入口：`LoopSpec.of(String prompt)`。所有可选项都接受 null。
 
 | 方法 | 类型 | 默认 | 规则 |
 |---|---|---|---|
 | `of(prompt)` | `String` | 必填 | 为空或空白抛 `IllegalArgumentException`；保存前 trim |
-| `everyMinutes(minutes)` | `Integer` | 5（`DEFAULT_INTERVAL_MINUTES`） | 须在 [1, 1440]，否则抛异常；设置了 cron 或 at 时不生效 |
-| `cron(cron)` | `String` | 不用 | null/空白 = 不用；6 或 7 位；无法解析或已无未来触发时刻抛异常 |
+| `everyMinutes(minutes)` | `Integer` | 5（`DEFAULT_INTERVAL_MINUTES`） | 须在 [1, 1440]，越界时 `schedule` 返回 `INVALID`；设置了 cron 或 at 时不生效 |
+| `cron(cron)` | `String` | 不用 | null/空白 = 不用；6 或 7 位；无法解析或已无未来触发时刻时 `schedule` 返回 `INVALID` |
 | `at(at)` | `LocalDateTime` | 不用 | 服务器本地时间，须为未来时刻；转为 `0 分 时 日 月 ? 年`，自动 oneShot |
 | `oneShot(oneShot)` | `Boolean` | false | 为 true 时必须有 at 或 cron |
 | `runNow(runNow)` | `Boolean` | false | 创建后立即执行首轮（仅固定间隔生效）；与一次性互斥 |
@@ -641,7 +798,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 `schedule` 时统一校验，失败返回 `INVALID`（`getDetail()` 为原因）：prompt 为空、间隔越界、at 不是未来时刻、一次性却没有 at/cron、一次性又要求 runNow、cron 无法解析或已无未来触发时刻、sessionId 为空。扩展字段键非法在调用 `extra` 时即抛出。
 
-### 6.3 LoopPatch（修改参数）
+### 7.3 LoopPatch（修改参数）
 
 入口：`LoopPatch.create()`。
 
@@ -649,13 +806,13 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 |---|---|---|---|
 | `prompt(prompt)` | `String` | 保持 | 空白同样视为保持；保存前 trim |
 | `everyMinutes(minutes)` | `Integer` | 保持 | 越界 [1, 1440] 时 `update` 返回 `INVALID` |
-| `cron(cron)` | `String` | 保持 | 空串 = 清除 cron、回到固定间隔；新 cron 无法解析或不可触发时抛异常 |
+| `cron(cron)` | `String` | 保持 | 空串 = 清除 cron、回到固定间隔；新 cron 无法解析或不可触发时 `update` 返回 `INVALID` |
 | `runNow(runNow)` | `Boolean` | 保持 | 只更新记录上的标志；修改不会触发立即执行（立即首轮只在创建时生效） |
 | `extra(key, value)` | `String`, `ONode` | value 为 null = 删除该键 | 只改列出的键；键非法抛异常 |
 
 保留不变：任务 ID、创建时间、启停状态、迭代数、最近结果、一次性属性、未列出的扩展字段。修改后若任务为启用状态，会以新定义重新注册 job；cron 在注册时已不可触发则任务被自动停用并记 WARN。
 
-### 6.4 LoopTask（只读快照）
+### 7.4 LoopTask（只读快照）
 
 `LoopTask` 对宿主只读：无公开构造器，无公开修改方法。
 
@@ -692,7 +849,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `lastResult` | 有值时 | 最近结果 |
 | `lastExecutedAt` | 有值时 | ISO-8601 字符串 |
 
-### 6.5 LoopOutcome（执行结论）
+### 7.5 LoopOutcome（执行结论）
 
 | 构造 | 判定方法 | 调度器处理 |
 |---|---|---|
@@ -704,13 +861,13 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 `LoopExecutor` 签名：`LoopOutcome handle(String sessionId, String prompt) throws Exception`。
 
-### 6.6 状态键
+### 7.6 状态键
 
 | 常量 | 定义 | 说明 |
 |---|---|---|
 | `LoopExtension.STATUS_TASKS` | `SessionStatus.Key.count("loop.tasks")` | 本会话任务数（含已暂停）；经 `engine.status(session).get(...)` 读取，只供展示与宿主业务，内核不读 |
 
-### 6.7 模型工具（LoopTalent）
+### 7.7 模型工具（LoopTalent）
 
 只挂在顶层请求上（委派不挂）。会话 ID 由框架注入（`__sessionId`），无活跃会话时返回 `ERROR:` 文本。所有成功响应为 JSON，附带 `serverNow`（`yyyy-MM-dd'T'HH:mm:ss`）与 `timezone`，供模型换算相对时间。
 
@@ -730,13 +887,13 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `oneShot` | 默认 false；为 true 时必须有 `at` 或 `cron` |
 | `runNow` | 默认 false；与 `oneShot=true` 互斥 |
 
-### 6.8 /loop 命令（LoopCommand）
+### 7.8 /loop 命令（LoopCommand）
 
-语法见 4.1，命令边界见 4.2。
+语法见 5.1，命令边界见 5.2。
 
 ---
 
-## 7. 持久化格式与兼容
+## 8. 持久化格式与兼容
 
 存储内容（`store` 指定目录下每个会话一个文件，如 `loop/web-xxx.json`；单个文件损坏只影响该会话）：
 
@@ -766,7 +923,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 | 规则 | 说明 |
 |---|---|
-| 写入时机 | 每次变更（创建、修改、启停、删除、一轮结束、出错）全量写入；写入串行化 |
+| 写入时机 | 每次变更（创建、修改、启停、删除、一轮结束、出错）按内存快照落盘，只重写内容有变化的会话文件（每个文件整体写入）；写入串行化；扩展摘除后不再写盘 |
 | 可选字段 | `cron`、`lastResult`、`lastExecutedAt` 有值才写；`runNow`、`oneShot` 仅为 true 时写 |
 | 不持久化 | 运行锁 `running`、连续错误计数 |
 | 读取缺省 | 缺 `enabled` 视为 true；缺 `currentIteration` 为 0；缺 `runNow` / `oneShot` / `cancelled` / `autoInterval` 为 false |
@@ -786,12 +943,12 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ---
 
-## 8. API 速查
+## 9. API 速查
 
 | 方法 | 返回 | 时态 | 说明 |
 |---|---|---|---|
 | `LoopExtension.builder()` | `Builder` | 装配 | 构建入口 |
-| `addExecutor(channel, claim, handler)` | `LoopExtension` | 装配 | 注册通道执行器（可链式）；handler 为 null 时忽略 |
+| `addExecutor(channel, claim, handler)` | `LoopExtension` | 装配（自己接线；L0 由骨架登记） | 注册通道执行器（可链式）；挂接后调用；handler 为 null 时忽略；谓词为 null 认领全部，谓词抛异常按不命中计 |
 | `schedule(sessionId, LoopSpec)` | `HarnessResult<LoopTask>` | 管理（`/loop`、`loop_add` 同一张表） | 新建并调度；`INVALID` / `FULL` / `NOT_OWNER` |
 | `update(sessionId, taskId, LoopPatch)` | `HarnessResult<LoopTask>` | 管理 | 按补丁修改；`NOT_FOUND` / `INVALID` |
 | `pause(sessionId, taskId)` | `HarnessResult<Void>` | 管理（对应 `/loop pause`） | 暂停；`NOT_FOUND` |
@@ -810,17 +967,19 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 ---
 
-## 9. 注意事项
+## 10. 注意事项
 
-1. **用 `addExtensionIfAbsent` 装配**：按类型幂等；同一实例重复 `addExtension` 只算一次。**SERVER 模式（`runtimeMutable=false`）下 build 之后不能再挂扩展**（抛 `IllegalStateException`）：改在构建期用 `Builder.extensionAdd(...)`。
+1. **构建期用 `Builder.extensionAdd(...)` 装配**：STANDALONE / SERVER 通用；同一实例重复 `extensionAdd` / `addExtension` 只算一次。运行期写法 `engine.addExtensionIfAbsent(...)`（按类型幂等）仅 `runtimeMutable` 时可用（STANDALONE 缺省），**SERVER 模式 build 之后调用抛 `IllegalStateException`**。用 L0 时必须在构建期挂上，骨架才会为它登记执行器（第 3 章）。
 2. **会话忙时本轮直接放弃**：不计错误、不重试、也不消耗一次性配额，等下一次到点。执行器无需自行判断会话忙。
 3. **同一任务不会并发**：上一轮未结束时到点的触发被丢弃。
 4. **一次性任务**：由调度触发且通过守卫后，无论 done / skip / failed 都会被删除；`trigger` 手动执行不消耗配额。
 5. **`runNow` 只在创建时生效**：加载恢复、恢复启用、修改后重新注册时都按完整间隔延迟首轮；cron 模式下 `runNow` 不起作用。
-6. **cron 在恢复路径不会拒绝**：加载、修改、恢复启用时若 cron 已无未来触发时刻，任务被自动停用并记 WARN；创建入口则直接抛异常。
+6. **cron 在恢复路径不会拒绝**：加载、修改、恢复启用时若 cron 已无未来触发时刻，任务被自动停用并记 WARN；创建入口则直接拒绝（`schedule` 返回 `INVALID`，`/loop` 与 `loop_add` 回报错误）。
 7. **自动停用后需手动恢复**：连续失败达阈值后任务 `enabled=false`，调用 `resume` 会清零计数并重新调度。
 8. **时间为服务器本地时区**：`at`、cron、`loop_add` 的 `serverNow` 均基于 JVM 默认时区。
-9. **删除会话**：经 `engine.removeSession(sessionId)` 触发 `onSessionRemove`，自动删除该会话全部任务。
+9. **删除会话**：经 `engine.removeSession(sessionId)` 触发 `onSessionRemove`，自动删除该会话全部任务；L0 下用 `host.closeSession(...)`（见 [host README §7.2](../solon-ai-harness-host/README.md#72-会话的开通与删除)）。
 10. **无 JobManager**：未显式关闭却取不到时只告警，任务只存不跑；测试中请显式 `jobManager(null)`。
-11. **`setEnabled(false)` 不停任务**：只关闭 `loop_*` 工具，`/loop` 与已有任务继续运行；要停任务请 `pause` / `remove`。
+11. **`setEnabled(false)` 不停任务，也没有「只关命令」的开关**：只关闭 `loop_*` 工具，`/loop`、门面与已有任务继续运行；要停任务请 `pause` / `remove`。Builder 没有 `commandEnabled` 之类的选项，`onAttach` 里总会注册 `/loop`（幂等）；不想提供 loop 能力就不装配本插件。`engine.setExtensionEnabled(loop, false)` 对本插件的效果与 `loop.setEnabled(false)` 相同（另外会重建主代理），但它同样受 `runtimeMutable` 限制（SERVER 模式 build 之后抛 `IllegalStateException`），且未加入引擎的扩展会先被加入再直接返回；初始就停用工具时，在装配前调 `loop.setEnabled(false)`。
 12. **缺省执行器**：以程序输入（`HarnessInput.ofProgram`，来源 `loop`）进入引擎，提示词不解析命令与 @提及；执行失败抛给调度器计错误。
+13. **只有 builder**：`LoopExtension` 没有公开构造器，统一 `LoopExtension.builder()...build()`；job 名前缀按实例自动生成，无需传标识（1.2）。
+14. **L0 下的后台轮次**：被中断或没有最终回答的一轮按 `skip` 计（不计错误、不增加迭代），只有出错才参与退避与自动停用；一次性任务在任何结论下都会被删除（第 4 条）。

@@ -20,7 +20,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * solon-ai-harness/docs/SAAS.md §二「最小可运行骨架」的装配写法必须能在 SERVER 模式下原样启动。
+ * solon-ai-harness-core/docs/SAAS.md §二「最小可运行骨架」的装配写法必须能在 SERVER 模式下原样启动。
  */
 class SaasSampleBootTest {
 

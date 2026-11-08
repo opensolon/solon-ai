@@ -4,7 +4,7 @@
 隔离模型、部署模式、作用域、会话归属、存储、容量与已知限制，以及不用骨架、直连 `engine.handle`（L1）时的写法。
 
 > **先看 [QUICKSTART-SAAS.md](../../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)**：用宿主骨架 `HarnessHost`（L0）搭服务端，四步即可；
-> 术语见 [CONCEPTS.md](CONCEPTS.md)，引擎的全部配置见 [README.md](../README.md) §1.2 / §8，安全底线见 README §10.3。
+> 术语见 [CONCEPTS.md](../../solon-ai-harness-host/docs/CONCEPTS.md)，引擎的全部配置见 [core README](../README.md) §1.2 / §6，安全底线见 core README §8.3。
 > 用 L0 时，本文 §六 的 L1 写法由骨架代办，可以跳过；其余各节（隔离、作用域、归属、存储、容量）两层都适用。
 
 > 文中 `TenantStore`、`Authz`、`RedisOwnership` 等是**宿主自己的类**（示意），harness 不提供；
@@ -302,7 +302,7 @@ loop 用其它目录名时，请把它加进这个名单。
 （只查不建会话、`RunTicket`、`afterRun` 续发、`isOccupied` 口径、派发轮次的回复路由、开流前失败的 `discard`、
 `engine_closed` 换新引擎重试、`not_owner` 转发、管理门面的统一结果码、入队后自动续发），写法见 [QUICKSTART-SAAS.md](../../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)。
 
-下面是**不用骨架**、直连 `engine.handle`（L1）时的写法，适用于只引 core、或需要自定义输出时序的宿主。单个结局的细节见 [README](../README.md) §2.3 / §3.6。
+下面是**不用骨架**、直连 `engine.handle`（L1）时的写法，适用于只引 core、或需要自定义输出时序的宿主。单个结局的细节见 [ENGINE-L1.md](ENGINE-L1.md) §1.3 / §2.6。
 
 ### 6.1 使用态（用户发消息）
 
