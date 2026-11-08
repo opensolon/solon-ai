@@ -28,7 +28,7 @@ import java.util.Map;
  * 字段名齐全的 Map 写回去——等于把 harness 的持久化格式复制到了宿主代码里。键名一旦调整
  * 宿主就静默失效，字段语义变更（如 {@code condition}/{@code objective} 双写）宿主也无从得知。</p>
  *
- * <p>本类是该投影<b>字段名的唯一出处</b>：运行态的读写（{@code GoalState.toMap/fromMap}）
+ * <p>本类是该投影<b>字段名的唯一出处</b>：运行态的读写（{@code Goal.toMap/fromMap}）
  * 同样委托这里，宿主只面对类型化 getter 与 {@link #writeTo}，不再出现任何字段名字符串。</p>
  *
  * <p>只读值对象，不可变；由 {@link #from(FlowContext)} / {@link #builder()} 创建。</p>
@@ -55,7 +55,7 @@ public final class GoalProjection {
 
     private final String goalId;
     private final String objective;
-    private final GoalSnapshot.Status status;
+    private final GoalStatus status;
     private final long consumedTokens;
     private final long maxTokens;
     private final int maxIterations;
@@ -91,7 +91,7 @@ public final class GoalProjection {
     public String getObjective() { return objective; }
 
     /** 投影状态枚举（而非状态名字符串）。 */
-    public GoalSnapshot.Status getStatus() { return status; }
+    public GoalStatus getStatus() { return status; }
 
     /** 是否活跃（PURSUING）。 */
     public boolean isActive() { return status != null && status.isActive(); }
@@ -135,9 +135,9 @@ public final class GoalProjection {
         if (statusValue == null) {
             return null;
         }
-        GoalSnapshot.Status status;
+        GoalStatus status;
         try {
-            status = GoalSnapshot.Status.valueOf(String.valueOf(statusValue));
+            status = GoalStatus.valueOf(String.valueOf(statusValue));
         } catch (Throwable e) {
             // 未知状态名：按「无有效投影」处理，避免宿主拿到半残对象
             return null;
@@ -160,7 +160,7 @@ public final class GoalProjection {
     }
 
     /** 轻读投影状态（宿主做启动恢复判定时的最常用操作）。 */
-    public static GoalSnapshot.Status statusOf(FlowContext context) {
+    public static GoalStatus statusOf(FlowContext context) {
         GoalProjection projection = from(context);
         return projection == null ? null : projection.getStatus();
     }
@@ -195,9 +195,9 @@ public final class GoalProjection {
         return map;
     }
 
-    // ===== GoalState 互通（字段名只在本类出现） =====
+    // ===== Goal 互通（字段名只在本类出现） =====
 
-    static GoalProjection ofState(GoalState gs) {
+    static GoalProjection ofGoal(Goal gs) {
         return new Builder()
                 .goalId(gs.getId())
                 .objective(gs.getObjective())
@@ -237,7 +237,7 @@ public final class GoalProjection {
     public static final class Builder {
         private String goalId;
         private String objective;
-        private GoalSnapshot.Status status;
+        private GoalStatus status;
         private long consumedTokens;
         private long maxTokens;
         private int maxIterations;
@@ -251,12 +251,12 @@ public final class GoalProjection {
 
         public Builder goalId(String goalId) { this.goalId = goalId; return this; }
         public Builder objective(String objective) { this.objective = objective; return this; }
-        public Builder status(GoalSnapshot.Status status) { this.status = status; return this; }
+        public Builder status(GoalStatus status) { this.status = status; return this; }
         /** 按状态名设置；非法名返回 null（调用方据此判定迁移数据不可用）。 */
         public Builder statusName(String statusName) {
             if (statusName == null) return this;
             try {
-                this.status = GoalSnapshot.Status.valueOf(statusName);
+                this.status = GoalStatus.valueOf(statusName);
             } catch (Throwable e) {
                 this.status = null;
             }

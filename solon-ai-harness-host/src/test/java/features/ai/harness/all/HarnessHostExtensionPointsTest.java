@@ -30,7 +30,7 @@ import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.host.SubmitResult;
-import org.noear.solon.ai.harness.host.SubmitResult.Kind;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.RejectReason;
 
@@ -97,11 +97,12 @@ class HarnessHostExtensionPointsTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            host.submit("acme", "ghost", HarnessInput.of("x").origin(InputOrigin.channel("web")));
+            host.submit("acme", "ghost", HarnessInput.of("x").origin(InputOrigin.channel("web")).attr("reqId", "r1"));
             HostInput rejected = sink.rejectedInputs.get(0);
+            assertEquals("r1", rejected.getAttr("reqId"), "会话不存在的拒绝也带着调用方的属性（请求关联）");
             assertEquals("acme", rejected.getTenant());
             assertEquals("ghost", rejected.getSessionId(), "拒绝也知道是哪个会话（按会话推送的宿主才能投递）");
-            assertEquals(Kind.REJECTED, rejected.getKind(), "受理之前就结束的输入也有结果类型，与 submit 返回值一致");
+            assertEquals(Disposition.REJECTED, rejected.getDisposition(), "受理之前就结束的输入也有结果类型，与 submit 返回值一致");
 
             host.submit("acme", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a")));
             host.submit("acme", "s1", HarnessInput.of("second").origin(InputOrigin.channel("b")));
@@ -109,10 +110,10 @@ class HarnessHostExtensionPointsTest {
             assertEquals("acme", deferred.getTenant());
             assertEquals("s1", deferred.getSessionId());
             assertEquals("second", deferred.getText(), "排队时可回放用户消息");
-            assertEquals(Kind.DEFERRED, deferred.getKind());
+            assertEquals(Disposition.DEFERRED, deferred.getDisposition());
 
             assertEquals(1, sink.admittedInputs.size(), "admitted 只在 TASK / REPLY / HITL / IGNORED 时调用");
-            assertEquals(Kind.STARTED, sink.admittedInputs.get(0).getKind());
+            assertEquals(Disposition.STARTED, sink.admittedInputs.get(0).getDisposition());
 
             // 续发的一轮：回合带上队列项（文本、id、来源）
             assertTrue(executor.runNext(5_000));
@@ -123,7 +124,7 @@ class HarnessHostExtensionPointsTest {
             assertNotNull(dispatched.getInput().getQueueItem(), "续发轮次可取回队列项");
             assertEquals("second", dispatched.getInput().getText());
             assertTrue(dispatched.getInput().isDispatched());
-            assertEquals(Kind.STARTED, dispatched.getInput().getKind(), "续发开出的一轮也是 STARTED");
+            assertEquals(Disposition.STARTED, dispatched.getInput().getDisposition(), "续发开出的一轮也是 STARTED");
         } finally {
             engine.shutdown();
         }
@@ -136,9 +137,9 @@ class HarnessHostExtensionPointsTest {
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            assertEquals(SubmitResult.Kind.IGNORED, host.submit("t", "s1", HarnessInput.of("")).getKind());
+            assertEquals(Disposition.IGNORED, host.submit("t", "s1", HarnessInput.of("")).getDisposition());
             assertEquals(1, sink.admittedInputs.size());
-            assertEquals(Kind.IGNORED, sink.admittedInputs.get(0).getKind());
+            assertEquals(Disposition.IGNORED, sink.admittedInputs.get(0).getDisposition());
         } finally {
             engine.shutdown();
         }
@@ -207,12 +208,12 @@ class HarnessHostExtensionPointsTest {
             host.openSession("t", "s1", "u1");
 
             SubmitResult idor = host.submit("t", "s1", HarnessInput.of("hello").principal("u2"));
-            assertEquals(SubmitResult.Kind.REJECTED, idor.getKind());
+            assertEquals(Disposition.REJECTED, idor.getDisposition());
             assertEquals(RejectReason.SCOPE_UNAVAILABLE, idor.getRejectReason());
             assertEquals(403, idor.httpStatus());
             assertFalse(engine.status(engine.getSessionOrNull("s1")).isOccupied(), "被拒的输入不占位");
 
-            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", HarnessInput.of("hello").principal("u1")).getKind());
+            assertEquals(Disposition.STARTED, host.submit("t", "s1", HarnessInput.of("hello").principal("u1")).getDisposition());
         } finally {
             engine.shutdown();
         }
@@ -269,7 +270,7 @@ class HarnessHostExtensionPointsTest {
             host.submit("t", "s1", HarnessInput.of("first"));
             // 受理窗口里还没开流：插话无处可去，回落到排队
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("more detail").whenBusy(BusyPolicy.STEER));
-            assertEquals(SubmitResult.Kind.DEFERRED, r.getKind());
+            assertEquals(Disposition.DEFERRED, r.getDisposition());
             assertTrue(sink.steeredInputs.isEmpty());
         } finally {
             engine.shutdown();

@@ -81,9 +81,9 @@ class GoalBoundaryTest {
     }
 
     @Test
-    void goalStateMustNotUseGlobalStaticConfiguration() throws IOException {
-        Path gs = GOAL_DIR.resolve("GoalState.java");
-        assertTrue(Files.exists(gs), "GoalState 源码必须存在");
+    void goalMustNotUseGlobalStaticConfiguration() throws IOException {
+        Path gs = GOAL_DIR.resolve("Goal.java");
+        assertTrue(Files.exists(gs), "Goal 源码必须存在");
 
         String content = new String(Files.readAllBytes(gs), StandardCharsets.UTF_8);
         assertTrue(!content.contains("static volatile int budgetWarningPercent"),

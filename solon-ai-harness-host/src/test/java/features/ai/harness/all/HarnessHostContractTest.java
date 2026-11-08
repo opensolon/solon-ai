@@ -27,6 +27,7 @@ import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.host.RunSink;
 import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.InterruptMode;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.RejectReason;
@@ -222,7 +223,7 @@ class HarnessHostContractTest {
         try {
             SubmitResult r = host.submit("t", "nope", HarnessInput.of("hello").origin(InputOrigin.channel("web")));
 
-            assertEquals(SubmitResult.Kind.REJECTED, r.getKind());
+            assertEquals(Disposition.REJECTED, r.getDisposition());
             assertEquals(RejectReason.SESSION_NOT_FOUND, r.getRejectReason());
             assertEquals(404, r.httpStatus());
             assertEquals(1, sink.rejectedReasons.size(), "拒绝原因已经经结构化回调发出");
@@ -239,7 +240,7 @@ class HarnessHostContractTest {
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            assertEquals(SubmitResult.Kind.IGNORED, host.submit("t", "s1", HarnessInput.of("")).getKind());
+            assertEquals(Disposition.IGNORED, host.submit("t", "s1", HarnessInput.of("")).getDisposition());
             assertTrue(sink.started.isEmpty());
         } finally {
             engine.shutdown();
@@ -254,7 +255,7 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
         try {
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello").origin(InputOrigin.channel("web")));
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
+            assertEquals(Disposition.STARTED, r.getDisposition(), r.toString());
             AgentSession session = engine.getSessionOrNull("s1");
             await(() -> engine.status(session).isOccupied() == false, "缺省 sink 下也正常收尾");
         } finally {
@@ -270,7 +271,7 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello").origin(InputOrigin.channel("web")));
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
+            assertEquals(Disposition.STARTED, r.getDisposition());
             assertEquals(1, sink.started.size(), "open 在 submit 返回前已调用");
             assertSame(sink.started.get(0), r.getRun().getRun(), "RunHandle 指向同一轮");
 
@@ -293,11 +294,11 @@ class HarnessHostContractTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a"))).getKind());
+            assertEquals(Disposition.STARTED, host.submit("t", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a"))).getDisposition());
 
             // 开流动作尚未执行：会话被受理占位占用，第二条进积压
             SubmitResult second = host.submit("t", "s1", HarnessInput.of("second").origin(InputOrigin.channel("b")));
-            assertEquals(SubmitResult.Kind.DEFERRED, second.getKind());
+            assertEquals(Disposition.DEFERRED, second.getDisposition());
             assertEquals(1, second.getBacklogPosition());
             assertEquals(202, second.httpStatus());
             assertEquals("b", sink.deferredInputs.get(sink.deferredInputs.size() - 1).getOrigin().getChannel(), "排队回调回给 b");
@@ -326,7 +327,7 @@ class HarnessHostContractTest {
         ManualExecutor executor = new ManualExecutor();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", HarnessInput.of("hello")).getKind());
+            assertEquals(Disposition.STARTED, host.submit("t", "s1", HarnessInput.of("hello")).getDisposition());
 
             // 开流前被停止
             assertTrue(host.admin("t").interrupt("s1", InterruptMode.CANCEL_STREAM).isOk());
@@ -394,6 +395,12 @@ class HarnessHostContractTest {
             assertEquals("node-b", sink.notOwners.get(0));
             assertFalse(sessions.containsKey("s1"), "非持有节点不加载（更不新建）会话");
 
+            host.submit("t", "s1", HarnessInput.of("hello").selectedModel("m1").attr("reqId", "r1"));
+            HostInput rejected = sink.notOwnerInputs.get(1);
+            assertEquals("m1", rejected.getSelectedModel(), "非持有节点的拒绝也带着调用方的选择");
+            assertEquals("r1", rejected.getAttr("reqId"), "宿主靠属性做请求关联");
+            assertNull(rejected.getSession());
+
             HarnessResult<Integer> admin = enqueue(host.admin("t"), "s1", "x", null);
             assertEquals(HarnessResult.Code.NOT_OWNER, admin.getCode());
             assertEquals("node-b", admin.getOwner());
@@ -410,10 +417,17 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
             SubmitResult r = host.decide("t", "s1", "no-such-call", HITLAction.APPROVE, null, null);
-            assertEquals(SubmitResult.Kind.HITL, r.getKind(), "过期卡不得续流（否则会把上一轮问题重跑）");
+            assertEquals(Disposition.HITL, r.getDisposition(), "过期卡不得续流（否则会把上一轮问题重跑）");
             assertTrue(sink.started.isEmpty());
             assertEquals(1, sink.hitlExpiredInputs.size(), "提示卡已失效（文案由宿主决定）");
-            assertTrue(sink.hitlExpiredInputs.get(0).isResume(), "审批决策是续跑：界面续用原来的输出流");
+            assertTrue(sink.hitlExpiredInputs.get(0).isResume(), "decide 总是续跑：界面续用原来的输出流");
+            assertTrue(sink.hitlExpiredInputs.get(0).isHitlDecision());
+
+            // submit + hitl 不带续跑：是审批但不是续跑（与 HarnessInput 同名方法同义）
+            host.submit("t", "s1", HarnessInput.of((String) null).hitl(HITLAction.APPROVE, "no-such-call").resume(false));
+            assertEquals(2, sink.hitlExpiredInputs.size());
+            assertFalse(sink.hitlExpiredInputs.get(1).isResume());
+            assertTrue(sink.hitlExpiredInputs.get(1).isHitlDecision());
         } finally {
             engine.shutdown();
         }
@@ -435,7 +449,7 @@ class HarnessHostContractTest {
         try {
             SubmitResult r = host.submit("t", "s1", HarnessInput.of("hello"));
             assertNotEquals(RejectReason.ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
+            assertEquals(Disposition.STARTED, r.getDisposition());
             await(() -> sink.finished.size() == 1, "新引擎上的一轮正常收尾");
         } finally {
             fresh.shutdown();
@@ -471,7 +485,7 @@ class HarnessHostContractTest {
         HarnessHost host = HarnessHost.builder().engines(k -> engine).executor(executor).build();
         try {
             host.openSession("t", "s1", "u1");
-            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", HarnessInput.of("hello")).getKind());
+            assertEquals(Disposition.STARTED, host.submit("t", "s1", HarnessInput.of("hello")).getDisposition());
 
             assertFalse(host.closeSession("t", "s1"), "忙时拒绝删除，且不做任何事");
             assertNotNull(engine.getSessionOrNull("s1"));
@@ -514,8 +528,8 @@ class HarnessHostContractTest {
             assertEquals(HarnessResult.Code.NOT_FOUND,
                     enqueue(host.admin("a"), "sb", "x", null).getCode(),
                     "A 的引擎看不到 B 的会话（提供者按租户隔离）");
-            assertEquals(SubmitResult.Kind.REJECTED,
-                    host.submit("a", "sb", HarnessInput.of("x")).getKind());
+            assertEquals(Disposition.REJECTED,
+                    host.submit("a", "sb", HarnessInput.of("x")).getDisposition());
             assertNull(engineA.getSessionOrNull("sb"), "A 侧不得因此建出会话");
 
             // B 自己看得到

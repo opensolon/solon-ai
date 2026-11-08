@@ -323,7 +323,7 @@ class GoalCommand extends AbsCommand {
         }
     }
 
-    private static String statusColor(GoalSnapshot.Status status) {
+    private static String statusColor(GoalStatus status) {
         switch (status) {
             case ACHIEVED:
                 return GREEN;

@@ -919,7 +919,7 @@ HarnessEngine.of("/data/work", ".solon/")
 SessionStatus st = engine.status(session);
 int queued  = st.get(QueueExtension.STATUS_PENDING);        // 待执行排队数（没装 queue 为 0）
 int steers  = st.get(SteerExtension.STATUS_PENDING);        // 待生效插话数
-GoalSnapshot.Status goal = st.get(GoalExtension.STATUS_GOAL);  // 无 goal 为 null
+GoalStatus goal = st.get(GoalExtension.STATUS_GOAL);  // 无 goal 为 null
 ```
 
 **会话属性键各自登记**：核心 `HarnessAttrs` 只放引擎键与核心槽位；插件键在插件模块内——`QueueAttrs`（`session.queue.*`）、`GoalAttrs`（`session.goal.*`）、`SteerAttrs`（`session.steer`）。三者都是包内可见类（4.2.0 起），宿主无法也不应读写（`HarnessStructureGuardTest` 与 soloncode 的 `PackageBoundaryTest` 守卫）。
@@ -1220,7 +1220,7 @@ goal.addListener((sessionId, task, removed) -> { /* push to client */ });
 
 ```java
 // 读：类型化，得到 Status 枚举而不是字符串
-GoalSnapshot.Status status = GoalProjection.statusOf(context);
+GoalStatus status = GoalProjection.statusOf(context);
 if (status != null && status.isActive()) { /* 恢复调度 */ }
 
 // 或拿完整投影

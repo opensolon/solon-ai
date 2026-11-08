@@ -127,7 +127,7 @@ public String chat(String tenant, String sid, String text, Context ctx) {
             .origin(InputOrigin.of("web", userOf(ctx), null, null))
             .principal(tenant + "/" + userOf(ctx)));   // sessionId 来自客户端：必须校验主体
     ctx.status(r.httpStatus());                  // 内容已经经 sink 发出，这里只回状态
-    return r.getKind().name();
+    return r.getDisposition().name();
 }
 
 // 或一问一答：SSE 直接返回信号流（客户端断开会停掉本轮）
@@ -144,7 +144,7 @@ public Flux<HostSignal> sse(String tenant, String sid, String text, Context ctx)
 public String decide(String tenant, String sid, String callId, String action, Context ctx) {
     SubmitResult r = host.decide(tenant, sid, callId, HITLAction.of(action), null, InputOrigin.channel("web"));
     ctx.status(r.httpStatus());
-    return r.getKind().name();
+    return r.getDisposition().name();
 }
 
 // 停止

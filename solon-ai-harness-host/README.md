@@ -149,7 +149,7 @@ public class AskController {
                 .principal(principalOf(tenant, userOf(ctx)))        // sessionId 来自客户端：必须校验主体
                 .whenBusy(BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
 
-        switch (r.getKind()) {
+        switch (r.getDisposition()) {
             case STARTED:
                 return awaitAnswer(r.getRun());
             case REPLY:                                             // 斜杠命令的回执
@@ -157,7 +157,7 @@ public class AskController {
             default:                                                // REJECTED / IGNORED / ...
                 ctx.status(r.httpStatus());
                 return Result.failure(r.httpStatus(),
-                        r.getRejectReason() != null ? r.getRejectReason().code() : r.getKind().name());
+                        r.getRejectReason() != null ? r.getRejectReason().code() : r.getDisposition().name());
         }
     }
 
@@ -491,7 +491,7 @@ public String send(String tenant, String sid, String text, String model, Context
             .whenBusy(BusyPolicy.STEER)
             .selectedModel(model).attr("effort", ctx.param("effort")));
     ctx.status(r.httpStatus());
-    return r.getKind().name();
+    return r.getDisposition().name();
 }
 ```
 
@@ -512,7 +512,7 @@ public String decide(String tenant, String sid, String callId, String action, St
     SubmitResult r = host.decide(tenant, sid, callId, HITLAction.of(action), note,
             InputOrigin.of("web", userOf(ctx), sid, null));
     ctx.status(r.httpStatus());                                 // STARTED = 已续跑；HITL = 还有未决卡或卡已失效
-    return r.getKind().name();
+    return r.getDisposition().name();
 }
 ```
 
@@ -972,7 +972,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 
 | 方法 | 说明 |
 |---|---|
-| `getKind()` | 结果类型，见下表 |
+| `getDisposition()` | 这次输入的处置 `Disposition`（去向），见下表；与同一次提交里回调看到的 `HostInput.getDisposition()` 是同一个值 |
 | `getRun()` | 本次请求开出的那一轮（仅 `STARTED`，否则 null） |
 | `getReplyText()` | 回执文本（仅 `REPLY`；命令无输出时为 null） |
 | `getHitlCards()` | 尚未决策的审批卡（仅 `HITL`；卡已失效时为空；永不为 null） |
@@ -981,7 +981,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 | `getOwner()` | 持有者节点标识（仅 `NOT_OWNER`，可空） |
 | `httpStatus()` | 建议的 HTTP 状态码，见下表 |
 
-| Kind | 含义 | sink 收到 | `httpStatus()` |
+| `Disposition` | 含义 | sink 收到 | `httpStatus()` |
 |---|---|---|---|
 | `STARTED` | 本轮已交给执行器 | `admitted` → `open` → [`reply`] → `prepare` → `event*` → `finished` → [`hitl`] | 200 |
 | `REPLY` | 命令已执行，只有回执 | `admitted` → `reply` | 200 |
@@ -1043,14 +1043,17 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 | `getOrigin()` | 回复路由：本次输入的来源；队列续发时为当初排队那条消息的来源；永不为 null |
 | `getSession()` | 会话（会话不存在、非持有节点时为 null） |
 | `getText()` | 输入文本（审批决策等为 null） |
-| `getKind()` | 结果类型 `SubmitResult.Kind`，永不为 null；与同一次 `submit` 返回的 `getKind()` 一致（会话不存在、非持有节点、忙时可执行命令触发了任务都是 `REJECTED`，插话成功是 `STEERED`，队列续发与后台轮次开出的一轮是 `STARTED`） |
+| `getDisposition()` | 处置 `Disposition`，永不为 null；与同一次 `submit` 返回的 `getDisposition()` 一致（会话不存在、非持有节点、忙时可执行命令触发了任务都是 `REJECTED`，插话成功是 `STEERED`，队列续发与后台轮次开出的一轮是 `STARTED`） |
 | `isCommand()` / `getCommandName()` / `getCommand()` | 是否斜杠命令 / 命令名 / 解析结果 |
 | `isBesideRunning()` | 是否在正在运行的任务旁边执行（忙时可执行命令）；为 true 时不要改写会话的回复路由与选择 |
 | `hasReply()` | 引擎是否给出了回执文本（命令无输出时为 false，可在 `admitted` 里兜底提示） |
-| `isResume()` | 是否续跑（审批决策或显式续流），界面应续用原来的输出流 |
+| `isResume()` | 是否显式要求续跑（与 `HarnessInput.isResume()` 同义；`host.decide` 总是带续跑），界面应续用原来的输出流 |
+| `isHitlDecision()` | 是否是审批决策（与 `HarnessInput.isHitlDecision()` 同义）；经 `submit` + `hitl(...)` 且不带续跑时，它为 true 而 `isResume()` 为 false |
 | `isDispatched()` / `getQueueItem()` | 是否由队列续发而来 / 续发的那一项 |
 | `getSelectedModel()` / `getSelectedAgent()` | 本次显式选择的模型 / 子代理（未选为 null；续发时为排队时的选择） |
-| `getAttrs()` / `getAttr(key)` | 宿主属性（`HarnessInput.attr` / `Builder.input` 写入的；续发时为排队时保存的），只读 |
+| `getAttrs()` / `getAttr(key)` | 宿主属性（`HarnessInput.attr` / `Builder.input` 写入的；续发时为排队时保存的），只读；会话不存在、非持有节点的拒绝也带着，可用来做请求关联 |
+
+与 `HarnessInput` 同名的读方法（`getText`、`getOrigin`、`getSelectedModel`、`getSelectedAgent`、`getAttrs`、`getAttr`、`isResume`、`isHitlDecision`）含义一致。`HostInput` 不是第二个输入类型，而是「一次输入的处理记录」：输入事实（创建时复制成只读）加上发给谁、引擎怎么处理的。
 
 ### 9.7 `HostRun`、`RunPrep`、`RunHandle`
 

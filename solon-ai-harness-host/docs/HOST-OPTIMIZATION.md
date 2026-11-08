@@ -309,3 +309,47 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 - host：`HostInput.early(kind, …)` / `of(kind, …)` 由骨架传入换算后的 kind（`early` 去掉恒为 null 的队列项参数）；`HostSink.admitted` 注释、README §9.4 / §9.6 与回调时序图改用 `STARTED`。`HarnessHostExtensionPointsTest` 原 `assertNull(getKind())` 改为断言 `REJECTED`，并补断言排队输入为 `DEFERRED`、续发开出的一轮为 `STARTED`。
 - 文档：harness README、host README、QUICKSTART-SAAS 的 `InputOutcome.RejectReason` 改为 `RejectReason`（`input` 包）。
 - 验证：host 79 例全绿（已 install）；core 672 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor），queue 99 / goal 232 / loop 102 / steer 73 全绿；soloncode-cli 1226 例 3F（settings 既有）+3 跳过。
+
+## 十四、HostInput 不删；枚举放哪里有规则（2026-11-08）
+
+### 14.1 决定
+
+**`HarnessInput` 不能替代 `HostInput`。** `HostInput` 的 15 个读方法里只有 6 个与 `HarnessInput` 重复（文本、来源、模型、子代理、属性），另有「发给谁」（租户、会话 ID、会话）与「引擎怎么处理的」（处置、命令、`isBesideRunning`、`hasReply`、队列项）两类。回调直接收 `HarnessInput` 会：① 处理结果没地方放，只能再交出 `InputOutcome`（带 `stream()` / `discard()`，误调会重复订阅或释放占位）；② `HarnessInput` 可改，同一条输入的多个回调可能在不同线程上互相看到改动；③ 受理前就被拒的路径没有副本，只能把调用方的对象交给回调。所以 `HostInput` 是「一次输入的处理记录」，保留；规则是**与 `HarnessInput` 同名的读方法必须同义**。
+
+按这条规则修两处：
+
+| 缺陷 | 改法 |
+|---|---|
+| `HostInput.isResume()` 原为 `isResume() || isHitlDecision()`，与 `HarnessInput.isResume()` 同名不同义（Web 经 `submit` + `hitl(...)` 且 `resume=false` 时两边不一致） | 改为只看 `isResume()`，新增 `isHitlDecision()`。`host.decide` 总带 `resume(true)`，桌面端行为不变 |
+| 非持有节点、会话不存在两条提前拒绝路径构造 `HostInput` 时传 `in=null`，回调读不到调用方的模型、子代理、属性（宿主用属性做请求关联时关联不上） | 改传调用方的 `HarnessInput`；`HostInput` 只复制值、不持有对象 |
+
+**枚举放哪里（与 JDK 一致）**：只被一个类型使用的枚举嵌套在它里面（如 `Thread.State`）；出现在两个以上类型的公开签名里的放到顶层（如 `TimeUnit`）。同一外层类型的嵌套类（如 `HarnessEnginePool.Builder`）算同一个类型。
+
+| 枚举 | 处理 |
+|---|---|
+| `SubmitResult.Kind` | 独立为 host 的 `Disposition`（处置 / 去向）：回调里没有 `SubmitResult`，却要写 `input.getKind() == SubmitResult.Kind.STARTED`。名字考虑过 `SubmitKind`（中文不好讲）、`InputKind`（会被读成「输入是哪一类」）、`SubmitStatus`（与 `SessionStatus` 撞词）。getter 跟着改为 `getDisposition()`（见 14.3） |
+| `GoalSnapshot.Status` | 守卫首跑抓到：出现在 `GoalExtension`、`GoalProjection` 的公开签名里，独立为 goal 包的 `GoalStatus` |
+| `HarnessEnginePool.WhenFull` | 只在池内，保留嵌套；改名 `FullPolicy`，与 `whenBusy(BusyPolicy)` 同一写法（`whenFull(FullPolicy.WAIT, …)`） |
+| `InputOutcome.Kind`、`HarnessResult.Code`、`HostSignal.Type`、`RunOutcome.End` / `CancelCause` | 只被一个类型使用，保留嵌套。`InputOutcome.Kind` 不跟着独立：前缀本身说明它是 core 层的词，与 host 的 `Disposition` 分得开；`HostSignal.Type` 不复用 `Disposition`（没有 `STARTED`，多了 `EVENT` / `FINISHED`） |
+
+守卫：`HarnessStructureGuardTest.nestedPublicEnumsStayWithTheirOwner`——反射扫描 core、四插件、host 的全部公开类型，嵌套公开枚举出现在别的外层类型的公开 / 受保护方法、构造器、字段签名里（含泛型参数）即失败。
+
+### 14.2 执行记录
+
+- host：新增 `Disposition.java`，删除 `SubmitResult.Kind`；`HostInput`（`getKind()` 返回 `Disposition`，`isResume` 改语义，新增 `isHitlDecision`）、`SubmitResult`、`HarnessHost`（`kindOf`、`early` 等）跟着改；两条提前拒绝路径传调用方输入。测试：6 个类的 `SubmitResult.Kind` 换成 `Disposition`；补断言「会话不存在 / 非持有节点的拒绝带着属性与模型」「`submit` + `hitl` 不带续跑时 `isResume()` 为 false、`isHitlDecision()` 为 true」。
+- core：`HarnessEnginePool.WhenFull` → `FullPolicy`。
+- goal：新增 `GoalStatus.java`，`GoalSnapshot` 删除内部枚举（状态机图移到 `GoalStatus`）；goal 主代码、测试、README 与 harness README 换名。
+- soloncode：`WebHostSink`、`WebGate`、`DesktopHostSink`、`DesktopInputRouter`、`PrintMode` 换 `Disposition`；`LoopWebController`、`SessionSnapshots`、`GoalLoopEndpointTest` 换 `GoalStatus`；`DesktopRunSink` / `DesktopHostSink` 的 `isResume()` 只来自 `host.decide`，行为不变。
+- 验证：host 80 例全绿、goal 232 例全绿（均已 install）；core 672 例 32F+5E（失败集与基线一致：ToolStrategy / TaskTalent / Accessor），queue 99 / loop 102 / steer 73 全绿；soloncode-cli 1226 例 3F（settings 既有）+3 跳过。
+
+### 14.3 后续两处改名
+
+**`GoalState` → `Goal`**：`GoalState` 与 `GoalStatus` 只差一个后缀，英文、中文都是「状态」。命名规则是「插件名 + 插件里装的那个东西」：queue 装多个条目（`QueueItem`）、loop 装多个定时任务（`LoopTask`），goal 每会话只有一个目标，那个东西就是目标本身。不用 `GoalTask`：4.2.0 刚把公开的 `GoalTask` 改名为 `GoalSnapshot`，再用会让读更新日志的人误以为改回去了；goal 没有 taskId，带 Task 会让人去找 id 与 list；也容易读成「目标下的子任务」。它只在包内可见，从未发布。改后 goal 包四个名字各管一件事：`Goal` 本体（可变）、`GoalStatus` 状态取值、`GoalSnapshot` 只读副本、`GoalProjection` 落盘投影。
+
+**`getKind()` → `getDisposition()`**（`SubmitResult` 与 `HostInput` 一起）：core 的 `InputOutcome.getKind()` 返回另一套词（`TASK` …），`HarnessHost` 里 `outcome.getKind()` 与 `r.getKind()` 同文件出现却不是一回事；`HostInput.getKind()` 上一轮还返回 core 的 Kind，老读者会误读。两个方法是同一个值，必须同名，所以一起改。规则：host 的读方法名与返回类型同名，不与 core 同名方法混用。
+
+执行记录：
+
+- goal：`GoalState.java` → `Goal.java`（类注释补命名说明），包内 `GoalProjection.ofState` → `ofGoal`；测试 `GoalStateTest` / `GoalStateErrorTest` → `GoalTest` / `GoalErrorTest`，`GoalBoundaryTest` 的源码路径与用例名跟着改。会话属性键 `GoalAttrs.GOAL_STATE`（值 `session.goal.state`，运行态、不落盘）未改。
+- host：`SubmitResult` / `HostInput` 的 `getKind()` → `getDisposition()`（字段、工厂参数同步），`HarnessHost.kindOf` → `dispositionOf`；`Disposition`、`HostSink` 注释、README、QUICKSTART-SAAS、测试与 `ReadmeSamples` 同步。
+- soloncode：`PrintMode`、`WebGate`、`WebHostSink`、`DesktopHostSink`、`DesktopInputRouter` 换 `getDisposition()`；`app-loop.js` 注释改指 `GoalStatus`。`GoalDataMigrator` 里的 `GoalState` 指旧版 tasks.json 的字段，属历史格式，保留。

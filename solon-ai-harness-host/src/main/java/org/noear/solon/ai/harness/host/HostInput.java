@@ -7,7 +7,6 @@ package org.noear.solon.ai.harness.host;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.extension.queue.QueueItem;
-import org.noear.solon.ai.harness.host.SubmitResult.Kind;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
@@ -23,6 +22,10 @@ import java.util.Map;
  *
  * <p>回调据此知道「发给谁」（{@link #getTenant()} + {@link #getSessionId()} + {@link #getOrigin()}），
  * 以及「这是什么输入、引擎怎么处理的」（文本、命令、结局、是否在运行中的任务旁边执行、是否为队列续发）。</p>
+ *
+ * <p>与 {@link HarnessInput} 同名的读方法（{@code getText}、{@code getOrigin}、{@code getSelectedModel}、
+ * {@code getSelectedAgent}、{@code getAttrs}、{@code getAttr}、{@code isResume}、{@code isHitlDecision}）含义一致，
+ * 取的是交给引擎的那一份。</p>
  *
  * <p>与相邻类型的分工：</p>
  * <ul>
@@ -41,7 +44,7 @@ public final class HostInput {
     private final InputOrigin origin;
     private final AgentSession session;
     private final String text;
-    private final Kind kind;
+    private final Disposition disposition;
     private final String commandName;
     private final ParsedCommand command;
     private final boolean besideRunning;
@@ -51,16 +54,17 @@ public final class HostInput {
     private final String selectedAgent;
     private final Map<String, String> attrs;
     private final boolean resume;
+    private final boolean hitlDecision;
 
     private HostInput(String tenant, String sessionId, InputOrigin origin, AgentSession session, String text,
-                      Kind kind, String commandName, ParsedCommand command, boolean besideRunning,
+                      Disposition disposition, String commandName, ParsedCommand command, boolean besideRunning,
                       boolean hasReply, QueueItem queueItem, HarnessInput in) {
         this.tenant = tenant;
         this.sessionId = sessionId;
         this.origin = origin == null ? InputOrigin.NONE : origin;
         this.session = session;
         this.text = text;
-        this.kind = kind;
+        this.disposition = disposition;
         this.commandName = commandName;
         this.command = command;
         this.besideRunning = besideRunning;
@@ -70,23 +74,24 @@ public final class HostInput {
         this.selectedAgent = in == null ? null : in.getSelectedAgent();
         this.attrs = in == null || in.getAttrs().isEmpty() ? Collections.emptyMap()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(in.getAttrs()));
-        this.resume = in != null && (in.isResume() || in.isHitlDecision());
+        this.resume = in != null && in.isResume();
+        this.hitlDecision = in != null && in.isHitlDecision();
     }
 
     /** 交给引擎之前就有了结果的输入（会话不存在、非持有节点 → REJECTED；忙时插话 → STEERED） */
-    static HostInput early(Kind kind, String tenant, String sessionId, InputOrigin origin,
+    static HostInput early(Disposition disposition, String tenant, String sessionId, InputOrigin origin,
                            @Nullable AgentSession session, @Nullable String text, @Nullable HarnessInput in) {
-        return new HostInput(tenant, sessionId, origin, session, text, kind, null, null, false, false, null, in);
+        return new HostInput(tenant, sessionId, origin, session, text, disposition, null, null, false, false, null, in);
     }
 
     /**
      * 引擎已给出结局的输入。
      *
-     * @param kind 框架换算后的结果类型（与同一次 {@code submit} 返回的 {@link SubmitResult#getKind()} 一致）
+     * @param disposition 框架换算后的结果类型（与同一次 {@code submit} 返回的 {@link SubmitResult#getDisposition()} 一致）
      */
-    static HostInput of(Kind kind, String tenant, AgentSession session, InputOrigin origin, @Nullable String text,
+    static HostInput of(Disposition disposition, String tenant, AgentSession session, InputOrigin origin, @Nullable String text,
                         InputOutcome outcome, @Nullable QueueItem queueItem, @Nullable HarnessInput in) {
-        return new HostInput(tenant, session.getSessionId(), origin, session, text, kind,
+        return new HostInput(tenant, session.getSessionId(), origin, session, text, disposition,
                 outcome.getCommandName(), outcome.getCommand(), outcome.isBesideRunning(), outcome.hasReply(), queueItem,
                 in);
     }
@@ -120,14 +125,14 @@ public final class HostInput {
     }
 
     /**
-     * 这次输入的结果类型，永不为 null。
+     * 这次输入的处置，永不为 null。
      *
-     * <p>与同一次提交里 {@code submit} 返回的 {@link SubmitResult#getKind()} 一致：
+     * <p>与同一次提交里 {@code submit} 返回的 {@link SubmitResult#getDisposition()} 一致：
      * 开了流为 {@code STARTED}；会话不存在、非持有节点、忙时可执行命令触发了任务都是 {@code REJECTED}；
      * 插话成功为 {@code STEERED}。队列续发、后台轮次开出的一轮也是 {@code STARTED}。</p>
      */
-    public Kind getKind() {
-        return kind;
+    public Disposition getDisposition() {
+        return disposition;
     }
 
     /** 命令名（非命令为 null） */
@@ -159,11 +164,19 @@ public final class HostInput {
     }
 
     /**
-     * 是否是「续跑」：审批决策或显式续流，开出的那一轮接着挂起的那一轮跑。
+     * 是否显式要求续跑（与 {@link HarnessInput#isResume()} 同义）：开出的那一轮接着挂起的那一轮跑。
      * 界面据此决定续用原来的输出流（序号、回放缓冲），而不是新开一段。
+     *
+     * <p>{@link HarnessHost#decide} 总是带续跑；经 {@code submit} + {@code hitl(...)} 提交的审批是否续跑由调用方决定。
+     * 只想知道「这是不是一次审批」时用 {@link #isHitlDecision()}。</p>
      */
     public boolean isResume() {
         return resume;
+    }
+
+    /** 是否是审批决策（与 {@link HarnessInput#isHitlDecision()} 同义） */
+    public boolean isHitlDecision() {
+        return hitlDecision;
     }
 
     /** 是否由队列续发而来 */
@@ -211,7 +224,7 @@ public final class HostInput {
     @Override
     public String toString() {
         return "HostInput{" + tenant + "/" + sessionId
-                + ", " + kind
+                + ", " + disposition
                 + (commandName != null ? ", cmd=" + commandName : "")
                 + (queueItem != null ? ", dispatched" : "") + "}";
     }

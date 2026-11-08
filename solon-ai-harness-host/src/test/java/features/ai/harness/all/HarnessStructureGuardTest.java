@@ -3,6 +3,14 @@ package features.ai.harness.all;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,8 +18,10 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -30,7 +40,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>插件内部实现类（{@code *Runtime/*Store/*Mailbox/*Scheduler}）不得 public——宿主只经 {@code XxxExtension} 门面；</li>
  *   <li>插件门面写方法统一返回 {@code HarnessResult}：不用 {@code int} 哨兵值或 {@code boolean} 表达业务失败；</li>
  *   <li>未发布前不留兼容层：主代码无 {@code @Deprecated}（白名单除外）；</li>
- *   <li>{@code @since} 不超过当前版本线（4.2.0）。</li>
+ *   <li>{@code @since} 不超过当前版本线（4.2.0）；</li>
+ *   <li>嵌套的公开枚举只属于外层类型：出现在别的类型的公开签名里就应独立为顶层枚举（反射检查）。</li>
  * </ol>
  *
  * <p>纯文本扫描（本模块的工作目录是 {@code solon-ai-harness-host}，兄弟模块源码按相对路径定位）。</p>
@@ -328,5 +339,116 @@ class HarnessStructureGuardTest {
             }
         }
         assertTrue(violations.isEmpty(), violations.toString());
+    }
+
+    /**
+     * 枚举放哪里（与 JDK 一致）：只被一个类型使用的枚举嵌套在它里面（如 {@code Thread.State}）；
+     * 出现在两个以上类型的公开签名里的放到顶层（如 {@code TimeUnit}；本项目的 {@code RejectReason}、
+     * {@code BusyPolicy}、{@code Disposition}、{@code InterruptMode}、{@code DeployMode}）。
+     *
+     * <p>反例：回调里没有 {@code SubmitResult}，却要写 {@code input.getKind() == SubmitResult.Kind.STARTED}。
+     * 同一外层类型的嵌套类（如 {@code HarnessEnginePool.Builder}）算同一个类型。</p>
+     */
+    @Test
+    void nestedPublicEnumsStayWithTheirOwner() throws Exception {
+        List<Class<?>> types = new ArrayList<>();
+        List<Path> roots = new ArrayList<>();
+        roots.add(mainOf("solon-ai-harness-core"));
+        for (String plugin : PLUGINS) {
+            roots.add(mainOf("solon-ai-harness-" + plugin));
+        }
+        roots.add(mainOf("solon-ai-harness-host"));
+        ClassLoader cl = getClass().getClassLoader();
+        for (Path root : roots) {
+            for (Path f : javaFiles(root)) {
+                String rel = root.relativize(f).toString().replace('\\', '/');
+                if (rel.endsWith("package-info.java")) {
+                    continue;
+                }
+                String name = rel.substring(0, rel.length() - ".java".length()).replace('/', '.');
+                collectPublicTypes(Class.forName(name, false, cl), types);
+            }
+        }
+        assertTrue(types.size() > 50, "公开类型未定位到：" + types.size());
+
+        Set<String> violations = new TreeSet<>();
+        for (Class<?> owner : types) {
+            Set<Type> used = new LinkedHashSet<>();
+            for (Method m : owner.getDeclaredMethods()) {
+                if (isExposed(m.getModifiers()) && m.isSynthetic() == false) {
+                    used.add(m.getGenericReturnType());
+                    used.addAll(Arrays.asList(m.getGenericParameterTypes()));
+                }
+            }
+            for (Constructor<?> c : owner.getDeclaredConstructors()) {
+                if (isExposed(c.getModifiers()) && c.isSynthetic() == false) {
+                    used.addAll(Arrays.asList(c.getGenericParameterTypes()));
+                }
+            }
+            for (Field fd : owner.getDeclaredFields()) {
+                if (isExposed(fd.getModifiers()) && fd.isSynthetic() == false) {
+                    used.add(fd.getGenericType());
+                }
+            }
+            Set<Class<?>> raw = new LinkedHashSet<>();
+            for (Type t : used) {
+                rawClasses(t, raw);
+            }
+            for (Class<?> e : raw) {
+                if (e.isEnum() && e.getEnclosingClass() != null && Modifier.isPublic(e.getModifiers())
+                        && outermost(e) != outermost(owner)) {
+                    violations.add(e.getName().replace('$', '.') + " ← " + owner.getName().replace('$', '.'));
+                }
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "嵌套公开枚举出现在别的类型的公开签名里，应独立为顶层枚举：" + violations);
+    }
+
+    private static boolean isExposed(int modifiers) {
+        return Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers);
+    }
+
+    private static void collectPublicTypes(Class<?> type, List<Class<?>> out) {
+        if (Modifier.isPublic(type.getModifiers()) == false) {
+            return;
+        }
+        out.add(type);
+        for (Class<?> nested : type.getDeclaredClasses()) {
+            collectPublicTypes(nested, out);
+        }
+    }
+
+    private static Class<?> outermost(Class<?> type) {
+        Class<?> c = type;
+        while (c.getEnclosingClass() != null) {
+            c = c.getEnclosingClass();
+        }
+        return c;
+    }
+
+    private static void rawClasses(Type t, Set<Class<?>> out) {
+        if (t instanceof Class) {
+            Class<?> c = (Class<?>) t;
+            while (c.isArray()) {
+                c = c.getComponentType();
+            }
+            out.add(c);
+        } else if (t instanceof ParameterizedType) {
+            ParameterizedType p = (ParameterizedType) t;
+            rawClasses(p.getRawType(), out);
+            for (Type a : p.getActualTypeArguments()) {
+                rawClasses(a, out);
+            }
+        } else if (t instanceof GenericArrayType) {
+            rawClasses(((GenericArrayType) t).getGenericComponentType(), out);
+        } else if (t instanceof WildcardType) {
+            for (Type b : ((WildcardType) t).getUpperBounds()) {
+                rawClasses(b, out);
+            }
+            for (Type b : ((WildcardType) t).getLowerBounds()) {
+                rawClasses(b, out);
+            }
+        }
     }
 }

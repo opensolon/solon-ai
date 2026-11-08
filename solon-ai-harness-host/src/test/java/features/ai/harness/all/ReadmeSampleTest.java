@@ -25,6 +25,7 @@ import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostSignal;
 import org.noear.solon.ai.harness.host.RunOutcome;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.handle.Result;
@@ -102,7 +103,7 @@ class ReadmeSampleTest {
             host.openSession("acme", "s1", "acme/u1");
             SubmitResult r = host.submit("acme", "s1", HarnessInput.of("hello").principal("acme/u1")
                     .whenBusy(BusyPolicy.REJECT));
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
+            assertEquals(Disposition.STARTED, r.getDisposition(), r.toString());
             Result<String> answer = AskController.awaitAnswer(r.getRun());
             assertEquals(500, answer.getCode(), "模型连不上：异常结束 → 500");
 
@@ -139,18 +140,18 @@ class ReadmeSampleTest {
         ImBot bot = new ImBot(this::engineOf, (chatId, text) -> outbox.add(chatId + ": " + text));
         try {
             SubmitResult r = bot.onMessage("acme", "c1", "u1", "m1", "hello");
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
+            assertEquals(Disposition.STARTED, r.getDisposition(), r.toString());
             r.getRun().await(Duration.ofSeconds(30));
             await(() -> outbox.contains("c1: The task could not be finished."), "异常结束时回安全文案，不发半成品");
 
             SubmitResult again = bot.onMessage("acme", "c1", "u1", "m2", "hello again");
-            assertNotEquals(SubmitResult.Kind.REJECTED, again.getKind(), "openSession 幂等：同一主体可重复调用");
+            assertNotEquals(Disposition.REJECTED, again.getDisposition(), "openSession 幂等：同一主体可重复调用");
             if (again.getRun() != null) {
                 again.getRun().await(Duration.ofSeconds(30));
             }
 
             SubmitResult expired = bot.onMessage("acme", "c1", "u1", "m3", "approve call-x");
-            assertEquals(SubmitResult.Kind.HITL, expired.getKind());
+            assertEquals(Disposition.HITL, expired.getDisposition());
             await(() -> outbox.contains("c1: This approval has expired."), "过期的审批有回执");
         } finally {
             shutdownAll();

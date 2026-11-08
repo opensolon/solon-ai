@@ -33,7 +33,7 @@
 
 ### 1.2 状态机
 
-`GoalSnapshot.Status` 共 6 个值，转移只能经门面、命令或模型工具发生：
+`GoalStatus` 共 6 个值，转移只能经门面、命令或模型工具发生：
 
 ```mermaid
 stateDiagram-v2
@@ -577,7 +577,7 @@ goal.addListener((sessionId, task, removed) -> {
 监听器在每次状态变化后回调（含两种时态触发的变化与调度轮次的结果），抛异常只记 debug 日志，不影响状态流转。快照创建后不随运行态变化，需要最新值时重新 `get`。状态事实也可经引擎读取（不受开关影响）：
 
 ```java
-GoalSnapshot.Status st = engine.status(session).get(GoalExtension.STATUS_GOAL); // 无 goal 为 null
+GoalStatus st = engine.status(session).get(GoalExtension.STATUS_GOAL); // 无 goal 为 null
 ```
 
 ### 5.5 重启恢复：recover
@@ -612,7 +612,7 @@ GoalProjection p = GoalProjection.from(context);           // 无 goal / 非 Map
 if (p != null && p.isActive()) {
     long used = p.getConsumedTokens();
 }
-GoalSnapshot.Status status = GoalProjection.statusOf(context); // 只要状态
+GoalStatus status = GoalProjection.statusOf(context); // 只要状态
 
 // 写：字段集合由 harness 定义，调用方只填值
 GoalProjection.builder()
@@ -696,7 +696,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `maxDurationMs(Long)` | `Long` | 保持 | 0 = 不限制，负数按 0 |
 | `maxIterations(Integer)` | `Integer` | 保持 | 0 = 不限制，负数按 0 |
 
-### 6.4 GoalSnapshot.Status
+### 6.4 GoalStatus
 
 | 值 | 含义 | `isActive` | `isTerminal` | `isResumable` |
 |---|---|---|---|---|
@@ -781,7 +781,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 | 常量 | 键名 | 类型 | 说明 |
 |---|---|---|---|
-| `GoalExtension.STATUS_GOAL` | `goal.status` | `SessionStatus.Key<GoalSnapshot.Status>` | 当前 goal 状态，无 goal 为 null；事实口径，不受开关影响 |
+| `GoalExtension.STATUS_GOAL` | `goal.status` | `SessionStatus.Key<GoalStatus>` | 当前 goal 状态，无 goal 为 null；事实口径，不受开关影响 |
 
 ---
 

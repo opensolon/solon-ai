@@ -23,32 +23,7 @@ import java.util.List;
  */
 @Preview("4.2.0")
 public final class SubmitResult {
-    /**
-     * 结果类型（只描述「已经发生了什么」）。
-     */
-    public enum Kind {
-        /**
-         * 本轮已交给执行器执行（{@link #getRun()} 非空）。
-         *
-         * <p>含义是「已经交出去了」，不保证流已真的跑起来：调度空档里被取消、启动失败时也是本值，
-         * 终态见 {@link RunOutcome}。</p>
-         */
-        STARTED,
-        /** 只有回执，没有任务（{@link #getReplyText()}；命令无输出时为 null） */
-        REPLY,
-        /** 审批已记录但未续流：本批仍有未决卡（{@link #getHitlCards()}），或审批卡已失效（卡为空） */
-        HITL,
-        /** 空输入（无文本也无附件），未做任何处理 */
-        IGNORED,
-        /** 会话忙，已入积压，空闲后自动续发（位置见 {@link #getBacklogPosition()}） */
-        DEFERRED,
-        /** 会话忙，已作为插话交给正在运行的那一轮（{@code HarnessInput.whenBusy(BusyPolicy.STEER)}） */
-        STEERED,
-        /** 未受理（原因见 {@link #getRejectReason()}，持有者见 {@link #getOwner()}） */
-        REJECTED
-    }
-
-    private final Kind kind;
+    private final Disposition disposition;
     private final RejectReason rejectReason;
     private final String rejectDetail;
     private final int backlogPosition;
@@ -57,9 +32,9 @@ public final class SubmitResult {
     private final String replyText;
     private final List<HitlCard> hitlCards;
 
-    private SubmitResult(Kind kind, RejectReason rejectReason, String rejectDetail, int backlogPosition, String owner,
+    private SubmitResult(Disposition disposition, RejectReason rejectReason, String rejectDetail, int backlogPosition, String owner,
                          RunHandle run, String replyText, List<HitlCard> hitlCards) {
-        this.kind = kind;
+        this.disposition = disposition;
         this.rejectReason = rejectReason;
         this.rejectDetail = rejectDetail;
         this.backlogPosition = backlogPosition;
@@ -69,36 +44,37 @@ public final class SubmitResult {
         this.hitlCards = hitlCards == null ? Collections.emptyList() : hitlCards;
     }
 
-    static SubmitResult of(Kind kind) {
-        return new SubmitResult(kind, null, null, 0, null, null, null, null);
+    static SubmitResult of(Disposition disposition) {
+        return new SubmitResult(disposition, null, null, 0, null, null, null, null);
     }
 
     static SubmitResult started(RunHandle run) {
-        return new SubmitResult(Kind.STARTED, null, null, 0, null, run, null, null);
+        return new SubmitResult(Disposition.STARTED, null, null, 0, null, run, null, null);
     }
 
     static SubmitResult reply(@Nullable String text) {
-        return new SubmitResult(Kind.REPLY, null, null, 0, null, null, text, null);
+        return new SubmitResult(Disposition.REPLY, null, null, 0, null, null, text, null);
     }
 
     static SubmitResult hitl(List<HitlCard> cards) {
-        return new SubmitResult(Kind.HITL, null, null, 0, null, null, null, cards);
+        return new SubmitResult(Disposition.HITL, null, null, 0, null, null, null, cards);
     }
 
     static SubmitResult deferred(int position) {
-        return new SubmitResult(Kind.DEFERRED, null, null, position, null, null, null, null);
+        return new SubmitResult(Disposition.DEFERRED, null, null, position, null, null, null, null);
     }
 
     static SubmitResult rejected(RejectReason reason, @Nullable String detail) {
-        return new SubmitResult(Kind.REJECTED, reason, detail, 0, null, null, null, null);
+        return new SubmitResult(Disposition.REJECTED, reason, detail, 0, null, null, null, null);
     }
 
     static SubmitResult notOwner(@Nullable String owner) {
-        return new SubmitResult(Kind.REJECTED, RejectReason.NOT_OWNER, owner, 0, owner, null, null, null);
+        return new SubmitResult(Disposition.REJECTED, RejectReason.NOT_OWNER, owner, 0, owner, null, null, null);
     }
 
-    public Kind getKind() {
-        return kind;
+    /** 这次输入的处置（与同一次提交里回调看到的 {@link HostInput#getDisposition()} 一致） */
+    public Disposition getDisposition() {
+        return disposition;
     }
 
     /** 本次请求开出的那一轮（仅 STARTED） */
@@ -147,7 +123,7 @@ public final class SubmitResult {
      * SCOPE_UNAVAILABLE → 403，ENGINE_CLOSED → 503，其余 → 409。
      */
     public int httpStatus() {
-        switch (kind) {
+        switch (disposition) {
             case DEFERRED:
                 return 202;
             case REJECTED:
@@ -171,8 +147,8 @@ public final class SubmitResult {
 
     @Override
     public String toString() {
-        return "SubmitResult{" + kind + (rejectReason != null ? ", " + rejectReason : "")
-                + (kind == Kind.DEFERRED ? ", position=" + backlogPosition : "")
+        return "SubmitResult{" + disposition + (rejectReason != null ? ", " + rejectReason : "")
+                + (disposition == Disposition.DEFERRED ? ", position=" + backlogPosition : "")
                 + (owner != null ? ", owner=" + owner : "") + "}";
     }
 }

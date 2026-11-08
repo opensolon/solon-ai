@@ -65,7 +65,7 @@ public final class HarnessEnginePool implements AutoCloseable {
     private final Function<String, HarnessEngine> factory;
     private final long idleTtlMs;
     private final int maxEngines;
-    private final WhenFull whenFull;
+    private final FullPolicy whenFull;
     private final long fullWaitMs;
     private final LongSupplier clock;
     private final ConcurrentHashMap<String, Entry> engines = new ConcurrentHashMap<>();
@@ -228,15 +228,15 @@ public final class HarnessEnginePool implements AutoCloseable {
         return count;
     }
 
-    /** 满额：先回收最久未用且静默的引擎；仍满时按 {@link WhenFull} 拒绝或等待 */
+    /** 满额：先回收最久未用且静默的引擎；仍满时按 {@link FullPolicy} 拒绝或等待 */
     private void awaitCapacity() {
-        long deadline = System.currentTimeMillis() + (whenFull == WhenFull.WAIT ? fullWaitMs : 0L);
+        long deadline = System.currentTimeMillis() + (whenFull == FullPolicy.WAIT ? fullWaitMs : 0L);
         while (true) {
             evictLeastRecentlyUsed();
             if (engines.size() < maxEngines) {
                 return;
             }
-            if (whenFull == WhenFull.REJECT || System.currentTimeMillis() >= deadline) {
+            if (whenFull == FullPolicy.REJECT || System.currentTimeMillis() >= deadline) {
                 throw new IllegalStateException("HarnessEnginePool is full: " + maxEngines);
             }
             try {
@@ -256,7 +256,7 @@ public final class HarnessEnginePool implements AutoCloseable {
      *
      * @since 4.2.0
      */
-    public enum WhenFull {
+    public enum FullPolicy {
         /** 立即拒绝（缺省） */
         REJECT,
         /** 等待其它引擎静默可回收，超过 {@code fullWait} 仍满则拒绝 */
@@ -344,7 +344,7 @@ public final class HarnessEnginePool implements AutoCloseable {
         private Duration idleTtl = Duration.ofMinutes(30);
         private Duration reapInterval = Duration.ofMinutes(1);
         private int maxEngines;
-        private WhenFull whenFull = WhenFull.REJECT;
+        private FullPolicy whenFull = FullPolicy.REJECT;
         private Duration fullWait = Duration.ofSeconds(10);
         private LongSupplier clock = System::currentTimeMillis;
 
@@ -374,11 +374,11 @@ public final class HarnessEnginePool implements AutoCloseable {
         }
 
         /**
-         * 满额策略（缺省 {@link WhenFull#REJECT}）；{@link WhenFull#WAIT} 时最多等 {@code fullWait}（缺省 10 秒）
+         * 满额策略（缺省 {@link FullPolicy#REJECT}）；{@link FullPolicy#WAIT} 时最多等 {@code fullWait}（缺省 10 秒）
          *
          * @since 4.2.0
          */
-        public Builder whenFull(WhenFull whenFull, Duration fullWait) {
+        public Builder whenFull(FullPolicy whenFull, Duration fullWait) {
             this.whenFull = Objects.requireNonNull(whenFull, "whenFull");
             this.fullWait = Objects.requireNonNull(fullWait, "fullWait");
             return this;

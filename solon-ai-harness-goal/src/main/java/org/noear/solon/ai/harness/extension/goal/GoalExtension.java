@@ -88,7 +88,7 @@ public class GoalExtension extends AbsHarnessExtension {
      *
      * <p>经 {@code engine.status(session).get(GoalExtension.STATUS_GOAL)} 读取。</p>
      */
-    public static final SessionStatus.Key<GoalSnapshot.Status> STATUS_GOAL = SessionStatus.Key.of("goal.status", null);
+    public static final SessionStatus.Key<GoalStatus> STATUS_GOAL = SessionStatus.Key.of("goal.status", null);
 
     private static final Logger LOG = LoggerFactory.getLogger(GoalExtension.class);
 
@@ -206,7 +206,7 @@ public class GoalExtension extends AbsHarnessExtension {
         if (goalRuntime == null) {
             return;
         }
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
         if (gs != null) {
             builder.put(STATUS_GOAL, gs.getStatus());
         }
@@ -359,7 +359,7 @@ public class GoalExtension extends AbsHarnessExtension {
             return denied;
         }
         AgentSession session = sessionOf(sessionId);
-        GoalState gs = session == null ? null : goalRuntime.state(session);
+        Goal gs = session == null ? null : goalRuntime.state(session);
         if (gs == null) {
             return HarnessResult.notFound("goal not found");
         }
@@ -387,7 +387,7 @@ public class GoalExtension extends AbsHarnessExtension {
             if (goalRuntime.awaitRoundStopped(session, UPDATE_STOP_TIMEOUT_MS) == false) {
                 return HarnessResult.conflict("Goal is still stopping; please retry");
             }
-            if (gs.getStatus() != GoalSnapshot.Status.PAUSED) {
+            if (gs.getStatus() != GoalStatus.PAUSED) {
                 return HarnessResult.conflict("Goal state changed before settings could be applied");
             }
         }
@@ -428,7 +428,7 @@ public class GoalExtension extends AbsHarnessExtension {
             return HarnessResult.disabled("goal is disabled");
         }
         AgentSession session = sessionOf(sessionId);
-        GoalState gs = session == null ? null : goalRuntime.state(session);
+        Goal gs = session == null ? null : goalRuntime.state(session);
         if (gs == null) {
             return HarnessResult.notFound("goal not found");
         }
@@ -467,7 +467,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * @param statusReader sessionId → 状态（无 goal 返回 null；抛异常按无 goal 处理）
      * @return 实际挂上调度的会话数
      */
-    public int recover(Iterable<String> sessionIds, Function<String, GoalSnapshot.Status> statusReader) {
+    public int recover(Iterable<String> sessionIds, Function<String, GoalStatus> statusReader) {
         if (sessionIds == null || statusReader == null || goalScheduler == null || isEnabled() == false) {
             return 0;
         }
@@ -476,7 +476,7 @@ public class GoalExtension extends AbsHarnessExtension {
             if (sessionId == null || sessionId.isEmpty()) {
                 continue;
             }
-            GoalSnapshot.Status status;
+            GoalStatus status;
             try {
                 status = statusReader.apply(sessionId);
             } catch (Throwable e) {
@@ -526,7 +526,7 @@ public class GoalExtension extends AbsHarnessExtension {
     // ==================== 包内（命令与测试共用的会话级实现） ====================
 
     GoalSnapshot create(AgentSession session, GoalSpec spec) {
-        GoalState gs = requireAttached().attach(session, spec);
+        Goal gs = requireAttached().attach(session, spec);
         schedule(session.getSessionId(), spec.isRunNow());
         return GoalSnapshot.of(gs, goalRuntime.isRunning(session));
     }
@@ -536,7 +536,7 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     boolean pause(AgentSession session) {
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
         if (gs == null || goalRuntime.pause(session, gs) == false) {
             return false;
         }
@@ -547,7 +547,7 @@ public class GoalExtension extends AbsHarnessExtension {
     }
 
     boolean resume(AgentSession session) {
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
         if (gs == null || goalRuntime.resume(session, gs) == false) {
             return false;
         }

@@ -42,7 +42,7 @@ public interface HostSink {
     // ==================== 会话级 ====================
 
     /**
-     * 输入已受理（getKind() 为 STARTED / REPLY / HITL / IGNORED，在分派之前调用；DEFERRED / REJECTED 不调用）。
+     * 输入已受理（getDisposition() 为 STARTED / REPLY / HITL / IGNORED，在分派之前调用；DEFERRED / REJECTED 不调用）。
      *
      * <p>宿主在这里持久化「用户这次的选择」（模型、子代理、回复路由等），或在命令无回执
      * （{@code !input.hasReply()}）时给一个兜底提示。{@code input.isBesideRunning()} 为 true 时不要改写回复路由。</p>

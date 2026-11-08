@@ -307,7 +307,7 @@ class GoalScheduler {
             return;
         }
 
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
         if (gs == null || !gs.getStatus().isActive()) {
             unschedule(sessionId);
             return;
@@ -337,7 +337,7 @@ class GoalScheduler {
         try {
             boolean canContinue = goalRuntime.runRound(session);
             if (!canContinue) {
-                GoalState latest = goalRuntime.state(session);
+                Goal latest = goalRuntime.state(session);
                 if (latest == null || !latest.getStatus().isActive()) {
                     unschedule(sessionId);
                 }

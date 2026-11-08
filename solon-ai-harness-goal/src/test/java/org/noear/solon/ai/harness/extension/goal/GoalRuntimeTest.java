@@ -32,7 +32,7 @@ class GoalRuntimeTest {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
 
-        GoalState gs = engine.attach(session, "生成报告", 1000, 0, 0);
+        Goal gs = engine.attach(session, "生成报告", 1000, 0, 0);
 
         assertNotNull(gs);
         Object projection = session.getContext().data().get(GoalAttrs.GOAL);
@@ -59,11 +59,11 @@ class GoalRuntimeTest {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
 
-        GoalState first = engine.attach(session, "目标一", 0, 0, 0);
+        Goal first = engine.attach(session, "目标一", 0, 0, 0);
         first.achieve();
         engine.commit(session, first);
 
-        GoalState second = engine.attach(session, "目标二", 0, 0, 0);
+        Goal second = engine.attach(session, "目标二", 0, 0, 0);
 
         assertEquals("目标二", second.getObjective());
         assertNotEquals(first.getId(), second.getId());
@@ -78,7 +78,7 @@ class GoalRuntimeTest {
         // 模拟进程重启：清掉运行态 attrs，只留上下文投影
         session.attrs().remove("session.goal.state");
 
-        GoalState restored = engine.state(session);
+        Goal restored = engine.state(session);
         assertNotNull(restored, "必须能从投影 hydrate");
         assertEquals("目标", restored.getObjective());
         assertEquals(500, restored.getMaxTokens());
@@ -103,25 +103,25 @@ class GoalRuntimeTest {
     void pauseAndResumeFlipStatusAndPersist() {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
-        GoalState gs = engine.attach(session, "目标", 0, 0, 0);
+        Goal gs = engine.attach(session, "目标", 0, 0, 0);
 
         assertTrue(engine.pause(session, gs));
-        assertEquals(GoalSnapshot.Status.PAUSED, gs.getStatus());
+        assertEquals(GoalStatus.PAUSED, gs.getStatus());
         assertEquals("PAUSED", ((Map<?, ?>) session.getContext().data().get(GoalAttrs.GOAL)).get("status"));
 
         assertTrue(engine.resume(session, gs));
-        assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus());
+        assertEquals(GoalStatus.PURSUING, gs.getStatus());
     }
 
     @Test
     void pauseRejectsBlockedGoalWithoutCommittingFalseSuccess() {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
-        GoalState gs = engine.attach(session, "目标", 0, 0, 0);
+        Goal gs = engine.attach(session, "目标", 0, 0, 0);
         gs.markBlocked();
 
         assertFalse(engine.pause(session, gs), "BLOCKED 是熔断态，不得由 pause 转换");
-        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus());
+        assertEquals(GoalStatus.BLOCKED, gs.getStatus());
     }
 
     @Test
@@ -148,7 +148,7 @@ class GoalRuntimeTest {
     void pausedGoalBlocksNewAttach() {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
-        GoalState gs = engine.attach(session, "目标", 0, 0, 0);
+        Goal gs = engine.attach(session, "目标", 0, 0, 0);
         engine.pause(session, gs);
 
         assertThrows(IllegalStateException.class, () -> engine.attach(session, "另一目标", 0, 0, 0));
@@ -158,7 +158,7 @@ class GoalRuntimeTest {
     void runtimeFieldsSurviveProjectionRoundTrip() {
         GoalRuntime engine = newEngine();
         AgentSession session = newSession();
-        GoalState gs = engine.attach(session, "构建并测试项目", 2000, 600_000, 10);
+        Goal gs = engine.attach(session, "构建并测试项目", 2000, 600_000, 10);
 
         gs.incrementIteration();
         gs.addTokens(321);
@@ -167,7 +167,7 @@ class GoalRuntimeTest {
         engine.commit(session, gs);
 
         session.attrs().remove("session.goal.state");
-        GoalState restored = engine.state(session);
+        Goal restored = engine.state(session);
 
         assertEquals(1, restored.getCurrentIteration());
         assertEquals(321, restored.getConsumedTokens());

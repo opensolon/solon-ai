@@ -118,7 +118,7 @@ final class ReadmeSamples {
                     .principal(principalOf(tenant, userOf(ctx)))        // sessionId 来自客户端：必须校验主体
                     .whenBusy(BusyPolicy.REJECT));           // 请求结束就没人接了：忙时不排队
 
-            switch (r.getKind()) {
+            switch (r.getDisposition()) {
                 case STARTED:
                     return awaitAnswer(r.getRun());
                 case REPLY:                                             // 斜杠命令的回执
@@ -126,7 +126,7 @@ final class ReadmeSamples {
                 default:                                                // REJECTED / IGNORED / ...
                     ctx.status(r.httpStatus());
                     return Result.failure(r.httpStatus(),
-                            r.getRejectReason() != null ? r.getRejectReason().code() : r.getKind().name());
+                            r.getRejectReason() != null ? r.getRejectReason().code() : r.getDisposition().name());
             }
         }
 
@@ -477,7 +477,7 @@ final class ReadmeSamples {
                     .whenBusy(BusyPolicy.STEER)
                     .selectedModel(model).attr("effort", ctx.param("effort")));
             ctx.status(r.httpStatus());
-            return r.getKind().name();
+            return r.getDisposition().name();
         }
 
         /** 审批：协议值 approve / reject / skip，脏值抛 IllegalArgumentException */
@@ -487,7 +487,7 @@ final class ReadmeSamples {
             SubmitResult r = host.decide(tenant, sid, callId, HITLAction.of(action), note,
                     InputOrigin.of("web", userOf(ctx), sid, null));
             ctx.status(r.httpStatus());                                 // STARTED = 已续跑；HITL = 还有未决卡或卡已失效
-            return r.getKind().name();
+            return r.getDisposition().name();
         }
 
         /** 用户点「停止」 */

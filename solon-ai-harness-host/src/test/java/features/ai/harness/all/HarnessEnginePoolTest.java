@@ -323,7 +323,7 @@ class HarnessEnginePoolTest {
                 .maxEngines(1).reapInterval(Duration.ZERO).build();
         HarnessEnginePool wait = HarnessEnginePool.builder(k -> builder().build())
                 .maxEngines(1).reapInterval(Duration.ZERO)
-                .whenFull(HarnessEnginePool.WhenFull.WAIT, Duration.ofMillis(300)).build();
+                .whenFull(HarnessEnginePool.FullPolicy.WAIT, Duration.ofMillis(300)).build();
         try {
             // 静默引擎可被 LRU 腾位：两种策略都能放下新键
             reject.get("a");

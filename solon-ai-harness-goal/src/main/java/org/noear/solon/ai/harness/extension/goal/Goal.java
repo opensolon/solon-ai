@@ -20,7 +20,11 @@ import org.noear.snack4.ONode;
 import java.util.Map;
 
 /**
- * Goal 运行态（包内可变实体；对外只暴露只读快照 {@link GoalSnapshot}）。
+ * Goal 本体（包内可变实体；对外只暴露只读快照 {@link GoalSnapshot}）。
+ *
+ * <p>命名：插件名 + 插件里装的那个东西（queue 装 {@code QueueItem}、loop 装 {@code LoopTask}）；
+ * goal 每会话只有一个目标，这个东西就是目标本身，故名 {@code Goal}。同包其余三个各管一件事：
+ * {@link GoalStatus} 状态取值、{@link GoalSnapshot} 只读副本、{@link GoalProjection} 落盘投影。</p>
  *
  * <p>状态机见 {@link GoalSnapshot}；BLOCKED 是模型主动声明的阻塞（{@code goal_update("blocked")}）
  * 或错误熔断，可与 PAUSED 区分。所有修改都在 {@link GoalRuntime} 的会话锁内完成并落盘。</p>
@@ -28,11 +32,11 @@ import java.util.Map;
  * @author noear
  * @since 3.9.2
  */
-class GoalState {
+class Goal {
 
     private String id;
     private volatile String objective;
-    private volatile GoalSnapshot.Status status;
+    private volatile GoalStatus status;
     private volatile long consumedTokens;
     private volatile long maxTokens;
     private volatile int maxIterations;
@@ -70,14 +74,14 @@ class GoalState {
     /** 预算提示阈值（实例级，避免多工作区互相覆盖）。 */
     private BudgetThresholds thresholds = BudgetThresholds.defaults();
 
-    GoalState(String objective, long maxTokens) {
+    Goal(String objective, long maxTokens) {
         this(objective, maxTokens, BudgetThresholds.defaults());
     }
 
-    GoalState(String objective, long maxTokens, BudgetThresholds thresholds) {
+    Goal(String objective, long maxTokens, BudgetThresholds thresholds) {
         this.id = HarnessIds.newId(); // 完整 128 bit：截断 ID 落共享存储会撞号
         this.objective = objective;
-        this.status = GoalSnapshot.Status.PURSUING;
+        this.status = GoalStatus.PURSUING;
         this.consumedTokens = 0;
         this.maxTokens = maxTokens;
         this.startEpochMs = System.currentTimeMillis();
@@ -86,7 +90,7 @@ class GoalState {
         }
     }
 
-    private GoalState() {} // for deserialization
+    private Goal() {} // for deserialization
 
     /** 注入预算阈值（由 GoalRuntime 从本工作区配置注入）。 */
     public void setThresholds(BudgetThresholds thresholds) {
@@ -100,40 +104,40 @@ class GoalState {
     }
 
     public boolean pause() {
-        if (status != GoalSnapshot.Status.PURSUING) return false;
-        this.status = GoalSnapshot.Status.PAUSED;
+        if (status != GoalStatus.PURSUING) return false;
+        this.status = GoalStatus.PAUSED;
         return true;
     }
 
     public boolean resume() {
         if (!status.isResumable()) return false;
-        this.status = GoalSnapshot.Status.PURSUING;
+        this.status = GoalStatus.PURSUING;
         return true;
     }
 
     public void achieve() {
-        if (status == GoalSnapshot.Status.PURSUING) this.status = GoalSnapshot.Status.ACHIEVED;
+        if (status == GoalStatus.PURSUING) this.status = GoalStatus.ACHIEVED;
     }
 
     /** 完成声明未通过运行时证据校验时，退回继续执行。 */
     public boolean rejectAchievement() {
-        if (status != GoalSnapshot.Status.ACHIEVED) return false;
-        this.status = GoalSnapshot.Status.PURSUING;
+        if (status != GoalStatus.ACHIEVED) return false;
+        this.status = GoalStatus.PURSUING;
         return true;
     }
 
     public void markBudgetLimited() {
-        if (status == GoalSnapshot.Status.PURSUING) this.status = GoalSnapshot.Status.BUDGET_LIMITED;
+        if (status == GoalStatus.PURSUING) this.status = GoalStatus.BUDGET_LIMITED;
     }
 
     public void markIterationLimited() {
-        if (status == GoalSnapshot.Status.PURSUING) this.status = GoalSnapshot.Status.ITERATION_LIMITED;
+        if (status == GoalStatus.PURSUING) this.status = GoalStatus.ITERATION_LIMITED;
     }
 
     /** 模型主动声明阻塞（PURSUING → BLOCKED） */
     public void markBlocked() {
-        if (status == GoalSnapshot.Status.PURSUING) {
-            this.status = GoalSnapshot.Status.BLOCKED;
+        if (status == GoalStatus.PURSUING) {
+            this.status = GoalStatus.BLOCKED;
         }
     }
 
@@ -167,8 +171,8 @@ class GoalState {
     public void extendBudget(long additionalTokens) {
         if (additionalTokens <= 0) return;
         this.maxTokens += additionalTokens;
-        if (status == GoalSnapshot.Status.BUDGET_LIMITED) {
-            this.status = GoalSnapshot.Status.PURSUING;
+        if (status == GoalStatus.BUDGET_LIMITED) {
+            this.status = GoalStatus.PURSUING;
         }
     }
 
@@ -177,8 +181,8 @@ class GoalState {
     public String getId() { return id; }
     public String getObjective() { return objective; }
     public void setObjective(String objective) { this.objective = objective; }
-    public GoalSnapshot.Status getStatus() { return status; }
-    public void setStatus(GoalSnapshot.Status status) { this.status = status; }
+    public GoalStatus getStatus() { return status; }
+    public void setStatus(GoalStatus status) { this.status = status; }
     public long getConsumedTokens() { return consumedTokens; }
     public long getMaxTokens() { return maxTokens; }
     public void setMaxTokens(long maxTokens) { this.maxTokens = maxTokens; }
@@ -282,15 +286,15 @@ class GoalState {
      * node 为 null 或缺少 status 时返回 null（与 {@link #fromMap(Map)} 对齐），
      * 调用方必须判空；旧版本此处对缺失 status 会抛 NPE。
      */
-    public static GoalState fromONode(ONode node) {
+    public static Goal fromONode(ONode node) {
         if (node == null || node.getOrNull("status") == null) {
             return null;
         }
 
-        GoalState gs = new GoalState();
+        Goal gs = new Goal();
         gs.id = node.get("id").getString();
         gs.objective = node.get("condition").getString();
-        gs.status = GoalSnapshot.Status.valueOf(node.get("status").getString());
+        gs.status = GoalStatus.valueOf(node.get("status").getString());
         gs.consumedTokens = node.get("consumedTokens").getLong();
         gs.maxTokens = node.get("maxTokens").getLong();
         gs.maxIterations = node.getOrNull("maxIterations") != null
@@ -316,15 +320,15 @@ class GoalState {
 
     /** 转为投影 Map（键名即持久化契约，字段名唯一出处见 {@link GoalProjection}）。 */
     public Map<String, Object> toMap() {
-        return GoalProjection.ofState(this).toMap();
+        return GoalProjection.ofGoal(this).toMap();
     }
 
     /** 从会话快照投影重建（字段名解析委托 {@link GoalProjection}，与写入侧同源）。 */
-    public static GoalState fromMap(Map<?, ?> map) {
+    public static Goal fromMap(Map<?, ?> map) {
         GoalProjection projection = GoalProjection.from((Object) map);
         if (projection == null) return null;
 
-        GoalState gs = new GoalState();
+        Goal gs = new Goal();
         gs.id = projection.getGoalId();
         gs.objective = projection.getObjective();
         gs.status = projection.getStatus();

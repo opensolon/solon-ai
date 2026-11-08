@@ -18,9 +18,9 @@ package org.noear.solon.ai.harness.extension.goal;
 /**
  * 预算提示阈值（不可变值对象）。
  *
- * <p>早期实现把这两个阈值放在 {@link GoalState} 的静态字段里，由调度器构造时写入；
+ * <p>早期实现把这两个阈值放在 {@link Goal} 的静态字段里，由调度器构造时写入；
  * 而工作区各自持有独立的调度器实例，后构造的工作区会覆盖先前工作区的阈值（跨工作区串味）。
- * 现改为随 GoalState 实例注入，不再有全局可变状态。
+ * 现改为随 Goal 实例注入，不再有全局可变状态。
  *
  * @author noear
  * @since 3.9.4

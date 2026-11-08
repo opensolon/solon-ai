@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * <ol>
  *   <li>未设置 = 0 = 不限制（与 GoalCommand 既有 DEFAULT_MAX_* 同口径）；</li>
  *   <li>时长以 {@link Duration} 表达，调用点不再出现 30 * 60_000L 换算；</li>
- *   <li>最简两参形态与完整形态走同一路径（同一 GoalState 语义）；</li>
+ *   <li>最简两参形态与完整形态走同一路径（同一 Goal 语义）；</li>
  *   <li>单槽约束不因入口形态而放宽。</li>
  * </ol>
  */
@@ -138,7 +138,7 @@ class GoalSpecTest {
         GoalExtension ext = newExtension();
 
         GoalSnapshot viaSpec = ext.create(newSession(), GoalSpec.of("目标").maxTokens(7).maxIterations(2)).getValue();
-        GoalState viaRaw = ext.getGoalRuntime().attach(sessions.computeIfAbsent(newSession(), InMemoryAgentSession::of), "目标", 7, 0, 2);
+        Goal viaRaw = ext.getGoalRuntime().attach(sessions.computeIfAbsent(newSession(), InMemoryAgentSession::of), "目标", 7, 0, 2);
 
         assertEquals(viaRaw.getObjective(), viaSpec.getObjective());
         assertEquals(viaRaw.getMaxTokens(), viaSpec.getMaxTokens());

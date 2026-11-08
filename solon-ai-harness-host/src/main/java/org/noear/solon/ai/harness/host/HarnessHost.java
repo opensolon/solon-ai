@@ -325,7 +325,7 @@ public final class HarnessHost {
                 return;
             }
 
-            switch (r.getKind()) {
+            switch (r.getDisposition()) {
                 case STARTED: {
                     RunHandle handle = r.getRun();
                     handleRef.set(handle);
@@ -512,7 +512,8 @@ public final class HarnessHost {
             OwnerCheck owner = engine.checkOwner(sessionId);
             if (owner.isOwned() == false) {
                 final String o = owner.getOwner();
-                HostInput input = HostInput.early(SubmitResult.Kind.REJECTED, tenant, sessionId, origin, null, text, null);
+                // 传调用方的输入：HostInput 只复制值，回调里仍读得到模型、子代理、属性（宿主据此做请求关联）
+                HostInput input = HostInput.early(Disposition.REJECTED, tenant, sessionId, origin, null, text, template);
                 HostSinkSupport.safe(() -> sink.notOwner(input, o));
                 return SubmitResult.notOwner(o);
             }
@@ -520,7 +521,7 @@ public final class HarnessHost {
             // 只查不建：getSession 会凭空新建会话
             AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) {
-                return rejectEarly(tenant, sessionId, origin, null, text, null, RejectReason.SESSION_NOT_FOUND, null);
+                return rejectEarly(tenant, sessionId, origin, null, text, template, RejectReason.SESSION_NOT_FOUND, null);
             }
 
             warnIfNoPrincipal(engine, template);
@@ -550,7 +551,7 @@ public final class HarnessHost {
     private SubmitResult rejectEarly(String tenant, String sessionId, InputOrigin origin, @Nullable AgentSession session,
                                      @Nullable String text, @Nullable HarnessInput in, RejectReason reason,
                                      @Nullable String detail) {
-        HostInput input = HostInput.early(SubmitResult.Kind.REJECTED, tenant, sessionId, origin, session, text, in);
+        HostInput input = HostInput.early(Disposition.REJECTED, tenant, sessionId, origin, session, text, in);
         HostSinkSupport.safe(() -> sink.rejected(input, reason, detail));
         return SubmitResult.rejected(reason, detail);
     }
@@ -587,10 +588,10 @@ public final class HarnessHost {
         if (r.isOk() == false) {
             return null; // 插不进（盒满、运行刚结束等）：回落到正常受理
         }
-        HostInput input = HostInput.early(SubmitResult.Kind.STEERED, tenant, session.getSessionId(), origin, session,
+        HostInput input = HostInput.early(Disposition.STEERED, tenant, session.getSessionId(), origin, session,
                 text, in);
         HostSinkSupport.safe(() -> sink.steered(input));
-        return SubmitResult.of(SubmitResult.Kind.STEERED);
+        return SubmitResult.of(Disposition.STEERED);
     }
 
     private void decorate(String tenant, HarnessInput in) {
@@ -612,7 +613,7 @@ public final class HarnessHost {
         if (dispatch != null && dispatch.getOrigin() != null && dispatch.getOrigin().isEmpty() == false) {
             routeIn = dispatch.getOrigin();
         }
-        final HostInput input = HostInput.of(kindOf(outcome), c.tenant, c.session, routeIn, text, outcome, item, in);
+        final HostInput input = HostInput.of(dispositionOf(outcome), c.tenant, c.session, routeIn, text, outcome, item, in);
 
         switch (outcome.getKind()) {
             case TASK:
@@ -665,29 +666,29 @@ public final class HarnessHost {
             default:
                 HostSinkSupport.safe(() -> sink.admitted(input));
                 drainUnless(c, inClaim);
-                return SubmitResult.of(SubmitResult.Kind.IGNORED);
+                return SubmitResult.of(Disposition.IGNORED);
         }
     }
 
     /**
-     * 引擎结局换算为宿主结果类型（与 {@link #route} 的分支一一对应，保证回调里的 kind 与 submit 返回值一致）。
+     * 引擎结局换算为宿主结果类型（与 {@link #route} 的分支一一对应，保证回调里的处置与 submit 返回值一致）。
      */
-    private static SubmitResult.Kind kindOf(InputOutcome outcome) {
+    private static Disposition dispositionOf(InputOutcome outcome) {
         switch (outcome.getKind()) {
             case TASK:
                 // 忙时可执行命令触发了任务：不开流，按 BUSY 拒绝
-                return outcome.isBesideRunning() ? SubmitResult.Kind.REJECTED : SubmitResult.Kind.STARTED;
+                return outcome.isBesideRunning() ? Disposition.REJECTED : Disposition.STARTED;
             case REPLY:
-                return SubmitResult.Kind.REPLY;
+                return Disposition.REPLY;
             case HITL:
-                return SubmitResult.Kind.HITL;
+                return Disposition.HITL;
             case DEFERRED:
-                return SubmitResult.Kind.DEFERRED;
+                return Disposition.DEFERRED;
             case REJECTED:
-                return SubmitResult.Kind.REJECTED;
+                return Disposition.REJECTED;
             case IGNORED:
             default:
-                return SubmitResult.Kind.IGNORED;
+                return Disposition.IGNORED;
         }
     }
 
@@ -937,7 +938,7 @@ public final class HarnessHost {
                     InputOutcome outcome = c.engine.handle(in);
                     SubmitResult r = route(c, outcome, item.getOrigin(), item.getText(), item, in, null, true, adm);
                     // 开了流 = 异步启动（终态由 RunTicket.settle 收口）；其余结局已同步完成
-                    return r.getKind() != SubmitResult.Kind.STARTED;
+                    return r.getDisposition() != Disposition.STARTED;
                 } finally {
                     admitting.remove(adm);
                 }
@@ -1022,7 +1023,7 @@ public final class HarnessHost {
         }
 
         Ctx c = new Ctx(tenant, engine, session);
-        HostInput input = HostInput.of(SubmitResult.Kind.STARTED, tenant, session, InputOrigin.channel(channel), prompt,
+        HostInput input = HostInput.of(Disposition.STARTED, tenant, session, InputOrigin.channel(channel), prompt,
                 outcome, null, in);
         ActiveRun ar = openRun(c, outcome, input, channel, null, null);
         try {

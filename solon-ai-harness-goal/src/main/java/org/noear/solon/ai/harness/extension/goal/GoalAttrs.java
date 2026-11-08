@@ -28,7 +28,7 @@ final class GoalAttrs {
     static final String GOAL = "session.goal";
 
     /**
-     * goal 运行态实例（{@code attrs()} 中的 {@link GoalState}，transient；首次访问时从投影 hydrate）
+     * goal 运行态实例（{@code attrs()} 中的 {@link Goal}，transient；首次访问时从投影 hydrate）
      */
     static final String GOAL_STATE = "session.goal.state";
 

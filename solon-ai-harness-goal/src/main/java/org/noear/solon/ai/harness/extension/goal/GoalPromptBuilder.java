@@ -16,7 +16,7 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 /**
- * Goal 提示词构建器 — 只依赖 {@link GoalState}。
+ * Goal 提示词构建器 — 只依赖 {@link Goal}。
  *
  * <p>职责：根据预算剩余比率自动切换完整/精简/极简三种引导词模式，以及预算耗尽收尾引导词。
  *
@@ -50,7 +50,7 @@ class GoalPromptBuilder {
      *   <li>预算 &lt; 15%：极简单段落</li>
      * </ul>
      */
-    public String buildEffectivePrompt(GoalState gs) {
+    public String buildEffectivePrompt(Goal gs) {
         String prompt = gs.getObjective();
         int iter = gs.getCurrentIteration();
         boolean isFirstIter = iter == 0;
@@ -165,7 +165,7 @@ class GoalPromptBuilder {
     /**
      * 构建 budget_limit 引导词（对齐 Codex budget_limit.md）
      */
-    public String buildBudgetLimitPrompt(GoalState gs) {
+    public String buildBudgetLimitPrompt(Goal gs) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n--- 预算耗尽 (Budget Limit) ---\n");
         sb.append("你的目标 Token 预算已耗尽。\n\n");
@@ -197,7 +197,7 @@ class GoalPromptBuilder {
     /**
      * 精简模式（预算 15%-30%）：3 章节
      */
-    private String buildCompactPrompt(String prompt, GoalState gs,
+    private String buildCompactPrompt(String prompt, Goal gs,
                                       String budgetInfo, int iter, boolean isFirstIter) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
@@ -223,7 +223,7 @@ class GoalPromptBuilder {
     /**
      * 极简模式（预算 < 15%）：单段落
      */
-    private String buildMinimalPrompt(String prompt, GoalState gs,
+    private String buildMinimalPrompt(String prompt, Goal gs,
                                       String budgetInfo) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
@@ -238,13 +238,13 @@ class GoalPromptBuilder {
     /**
      * 计算预算剩余比率
      */
-    static double budgetRatio(GoalState gs) {
+    static double budgetRatio(Goal gs) {
         return gs.getMaxTokens() > 0
                 ? (double) (gs.getMaxTokens() - gs.getConsumedTokens()) / gs.getMaxTokens()
                 : 1.0;
     }
 
-    static String buildBudgetInfo(GoalState gs) {
+    static String buildBudgetInfo(Goal gs) {
         StringBuilder sb = new StringBuilder();
 
         if (gs.getMaxTokens() > 0) {
@@ -273,7 +273,7 @@ class GoalPromptBuilder {
         return sb.toString();
     }
 
-    static String buildIterationInfo(GoalState gs) {
+    static String buildIterationInfo(Goal gs) {
         if (gs.getMaxIterations() <= 0) {
             return "";
         }

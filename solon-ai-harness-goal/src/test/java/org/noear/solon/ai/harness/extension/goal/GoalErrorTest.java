@@ -20,25 +20,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 连续错误递增测试：验证 GoalState 的错误计数、重置及 BLOCKED 阈值行为。
+ * 连续错误递增测试：验证 Goal 的错误计数、重置及 BLOCKED 阈值行为。
  *
  * <p>覆盖场景：
  * <ul>
  *   <li>连续错误计数递增（1, 2, 3, ...）</li>
  *   <li>成功后重置计数</li>
  *   <li>递增延迟公式（5s × errors）— 由 handleExecutionError 内部计算</li>
- *   <li>达到阈值后 GoalState 转换至 BLOCKED</li>
+ *   <li>达到阈值后 Goal 转换至 BLOCKED</li>
  * </ul>
  *
  * @since 3.9.3
  */
-class GoalStateErrorTest {
+class GoalErrorTest {
 
     // ===== 连续错误计数 =====
 
     @Test
     void consecutiveErrorsIncrementsFromZero() {
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         assertEquals(0, gs.getConsecutiveErrors(), "initial error count should be 0");
         assertEquals(1, gs.incrementConsecutiveErrors(), "first error should return 1");
         assertEquals(2, gs.incrementConsecutiveErrors(), "second error should return 2");
@@ -47,7 +47,7 @@ class GoalStateErrorTest {
 
     @Test
     void consecutiveErrorsResetAfterSuccess() {
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         gs.incrementConsecutiveErrors();
         gs.incrementConsecutiveErrors();
         assertEquals(2, gs.getConsecutiveErrors(), "should have 2 errors before reset");
@@ -58,7 +58,7 @@ class GoalStateErrorTest {
 
     @Test
     void consecutiveErrorsContinuesAfterPartialReset() {
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         gs.incrementConsecutiveErrors(); // 1
         gs.incrementConsecutiveErrors(); // 2
         gs.resetConsecutiveErrors();     // 0
@@ -83,7 +83,7 @@ class GoalStateErrorTest {
     @Test
     void goalMarkedBlockedWhenErrorsReachThreshold() {
         // maxConsecutiveErrors = 3（LoopGroupDo 默认值）
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         
 
         // 前 2 次错误不应触发 BLOCKED
@@ -91,7 +91,7 @@ class GoalStateErrorTest {
             int errors = gs.incrementConsecutiveErrors();
             if (errors < 3) {
                 // 未达阈值，不标记 BLOCKED
-                assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus());
+                assertEquals(GoalStatus.PURSUING, gs.getStatus());
             }
         }
 
@@ -104,7 +104,7 @@ class GoalStateErrorTest {
             gs.markBlocked();
         }
 
-        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus(),
+        assertEquals(GoalStatus.BLOCKED, gs.getStatus(),
                 "goal should be BLOCKED after 3 consecutive errors");
         assertTrue(gs.getStatus().isResumable(),
                 "BLOCKED should be resumable");
@@ -112,14 +112,14 @@ class GoalStateErrorTest {
 
     @Test
     void goalNotBlockedBeforeThreshold() {
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         
 
         // 2 次错误，阈值为 3 → 不应 BLOCKED
         gs.incrementConsecutiveErrors(); // 1
         gs.incrementConsecutiveErrors(); // 2
 
-        assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus(),
+        assertEquals(GoalStatus.PURSUING, gs.getStatus(),
                 "goal should still be PURSUING before threshold");
         assertFalse(gs.getStatus().isTerminal(),
                 "goal should not be terminal before threshold");
@@ -129,7 +129,7 @@ class GoalStateErrorTest {
     void goalBlockedWithCustomThreshold() {
         // 模拟 maxConsecutiveErrors=5 场景
         int threshold = 5;
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         
 
         for (int i = 1; i <= threshold; i++) {
@@ -143,7 +143,7 @@ class GoalStateErrorTest {
             gs.markBlocked();
         }
 
-        assertEquals(GoalSnapshot.Status.BLOCKED, gs.getStatus(),
+        assertEquals(GoalStatus.BLOCKED, gs.getStatus(),
                 "goal should be BLOCKED after " + threshold + " errors");
     }
 
@@ -151,7 +151,7 @@ class GoalStateErrorTest {
 
     @Test
     void successfulExecutionResetsErrorsAndGoalRemainsPursuing() {
-        GoalState gs = createGoal();
+        Goal gs = createGoal();
         
 
         // 2 次连续错误
@@ -167,13 +167,13 @@ class GoalStateErrorTest {
         // 再错误计数应为 1（重新从 0 开始）
         assertEquals(1, gs.incrementConsecutiveErrors(),
                 "should start from 1 after reset then error");
-        assertEquals(GoalSnapshot.Status.PURSUING, gs.getStatus(),
+        assertEquals(GoalStatus.PURSUING, gs.getStatus(),
                 "goal should remain PURSUING after reset");
     }
 
     // ===== 辅助方法 =====
 
-    private static GoalState createGoal() {
-        return new GoalState("test goal", 0);
+    private static Goal createGoal() {
+        return new Goal("test goal", 0);
     }
 }

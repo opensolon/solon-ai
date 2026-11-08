@@ -76,7 +76,7 @@ public class GoalTalent extends AbsTalent {
     public String goal_get(String __sessionId,
                           String __cwd) {
         AgentSession session = sessionOf(__sessionId);
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
 
         if (gs == null) {
             return errJson("NO_GOAL", "未找到目标");
@@ -143,7 +143,7 @@ public class GoalTalent extends AbsTalent {
         }
 
         AgentSession session = sessionOf(__sessionId);
-        GoalState gs = goalRuntime.state(session);
+        Goal gs = goalRuntime.state(session);
         if (gs == null) {
             return errJson("NO_GOAL", "未找到活跃目标");
         }
@@ -249,7 +249,7 @@ public class GoalTalent extends AbsTalent {
     /**
      * 构建 completion budget report（目标完成时的预算摘要）
      */
-    private static String buildCompletionBudgetReport(GoalState gs) {
+    private static String buildCompletionBudgetReport(Goal gs) {
         StringBuilder sb = new StringBuilder();
         sb.append("Goal achieved. ");
         if (gs.getMaxTokens() > 0) {

@@ -138,7 +138,7 @@ class GoalRuntime {
         }
     }
 
-    private void notifyChanged(AgentSession session, GoalState gs, boolean removed) {
+    private void notifyChanged(AgentSession session, Goal gs, boolean removed) {
         if (gs == null || listeners.isEmpty()) return;
         String sessionId = session.getSessionId();
         GoalSnapshot snapshot = GoalSnapshot.of(gs, removed == false && isRunning(session));
@@ -558,16 +558,16 @@ class GoalRuntime {
      * @param maxTokens Token 预算（0 = 不限制）
      * @param maxDurationMs 时间预算毫秒（0 = 不限制）
      * @param maxIterations 轮次预算（0 = 不限制）
-     * @return 新建的 GoalState
+     * @return 新建的 Goal
      * @throws IllegalStateException 已有活跃 goal
      */
-    public GoalState attach(AgentSession session, String objective,
+    public Goal attach(AgentSession session, String objective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
         return attach(session, objective, null, maxTokens, maxDurationMs, maxIterations);
     }
 
     /** 按规格创建（含展示正文）。 */
-    GoalState attach(AgentSession session, GoalSpec spec) {
+    Goal attach(AgentSession session, GoalSpec spec) {
         return attach(session, spec.getObjective(), spec.getDisplayObjective(),
                 spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
     }
@@ -581,21 +581,21 @@ class GoalRuntime {
      * （列表短暂出现附件全文）。本方法在同一个临界区内完成两步并只广播一次。</p>
      *
      * @param displayObjective 展示正文；null 或与 objective 相同时不覆写
-     * @return 新建的 GoalState
+     * @return 新建的 Goal
      * @throws IllegalStateException 已有活跃 goal
      */
-    public GoalState attach(AgentSession session, String objective, String displayObjective,
+    public Goal attach(AgentSession session, String objective, String displayObjective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
         if (session == null) {
             throw new IllegalArgumentException("session is required");
         }
         synchronized (session.attrs()) {
-            GoalState existing = stateLocked(session);
+            Goal existing = stateLocked(session);
             if (existing != null && !existing.getStatus().isTerminal()) {
                 throw new IllegalStateException("当前会话已有进行中的 Goal，请先清除后再创建");
             }
 
-            GoalState gs = new GoalState(objective, maxTokens, budgetThresholds);
+            Goal gs = new Goal(objective, maxTokens, budgetThresholds);
             gs.setMaxDurationMs(maxDurationMs);
             gs.setMaxIterations(maxIterations);
 
@@ -621,7 +621,7 @@ class GoalRuntime {
     }
 
     /** 读取本会话 goal（无则返回 null）。 */
-    public GoalState state(AgentSession session) {
+    public Goal state(AgentSession session) {
         if (session == null) return null;
         synchronized (session.attrs()) {
             return stateLocked(session);
@@ -630,12 +630,12 @@ class GoalRuntime {
 
     /** 是否存在活跃或可恢复的 goal。 */
     public boolean hasGoal(AgentSession session) {
-        GoalState gs = state(session);
+        Goal gs = state(session);
         return gs != null && !gs.getStatus().isTerminal();
     }
 
     /** 持久化当前状态（状态转移后调用），并广播给观察者。 */
-    public void commit(AgentSession session, GoalState gs) {
+    public void commit(AgentSession session, Goal gs) {
         if (session == null || gs == null) return;
         synchronized (session.attrs()) {
             session.attrs().put(ATTR_GOAL, gs);
@@ -648,7 +648,7 @@ class GoalRuntime {
      * 更新目标与预算（编辑场景）。调用方应先暂停并中断正在执行的旧轮次。
      */
     public void update(AgentSession session, String objective, long maxTokens, int maxIterations) {
-        GoalState gs = state(session);
+        Goal gs = state(session);
         if (gs == null) {
             throw new IllegalStateException("Goal not found");
         }
@@ -663,7 +663,7 @@ class GoalRuntime {
     }
 
     /** 按补丁改写（null 字段保持原值）；一次落盘、一次广播。调用方应先停稳在跑轮次。 */
-    void apply(AgentSession session, GoalState gs, GoalPatch patch) {
+    void apply(AgentSession session, Goal gs, GoalPatch patch) {
         synchronized (session.attrs()) {
             if (patch.getObjective() != null) gs.setObjective(patch.getObjective());
             if (patch.getMaxTokens() != null) gs.setMaxTokens(patch.getMaxTokens());
@@ -684,7 +684,7 @@ class GoalRuntime {
     public void clear(AgentSession session) {
         if (session == null) return;
         synchronized (session.attrs()) {
-            GoalState removed = stateLocked(session);
+            Goal removed = stateLocked(session);
             session.attrs().remove(ATTR_GOAL);
             if (session.getContext() != null) {
                 session.getContext().data().remove(KEY_GOAL);
@@ -698,7 +698,7 @@ class GoalRuntime {
      * 暂停（PURSUING → PAUSED）。仅 PURSUING 可暂停：BLOCKED 是熔断态、
      * 其调度已随熔断停止，无需也不应经 pause 转换（Web 端点已前置同口径校验）。
      */
-    public boolean pause(AgentSession session, GoalState gs) {
+    public boolean pause(AgentSession session, Goal gs) {
         if (gs == null) return false;
         boolean changed = gs.pause();
         if (changed) {
@@ -708,7 +708,7 @@ class GoalRuntime {
     }
 
     /** 恢复（PAUSED/BLOCKED → PURSUING）。 */
-    public boolean resume(AgentSession session, GoalState gs) {
+    public boolean resume(AgentSession session, Goal gs) {
         if (gs == null) return false;
         boolean changed = gs.resume();
         if (changed) {
@@ -720,12 +720,12 @@ class GoalRuntime {
     // ==================== 运行态存取（与快照投影的桥接） ====================
 
     /** 运行态优先；缺失时从 data() 投影 hydrate（调用方须持 attrs 锁）。 */
-    private GoalState stateLocked(AgentSession session) {
+    private Goal stateLocked(AgentSession session) {
         Object value = session.attrs().get(ATTR_GOAL);
-        if (value instanceof GoalState) {
-            return (GoalState) value;
+        if (value instanceof Goal) {
+            return (Goal) value;
         }
-        GoalState hydrated = hydrate(session);
+        Goal hydrated = hydrate(session);
         if (hydrated != null) {
             session.attrs().put(ATTR_GOAL, hydrated);
         }
@@ -733,12 +733,12 @@ class GoalRuntime {
     }
 
     /** 从会话上下文投影重建 goal；无投影返回 null。 */
-    private GoalState hydrate(AgentSession session) {
+    private Goal hydrate(AgentSession session) {
         if (session.getContext() == null) return null;
         GoalProjection projection = GoalProjection.from(session.getContext());
         if (projection == null) return null;
         try {
-            GoalState gs = GoalState.fromMap(projection.toMap());
+            Goal gs = Goal.fromMap(projection.toMap());
             if (gs != null) {
                 gs.setThresholds(budgetThresholds);
             }
@@ -750,7 +750,7 @@ class GoalRuntime {
     }
 
     /** 写投影并落盘（调用方须持 attrs 锁）。 */
-    private void saveLocked(AgentSession session, GoalState gs) {
+    private void saveLocked(AgentSession session, Goal gs) {
         if (session.getContext() == null) return;
         session.getContext().data().put(KEY_GOAL, gs.toMap());
         session.updateSnapshot();
@@ -765,7 +765,7 @@ class GoalRuntime {
      */
     public boolean runRound(AgentSession session) {
         String sessionId = session.getSessionId();
-        GoalState gs = state(session);
+        Goal gs = state(session);
 
         // ① 守卫
         if (gs == null || !gs.getStatus().isActive()) {
@@ -809,14 +809,14 @@ class GoalRuntime {
     }
 
     /** 轮前预算守卫：命中即收尾并终止。 */
-    private boolean guardBeforeRound(AgentSession session, GoalState gs) {
+    private boolean guardBeforeRound(AgentSession session, Goal gs) {
         // 时间预算
         if (gs.getMaxDurationMs() > 0) {
             long elapsed = System.currentTimeMillis() - gs.getStartEpochMs();
             if (elapsed >= gs.getMaxDurationMs()) {
                 LOG.info("Goal '{}' duration exceeded ({}ms), wrap-up turn", gs.getId(), elapsed);
                 executeBudgetWrapUp(session, gs);
-                if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
+                if (gs.getStatus() != GoalStatus.ACHIEVED) {
                     gs.markBudgetLimited();
                 }
                 commit(session, gs);
@@ -828,7 +828,7 @@ class GoalRuntime {
         if (gs.isBudgetExceeded()) {
             LOG.info("Goal '{}' token budget exceeded, wrap-up turn", gs.getId());
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalStatus.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -848,7 +848,7 @@ class GoalRuntime {
     }
 
     /** 执行一轮主体：构建 prompt → 执行 → 状态评估 → 持久化。 */
-    private boolean executeRound(AgentSession session, GoalState gs) throws Exception {
+    private boolean executeRound(AgentSession session, Goal gs) throws Exception {
         String sessionId = session.getSessionId();
         String effectivePrompt = promptBuilder.buildEffectivePrompt(gs);
 
@@ -906,7 +906,7 @@ class GoalRuntime {
         }
 
         // 完成判定（由 goal_update(complete) 驱动，此处只做证据复核）
-        boolean achieved = gs.getStatus() == GoalSnapshot.Status.ACHIEVED;
+        boolean achieved = gs.getStatus() == GoalStatus.ACHIEVED;
         if (achieved && requiresActionEvidence(gs.getObjective())
                 && !result.hasToolCalls()) {
             gs.rejectAchievement();
@@ -924,7 +924,7 @@ class GoalRuntime {
         // 轮后 Token 预算
         if (gs.isBudgetExceeded()) {
             executeBudgetWrapUp(session, gs);
-            if (gs.getStatus() != GoalSnapshot.Status.ACHIEVED) {
+            if (gs.getStatus() != GoalStatus.ACHIEVED) {
                 gs.markBudgetLimited();
             }
             commit(session, gs);
@@ -943,7 +943,7 @@ class GoalRuntime {
     }
 
     /** 预算耗尽收尾：让模型总结进展与剩余工作，不再续行。 */
-    private void executeBudgetWrapUp(AgentSession session, GoalState gs) {
+    private void executeBudgetWrapUp(AgentSession session, Goal gs) {
         try {
             String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs);
             execute(session.getSessionId(), wrapUpPrompt);
@@ -954,7 +954,7 @@ class GoalRuntime {
 
     // ==================== 异常分级熔断 ====================
 
-    private void handleExecutionError(AgentSession session, GoalState gs, Exception e) {
+    private void handleExecutionError(AgentSession session, Goal gs, Exception e) {
         String errorType = ErrorClassifier.classifyError(e);
         String summary = extractErrorSummary(e);
         int sameTypeCount = gs.recordError(errorType, summary);
@@ -1009,7 +1009,7 @@ class GoalRuntime {
      * 在轮内仅作「提示性」判断，权威判定是 {@code executeRound} 对返回结果的复核。</p>
      */
     public Boolean currentRoundHasActionEvidence(AgentSession session) {
-        GoalState gs = state(session);
+        Goal gs = state(session);
         return gs == null ? null : gs.getLastHasToolCalls();
     }
 
@@ -1114,7 +1114,7 @@ class GoalRuntime {
     /** 投影状态名是否终态（损坏/未知值按非终态处理，交由 hydrate 与守卫兜底）。 */
     public static boolean isTerminalStatus(String statusName) {
         try {
-            return GoalSnapshot.Status.valueOf(statusName).isTerminal();
+            return GoalStatus.valueOf(statusName).isTerminal();
         } catch (Throwable e) {
             return false;
         }
@@ -1123,7 +1123,7 @@ class GoalRuntime {
     /** 投影状态名是否活跃（PURSUING；损坏/未知值按非活跃处理，恢复时不动）。 */
     public static boolean isActiveStatus(String statusName) {
         try {
-            return GoalSnapshot.Status.valueOf(statusName).isActive();
+            return GoalStatus.valueOf(statusName).isActive();
         } catch (Throwable e) {
             return false;
         }

@@ -13,6 +13,7 @@ import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.host.HostSignal;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.RejectReason;
 
@@ -99,7 +100,7 @@ class ReferenceHostsTest {
         try {
             b.host.openSession("acme", "im-c1", "acme/u1");
             SubmitResult r = b.onMessage("acme", "c1", "u1", "hello");
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
+            assertEquals(Disposition.STARTED, r.getDisposition());
             assertEquals("c1", b.replyRoute.get("im-c1"), "受理后记下回复路由");
             assertEquals(1, b.typing.size());
             r.getRun().await(Duration.ofSeconds(30));

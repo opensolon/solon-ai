@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.host.HostSink;
 import org.noear.solon.ai.harness.host.HostInput;
 import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.InterruptMode;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.scope.InputScope;
@@ -129,7 +130,7 @@ class QuickstartSampleTest {
             SubmitResult r = host.submit("acme", "s1", HarnessInput.of("hello")
                     .origin(InputOrigin.of("web", "u1", null, null))
                     .principal("acme/u1"));
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
+            assertEquals(Disposition.STARTED, r.getDisposition(), r.toString());
             RunOutcome outcome = r.getRun().await(Duration.ofSeconds(30));   // 按请求拿结果，不必轮询 sink
             assertNotNull(outcome);
             assertEquals(1, sink.finished.size(), "全局 sink 同样收到终态");
@@ -141,7 +142,7 @@ class QuickstartSampleTest {
             // 别的租户的主体：解析不到作用域 → SERVER 下拒绝受理
             host.openSession("acme", "s2", "other/u1");
             SubmitResult noScope = host.submit("acme", "s2", HarnessInput.of("hello"));
-            assertEquals(SubmitResult.Kind.REJECTED, noScope.getKind());
+            assertEquals(Disposition.REJECTED, noScope.getDisposition());
             assertEquals(403, noScope.httpStatus());
 
             // 未开通的会话：只查不建

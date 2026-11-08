@@ -19,6 +19,7 @@ import org.noear.solon.ai.harness.host.HostSink;
 import org.noear.solon.ai.harness.host.RunOutcome;
 import org.noear.solon.ai.harness.host.RunPrep;
 import org.noear.solon.ai.harness.host.RunSink;
+import org.noear.solon.ai.harness.host.Disposition;
 import org.noear.solon.ai.harness.host.SubmitResult;
 import reactor.core.Disposable;
 import reactor.core.scheduler.Schedulers;
@@ -325,7 +326,7 @@ class HarnessHostLifecycleTest {
             release.countDown();
 
             SubmitResult r = f.get(10, TimeUnit.SECONDS);
-            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
+            assertEquals(Disposition.STARTED, r.getDisposition());
             assertTrue(executor.runNext(5_000));
             RunOutcome o = r.getRun().await(Duration.ofSeconds(10));
             assertEquals(RunOutcome.End.CANCELLED, o.getEnd());

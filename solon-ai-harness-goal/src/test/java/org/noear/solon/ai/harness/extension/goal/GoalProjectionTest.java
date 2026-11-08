@@ -14,14 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Goal 投影门面契约：
  * 1. 字段名解析/写入只在 harness 内部发生，宿主不再拼投影 Map；
- * 2. GoalState.toMap/fromMap 与本门面双向一致（字段集不漂移）；
+ * 2. Goal.toMap/fromMap 与本门面双向一致（字段集不漂移）；
  * 3. 无投影 / 缺 status / 状态名非法 一律返回 null，不抛异常。
  */
 class GoalProjectionTest {
 
     @Test
-    void roundTripWithGoalState() {
-        GoalState gs = new GoalState("全部测试通过", 1000);
+    void roundTripWithGoal() {
+        Goal gs = new Goal("全部测试通过", 1000);
         gs.setMaxIterations(5);
         gs.setMaxDurationMs(60000);
         gs.setCurrentIteration(2);
@@ -33,7 +33,7 @@ class GoalProjectionTest {
         assertTrue(projection != null);
         assertEquals(gs.getId(), projection.getGoalId());
         assertEquals("全部测试通过", projection.getObjective());
-        assertEquals(GoalSnapshot.Status.PURSUING, projection.getStatus());
+        assertEquals(GoalStatus.PURSUING, projection.getStatus());
         assertTrue(projection.isActive());
         assertFalse(projection.isTerminal());
         assertEquals(1000, projection.getMaxTokens());
@@ -46,17 +46,17 @@ class GoalProjectionTest {
 
     @Test
     void fromMapIsSymmetric() {
-        GoalState gs = new GoalState("obj", 100);
+        Goal gs = new Goal("obj", 100);
         gs.pause();
 
         // 门面 → Map → 领域对象
-        GoalProjection projection = GoalProjection.ofState(gs);
-        GoalState restored = GoalState.fromMap(projection.toMap());
+        GoalProjection projection = GoalProjection.ofGoal(gs);
+        Goal restored = Goal.fromMap(projection.toMap());
 
         assertTrue(restored != null);
         assertEquals(gs.getId(), restored.getId());
         assertEquals(gs.getObjective(), restored.getObjective());
-        assertEquals(GoalSnapshot.Status.PAUSED, restored.getStatus());
+        assertEquals(GoalStatus.PAUSED, restored.getStatus());
         assertEquals(gs.getMaxTokens(), restored.getMaxTokens());
     }
 
@@ -87,7 +87,7 @@ class GoalProjectionTest {
         GoalProjection.builder()
                 .goalId("g-1")
                 .objective("完成重构")
-                .status(GoalSnapshot.Status.PURSUING)
+                .status(GoalStatus.PURSUING)
                 .maxTokens(2000)
                 .maxIterations(3)
                 .build()
@@ -100,14 +100,14 @@ class GoalProjectionTest {
         assertTrue(read.isActive());
         assertEquals(2000, read.getMaxTokens());
 
-        assertEquals(GoalSnapshot.Status.PURSUING, GoalProjection.statusOf(context));
+        assertEquals(GoalStatus.PURSUING, GoalProjection.statusOf(context));
     }
 
     /** 迁移场景：按历史状态名填充，非法名不得产出半残投影。 */
     @Test
     void builderStatusNameToleratesBadInput() {
         GoalProjection ok = GoalProjection.builder().statusName("ACHIEVED").build();
-        assertEquals(GoalSnapshot.Status.ACHIEVED, ok.getStatus());
+        assertEquals(GoalStatus.ACHIEVED, ok.getStatus());
         assertTrue(ok.isTerminal());
 
         GoalProjection bad = GoalProjection.builder().statusName("NOPE").build();
@@ -120,11 +120,11 @@ class GoalProjectionTest {
     @Test
     void statusOfReflectsActiveAndTerminal() {
         FlowContext pursuing = FlowContext.fromJson("{}");
-        GoalProjection.builder().status(GoalSnapshot.Status.PURSUING).build().writeTo(pursuing);
+        GoalProjection.builder().status(GoalStatus.PURSUING).build().writeTo(pursuing);
         assertTrue(GoalProjection.statusOf(pursuing).isActive());
 
         FlowContext achieved = FlowContext.fromJson("{}");
-        GoalProjection.builder().status(GoalSnapshot.Status.ACHIEVED).build().writeTo(achieved);
+        GoalProjection.builder().status(GoalStatus.ACHIEVED).build().writeTo(achieved);
         assertTrue(GoalProjection.statusOf(achieved).isTerminal());
         assertFalse(GoalProjection.statusOf(achieved).isActive());
     }

@@ -109,7 +109,7 @@ class GoalExtensionTest {
 
         GoalSnapshot t = ext.create(sid("s1"), GoalSpec.of("让测试全绿").maxTokens(100).maxIterations(5)).getValue();
         assertEquals("让测试全绿", t.getObjective());
-        assertEquals(GoalSnapshot.Status.PURSUING, t.getStatus());
+        assertEquals(GoalStatus.PURSUING, t.getStatus());
         assertEquals(100L, t.getMaxTokens());
         assertEquals(5, t.getMaxIterations());
 
@@ -153,8 +153,8 @@ class GoalExtensionTest {
         GoalExtension ext = attached();
         GoalSnapshot before = ext.create(sid("s1"), GoalSpec.of("目标")).getValue();
         assertTrue(ext.pause("s1").isOk());
-        assertEquals(GoalSnapshot.Status.PURSUING, before.getStatus(), "旧快照不随运行态变化");
-        assertEquals(GoalSnapshot.Status.PAUSED, ext.get("s1").getStatus());
+        assertEquals(GoalStatus.PURSUING, before.getStatus(), "旧快照不随运行态变化");
+        assertEquals(GoalStatus.PAUSED, ext.get("s1").getStatus());
     }
 
     @Test
@@ -183,10 +183,10 @@ class GoalExtensionTest {
 
         assertTrue(ext.pause("s-str").isOk());
         assertEquals(HarnessResult.Code.CONFLICT, ext.pause("s-str").getCode(), "已暂停不可再暂停");
-        assertEquals(GoalSnapshot.Status.PAUSED, ext.get("s-str").getStatus());
+        assertEquals(GoalStatus.PAUSED, ext.get("s-str").getStatus());
 
         assertTrue(ext.resume("s-str").isOk());
-        assertEquals(GoalSnapshot.Status.PURSUING, ext.get("s-str").getStatus());
+        assertEquals(GoalStatus.PURSUING, ext.get("s-str").getStatus());
         assertEquals(HarnessResult.Code.CONFLICT, ext.resume("s-str").getCode(), "活跃态不可恢复");
 
         assertTrue(ext.remove("s-str").isOk());
@@ -223,7 +223,7 @@ class GoalExtensionTest {
         assertEquals(200L, after.getMaxTokens());
         assertEquals(5000L, after.getMaxDurationMs(), "null 时长不得清空原值");
         assertEquals(7, after.getMaxIterations(), "轮次应保持原值");
-        assertEquals(GoalSnapshot.Status.PAUSED, after.getStatus(), "非活跃时只改写、不改状态");
+        assertEquals(GoalStatus.PAUSED, after.getStatus(), "非活跃时只改写、不改状态");
         assertEquals(0, stops.get(), "非活跃时无需停流");
 
         after = ext.update("s1", GoalPatch.create().objective("  ").maxDurationMs(9000L), null).getValue();
@@ -246,7 +246,7 @@ class GoalExtensionTest {
 
         assertEquals(Arrays.asList("PAUSED", "stop", "PAUSED", "PURSUING"), order,
                 "时序：暂停 → 停流 → 改写 → 恢复");
-        assertEquals(GoalSnapshot.Status.PURSUING, after.getStatus());
+        assertEquals(GoalStatus.PURSUING, after.getStatus());
         assertEquals("新目标", after.getObjective());
     }
 
@@ -255,7 +255,7 @@ class GoalExtensionTest {
         GoalExtension ext = attached();
         GoalSnapshot t = ext.create(sid("s1"), GoalSpec.of("目标")).getValue();
         AgentSession s = session("s1");
-        GoalState gs = ext.getGoalRuntime().state(s);
+        Goal gs = ext.getGoalRuntime().state(s);
         gs.achieve();
         ext.getGoalRuntime().commit(s, gs);
 
@@ -299,8 +299,8 @@ class GoalExtensionTest {
     void recoverIsNullSafeWithoutScheduler() {
         GoalExtension ext = attached();
 
-        assertEquals(0, ext.recover(Arrays.asList("a", "b"), id -> GoalSnapshot.Status.PURSUING));
-        assertEquals(0, ext.recover(null, id -> GoalSnapshot.Status.PURSUING));
+        assertEquals(0, ext.recover(Arrays.asList("a", "b"), id -> GoalStatus.PURSUING));
+        assertEquals(0, ext.recover(null, id -> GoalStatus.PURSUING));
         assertEquals(0, ext.recover(Collections.singletonList("a"), null));
         assertFalse(ext.hasActiveGoals(), "无调度器时恒为 false");
     }
@@ -332,11 +332,11 @@ class GoalExtensionTest {
         assertNull(engine.status(session).get(GoalExtension.STATUS_GOAL), "无 goal 时为 null");
 
         GoalSnapshot t = ext.create(sid("s-status"), GoalSpec.of("目标")).getValue();
-        assertEquals(GoalSnapshot.Status.PURSUING, engine.status(session).get(GoalExtension.STATUS_GOAL));
+        assertEquals(GoalStatus.PURSUING, engine.status(session).get(GoalExtension.STATUS_GOAL));
 
         ext.pause("s-status");
         ext.setEnabled(false);
-        assertEquals(GoalSnapshot.Status.PAUSED, engine.status(session).get(GoalExtension.STATUS_GOAL),
+        assertEquals(GoalStatus.PAUSED, engine.status(session).get(GoalExtension.STATUS_GOAL),
                 "事实口径不受开关影响");
 
         ext.remove("s-status");
@@ -352,6 +352,6 @@ class GoalExtensionTest {
         ext.create(sid("s-attrs"), GoalSpec.of("目标"));
 
         assertTrue(session.getContext().data().get(GoalAttrs.GOAL) instanceof Map, "投影落在 GoalAttrs.GOAL");
-        assertTrue(session.attrs().get(GoalAttrs.GOAL_STATE) instanceof GoalState, "运行态落在 GoalAttrs.GOAL_STATE");
+        assertTrue(session.attrs().get(GoalAttrs.GOAL_STATE) instanceof Goal, "运行态落在 GoalAttrs.GOAL_STATE");
     }
 }
