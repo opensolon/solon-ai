@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -36,39 +37,34 @@ import java.util.function.Predicate;
 /**
  * 一次输入的完整上下文
  * <p>
- * 这是「完整输入体验」的专用参数对象：宿主持有原始输入与端特性（模型选择、附件、回复路由），
- * 引擎据此完成命令识别、子代理解析、附件装配与 Prompt 构建。
+ * 宿主持有原始输入与端特性（模型选择、附件、回复路由），引擎据此完成命令识别、子代理解析、附件装配与 Prompt 构建。
  *
- * <p>示例：</p>
+ * <h3>两种写法，对应两层 API（不要混用）</h3>
  * <pre>{@code
- * InputAttachments atts = InputAttachments.of()
- *         .media(ImageBlock.ofBase64(base64, "image/png").filePath(".uploads/a.png"))
- *         .reference(".uploads/report.pdf");
- *
- * InputOutcome outcome = engine.handle(HarnessInput.of(session, "帮我看看这个 @coder")
- *         .selectedModel("gpt-4o")
- *         .attachments(atts));
- *
- * // 经宿主骨架提交时不带会话（由 HarnessHost 查归属、加载会话后绑定，见 copyFor）：
+ * // L0（推荐）：经宿主骨架提交，不带会话——HarnessHost 查归属、加载会话后绑定（见 copyFor）
  * host.submit(tenant, sid, HarnessInput.of("帮我看看这个")
  *         .principal(userId)                // 校验会话主体
  *         .whenBusy(BusyPolicy.STEER)       // 忙时先插话，插不进再排队
  *         .selectedModel("gpt-4o"));
  *
- * switch (outcome.getKind()) {
- *     case TASK:   // 有任务：先渲染回执（若有），再执行
- *         if (outcome.hasReply()) {
- *             render(outcome.getCommandOutput());
- *         }
- *         outcome.getRequest().stream().subscribe(event -> render(event));
- *         break;
- *     case REPLY:  // 只有回执（命令已执行，或命令在本渠道不可用）
- *         render(outcome.getCommandOutput());
- *         break;
- *     default:     // HITL / IGNORED
- *         break;
- * }
+ * // L1：自己编排时直接交给引擎，必须带会话（否则走临时会话），结局读 InputOutcome.getKind()
+ * InputOutcome outcome = engine.handle(HarnessInput.of(session, "帮我看看这个 @coder")
+ *         .selectedModel("gpt-4o")
+ *         .media(ImageBlock.ofBase64(base64, "image/png").filePath(".uploads/a.png")));
  * }</pre>
+ *
+ * <h3>方法分组</h3>
+ * <ul>
+ *   <li><b>常用</b>：{@link #whenBusy}、{@link #principal}、{@link #selectedModel}、{@link #selectedAgent}、
+ *       {@link #selectedSkill}、{@link #selectedMcp}、{@link #media}、{@link #reference}、{@link #attachments}、
+ *       {@link #attr}、{@link #hitl}、{@link #hitlOutput}、{@link #resume}；</li>
+ *   <li><b>渠道特性</b>（接入新端时才需要）：{@link #origin}、{@link #terminal}、{@link #commandAware}、
+ *       {@link #agentAware}、{@link #commandContextFactory}、{@link #scope}；</li>
+ *   <li><b>进阶</b>（宿主自行解析提及时）：{@link #explicitAgent}、{@link #trimContent}、
+ *       {@link #agentNameValidator}、{@link #parseMention}；</li>
+ *   <li><b>框架内部 / SPI</b>（宿主不要调）：{@link #copyFor}（宿主骨架）、{@link #restoredScope}（积压实现）、
+ *       {@link #resolvedScope}（引擎）、{@link #ofProgram}（调度插件）。</li>
+ * </ul>
  *
  * @author noear
  * @since 4.2
@@ -536,11 +532,12 @@ public final class HarnessInput {
     }
 
     /**
-     * 积压实现还原输入时用：设置从积压保存的显式作用域（见 {@code InputScope#fromSpec}）。
-     * 引擎续发时会把它与解析器的最新结果取交集。
+     * SPI：积压实现（{@code spi.InputBacklog}）还原输入时用：设置从积压保存的显式作用域（见 {@code InputScope#fromSpec}）。
+     * 引擎续发时会把它与解析器的最新结果取交集。宿主设置作用域请用 {@link #scope(InputScope)}。
      *
      * @since 4.2.0
      */
+    @Internal
     public HarnessInput restoredScope(@Nullable InputScope scope) {
         this.scope = scope;
         this.scopeResolved = false;
@@ -550,9 +547,11 @@ public final class HarnessInput {
 
     /**
      * 引擎内部使用：受理时把解析器的结果回写到输入（便于宿主回读），不算显式作用域。
+     * 宿主设置作用域请用 {@link #scope(InputScope)}。
      *
      * @since 4.2.0
      */
+    @Internal
     public HarnessInput resolvedScope(@Nullable InputScope scope) {
         this.scope = scope;
         this.scopeResolved = scope != null;

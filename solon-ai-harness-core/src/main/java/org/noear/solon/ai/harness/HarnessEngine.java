@@ -963,26 +963,6 @@ public class HarnessEngine {
     }
 
     /**
-     * 命令前缀（默认 "/"）
-     *
-     * @deprecated 4.2.0 改用 {@code getSettings().getCommandPrefix()}
-     */
-    @Deprecated
-    public String getCommandPrefix() {
-        return options.getCommandPrefix();
-    }
-
-    /**
-     * 子代理提及前缀（默认 "@"）
-     *
-     * @deprecated 4.2.0 改用 {@code getSettings().getAgentPrefix()}
-     */
-    @Deprecated
-    public String getAgentPrefix() {
-        return options.getAgentPrefix();
-    }
-
-    /**
      * @deprecated 4.2.0 改用 {@code getSettings().getApiRetries()}
      */
     @Deprecated
@@ -1333,33 +1313,11 @@ public class HarnessEngine {
     }
 
     /**
-     * 子代理任务默认并发上限（模型未配置 {@code AiConfig#getConcurrency()} 时生效）
+     * 设置子代理任务默认并发上限（仅供 {@link HarnessSettings#setSubagentDefaultConcurrency(Integer)} 使用）
      *
-     * <p>恒为有限正整数，不存在「不限制」；归一规则见
-     * {@link TaskTalent#normalizeDefaultConcurrency(int)}。</p>
-     *
-     * @deprecated 4.2.0 改用 {@code getSettings().getSubagentDefaultConcurrency()}
+     * <p>4.2.0 新增的配置项，公开入口只有 {@code getSettings()}，引擎上不留桥接。</p>
      */
-    @Deprecated
-    public int getSubagentDefaultConcurrency() {
-        return options.getSubagentDefaultConcurrency();
-    }
-
-    /**
-     * 设置子代理任务默认并发上限
-     *
-     * <p>取值：{@code 0} = 未设置（取 {@link TaskTalent#DEFAULT_CONCURRENCY}）；
-     * 上界 {@link TaskTalent#MAX_CONCURRENCY}（超出按上界处理）。
-     * <b>不存在「0 = 不限制」</b>——无限并发会让线程数、上游 QPS、内存退化为只受任务数约束，
-     * 且信号量缺席会让模型级 {@code concurrency} 形同虚设；需要更高并发请显式配置模型级
-     * {@code AiConfig#concurrency}。</p>
-     *
-     * @param subagentDefaultConcurrency 默认并发上限（0 = 未设置；负数报错）
-     *
-     * @deprecated 4.2.0 改用 {@code getSettings().setSubagentDefaultConcurrency(...)}
-     */
-    @Deprecated
-    public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
+    void applySubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
         assertMutable("setSubagentDefaultConcurrency");
         if (subagentDefaultConcurrency != null) {
             options.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
@@ -3021,7 +2979,10 @@ public class HarnessEngine {
             options.applyDeployMode(deployMode, explicit);
             if (options.getDeployMode() == DeployMode.SERVER) {
                 validateServerMode(options);
+            } else {
+                warnStandaloneMode(options);
             }
+            warnHitlMisconfigured(options);
 
             HarnessEngine engine = new HarnessEngine(options);
 
@@ -3036,6 +2997,50 @@ public class HarnessEngine {
             }
 
             return engine;
+        }
+
+        /**
+         * STANDALONE 模式的构建期提示：允许构建后再补模型（运行期可改），因此只告警不报错，
+         * 免得「忘了配模型」要到首次 {@code handle} 才发现。
+         */
+        static boolean warnStandaloneMode(HarnessOptions options) {
+            if (options.getModels().isEmpty()) {
+                LOG.warn("[Harness] no model configured at build time: the first handle will fail "
+                        + "unless addModel(...) is called before it (prefer Builder.modelAdd(...))");
+                return true;
+            }
+            if (Assert.isNotEmpty(options.getDefaultModel()) && !options.hasModel(options.getDefaultModel())) {
+                LOG.warn("[Harness] defaultModel not found among configured models: {}", options.getDefaultModel());
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * HITL 开关已开，但主代理工具集里没有 {@code hitl}（未加入或被禁用）时告警：
+         * 两个条件缺一不生效，而且不报错。
+         */
+        static boolean warnHitlMisconfigured(HarnessOptions options) {
+            if (options.isHitlEnabled() == false) {
+                return false;
+            }
+
+            String hitl = ToolName.TOOL_HITL.getName();
+            boolean listed = false;
+            for (String name : options.getTools()) {
+                if (name != null && ToolName.expand(name.trim()).contains(hitl)) {
+                    listed = true;
+                    break;
+                }
+            }
+
+            if (listed == false || options.getDisallowedTools().contains(hitl)) {
+                LOG.warn("[Harness] hitlEnabled=true but tool 'hitl' is not enabled for the main agent "
+                        + "(add it via toolsAdd(ToolName.TOOL_HITL) or '**', and keep it out of disallowedTools); "
+                        + "HITL will not take effect");
+                return true;
+            }
+            return false;
         }
 
         /**

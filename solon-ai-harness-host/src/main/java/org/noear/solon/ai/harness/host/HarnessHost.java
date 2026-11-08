@@ -967,10 +967,13 @@ public final class HarnessHost {
         }
     }
 
-    /** 先登记执行器再恢复：反过来，刚恢复的轮次可能走插件缺省执行器（不经 sink、不续发）。幂等 */
+    /**
+     * 先登记执行器再恢复：反过来，刚恢复的轮次可能走插件缺省执行器（不经 sink、不续发）。幂等。
+     * 只恢复后台轮次过滤命中的会话：同一引擎上挂了多个宿主时，别的入口的 goal 不该由本骨架恢复后落到缺省执行器上。
+     */
     private void recoverGoals(String tenant, HarnessEngine engine) {
         try {
-            engine.getExtension(GoalExtension.class).ifPresent(GoalExtension::recover);
+            engine.getExtension(GoalExtension.class).ifPresent(goal -> goal.recover(programFilter));
         } catch (Throwable e) {
             LOG.warn("[HarnessHost] goal recover failed: {}", tenant, e);
         }

@@ -1,7 +1,7 @@
 # solon-ai-harness 核心概念
 
-只列 SaaS 开发者（L0，见 [QUICKSTART-SAAS.md](QUICKSTART-SAAS.md)）需要掌握的概念。其余类型属于 L1 / L2，
-见 [README.md](README.md) 与 [SAAS.md](SAAS.md)。
+只列 SaaS 开发者（L0，见 [QUICKSTART-SAAS.md](../../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)）需要掌握的概念。其余类型属于 L1 / L2，
+见 [README.md](../README.md)、[ENGINE-L1.md](ENGINE-L1.md)（L1 受理 API）、[SAAS.md](SAAS.md)（服务端引擎侧约定）与 [host README](../../solon-ai-harness-host/README.md)。
 
 ## 术语
 

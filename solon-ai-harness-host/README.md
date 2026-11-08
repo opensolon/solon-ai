@@ -9,7 +9,7 @@ solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终�
 - 聚合包 `solon-ai-harness` 只做引用，已包含本模块
 
 > 本文示例都摘自 `src/test/java/features/ai/harness/all/ReadmeSamples.java`（文中省略了 import 与重复的端点），随构建编译，主干流程由 `ReadmeSampleTest` 运行。改示例时两边同步。
-> 多租户 SaaS 的引擎构建、权限与上线清单见 [QUICKSTART-SAAS.md](docs/QUICKSTART-SAAS.md)；术语见 [CONCEPTS.md](../solon-ai-harness/docs/CONCEPTS.md)；设计取舍见 [HOST-OPTIMIZATION.md](docs/HOST-OPTIMIZATION.md)。
+> 多租户 SaaS 的引擎构建、权限与上线清单见 [QUICKSTART-SAAS.md](docs/QUICKSTART-SAAS.md)；术语见 [CONCEPTS.md](../solon-ai-harness/docs/CONCEPTS.md)；引擎侧的隔离、作用域、会话归属与容量见 [SAAS.md](../solon-ai-harness/docs/SAAS.md)；设计取舍见 [HOST-OPTIMIZATION.md](docs/HOST-OPTIMIZATION.md)。
 
 **目录**
 

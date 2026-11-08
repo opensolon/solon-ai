@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.session.OwnerCheck;
@@ -500,11 +501,26 @@ public class GoalExtension extends AbsHarnessExtension {
      * @since 4.2.0
      */
     public int recover() {
+        return recover((Predicate<String>) null);
+    }
+
+    /**
+     * 同 {@link #recover()}，只恢复过滤命中的会话（同一引擎上挂了多个宿主时，各自只恢复自己认领的会话，
+     * 免得别的入口的 goal 被恢复后落到缺省执行器上跑）。
+     *
+     * @param sessionFilter 会话过滤（null = 全部）
+     * @return 挂上调度的会话数
+     * @since 4.2.0
+     */
+    public int recover(@Nullable Predicate<String> sessionFilter) {
         if (goalScheduler == null || isEnabled() == false) {
             return 0;
         }
         int recovered = 0;
         for (String sessionId : goalScheduler.readIndex()) {
+            if (sessionFilter != null && sessionFilter.test(sessionId) == false) {
+                continue;
+            }
             if (goalScheduler.isScheduled(sessionId) == false) {
                 schedule(sessionId, false);
                 recovered++;

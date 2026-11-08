@@ -171,17 +171,15 @@ public final class HarnessSettings {
     /**
      * 命令前缀（默认 "/"）
      */
-    @SuppressWarnings("deprecation")
     public String getCommandPrefix() {
-        return engine.getCommandPrefix();
+        return engine.options.getCommandPrefix();
     }
 
     /**
      * 子代理提及前缀（默认 "@"）
      */
-    @SuppressWarnings("deprecation")
     public String getAgentPrefix() {
-        return engine.getAgentPrefix();
+        return engine.options.getAgentPrefix();
     }
 
     @SuppressWarnings("deprecation")
@@ -281,9 +279,8 @@ public final class HarnessSettings {
      * <p>恒为有限正整数，不存在「不限制」；归一规则见
      * {@link TaskTalent#normalizeDefaultConcurrency(int)}。</p>
      */
-    @SuppressWarnings("deprecation")
     public int getSubagentDefaultConcurrency() {
-        return engine.getSubagentDefaultConcurrency();
+        return engine.options.getSubagentDefaultConcurrency();
     }
 
     /**
@@ -297,9 +294,8 @@ public final class HarnessSettings {
      *
      * @param subagentDefaultConcurrency 默认并发上限（0 = 未设置；负数报错）
      */
-    @SuppressWarnings("deprecation")
     public void setSubagentDefaultConcurrency(Integer subagentDefaultConcurrency) {
-        engine.setSubagentDefaultConcurrency(subagentDefaultConcurrency);
+        engine.applySubagentDefaultConcurrency(subagentDefaultConcurrency);
     }
 
     @SuppressWarnings("deprecation")

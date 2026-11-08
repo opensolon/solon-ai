@@ -1,5 +1,9 @@
 # solon-ai-harness-host 优化方案（v2，已拍板）
 
+> **这是决策记录，不是使用文档。** 按时间追加，后面的章节会推翻前面的写法（例如第十二节删掉了 `SubmitSpec`，
+> 第十四节把 `SubmitResult.Kind` 改成了 `Disposition`）；第三、四节的示例与类型表已同步到当前 API，其余章节保留当时的原文。
+> 当前 API 以 [host README](../README.md) 与 [QUICKSTART-SAAS.md](QUICKSTART-SAAS.md) 为准。
+
 > 目标：让 HarnessHost 能开发**任意** agent / agent SaaS，且三档用法都简单；soloncode-cli 的 Web 端
 > （一个工作区 = 一个租户）是验证样本之一，而不是接口的模子。
 >
@@ -13,7 +17,7 @@
 | principal 校验 | SERVER 模式下 `submit` 不传 principal 只告警一次（不拒绝）；传了就与 `getSessionPrincipal` 比对，不一致 → `rejected(SCOPE_UNAVAILABLE)` |
 | 插件依赖 | host 维持对 goal/queue/steer/loop 的硬依赖；README 写明「最小依赖请直接用 L1 的 `engine.handle`」 |
 | 引擎池位置 | 留在 core（`org.noear.solon.ai.harness.HarnessEnginePool`），文档与守卫随之对齐 |
-| 忙时语义 | `SubmitSpec.rejectWhenBusy(true)`：一问一答型宿主忙时直接拒绝，不排队 |
+| 忙时语义 | 一问一答型宿主忙时直接拒绝、不排队（当时写作 `SubmitSpec.rejectWhenBusy(true)`；现为 `HarnessInput.whenBusy(BusyPolicy.REJECT)`，见第十二节） |
 
 ## 二、防锁定规则
 
@@ -31,9 +35,9 @@
 // 第一档：一个请求一轮，不写 sink
 HarnessHost host = HarnessHost.builder().engines(pool::get).build();
 host.openSession(tenant, sid, userId);
-RunOutcome o = host.submit(tenant, sid, SubmitSpec.of("hello").principal(userId))
+RunOutcome o = host.submit(tenant, sid, HarnessInput.of("hello").principal(userId))
                    .getRun().await(Duration.ofMinutes(5));
-Flux<HostSignal> sse = host.stream(tenant, sid, SubmitSpec.of(text).principal(userId));
+Flux<HostSignal> sse = host.stream(tenant, sid, HarnessInput.of(text).principal(userId));
 
 // 第二档：推送型（WebSocket / IM），覆盖 2~3 个方法
 new HostSink() {
@@ -51,10 +55,10 @@ new HostSink() {
 
 ```java
 public interface HostSink {                         // 全部缺省实现
-    void admitted(HostInput in);                      // 受理后、分派前（TASK/REPLY/HITL/IGNORED）
+    void admitted(HostInput in);                      // 受理后、分派前（STARTED/REPLY/HITL/IGNORED）
     void reply(HostInput in, String text);            // 无任务的回执（text 非空才调）
     void deferred(HostInput in, int position);
-    void steered(HostInput in);                       // steerWhenBusy 插话成功
+    void steered(HostInput in);                       // whenBusy(STEER) 插话成功
     void rejected(HostInput in, RejectReason r, @Nullable String detail);
     void notOwner(HostInput in, @Nullable String owner);   // 缺省链到 rejected
     void hitl(HostInput in, List<HitlCard> cards);
@@ -74,12 +78,12 @@ public interface RunSink {                          // 每轮一个；全部缺�
 
 | 类型 | 内容 |
 |---|---|
-| `HostInput` | tenant、sessionId、origin、session(可空)、text、kind、commandName、command、besideRunning、hasReply、queueItem(可空)、selectedModel、selectedAgent、attrs（只读） |
+| `HostInput` | tenant、sessionId、origin、session(可空)、text、disposition（`Disposition`）、commandName、command、besideRunning、hasReply、queueItem(可空)、selectedModel、selectedAgent、attrs（只读） |
 | `HostRun` | tenant、sessionId、origin、agentName、modelName、dispatched、programChannel、text、queueItem、startedAt、session |
 | `RunPrep` | 只读视图：request()、prompt()、session()、modelName()、agentName()、run() |
 | `RunOutcome` | end（COMPLETED/FAILED/CANCELLED）、error、resultText、usage（`RunUsage`：tokens、toolCalls、elapsedMs）、streamOpened、hitlCards |
 | `RunHandle` | future()、await(Duration)、cancel() |
-| `SubmitSpec` | text、origin、principal、whenBusy(QUEUE/STEER/REJECT)、customize(Consumer&lt;HarnessInput&gt;)、observe(RunSink) |
+| `HarnessInput`（core） | 提交只有这一个输入类型：text、origin、principal、whenBusy(`BusyPolicy`：QUEUE/STEER/REJECT) 等；本轮监听改为 `submit/stream(t, sid, input, observer)` 的参数（原 `SubmitSpec` 已在第十二节删除） |
 | `HostSignal` | `host.stream` 元素：REPLY / EVENT / DEFERRED / REJECTED / HITL / STEERED / FINISHED |
 
 Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,Runnable,Runnable>)`、
@@ -144,7 +148,7 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 
 ## 九、第二轮优化：去掉宿主侧的时序负担
 
-迁移后 soloncode Web 端多出的复杂度有四个根因：同一轮的回调分在两个线程上；停止后迟到事件仍会交给宿主；queue 没有积压索引；工作区进缓存之前就通知运行时。本轮只调整语义、补一个索引，不新增回调。
+迁移后 soloncode Web 端多出的复杂度有四个根因：同一轮的回调分在两个线程上；停止后迟到事件仍会交给宿主；queue 没有积压索引（已由下表 H5 补上，即 `QueueIndex`）；工作区进缓存之前就通知运行时。本轮只调整语义、补一个索引，不新增回调。
 
 | 编号 | 内容 |
 |---|---|

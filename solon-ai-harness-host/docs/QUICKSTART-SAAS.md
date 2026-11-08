@@ -1,7 +1,7 @@
 # SaaS 快速上手：HarnessHost
 
 本文只讲宿主骨架 `HarnessHost`（L0）：用它搭一个多租户服务端。一问一答型接口不用写任何回调，推送型只需覆盖两个。
-隔离模型、作用域、多节点、存储等细节见 [harness README](../../solon-ai-harness/README.md)；术语见 [CONCEPTS.md](../../solon-ai-harness/docs/CONCEPTS.md)。
+隔离模型、作用域、多节点、存储与容量等引擎侧细节见 [SAAS.md](../../solon-ai-harness/docs/SAAS.md)，引擎配置见 [harness README](../../solon-ai-harness/README.md)；术语见 [CONCEPTS.md](../../solon-ai-harness/docs/CONCEPTS.md)。
 
 > 本文的代码与 `src/test/java/features/ai/harness/all/QuickstartSampleTest.java` 保持一致，并随构建编译运行。
 > `HarnessHost` 及相关类型标注 `@Preview("4.2.0")`，在 4.2.x 内可能还有调整。
@@ -13,7 +13,7 @@
 | 层 | 入口 | 适用 |
 |---|---|---|
 | **L0 宿主骨架** | `HarnessHost` + `HarnessInput`（+ 可选 `HostSink` / `RunSink`） | SaaS、IM 机器人、HTTP / SSE 接口、多会话推送的 Web 应用（本文） |
-| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件依赖，或要完全自己掌握编排的宿主，见 harness README |
+| L1 受理 API | `engine.handle` + `InputOutcome` + `RunTicket` | 只要核心、不要插件依赖，或要完全自己掌握编排的宿主，见 [ENGINE-L1.md](../../solon-ai-harness/docs/ENGINE-L1.md) |
 | L2 扩展 SPI | `HarnessExtension`、`InputBacklog`、`RunDispatch` | 写插件 |
 
 用 L0 时，下面这些都由框架代办，宿主不需要知道：`RunTicket`、`afterRun`、`drainLoop`、`discard`、
@@ -63,7 +63,7 @@ HarnessEngine buildEngine(String tenantId) {
 goal 的重启恢复不用自己调：`HarnessHost` 首次取到引擎时先登记后台执行器，再 `goal.recover()`（见 §七）。
 
 SERVER 模式还要求：启动时 `SandboxBootstrap.initOnce(...)` 一次；`stateSource` 显式配置且不在工作区内；
-至少一个模型。详见 [harness README](../../solon-ai-harness/README.md)。
+至少一个模型；配置 `scopeResolver`。完整对照见 [SAAS.md §2.1](../../solon-ai-harness/docs/SAAS.md)。
 
 ### 3.2 选一种输出写法
 

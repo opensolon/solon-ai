@@ -153,6 +153,32 @@ class GoalSchedulerTickTest {
     }
 
     @Test
+    void recoverWithFilterOnlyReschedulesClaimedSessions() {
+        Path home = workspace.resolve("home");
+        GoalExtension ext1 = GoalExtension.builder().jobManager(jobManager()).build();
+        HarnessEngine e1 = HarnessEngine.of(workspace.toString(), home.toString())
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .extensionAdd(ext1)
+                .build();
+        ext1.getGoalScheduler().schedule("cli", false);
+        ext1.getGoalScheduler().schedule("web-1", false);
+        e1.shutdown();
+
+        jobs.clear();
+        GoalExtension ext2 = GoalExtension.builder().jobManager(jobManager()).build();
+        HarnessEngine.of(workspace.toString(), home.toString())
+                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .extensionAdd(ext2)
+                .build();
+
+        // 同一引擎上只接管 cli 会话的入口：别的入口的 goal 不该被它恢复（否则会落到缺省执行器上跑）
+        assertEquals(1, ext2.recover("cli"::equals));
+        assertTrue(ext2.getGoalScheduler().isScheduled("cli"));
+        assertFalse(ext2.getGoalScheduler().isScheduled("web-1"));
+        assertEquals(1, ext2.recover(), "不带过滤时恢复其余全部");
+    }
+
+    @Test
     void declaresOwnToolNamesForScopeGuard() {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).build();
         assertTrue(ext.getToolNames().isEmpty(), "未挂载时不声明");

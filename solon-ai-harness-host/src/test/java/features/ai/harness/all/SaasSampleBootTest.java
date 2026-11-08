@@ -20,7 +20,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * SAAS.md §二「最小可运行骨架」的装配写法必须能在 SERVER 模式下原样启动。
+ * solon-ai-harness/docs/SAAS.md §二「最小可运行骨架」的装配写法必须能在 SERVER 模式下原样启动。
  */
 class SaasSampleBootTest {
 
@@ -36,7 +36,7 @@ class SaasSampleBootTest {
         return model;
     }
 
-    /** SAAS.md §二 buildEngine 的装配写法（改动文档示例时同步此处） */
+    /** docs/SAAS.md §二 buildEngine 的装配写法（改动文档示例时同步此处） */
     @Test
     void documentedSampleBootsUnderServer() throws Exception {
         Path ws = Files.createDirectories(tmp.resolve("ws"));
