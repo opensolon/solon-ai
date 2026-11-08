@@ -54,8 +54,8 @@ import java.util.function.LongSupplier;
  * 扩展的 {@code onDetach} 里不得再调用本池（会抛 Recursive update）。{@code maxEngines} 是软上限，并发创建时可能短暂超出。</p>
  *
  * <p>重启恢复：池是懒建的，没人访问的租户其 goal / loop 不会自动恢复。接了 {@link HarnessHost} 时用
- * {@link HarnessHost#warmup} 预热（它会先登记后台执行器再恢复 goal）；不接骨架时用本类的 {@link #warmup}。
- * 预热的键由宿主维护（例如租户表里「有活跃 goal」的标记）。</p>
+ * {@link HarnessHost#warmup} 预热（它会先登记后台执行器再恢复 goal）；不接骨架时用 {@link #get} 逐个取
+ * （取到即建，但插件只有缺省执行器）。预热的键由宿主维护（例如租户表里「有活跃 goal」的标记）。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -169,31 +169,6 @@ public final class HarnessEnginePool implements AutoCloseable {
             }
             throw new IllegalStateException("HarnessEnginePool build failed: " + key, cause);
         }
-    }
-
-    /**
-     * 预热：逐个 {@link #get} 这些键（用于重启后恢复有后台工作的租户）。单个键构建失败只记日志，不影响其它键。
-     *
-     * @return 成功预热的数量
-     * @since 4.2.0
-     */
-    public int warmup(Collection<String> keys) {
-        int ok = 0;
-        if (keys == null) {
-            return ok;
-        }
-        for (String key : keys) {
-            if (key == null) {
-                continue;
-            }
-            try {
-                get(key);
-                ok++;
-            } catch (Throwable e) {
-                LOG.warn("HarnessEnginePool warmup failed: {}", key, e);
-            }
-        }
-        return ok;
     }
 
     /**

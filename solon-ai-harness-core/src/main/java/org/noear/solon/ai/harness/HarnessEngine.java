@@ -3067,9 +3067,14 @@ public class HarnessEngine {
                         + "sessions of different tenants with the same id will contend for one lease. "
                         + "Wrap it with SessionOwnership.namespaced(tenantId, delegate)");
             }
-            if (!options.isSandboxEnabled() || !options.isSandboxSystemRestrict()) {
+            if (options.isSandboxEnabled() == false || options.isSandboxSystemRestrict() == false) {
                 LOG.warn("[Harness] SERVER profile with OS sandbox relaxed (sandboxEnabled={}, sandboxSystemRestrict={})",
                         options.isSandboxEnabled(), options.isSandboxSystemRestrict());
+            }
+            // 要求作用域却没有解析器：每一轮输入都会被拒绝（scope_unavailable），引擎实际不可用
+            if (options.isScopeRequired() && options.getScopeResolver() == null) {
+                throw new IllegalStateException("SERVER profile requires a scopeResolver when scopeRequired is true: "
+                        + "call scopeResolver(...) (e.g. InputScopeResolver.byPrincipal(...)), or set scopeRequired(false)");
             }
         }
     }

@@ -67,7 +67,7 @@ SERVER 模式还要求：启动时 `SandboxBootstrap.initOnce(...)` 一次；`st
 
 ### 3.2 实现输出通道
 
-只有 `reply` 与 `event` 必须实现：
+`HostSink` 的**每个方法都有缺省实现**（不传 sink 也能跑通一轮，事件只记日志）。接入时通常只需覆盖两个投递出口：
 
 ```java
 public class MySink implements HostSink {
@@ -81,11 +81,14 @@ public class MySink implements HostSink {
         channels.push(run.getOrigin(), event);
     }
 
-    // 可选：
+    // 可选：运行类
     // runStarted(run) / runFinished(run, error)   每个 started 恰好配一个 finished
-    // hitl(origin, cards)                          有待审批的工具调用
-    // forward(origin, owner)                       多节点：转发给持有节点
-    // rejectText / deferredText / hitlExpiredText  文案（国际化）
+    // hitl(origin, cards)                         有待审批的工具调用
+    // 可选：结构化事实（文案、要不要提示用户，由你决定）
+    // rejected(origin, reason, detail)            未受理（reason 是 RejectReason 枚举）
+    // deferred(origin, position)                  会话忙，已排队
+    // hitlExpired(origin)                         审批卡已失效
+    // notOwner(origin, owner)                     多节点：会话由其它节点持有
 }
 ```
 
@@ -101,11 +104,10 @@ HarnessEnginePool pool = HarnessEnginePool.builder(this::buildEngine)
 
 HarnessHost host = HarnessHost.builder()
         .engines(pool::get)                       // 租户 → 引擎
-        .sink(new MySink())
-        .adminAuthorizer((tenant, principal, sid, op) -> authz.isAdmin(tenant, principal))   // 可选
+        .sink(new MySink())                       // 可选：不传则用缺省 sink（只记日志）
         .build();
 
-host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / loop 的租户（经 host，不要直接 pool.warmup）
+host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / loop 的租户（经 host，不要自己取引擎）
 ```
 
 ### 3.4 接入控制器
@@ -115,7 +117,7 @@ host.warmup(tenantsWithBackgroundWork());         // 重启后预热有 goal / l
 @Post 
 @Mapping("/chat/{tenant}/{sid}")
 public String chat(String tenant, String sid, String text, Context ctx) {
-    Submitted r = host.submit(tenant, sid, text, InputOrigin.of("web", userOf(ctx), null, null));
+    SubmitResult r = host.submit(tenant, sid, text, InputOrigin.of("web", userOf(ctx), null, null));
     ctx.status(r.httpStatus());                  // 内容已经经 sink 发出，这里只回状态
     return r.getKind().name();
 }
@@ -124,7 +126,7 @@ public String chat(String tenant, String sid, String text, Context ctx) {
 @Post 
 @Mapping("/chat/{tenant}/{sid}/hitl")
 public String decide(String tenant, String sid, String callId, String action, Context ctx) {
-    Submitted r = host.decide(tenant, sid, callId, HITLAction.of(action), null, InputOrigin.channel("web"));
+    SubmitResult r = host.decide(tenant, sid, callId, HITLAction.of(action), null, InputOrigin.channel("web"));
     ctx.status(r.httpStatus());
     return r.getKind().name();
 }
@@ -138,26 +140,31 @@ public Result stop(String tenant, String sid) {
 }
 ```
 
-创建会话时写入会话主体（作用域据此解析；设置后不可改）：
+创建会话用 `openSession`：建会话与写入会话主体一次完成（主体是作用域解析的依据，设置后不可改）。
 
 ```java
-HarnessEngine engine = host.engine(tenant);
-engine.setSessionPrincipal(engine.getSession(newSessionId), tenant + "/" + userId);
+// 登录后 / 新建对话时
+host.openSession(tenant, newSessionId, tenant + "/" + userId);
+
+// 需要删除会话时：判忙 → 通知扩展 → 删存储，顺序由框架保证
+if (host.closeSession(tenant, sid, () -> store.delete(sid)) == false) {
+    return Result.failure(409, "session is busy");
+}
 ```
 
 ---
 
 ## 四、使用态：`submit` 的结果
 
-要给用户看的内容**已经经 sink 发出**，`Submitted` 只用来映射状态码：
+要给用户看的内容**已经经 sink 发出**，`SubmitResult` 只用来映射状态码：
 
 | Kind | 发生了什么 | sink 收到 | `httpStatus()` |
 |---|---|---|---|
 | `STARTED` | 已开流 | `runStarted` →（命令回执）→ `event`* → `hitl`（若挂起）→ `runFinished` | 200 |
 | `REPLY` | 命令已执行，只有回执 | `reply` | 200 |
-| `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `reply(deferredText)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
-| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `reply(rejectText)`；`NOT_OWNER` 时为 `forward` | 404 / 307 / 403 / 503 / 409 |
-| `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `reply(hitlExpiredText)` | 200 |
+| `DEFERRED` | 会话忙，已排队；空闲后自动续发 | `deferred(origin, position)`，续发时按**这条消息自己的 origin** 再开流 | 202 |
+| `REJECTED` | 未受理，原因见 `getRejectReason()`（`InputOutcome.RejectReason` 枚举，线上值 `.code()`） | `rejected(origin, reason, detail)`；`NOT_OWNER` 时为 `notOwner(origin, owner)`，持有者也从 `getOwner()` 读 | 404 / 307 / 403 / 503 / 409 |
+| `HITL` | 审批已记录但本批未齐备（或卡已失效） | `hitl(cards)` 或 `hitlExpired(origin)` | 200 |
 | `IGNORED` | 空输入 | — | 200 |
 
 拒绝原因码：`session_not_found`（会话不存在，骨架只查不建）、`not_owner`、`scope_unavailable`、`busy`、
@@ -172,19 +179,23 @@ host.submit(tenant, sid, text, origin, in -> in.attachments(files).selectedModel
 
 ---
 
-## 五、管理态：`AdminGateway`
+## 五、管理态：`SessionAdmin`
 
-控制台 / 后台 API 用 `host.admin(tenant, principal)`。只有一个入口 `call`：取扩展 → 调它自己的门面 → 给出结果码。
-queue / steer / goal / loop 和你自己的扩展都是同一种写法：
+**鉴权在控制器 / 拦截器层做，框架不参与**（它拿不到角色、租户成员关系、限流等上下文；给了钩子也只会是一条重复路径，
+而且默认值只能是 fail-open）。鉴权通过后，用 `host.admin(tenant)` 操作会话。只有一个入口 `call`：
+取扩展 → 调它自己的门面 → 给出结果码。queue / steer / goal / loop 和你自己的扩展都是同一种写法：
 
 ```java
-AdminGateway admin = host.admin(tenant, principal);
+// 先鉴权（@CheckRole / 自己的 authz）
+authz.require("console.queue.enqueue", tenant, principal, sid);
 
-HarnessResult<List<LoopTask>> tasks = admin.call(sid, "loop.list", LoopExtension.class,
+SessionAdmin admin = host.admin(tenant);
+
+HarnessResult<List<LoopTask>> tasks = admin.call(sid, LoopExtension.class,
         (loop, s) -> HarnessResult.ok(loop.list(sid)));
 
 // 插件写门面本身就返回 HarnessResult，直接交出去即可
-HarnessResult<Integer> r = admin.call(sid, "queue.enqueue", QueueExtension.class,
+HarnessResult<Integer> r = admin.call(sid, QueueExtension.class,
         (queue, s) -> queue.enqueue(s, text, InputOrigin.channel("console")));
 switch (r.getCode()) {
     case OK:        return Result.succeed(r.getValue());          // 队列位置
@@ -199,8 +210,7 @@ return r.isOk() ? Result.succeed(r.getValue())
 admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 ```
 
-`call` 按同一顺序检查：鉴权（`AdminAuthorizer`，未配置时不鉴权；操作名由你自定）→ 扩展是否装配（`DISABLED`）→
-会话归属（`NOT_OWNER`）→ 会话是否存在（`NOT_FOUND`，只查不建）→ 执行。扩展抛的 `NotOwnerException` 译为 `NOT_OWNER`，
+`call` 按同一顺序检查：扩展是否装配（`DISABLED`）→ 会话归属（`NOT_OWNER`）→ 会话是否存在（`NOT_FOUND`，只查不建）→ 执行。扩展抛的 `NotOwnerException` 译为 `NOT_OWNER`，
 `IllegalArgumentException` 译为 `INVALID`，`IllegalStateException` 译为 `CONFLICT`。成功之后自动续发积压（入队、置顶后会话空闲就立即执行）。
 
 | Code | 含义 | `httpStatus()` |
@@ -212,7 +222,7 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 | `FULL` | 队列满、loop 任务数或会话配额达上限 | 429 |
 | `INVALID` | 参数不合法（重试同样的请求不会成功），`getDetail()` 为原因 | 400 |
 | `CONFLICT` | 参数合法但当前状态不允许（goal 已是终态、轮次已切换、ID 重复等） | 409 |
-| `FORBIDDEN` | `AdminAuthorizer` 拒绝（授权服务抛异常时同样拒绝） | 403 |
+| `FORBIDDEN` | 框架不再产生；鉴权拒绝由宿主在控制器层返回（码表里保留，便于统一） | 403 |
 
 状态码由粗码自带（每个 `Code` 值上就有，`r.httpStatus()` 是同一份的转发），宿主不用另维护一张表；
 `NOT_OWNER` 用 307 而不是 302，是为了让网关跳转后仍用原方法与原请求体。
@@ -255,8 +265,8 @@ sink 回调可能在任意线程上执行，实现需线程安全；回调抛出
 ## 九、上线检查清单（L0）
 
 - [ ] 引擎：`profile(SERVER)`、`stateSource` 在工作区之外、`SandboxBootstrap.initOnce`、插件经 `Builder.extensionAdd` 在构建期挂上
-- [ ] 权限：创建会话时 `setSessionPrincipal`；`scopeResolver` 用 `byPrincipal` 并做短期缓存
+- [ ] 权限：用 `host.openSession` 建会话并写入主体；`scopeResolver` 用 `byPrincipal` 并做短期缓存（SERVER 下缺失会在 `build()` 报错）
 - [ ] 骨架：`engines(pool::get)`；预热用 `host.warmup`；sink 线程安全
-- [ ] 管理态：配置 `adminAuthorizer`，或在控制器上自行鉴权；按 `HarnessResult.Code` 映射状态码
-- [ ] 多节点：`SessionOwnership.namespaced(tenantId, impl)`；实现 `HostSink.forward` 与 `NOT_OWNER` 的网关转发
-- [ ] 删除会话：判忙 → `engine.removeSession(id)` → 移出内存 → 删除存储（见 SAAS.md §九）
+- [ ] 管理态：鉴权放在控制器 / 拦截器层；按 `HarnessResult.Code` 映射状态码
+- [ ] 多节点：`SessionOwnership.namespaced(tenantId, impl)`；实现 `HostSink.notOwner` 与 `NOT_OWNER` 的网关转发
+- [ ] 删除会话：用 `host.closeSession(tenant, sid, storageCleanup)`（判忙 → 通知扩展 → 删存储，顺序由框架保证）

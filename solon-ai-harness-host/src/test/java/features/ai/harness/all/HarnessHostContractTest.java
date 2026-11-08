@@ -17,16 +17,15 @@ import org.noear.solon.ai.harness.extension.loop.LoopTask;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
 import org.noear.solon.ai.harness.hitl.HitlCard;
-import org.noear.solon.ai.harness.host.AdminGateway;
 import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
+import org.noear.solon.ai.harness.host.SessionAdmin;
 import org.noear.solon.ai.harness.InterruptMode;
-import org.noear.solon.ai.harness.host.Submitted;
+import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionOwnership;
-import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,7 +61,12 @@ class HarnessHostContractTest {
         final List<HostRun> started = new CopyOnWriteArrayList<>();
         final List<HostRun> finished = new CopyOnWriteArrayList<>();
         final List<Throwable> errors = new CopyOnWriteArrayList<>();
-        final List<String> forwards = new CopyOnWriteArrayList<>();
+        final List<String> notOwners = new CopyOnWriteArrayList<>();
+        final List<InputOrigin> notOwnerOrigins = new CopyOnWriteArrayList<>();
+        final List<InputOutcome.RejectReason> rejectedReasons = new CopyOnWriteArrayList<>();
+        final List<Integer> deferredPositions = new CopyOnWriteArrayList<>();
+        final List<InputOrigin> deferredOrigins = new CopyOnWriteArrayList<>();
+        final List<InputOrigin> hitlExpiredOrigins = new CopyOnWriteArrayList<>();
         final List<List<HitlCard>> hitls = new CopyOnWriteArrayList<>();
         final List<AgentEvent> events = new CopyOnWriteArrayList<>();
 
@@ -96,8 +100,25 @@ class HarnessHostContractTest {
         }
 
         @Override
-        public void forward(InputOrigin origin, String owner) {
-            forwards.add(owner);
+        public void notOwner(InputOrigin origin, String owner) {
+            notOwnerOrigins.add(origin);
+            notOwners.add(owner);
+        }
+
+        @Override
+        public void rejected(InputOrigin origin, InputOutcome.RejectReason reason, String detail) {
+            rejectedReasons.add(reason);
+        }
+
+        @Override
+        public void deferred(InputOrigin origin, int position) {
+            deferredOrigins.add(origin);
+            deferredPositions.add(position);
+        }
+
+        @Override
+        public void hitlExpired(InputOrigin origin) {
+            hitlExpiredOrigins.add(origin);
         }
     }
 
@@ -153,11 +174,9 @@ class HarnessHostContractTest {
         return b.build();
     }
 
-    /** 入队（管理态的典型写法） */
-    private static HarnessResult<Integer> enqueue(AdminGateway admin, String sid, String text, InputOrigin origin) {
-        return admin.call(sid, "queue.enqueue", QueueExtension.class, (q, s) -> {
-            return q.enqueue(s, text, origin);
-        });
+    /** 入队（管理态的典型写法；操作名由宿主自己在控制器层决定，不再进框架） */
+    private static HarnessResult<Integer> enqueue(SessionAdmin admin, String sid, String text, InputOrigin origin) {
+        return admin.call(sid, QueueExtension.class, (q, s) -> q.enqueue(s, text, origin));
     }
 
     private static void await(Supplier<Boolean> cond, String message) throws InterruptedException {
@@ -177,14 +196,14 @@ class HarnessHostContractTest {
     void unknownSessionIsRejectedWithoutCreatingIt() throws Exception {
         HarnessEngine engine = engine();
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            Submitted r = host.submit("t", "nope", "hello", InputOrigin.channel("web"));
+            SubmitResult r = host.submit("t", "nope", "hello", InputOrigin.channel("web"));
 
-            assertEquals(Submitted.Kind.REJECTED, r.getKind());
+            assertEquals(SubmitResult.Kind.REJECTED, r.getKind());
             assertEquals(InputOutcome.RejectReason.SESSION_NOT_FOUND, r.getRejectReason());
             assertEquals(404, r.httpStatus());
-            assertEquals(1, sink.replies.size(), "提示已经经 sink 发出");
+            assertEquals(1, sink.rejectedReasons.size(), "拒绝原因已经经结构化回调发出");
             assertNull(engine.getSessionOrNull("nope"), "只查不建：不得凭空新建会话");
         } finally {
             engine.shutdown();
@@ -196,10 +215,26 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine();
         engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            assertEquals(Submitted.Kind.IGNORED, host.submit("t", "s1", "", null).getKind());
+            assertEquals(SubmitResult.Kind.IGNORED, host.submit("t", "s1", "", null).getKind());
             assertTrue(sink.started.isEmpty());
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    @Test
+    void defaultSinkIsEnoughToRun() throws Exception {
+        // 不传 sink：缺省通道只记日志，一轮仍然完整跑通（首次接入的零代码门槛）
+        HarnessEngine engine = engine();
+        engine.getSession("s1");
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
+        try {
+            SubmitResult r = host.submit("t", "s1", "hello", InputOrigin.channel("web"));
+            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
+            AgentSession session = engine.getSessionOrNull("s1");
+            await(() -> engine.status(session).isOccupied() == false, "缺省 sink 下也正常收尾");
         } finally {
             engine.shutdown();
         }
@@ -210,10 +245,10 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine();
         AgentSession session = engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            Submitted r = host.submit("t", "s1", "hello", InputOrigin.channel("web"));
-            assertEquals(Submitted.Kind.STARTED, r.getKind());
+            SubmitResult r = host.submit("t", "s1", "hello", InputOrigin.channel("web"));
+            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
             assertEquals(1, sink.started.size(), "runStarted 在 submit 返回前已调用");
 
             await(() -> sink.finished.size() == 1, "流终止后 runFinished 必须调用");
@@ -233,16 +268,16 @@ class HarnessHostContractTest {
         AgentSession session = engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
         ManualExecutor executor = new ManualExecutor();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).executor(executor).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            assertEquals(Submitted.Kind.STARTED, host.submit("t", "s1", "first", InputOrigin.channel("a")).getKind());
+            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", "first", InputOrigin.channel("a")).getKind());
 
             // 开流动作尚未执行：会话被受理占位占用，第二条进积压
-            Submitted second = host.submit("t", "s1", "second", InputOrigin.channel("b"));
-            assertEquals(Submitted.Kind.DEFERRED, second.getKind());
+            SubmitResult second = host.submit("t", "s1", "second", InputOrigin.channel("b"));
+            assertEquals(SubmitResult.Kind.DEFERRED, second.getKind());
             assertEquals(1, second.getBacklogPosition());
             assertEquals(202, second.httpStatus());
-            assertEquals("b", sink.replyOrigins.get(sink.replyOrigins.size() - 1).getChannel(), "排队提示回给 b");
+            assertEquals("b", sink.deferredOrigins.get(sink.deferredOrigins.size() - 1).getChannel(), "排队回调回给 b");
 
             // 执行第一条 → 终止后 afterRun 续发第二条（又一次开流动作）
             assertTrue(executor.runNext(5_000));
@@ -266,9 +301,9 @@ class HarnessHostContractTest {
         AgentSession session = engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
         ManualExecutor executor = new ManualExecutor();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).executor(executor).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
         try {
-            assertEquals(Submitted.Kind.STARTED, host.submit("t", "s1", "hello", null).getKind());
+            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", "hello", null).getKind());
 
             // 开流前被停止
             assertTrue(host.interrupt("t", "s1", InterruptMode.CANCEL_STREAM).isOk());
@@ -291,7 +326,7 @@ class HarnessHostContractTest {
         Executor rejecting = r -> {
             throw new RejectedExecutionException("pool closed");
         };
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).executor(rejecting).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(rejecting).build();
         try {
             host.submit("t", "s1", "hello", null);
 
@@ -304,7 +339,7 @@ class HarnessHostContractTest {
     }
 
     @Test
-    void notOwnerIsForwardedWithoutLoadingSession() throws Exception {
+    void notOwnerIsReportedWithoutLoadingSession() throws Exception {
         SessionOwnership other = new SessionOwnership() {
             @Override
             public boolean tryAcquire(String sessionId) {
@@ -324,12 +359,13 @@ class HarnessHostContractTest {
                 .extensionAdd(QueueExtension.builder().build())
                 .build();
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            Submitted r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", "hello", null);
             assertEquals(InputOutcome.RejectReason.NOT_OWNER, r.getRejectReason());
+            assertEquals("node-b", r.getOwner(), "持有者随结果返回，网关不必自己解析拒绝详情");
             assertEquals(307, r.httpStatus());
-            assertEquals("node-b", sink.forwards.get(0));
+            assertEquals("node-b", sink.notOwners.get(0));
             assertFalse(sessions.containsKey("s1"), "非持有节点不加载（更不新建）会话");
 
             HarnessResult<Integer> admin = enqueue(host.admin("t"), "s1", "x", null);
@@ -345,12 +381,12 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine();
         engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            Submitted r = host.decide("t", "s1", "no-such-call", HITLAction.APPROVE, null, null);
-            assertEquals(Submitted.Kind.HITL, r.getKind(), "过期卡不得续流（否则会把上一轮问题重跑）");
+            SubmitResult r = host.decide("t", "s1", "no-such-call", HITLAction.APPROVE, null, null);
+            assertEquals(SubmitResult.Kind.HITL, r.getKind(), "过期卡不得续流（否则会把上一轮问题重跑）");
             assertTrue(sink.started.isEmpty());
-            assertEquals(new RecordingSink().hitlExpiredText(), sink.replies.get(0), "提示卡已失效");
+            assertEquals(1, sink.hitlExpiredOrigins.size(), "提示卡已失效（文案由宿主决定）");
         } finally {
             engine.shutdown();
         }
@@ -370,12 +406,94 @@ class HarnessHostContractTest {
                 .engines(k -> seq[Math.min(calls[0]++, 1)])
                 .sink(sink).build();
         try {
-            Submitted r = host.submit("t", "s1", "hello", null);
+            SubmitResult r = host.submit("t", "s1", "hello", null);
             assertNotEquals(InputOutcome.RejectReason.ENGINE_CLOSED, r.getRejectReason(), "engine_closed 应换新引擎重试");
-            assertEquals(Submitted.Kind.STARTED, r.getKind());
+            assertEquals(SubmitResult.Kind.STARTED, r.getKind());
             await(() -> sink.finished.size() == 1, "新引擎上的一轮正常收尾");
         } finally {
             fresh.shutdown();
+        }
+    }
+
+    // ==================== 会话生命周期（宿主该做的事，窄门面） ====================
+
+    @Test
+    void openSessionCreatesAndSetsPrincipalInOneCall() throws Exception {
+        HarnessEngine engine = engine();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
+        try {
+            AgentSession session = host.openSession("t", "s1", "u1");
+            assertSame(session, engine.getSessionOrNull("s1"));
+            assertEquals("u1", engine.getSessionPrincipal(session));
+
+            // 同一主体重复开通是空操作；不同主体必须被拒绝（防止把 A 的会话交给 B 用）
+            host.openSession("t", "s1", "u1");
+            assertThrows(SecurityException.class, () -> host.openSession("t", "s1", "u2"));
+            assertThrows(IllegalArgumentException.class, () -> host.openSession("t", "s9", ""));
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    @Test
+    void closeSessionRefusesWhileBusyThenRemoves() throws Exception {
+        HarnessEngine engine = engine(GoalExtension.builder().jobManager(null).build());
+        ManualExecutor executor = new ManualExecutor();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).executor(executor).build();
+        try {
+            host.openSession("t", "s1", "u1");
+            assertEquals(SubmitResult.Kind.STARTED, host.submit("t", "s1", "hello", null).getKind());
+
+            assertFalse(host.closeSession("t", "s1"), "忙时拒绝删除，且不做任何事");
+            assertNotNull(engine.getSessionOrNull("s1"));
+
+            assertTrue(executor.runNext(5_000));
+            await(() -> engine.status(engine.getSessionOrNull("s1")).isOccupied() == false, "跑完");
+
+            boolean[] cleaned = {false};
+            assertTrue(host.closeSession("t", "s1", () -> cleaned[0] = true));
+            assertTrue(cleaned[0], "存储删除回调在 removeSession 之后执行");
+            assertTrue(host.closeSession("t", "ghost"), "本来就不存在也算关闭成功");
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    @Test
+    void sessionsOfAnotherTenantAreNotFound() throws Exception {
+        // 隔离来自「每个租户一个会话提供者」：这是宿主侧的责任（每个租户一个工作区 / 一个存储命名空间）。
+        // 框架删掉了「单引擎宿主」捷径，但不会替你校验提供者的隔离性 —— 多租户共用一个引擎 + 共用存储，
+        // 不同租户的会话仍然互相可见，且不会报错。
+        Map<String, AgentSession> storeA = new ConcurrentHashMap<>();
+        Map<String, AgentSession> storeB = new ConcurrentHashMap<>();
+        HarnessEngine engineA = builder()
+                .extensionAdd(QueueExtension.builder().build())
+                .sessionProvider((id, create) -> create
+                        ? storeA.computeIfAbsent(id, InMemoryAgentSession::of) : storeA.get(id)).build();
+        HarnessEngine engineB = builder()
+                .extensionAdd(QueueExtension.builder().build())
+                .sessionProvider((id, create) -> create
+                        ? storeB.computeIfAbsent(id, InMemoryAgentSession::of) : storeB.get(id)).build();
+        engineB.getSession("sb");
+
+        Map<String, HarnessEngine> byTenant = new ConcurrentHashMap<>();
+        byTenant.put("a", engineA);
+        byTenant.put("b", engineB);
+
+        HarnessHost host = HarnessHost.builder().engines(byTenant::get).build();
+        try {
+            assertEquals(HarnessResult.Code.NOT_FOUND,
+                    enqueue(host.admin("a"), "sb", "x", null).getCode(),
+                    "A 的引擎看不到 B 的会话（提供者按租户隔离）");
+            assertEquals(SubmitResult.Kind.REJECTED,
+                    host.submit("a", "sb", "x", null).getKind());
+            assertNull(engineA.getSessionOrNull("sb"), "A 侧不得因此建出会话");
+
+            // B 自己看得到
+            assertTrue(enqueue(host.admin("b"), "sb", "x", null).isOk());
+        } finally {
+            engineA.shutdown();
+            engineB.shutdown();
         }
     }
 
@@ -386,7 +504,7 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine();
         AgentSession session = engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
             HarnessResult<Integer> r = enqueue(host.admin("t"), "s1", "from console", InputOrigin.channel("console"));
             assertTrue(r.isOk(), r.toString());
@@ -404,25 +522,20 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine();
         engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink)
-                .adminAuthorizer((tenant, principal, sid, op) -> "admin".equals(principal))
-                .build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            AdminGateway admin = host.admin("t", "admin");
+            SessionAdmin admin = host.admin("t");
             assertEquals(HarnessResult.Code.NOT_FOUND, enqueue(admin, "ghost", "x", null).getCode(), "会话不存在");
             assertNull(engine.getSessionOrNull("ghost"), "管理门面同样只查不建");
             assertEquals(HarnessResult.Code.DISABLED,
-                    admin.call("s1", "goal.get", GoalExtension.class, (g, s) -> HarnessResult.ok(g.get("s1"))).getCode(),
+                    admin.call("s1", GoalExtension.class, (g, s) -> HarnessResult.ok(g.get("s1"))).getCode(),
                     "goal 未装配");
             assertEquals(HarnessResult.Code.INVALID,
-                    admin.call("s1", "x", QueueExtension.class, (q, s) -> {
+                    admin.call("s1", QueueExtension.class, (q, s) -> {
                         throw new IllegalArgumentException("bad");
                     }).getCode(), "扩展抛参数异常译为 INVALID");
             assertEquals(HarnessResult.Code.NOT_FOUND, admin.interrupt("ghost", InterruptMode.INTERRUPT_ALL).getCode());
-            assertTrue(admin.call("s1", "queue.list", QueueExtension.class, (q, s) -> HarnessResult.ok(q.list(s))).isOk());
-
-            assertEquals(HarnessResult.Code.FORBIDDEN, enqueue(host.admin("t", "guest"), "s1", "x", null).getCode());
-            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("t", "guest").interrupt("s1", InterruptMode.INTERRUPT_ALL).getCode());
+            assertTrue(admin.call("s1", QueueExtension.class, (q, s) -> HarnessResult.ok(q.list(s))).isOk());
         } finally {
             engine.shutdown();
         }
@@ -433,16 +546,15 @@ class HarnessHostContractTest {
         HarnessEngine engine = engine(LoopExtension.builder().jobManager(null).build());
         engine.getSession("s1");
         RecordingSink sink = new RecordingSink();
-        HarnessHost host = HarnessHost.builder().engine(engine).sink(sink).build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).build();
         try {
-            AdminGateway admin = host.admin("t");
-            HarnessResult<LoopTask> task = admin.call("s1", "loop.schedule", LoopExtension.class,
+            SessionAdmin admin = host.admin("t");
+            HarnessResult<LoopTask> task = admin.call("s1", LoopExtension.class,
                     (l, s) -> l.schedule("s1", LoopSpec.of("ping").everyMinutes(5)));
             assertTrue(task.isOk(), task.toString());
 
             String id = task.getValue().getId();
-            assertTrue(admin.call("s1", "loop.trigger", LoopExtension.class,
-                    (l, s) -> l.trigger("s1", id)).isOk());
+            assertTrue(admin.call("s1", LoopExtension.class, (l, s) -> l.trigger("s1", id)).isOk());
             await(() -> sink.finished.stream().anyMatch(HostRun::isProgram), "loop 后台轮次经骨架收尾");
             HostRun run = sink.finished.stream().filter(HostRun::isProgram).findFirst().get();
             assertEquals("loop", run.getProgramChannel());

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;
@@ -38,7 +40,8 @@ class HarnessServerProfileTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
-                .defaultModel("fake");
+                .defaultModel("fake")
+                .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()));
     }
 
     @Test
@@ -122,6 +125,22 @@ class HarnessServerProfileTest {
         IllegalStateException e4 = assertThrows(IllegalStateException.class, () ->
                 server().defaultModel("nope").build());
         assertTrue(e4.getMessage().contains("nope"));
+
+        // 要求作用域（scopeRequired）却没有 scopeResolver：每轮输入都会被拒，构建期就报错
+        IllegalStateException e5 = assertThrows(IllegalStateException.class, () ->
+                HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                        .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                        .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s5"))))
+                        .modelAdd(model()).defaultModel("fake").build());
+        assertTrue(e5.getMessage().contains("scopeResolver"), e5.getMessage());
+
+        // 显式关掉 scopeRequired 则不要求解析器
+        HarnessEngine noScope = HarnessEngine.of(ws.toString(), ".solon/").profile(HarnessProfile.SERVER)
+                .scopeRequired(false)
+                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s6"))))
+                .modelAdd(model()).defaultModel("fake").build();
+        assertFalse(noScope.isScopeRequired());
     }
 
     @Test

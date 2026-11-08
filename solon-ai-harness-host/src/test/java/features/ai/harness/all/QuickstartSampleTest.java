@@ -19,7 +19,7 @@ import org.noear.solon.ai.harness.host.HarnessHost;
 import org.noear.solon.ai.harness.host.HostRun;
 import org.noear.solon.ai.harness.host.HostSink;
 import org.noear.solon.ai.harness.InterruptMode;
-import org.noear.solon.ai.harness.host.Submitted;
+import org.noear.solon.ai.harness.host.SubmitResult;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.scope.InputScopeResolver;
@@ -69,7 +69,9 @@ class QuickstartSampleTest {
                     .modelAdd(model)
                     .defaultModel("fake")
                     .toolsAdd(ToolName.TOOL_ALL_PUBLIC)
-                    .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))
+                    // 作用域：认领本租户主体；解析不到时返回 null → scope_unavailable
+                    .scopeResolver(InputScopeResolver.byPrincipal(
+                            p -> p.startsWith(tenantId + "/") ? InputScope.builder(p).build() : null))
                     // 会话插件：普通构建链，不要哪个删哪行，自己的扩展同样写法
                     .extensionAdd(QueueExtension.builder().maxSize(20).build())
                     .extensionAdd(new SteerExtension())
@@ -81,7 +83,7 @@ class QuickstartSampleTest {
         }
     }
 
-    /** §3.2 输出通道 */
+    /** §3.2 输出通道：只需要覆盖投递出口，其余缺省即可 */
     static final class MySink implements HostSink {
         final List<String> replies = new CopyOnWriteArrayList<>();
         final List<HostRun> finished = new CopyOnWriteArrayList<>();
@@ -112,38 +114,39 @@ class QuickstartSampleTest {
         HarnessHost host = HarnessHost.builder()
                 .engines(pool::get)
                 .sink(sink)
-                .adminAuthorizer((tenant, principal, sid, op) -> "acme/admin".equals(principal))
                 .build();
         try {
             assertEquals(1, host.warmup(Collections.singletonList("acme")));
 
-            // 创建会话并写入会话主体
-            HarnessEngine engine = host.engine("acme");
-            engine.setSessionPrincipal(engine.getSession("s1"), "acme/u1");
+            // 创建会话并写入会话主体（一次调用，不留「先建后写主体」的窗口）
+            host.openSession("acme", "s1", "acme/u1");
 
             // §3.4 使用态
-            Submitted r = host.submit("acme", "s1", "hello", InputOrigin.of("web", "u1", null, null));
-            assertEquals(Submitted.Kind.STARTED, r.getKind(), r.toString());
+            SubmitResult r = host.submit("acme", "s1", "hello", InputOrigin.of("web", "u1", null, null));
+            assertEquals(SubmitResult.Kind.STARTED, r.getKind(), r.toString());
             long deadline = System.currentTimeMillis() + 30_000;
             while (sink.finished.isEmpty() && System.currentTimeMillis() < deadline) {
                 Thread.sleep(20);
             }
             assertEquals(1, sink.finished.size());
 
-            // 没有主体的会话：SERVER 下 scopeRequired，拒绝受理
-            engine.getSession("s2");
-            Submitted noScope = host.submit("acme", "s2", "hello", null);
-            assertEquals(Submitted.Kind.REJECTED, noScope.getKind());
+            // 别的租户的主体：解析不到作用域 → SERVER 下拒绝受理
+            host.openSession("acme", "s2", "other/u1");
+            SubmitResult noScope = host.submit("acme", "s2", "hello", null);
+            assertEquals(SubmitResult.Kind.REJECTED, noScope.getKind());
             assertEquals(403, noScope.httpStatus());
 
-            // §五 管理态
-            assertEquals(HarnessResult.Code.FORBIDDEN, host.admin("acme", "acme/u1")
-                    .call("s1", "goal.get", GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get("s1"))).getCode());
-            assertTrue(host.admin("acme", "acme/admin")
-                    .call("s1", "goal.get", GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get("s1"))).isOk());
+            // 未开通的会话：只查不建
+            assertEquals(404, host.submit("acme", "ghost", "hello", null).httpStatus());
+
+            // §五 管理态：鉴权在控制器层做（框架不参与），管理态只保证不变量
+            assertTrue(host.admin("acme")
+                    .call("s1", QueueExtension.class, (queue, s) -> HarnessResult.ok(queue.list(s))).isOk());
+            assertTrue(host.admin("acme")
+                    .call("s1", GoalExtension.class, (goal, s) -> HarnessResult.ok(goal.get("s1"))).isOk());
 
             // §六 停止
-            assertTrue(host.admin("acme", "acme/admin").interrupt("s1", InterruptMode.INTERRUPT_ALL).isOk());
+            assertTrue(host.admin("acme").interrupt("s1", InterruptMode.INTERRUPT_ALL).isOk());
         } finally {
             pool.close();
         }

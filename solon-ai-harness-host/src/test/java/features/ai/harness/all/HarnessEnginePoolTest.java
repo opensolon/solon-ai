@@ -307,7 +307,8 @@ class HarnessEnginePoolTest {
             assertNull(pool.getIfPresent("flaky"), "失败不留占位");
             assertNotNull(pool.get("flaky"), "下一次重试成功");
 
-            assertEquals(2, pool.warmup(Arrays.asList("w1", "w2", null)));
+            assertNotNull(pool.get("w1"), "重置后逐个 get 即可建键（预热由宿主骨架负责）");
+            assertNotNull(pool.get("w2"));
             assertTrue(pool.removeWhenQuiescent("w1", Duration.ofSeconds(2)));
             assertNull(pool.getIfPresent("w1"));
         } finally {

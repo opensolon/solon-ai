@@ -288,4 +288,45 @@ class HarnessStructureGuardTest {
         }
         assertTrue(violations.isEmpty(), "@since 不得超过 4.2.0：" + violations);
     }
+
+    /** 注释去掉后的源码（判断「字面量里有没有用户文案」时只用它） */
+    private static String codeOnly(String src) {
+        return src.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("(?m)//.*$", "");
+    }
+
+    /**
+     * 宿主骨架不得替宿主做「呈现」决定：主代码的字符串字面量里不能出现中文（日志与错误码用英文，
+     * 用户文案由 {@code HostSink} 的结构化回调交给宿主决定）。
+     */
+    @Test
+    void hostMainHasNoUserFacingText() throws IOException {
+        Pattern cjkLiteral = Pattern.compile("\"[^\"]*[\\u4e00-\\u9fa5][^\"]*\"");
+        List<String> violations = new ArrayList<>();
+        for (Path f : javaFiles(mainOf("solon-ai-harness-host"))) {
+            Matcher m = cjkLiteral.matcher(codeOnly(read(f)));
+            while (m.find()) {
+                violations.add(f.getFileName() + ": " + m.group());
+            }
+        }
+        assertTrue(violations.isEmpty(),
+                "框架不自带用户文案（文案归宿主 / i18n），改用结构化回调或英文日志：" + violations);
+    }
+
+    /**
+     * 鉴权归宿主：框架拿不到角色、租户成员关系、限流等上下文，鉴权钩子会变成一条重复路径，
+     * 而且默认值只能是 fail-open。不要再把鉴权拉回框架。
+     */
+    @Test
+    void adminAuthorizerStaysRetired() throws IOException {
+        List<String> violations = new ArrayList<>();
+        for (Path f : javaFiles(mainOf("solon-ai-harness-host"))) {
+            if (f.getFileName().toString().equals("AdminAuthorizer.java")) {
+                violations.add("AdminAuthorizer：鉴权请在控制器 / 拦截器层完成");
+            }
+            if (codeOnly(read(f)).contains("AdminAuthorizer")) {
+                violations.add(f.getFileName() + " 仍在引用 AdminAuthorizer");
+            }
+        }
+        assertTrue(violations.isEmpty(), violations.toString());
+    }
 }

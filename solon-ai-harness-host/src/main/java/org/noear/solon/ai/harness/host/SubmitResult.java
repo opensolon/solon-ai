@@ -11,14 +11,14 @@ import org.noear.solon.lang.Preview;
 /**
  * {@link HarnessHost#submit} / {@link HarnessHost#decide} 的结果。
  *
- * <p>只用来给调用方（如 HTTP 控制器）映射状态码：要给用户看的内容已经经 {@link HostSink} 发出，
- * 调用方不需要再按结果做任何收尾。</p>
+ * <p>只用来给调用方（如 HTTP 控制器、网关）判断「已经发生了什么」：要给用户看的内容已经经 {@link HostSink}
+ * 发出，调用方不需要再按结果做任何收尾。</p>
  *
  * @author noear
  * @since 4.2.0
  */
 @Preview("4.2.0")
-public final class Submitted {
+public final class SubmitResult {
     /**
      * 结果类型
      *
@@ -51,8 +51,8 @@ public final class Submitted {
         /**
          * 未受理（原因见 {@link #getRejectReason()}）。
          *
-         * <p>绝大多数情况下提示已经经 {@link HostSink#rejectText} 发出；唯一例外是
-         * {@code NOT_OWNER}：那时由 {@link HostSink#forward} 将请求转给持有者，不会发提示。
+         * <p>提示与转发都已由对应的结构化回调交给宿主：{@link HostSink#rejected}（一般拒绝）、
+         * {@link HostSink#notOwner}（多节点未持有，持有者见 {@link #getOwner()}）。</p>
          */
         REJECTED
     }
@@ -60,23 +60,29 @@ public final class Submitted {
     private final Kind kind;
     private final RejectReason rejectReason;
     private final int backlogPosition;
+    private final String owner;
 
-    private Submitted(Kind kind, @Nullable RejectReason rejectReason, int backlogPosition) {
+    private SubmitResult(Kind kind, @Nullable RejectReason rejectReason, int backlogPosition, @Nullable String owner) {
         this.kind = kind;
         this.rejectReason = rejectReason;
         this.backlogPosition = backlogPosition;
+        this.owner = owner;
     }
 
-    static Submitted of(Kind kind) {
-        return new Submitted(kind, null, 0);
+    static SubmitResult of(Kind kind) {
+        return new SubmitResult(kind, null, 0, null);
     }
 
-    static Submitted deferred(int position) {
-        return new Submitted(Kind.DEFERRED, null, position);
+    static SubmitResult deferred(int position) {
+        return new SubmitResult(Kind.DEFERRED, null, position, null);
     }
 
-    static Submitted rejected(RejectReason reason) {
-        return new Submitted(Kind.REJECTED, reason, 0);
+    static SubmitResult rejected(RejectReason reason) {
+        return new SubmitResult(Kind.REJECTED, reason, 0, null);
+    }
+
+    static SubmitResult notOwner(@Nullable String owner) {
+        return new SubmitResult(Kind.REJECTED, RejectReason.NOT_OWNER, 0, owner);
     }
 
     public Kind getKind() {
@@ -95,10 +101,22 @@ public final class Submitted {
     }
 
     /**
+     * 持有者节点标识（仅 {@code NOT_OWNER}，可空）：网关据此把请求转发过去，不必自己去解析拒绝详情。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getOwner() {
+        return owner;
+    }
+
+    /**
      * 建议的 HTTP 状态码：STARTED / REPLY / HITL / IGNORED → 200，DEFERRED → 202，
      * REJECTED 按 {@link RejectReason}：SESSION_NOT_FOUND → 404，NOT_OWNER → 307，
      * SCOPE_UNAVAILABLE → 403，ENGINE_CLOSED → 503，其余（BUSY / HITL_PENDING /
      * ATTACHMENTS_NOT_DEFERRABLE / BACKLOG_UNAVAILABLE / SCOPE_NOT_DEFERRABLE）→ 409。
+     *
+     * <p>与 {@code HarnessResult.Code#httpStatus()} 同一套口径：不采用 HTTP 的宿主（IM 网关、RPC）忽略即可。</p>
      */
     public int httpStatus() {
         switch (kind) {
@@ -125,7 +143,8 @@ public final class Submitted {
 
     @Override
     public String toString() {
-        return "Submitted{" + kind + (rejectReason != null ? ", " + rejectReason : "")
-                + (kind == Kind.DEFERRED ? ", position=" + backlogPosition : "") + "}";
+        return "SubmitResult{" + kind + (rejectReason != null ? ", " + rejectReason : "")
+                + (kind == Kind.DEFERRED ? ", position=" + backlogPosition : "")
+                + (owner != null ? ", owner=" + owner : "") + "}";
     }
 }

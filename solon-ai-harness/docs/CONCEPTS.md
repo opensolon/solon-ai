@@ -23,10 +23,10 @@
 | | `InputOrigin` | 一次输入的来源（渠道、发送者、返回地址），也是回复路由 |
 | 权限 | 会话主体（principal） | 「这个会话属于谁」，`engine.setSessionPrincipal` 写入，随会话持久化 |
 | | `InputScope` / `InputScopeResolver` | 「这次输入能用什么」：工具、技能、MCP、命令名单；按主体解析，只能收窄 |
-| 交互 | `Submitted` | 提交结果，只用于映射状态码（内容已经经 sink 发出） |
+| 交互 | `SubmitResult` | 提交结果，只用于映射状态码（内容已经经 sink 发出） |
 | | `HitlCard` / `HITLAction` | 待审批的工具调用 / 审批决策（approve、reject、skip） |
 | | `InterruptMode` | `INTERRUPT_ALL`（清队列 + 停流 + 写取消消息）、`CANCEL_STREAM`（只停当前流）或 `PREEMPT_STREAM`（腾位，不推进取消代数） |
-| 管理 | `AdminGateway` | 管理入口 `call(sid, op, 扩展类型, 操作)`：统一鉴权、归属、存在性检查，任意扩展同一写法 |
+| 管理 | `SessionAdmin` | 管理态 `call(sid, 扩展类型, 操作)`：归属、存在性检查 + 成功后自动续发，任意扩展同一写法；鉴权归宿主 |
 | | `HarnessResult` | goal / loop / queue / steer 写门面与管理入口的统一结果：粗码 OK / NOT_FOUND / NOT_OWNER / DISABLED / FULL / INVALID / CONFLICT / FORBIDDEN，失败时可带细分码 `getReason()`（应答码用 `getReasonOrCode()`） |
 | 多节点（可选） | `SessionOwnership` | 会话单写者租约：同一时刻只由一个节点执行一个会话 |
 

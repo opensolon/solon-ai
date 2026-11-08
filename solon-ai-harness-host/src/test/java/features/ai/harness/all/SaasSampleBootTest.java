@@ -10,6 +10,8 @@ import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 import org.noear.solon.ai.harness.extension.steer.SteerExtension;
+import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.nio.file.Files;
@@ -49,6 +51,7 @@ class SaasSampleBootTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model())
                 .defaultModel("fake")
+                .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))
                 .extensionAdd(QueueExtension.builder().maxSize(20).build())
                 .extensionAdd(new SteerExtension())
                 .extensionAdd(goal)
@@ -85,6 +88,7 @@ class SaasSampleBootTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
+                .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))
                 .build();
         try {
             IllegalStateException e = assertThrows(IllegalStateException.class,

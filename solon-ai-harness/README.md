@@ -44,7 +44,7 @@
 | 坐标 | 内容 | 适用 |
 |---|---|---|
 | `solon-ai-harness` | **聚合包**：只做引用（没有任何源码），引入核心 + 四个会话插件（goal / queue / steer / loop）+ 宿主骨架 `-host` | 应用宿主（推荐） |
-| `solon-ai-harness-host` | 宿主骨架（L0）：`HarnessHost` / `HostSink` / `AdminGateway`，依赖核心与四个插件，见 [host README](../solon-ai-harness-host/README.md) | SaaS / IM 网关 / 普通 Web 服务 |
+| `solon-ai-harness-host` | 宿主骨架（L0）：`HarnessHost` / `HostSink` / `SubmitResult` / `SessionAdmin` / `HarnessEnginePool`，依赖核心与四个插件，见 [host README](../solon-ai-harness-host/README.md) | SaaS / IM 网关 / 普通 Web 服务 |
 | `solon-ai-harness-core` | 只有核心（引擎、输入、命令、权限、作用域、SPI） | 只需核心、或自己写插件 |
 | `solon-ai-harness-goal` / `-queue` / `-steer` / `-loop` | 单个插件（各自只依赖 core） | 按需挑选插件 |
 

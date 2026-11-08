@@ -7,6 +7,8 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessProfile;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidatorPolicy;
+import org.noear.solon.ai.harness.scope.InputScope;
+import org.noear.solon.ai.harness.scope.InputScopeResolver;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.cli.CommandResult;
 
@@ -35,6 +37,7 @@ class GoalProfileDefaultsTest {
                 .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("state-" + profile))))
                 .modelAdd(model)
+                .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))
                 .runtimeMutable(true) // 测试里要 addExtension
                 .build();
     }
