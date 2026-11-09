@@ -962,7 +962,8 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 |---|---|---|---|
 | `session.getContext().data()` | `session.goal`（`GoalAttrs.GOAL`） | Map 投影，单槽一条 | 是，每次变更后 `updateSnapshot()` |
 | `session.attrs()` | `session.goal.state`（`GoalAttrs.GOAL_STATE`） | 包内运行态，首次访问从投影 hydrate | 否 |
-| `session.attrs()` | `session.goal.running`（`GoalAttrs.GOAL_RUNNING`） | 轮次防重入标记 | 否 |
+| `session.attrs()` | `session.goal.running`（`GoalAttrs.GOAL_RUNNING`） | 轮次防重入标记（可观测镜像） | 否 |
+| `session.attrs()` | `session.goal.round.guard`（`GoalAttrs.GOAL_ROUND_GUARD`） | 轮次守护对象（显式锁 + 停等 Condition） | 否 |
 
 投影字段（由 `GoalProjection` 唯一定义）：`goalId`、`objective` 与 `condition`（双写，读取时 `condition` 优先）、`status`、`consumedTokens`、`maxTokens`、`maxIterations`、`startEpochMs`、`maxDurationMs`、`currentIteration`、`lastResult`、`lastExecutedAt`、`stagnationCount`、`consecutiveErrors`（后四项仅非零/非空时写入）。上一轮指纹、错误类型/摘要、连续同类错误数与工具证据不持久化，重启后从零计。
 
