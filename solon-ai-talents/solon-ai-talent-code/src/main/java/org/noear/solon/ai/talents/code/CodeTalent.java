@@ -27,6 +27,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Code 规范对齐的才能
@@ -104,8 +105,11 @@ public class CodeTalent extends AbsTalent {
      * 按根目录分段的扫描锁（固定 64 段，内存有界）。
      * <p>曾锁整个实例：一个才能实例服务多个会话目录时，一个大仓库的首次全树扫描会挡住
      * 其它所有目录的这一轮。同一根目录仍串行（避免同时重扫并写同一份 CODE.md）。</p>
+     *
+     * <p>临界区内是全树扫描与 CODE.md 写入，属于持锁 I/O。用 {@link ReentrantLock} 而非监视器：
+     * 在支持虚拟线程的 JDK（21–23）上，进入被占用的监视器会钉住载体线程。</p>
      */
-    private final Object[] rootLocks = newLocks(64);
+    private final ReentrantLock[] rootLocks = newLocks(64);
 
     public CodeTalent(String workDir, String codeDir) {
         this.workDir = workDir;
@@ -290,7 +294,9 @@ public class CodeTalent extends AbsTalent {
             return cached.value;
         }
 
-        synchronized (lockOf(key)) {
+        ReentrantLock lock = lockOf(key);
+        lock.lock();
+        try {
             // 双检：避免并发场景下多个线程同时全树重扫并写同一个文件
             cached = initCache.get(key);
             if (cached != null && cached.isFresh(sign)) {
@@ -298,6 +304,8 @@ public class CodeTalent extends AbsTalent {
             }
 
             return init(__cwd);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -332,20 +340,24 @@ public class CodeTalent extends AbsTalent {
         } catch (RuntimeException e) {
             return doInit(__cwd); // 根目录都解析不了：交给 doInit 报告失败
         }
-        synchronized (lockOf(lockPath.toString())) {
+        ReentrantLock lock = lockOf(lockPath.toString());
+        lock.lock();
+        try {
             return doInit(__cwd);
+        } finally {
+            lock.unlock();
         }
     }
 
-    private static Object[] newLocks(int n) {
-        Object[] locks = new Object[n];
+    private static ReentrantLock[] newLocks(int n) {
+        ReentrantLock[] locks = new ReentrantLock[n];
         for (int i = 0; i < n; i++) {
-            locks[i] = new Object();
+            locks[i] = new ReentrantLock();
         }
         return locks;
     }
 
-    private Object lockOf(String rootKey) {
+    private ReentrantLock lockOf(String rootKey) {
         return rootLocks[(rootKey.hashCode() & 0x7fffffff) % rootLocks.length];
     }
 

@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 系统环境变量解析器。
@@ -64,6 +65,15 @@ public final class EnvironmentResolver {
     private static volatile String cachedPath;
     private static volatile long cachedAt;
 
+    /**
+     * 缓存重建锁。
+     *
+     * <p>临界区内要 fork PowerShell 读注册表（最长等 {@code READ_TIMEOUT_MS}，
+     * 实际还包含进程启动时间），属于持锁阻塞。用 {@link ReentrantLock} 取代类监视器：
+     * 在支持虚拟线程的 JDK（21–23）上，进入被占用的监视器会钉住载体线程。</p>
+     */
+    private static final ReentrantLock REFRESH_LOCK = new ReentrantLock();
+
     private EnvironmentResolver() {
     }
 
@@ -82,7 +92,8 @@ public final class EnvironmentResolver {
         if (isFresh(cached, now)) {
             return cached == FAILED_SENTINEL ? null : cached;
         }
-        synchronized (EnvironmentResolver.class) {
+        REFRESH_LOCK.lock();
+        try {
             cached = cachedPath;
             if (isFresh(cached, now)) {
                 return cached == FAILED_SENTINEL ? null : cached;
@@ -90,6 +101,8 @@ public final class EnvironmentResolver {
             cachedPath = resolveWindowsPath();
             cachedAt = System.currentTimeMillis();
             return cachedPath == FAILED_SENTINEL ? null : cachedPath;
+        } finally {
+            REFRESH_LOCK.unlock();
         }
     }
 

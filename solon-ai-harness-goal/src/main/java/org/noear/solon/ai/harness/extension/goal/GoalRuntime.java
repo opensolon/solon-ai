@@ -43,7 +43,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 
 /**
@@ -71,8 +74,10 @@ class GoalRuntime {
     private static final String KEY_GOAL = GoalAttrs.GOAL;
     /** 运行态实例的 attrs key（见 {@link GoalAttrs#GOAL_STATE}）。 */
     private static final String ATTR_GOAL = GoalAttrs.GOAL_STATE;
-    /** 运行态防重入锁的 attrs key（见 {@link GoalAttrs#GOAL_RUNNING}）。 */
+    /** 运行态防重入标记的 attrs key（见 {@link GoalAttrs#GOAL_RUNNING}）。 */
     private static final String ATTR_RUNNING = GoalAttrs.GOAL_RUNNING;
+    /** 一轮运行状态守护对象的 attrs key（见 {@link GoalAttrs#GOAL_ROUND_GUARD}）。 */
+    private static final String ATTR_ROUND_GUARD = GoalAttrs.GOAL_ROUND_GUARD;
 
     private final HarnessEngine engine;
     /** 宿主注册的执行者（按注册顺序取首个认领者；通道化注册携带通道名与认领谓词）。 */
@@ -154,15 +159,62 @@ class GoalRuntime {
     /** 当前是否有一轮正在执行（供 UI 展示与编辑前的停等判定）。 */
     public boolean isRunning(AgentSession session) {
         if (session == null) return false;
-        return Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING));
+        // 读 volatile 标记 + attrs 镜像，均不加锁：本方法可能在任意宿主上下文（含持有 attrs 监视器的上下文）
+        // 被调用，若在此取 RoundGuard 的锁，会与「持 RoundGuard 锁后再读 attrs」形成锁序倒置的可能
+        boolean marked = Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING));
+        return marked || guardOf(session).running;
     }
 
     /**
-     * 等待正在执行的那一轮安全结束（不轮询，靠 {@code attrs()} 上的 notify）。
+     * 取（或惰性建）会话的一轮守护对象。
      *
-     * <p>锁对象就是 {@code attrs()} 本身，与 {@link #runRound} 的 CAS 段、finally 清除段
-     * 完全同一把锁，因此不存在「漏唤醒」：唯一清除 {@code ATTR_RUNNING} 的地方
-     * 在 {@code runRound} 的 finally 内，且会 {@code notifyAll}。</p>
+     * <p>创建段借用 {@code attrs()} 的监视器：需要一个与其它线程互斥的「没有就放一个」。
+     * 该段只做一次 Map 读写，不含任何可能阻塞的调用，且<b>不会在持有 {@link RoundGuard#lock}
+     * 时进入</b>（调用点均在取锁之前），因此不存在锁序倒置。</p>
+     */
+    private RoundGuard guardOf(AgentSession session) {
+        Map<String, Object> attrs = session.attrs();
+        Object existing = attrs.get(ATTR_ROUND_GUARD);
+        if (existing instanceof RoundGuard) {
+            return (RoundGuard) existing;
+        }
+
+        synchronized (attrs) {
+            Object value = attrs.get(ATTR_ROUND_GUARD);
+            if (value instanceof RoundGuard) {
+                return (RoundGuard) value;
+            }
+            RoundGuard guard = new RoundGuard();
+            attrs.put(ATTR_ROUND_GUARD, guard);
+            return guard;
+        }
+    }
+
+    /**
+     * 一轮运行状态的专用守护对象。
+     *
+     * <p>运行标记与停等唤醒收敛在这把显式锁上，不再借用 {@code session.attrs()} 的监视器：
+     * 后者是 queue / steer / dispatch 等模块共用的跨模块锁；在 JDK 21-23 的虚拟线程里
+     * 等待（或进入已被占用的 monitor）会 pin 住载体线程。本锁只保护
+     * {@code session.goal.running} 这一个键，与其它模块的 attrs 键无交集。</p>
+     */
+    private static final class RoundGuard {
+        private final ReentrantLock lock = new ReentrantLock();
+        private final Condition stopped = lock.newCondition();
+        /** 当前是否有一轮在跑（volatile：供不加锁的 isRunning 即时读取） */
+        private volatile boolean running;
+    }
+
+    /**
+     * 等待正在执行的那一轮安全结束（不轮询，靠 {@link RoundGuard} 的 Condition 唤醒）。
+     *
+     * <p>等待与唤醒都收敛在会话级的同一把显式锁上（{@link RoundGuard#lock}），与
+     * {@link #runRound} 的 CAS 段、finally 清除段是同一把锁，因此不存在「漏唤醒」；
+     * 唯一清除运行标记的地方在 {@code runRound} 的 finally 内，且会 {@code signalAll}。</p>
+     *
+     * <p><b>为何不借 {@code attrs()} 的监视器</b>：那是 queue / steer / dispatch 等模块共用的
+     * 跨模块锁，在 JDK 21-23 上于虚拟线程中等待会把载体线程 pin 住（本方法最长可等整个超时预算）。
+     * 改为显式锁后，等待期间释放载体线程，且不改变跨模块的 attrs 锁协议。</p>
      *
      * <p>语义是「给宿主一个不忙等的停等」，<b>不负责中断</b>——中断依赖宿主的运行时通道，
      * 不属于 goal 域职责。</p>
@@ -174,22 +226,27 @@ class GoalRuntime {
         if (session == null) {
             return true;
         }
+        RoundGuard guard = guardOf(session);
         long deadline = System.currentTimeMillis() + Math.max(0L, timeoutMs);
-        synchronized (session.attrs()) {
-            while (Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING))) {
+
+        guard.lock.lock();
+        try {
+            while (guard.running) {
                 long remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) {
                     return false;
                 }
                 try {
-                    session.attrs().wait(remaining);
+                    guard.stopped.await(remaining, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return false;
                 }
             }
+            return true;
+        } finally {
+            guard.lock.unlock();
         }
-        return true;
     }
 
     /**
@@ -589,13 +646,14 @@ class GoalRuntime {
         if (session == null) {
             throw new IllegalArgumentException("session is required");
         }
+        Goal gs;
         synchronized (session.attrs()) {
             Goal existing = stateLocked(session);
             if (existing != null && !existing.getStatus().isTerminal()) {
                 throw new IllegalStateException("当前会话已有进行中的 Goal，请先清除后再创建");
             }
 
-            Goal gs = new Goal(objective, maxTokens, budgetThresholds);
+            gs = new Goal(objective, maxTokens, budgetThresholds);
             gs.setMaxDurationMs(maxDurationMs);
             gs.setMaxIterations(maxIterations);
 
@@ -603,12 +661,10 @@ class GoalRuntime {
             if (displayed != null) {
                 gs.setObjective(displayed);
             }
-
-            session.attrs().put(ATTR_GOAL, gs);
-            saveLocked(session, gs);
-            notifyChanged(session, gs, false);
-            return gs;
         }
+        saveGuarded(session, gs);
+        notifyChanged(session, gs, false);
+        return gs;
     }
 
     /** 展示正文归一：null/空/与执行正文相同时返回 null（表示无需覆写）。 */
@@ -637,10 +693,7 @@ class GoalRuntime {
     /** 持久化当前状态（状态转移后调用），并广播给观察者。 */
     public void commit(AgentSession session, Goal gs) {
         if (session == null || gs == null) return;
-        synchronized (session.attrs()) {
-            session.attrs().put(ATTR_GOAL, gs);
-            saveLocked(session, gs);
-        }
+        saveGuarded(session, gs);
         notifyChanged(session, gs, false);
     }
 
@@ -656,9 +709,8 @@ class GoalRuntime {
             gs.setObjective(objective);
             gs.setMaxTokens(maxTokens);
             gs.setMaxIterations(maxIterations);
-            session.attrs().put(ATTR_GOAL, gs);
-            saveLocked(session, gs);
         }
+        saveGuarded(session, gs);
         notifyChanged(session, gs, false);
     }
 
@@ -669,9 +721,8 @@ class GoalRuntime {
             if (patch.getMaxTokens() != null) gs.setMaxTokens(patch.getMaxTokens());
             if (patch.getMaxDurationMs() != null) gs.setMaxDurationMs(patch.getMaxDurationMs());
             if (patch.getMaxIterations() != null) gs.setMaxIterations(patch.getMaxIterations());
-            session.attrs().put(ATTR_GOAL, gs);
-            saveLocked(session, gs);
         }
+        saveGuarded(session, gs);
         notifyChanged(session, gs, false);
     }
 
@@ -683,15 +734,26 @@ class GoalRuntime {
     /** 清除本会话 goal（移除投影并落盘）。 */
     public void clear(AgentSession session) {
         if (session == null) return;
-        synchronized (session.attrs()) {
-            Goal removed = stateLocked(session);
-            session.attrs().remove(ATTR_GOAL);
-            if (session.getContext() != null) {
-                session.getContext().data().remove(KEY_GOAL);
+
+        RoundGuard guard = guardOf(session);
+        guard.lock.lock();
+        Goal removed;
+        try {
+            synchronized (session.attrs()) {
+                removed = stateLocked(session);
+                session.attrs().remove(ATTR_GOAL);
+                if (session.getContext() != null) {
+                    session.getContext().data().remove(KEY_GOAL);
+                }
             }
-            session.updateSnapshot();
-            notifyChanged(session, removed, true);
+            // 落盘是 IO：出 attrs 监视器，改由会话级守卫锁串行化
+            if (session.getContext() != null) {
+                session.updateSnapshot();
+            }
+        } finally {
+            guard.lock.unlock();
         }
+        notifyChanged(session, removed, true);
     }
 
     /**
@@ -749,7 +811,30 @@ class GoalRuntime {
         }
     }
 
-    /** 写投影并落盘（调用方须持 attrs 锁）。 */
+    /**
+     * 提交运行态并落盘：attrs 写入（短临界区）→ 落盘（会话级守卫锁串行化）。
+     *
+     * <p>落盘是 IO（文件 fsync / Redis 网络写），不能放在 {@code synchronized (session.attrs())} 内：
+     * 那是 queue / steer / dispatch 等模块共用的跨模块锁，持它做 IO 会阻塞其它模块，
+     * 在 JDK 21-23 上还会 pin 住虚拟线程的载体线程。</p>
+     *
+     * <p>串行化改由会话级 {@link RoundGuard#lock} 承担：它与停等是同一把锁，
+     * {@code await} 期间会释放，不互相阻塞。</p>
+     */
+    private void saveGuarded(AgentSession session, Goal gs) {
+        RoundGuard guard = guardOf(session);
+        guard.lock.lock();
+        try {
+            synchronized (session.attrs()) {
+                session.attrs().put(ATTR_GOAL, gs);
+            }
+            saveLocked(session, gs);
+        } finally {
+            guard.lock.unlock();
+        }
+    }
+
+    /** 写投影并落盘（调用方不得持 attrs 监视器）。 */
     private void saveLocked(AgentSession session, Goal gs) {
         if (session.getContext() == null) return;
         session.getContext().data().put(KEY_GOAL, gs.toMap());
@@ -786,12 +871,20 @@ class GoalRuntime {
             return false;
         }
 
-        // ③ CAS 防重入
-        synchronized (session.attrs()) {
-            if (Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING))) {
+        // ③ CAS 防重入（同一把会话级显式锁，见 RoundGuard）
+        RoundGuard guard = guardOf(session);
+        guard.lock.lock();
+        try {
+            // 双重判据：RoundGuard 是权威状态（同一会话跨 GoalRuntime 实例共享同一个 guard）；
+            // attrs 键允许被旧路径/宿主直接标记，作为兼容兑底
+            if (guard.running || Boolean.TRUE.equals(session.attrs().get(ATTR_RUNNING))) {
                 return false;
             }
+            guard.running = true;
+            // 兼容保留：该键在 README 中已登记为可观测的运行态标记
             session.attrs().put(ATTR_RUNNING, Boolean.TRUE);
+        } finally {
+            guard.lock.unlock();
         }
 
         try {
@@ -800,10 +893,14 @@ class GoalRuntime {
             handleExecutionError(session, gs, e);
             return false;
         } finally {
-            synchronized (session.attrs()) {
+            guard.lock.lock();
+            try {
+                guard.running = false;
                 session.attrs().remove(ATTR_RUNNING);
-                // 唤醒 awaitRoundStopped 的等待者（锁对象与等待者一致，且此处是唯一移除点）
-                session.attrs().notifyAll();
+                // 唤醒 awaitRoundStopped 的等待者（与本方法同一把锁，且此处是唯一移除点）
+                guard.stopped.signalAll();
+            } finally {
+                guard.lock.unlock();
             }
         }
     }

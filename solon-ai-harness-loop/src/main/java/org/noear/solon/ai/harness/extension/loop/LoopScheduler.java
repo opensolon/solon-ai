@@ -91,6 +91,9 @@ final class LoopScheduler {
     private final ReentrantLock storeLock = new ReentrantLock();
     /** 全量加载标记（先置位、不反复重试，避免半初始化反复执行）。 */
     private volatile boolean loaded = false;
+
+    /** 加载锁：load() 的临界区含存储读取，用显式锁避免钉住载体线程（见 {@link #doLoad()}）。 */
+    private final ReentrantLock loadLock = new ReentrantLock();
     /** 已摘除（unloadAll 置位、load 清除）。 */
     private volatile boolean detached = false;
 
@@ -246,6 +249,7 @@ final class LoopScheduler {
         List<LoopTask> tasks = sessionId == null || taskId == null ? null : sessionTasks.get(sessionId);
         if (tasks == null) return null;
 
+        LoopTask result = null;
         synchronized (tasks) {
             for (int i = 0; i < tasks.size(); i++) {
                 LoopTask t = tasks.get(i);
@@ -256,12 +260,18 @@ final class LoopScheduler {
                     if (newTask.isEnabled() && !newTask.isCancelled()) {
                         registerJob(sessionId, newTask, false);
                     }
-                    persistAll();
-                    return newTask;
+                    result = newTask;
+                    break;
                 }
             }
         }
-        return null;
+
+        // 落盘放到锁外：persistAll() 是先取 storeLock 再锁各会话任务表，
+        // 若在持有任务表锁时调用，就与它构成锁序倒置（A 持表锁等 storeLock，B 持 storeLock 等表锁）。
+        if (result != null) {
+            persistAll();
+        }
+        return result;
     }
 
     boolean trigger(String sessionId, String taskId) {
@@ -375,10 +385,26 @@ final class LoopScheduler {
     // ==================== 加载 ====================
 
     /** 全量加载存储并注册全部启用任务（幂等）。 */
-    synchronized void load() {
-        if (loaded) return;
-        loaded = true; // 先置位：即便后续异常也不再重试
-        detached = false;
+    void load() {
+        loadLock.lock();
+        try {
+            if (loaded) return;
+            loaded = true; // 先置位：即便后续异常也不再重试
+            detached = false;
+            doLoad();
+        } finally {
+            loadLock.unlock();
+        }
+    }
+
+    /**
+     * 真正的加载动作。
+     *
+     * <p>临界区内是存储读取（磁盘或远程挂载）与 job 注册，属于持锁 I/O，
+     * 因此由 {@link #loadLock} 以显式锁保护，而不是方法上的 {@code synchronized}：
+     * 在支持虚拟线程的 JDK（21–23）上，进入被占用的监视器会钉住载体线程。</p>
+     */
+    private void doLoad() {
         try {
             Map<String, List<LoopTask>> all = store.load();
             boolean orphanRemoved = false;

@@ -33,6 +33,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 统一的 shell 命令启动拼装。
@@ -91,6 +92,16 @@ public final class ShellCommandFactory {
 
     /** 父 shell 探测失败/不可判定的缓存哨兵（进程名不可能是 NUL 字符） */
     private static final String PARENT_PROBE_FAILED = "\u0000";
+
+    /**
+     * 探测器初始化锁。
+     *
+     * <p>临界区内要 fork 子进程（祖先链探测最长等 {@code PARENT_PROBE_TIMEOUT_MS}，
+     * unix shell 探测最长等 3 秒），属于典型的持锁阻塞。用 {@link ReentrantLock}
+     * 取代类监视器：在支持虚拟线程的 JDK（21–23）上，进入被占用的监视器会钉住载体线程，
+     * 显式锁只会挂起虚拟线程本身。</p>
+     */
+    private static final ReentrantLock PROBE_LOCK = new ReentrantLock();
 
     private static volatile String cachedUnixShell;
 
@@ -276,12 +287,15 @@ public final class ShellCommandFactory {
     static String detectWindowsParentShellName() {
         String cached = cachedWindowsParentShell;
         if (cached == null) {
-            synchronized (ShellCommandFactory.class) {
+            PROBE_LOCK.lock();
+            try {
                 cached = cachedWindowsParentShell;
                 if (cached == null) {
                     cached = probeWindowsParentShellName();
                     cachedWindowsParentShell = (cached == null) ? PARENT_PROBE_FAILED : cached;
                 }
+            } finally {
+                PROBE_LOCK.unlock();
             }
         }
         return PARENT_PROBE_FAILED.equals(cached) ? null : cached;
@@ -675,7 +689,8 @@ public final class ShellCommandFactory {
         if (cached != null) {
             return cached;
         }
-        synchronized (ShellCommandFactory.class) {
+        PROBE_LOCK.lock();
+        try {
             if (cachedUnixShell != null) {
                 return cachedUnixShell;
             }
@@ -690,6 +705,8 @@ public final class ShellCommandFactory {
                 cachedUnixShell = "/bin/sh";
             }
             return cachedUnixShell;
+        } finally {
+            PROBE_LOCK.unlock();
         }
     }
 

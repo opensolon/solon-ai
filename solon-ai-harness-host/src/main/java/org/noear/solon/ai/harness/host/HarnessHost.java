@@ -4,6 +4,7 @@
  */
 package org.noear.solon.ai.harness.host;
 
+import org.noear.solon.Solon;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.AbsReActEvent;
@@ -32,6 +33,7 @@ import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.core.util.ThreadsUtil;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
@@ -105,6 +107,51 @@ public final class HarnessHost {
 
     /** 后台轮次在 goal / loop 执行器中登记的通道名 */
     static final String EXECUTOR_CHANNEL = "host";
+
+    /**
+     * 缺省执行器：一轮一个虚拟线程（阻塞等 LLM 时不占载体线程，并发不受线程池大小限制）。
+     *
+     * <p>开启条件：{@code solon.threads.virtual.enabled=true}（Solon 应用配置，或非 Solon 运行时
+     * 下的同名系统属性；且运行环境支持虚拟线程）。
+     * 不满足时沿用 Reactor boundedElastic（4.2.0 之前的行为），此时并发上限仍受线程池大小约束。</p>
+     *
+     * <p><b>并发上限</b>：虚拟线程分支不做全局限流——一轮一个虚拟线程，阻塞等 LLM 时释放载体
+     * 线程；真实天花板往往在模型服务的 RPM/TPM 或下游连接池。需要削峰时由宿主通过
+     * {@link Builder#executor(Executor)} 传入带信号量的包装执行器，本类不预设策略。</p>
+     */
+    private static void executeDefault(Runnable task) {
+        Executor virtualExecutor = isVirtualThreadsEnabled() ? VirtualExecutorHolder.INSTANCE : null;
+
+        if (virtualExecutor != null) {
+            virtualExecutor.execute(task);
+        } else {
+            Schedulers.boundedElastic().schedule(task);
+        }
+    }
+
+    private static boolean isVirtualThreadsEnabled() {
+        // 1) Solon 应用配置优先
+        if (Solon.appIf(app -> app.cfg().isEnabledVirtualThreads())) {
+            return true;
+        }
+        // 2) 非 Solon 运行时（Spring / 纯 main）下 Solon.app 为 null，读不到应用配置；
+        //    允许用同名系统属性显式开启，避免「配了开关却静默退回 boundedElastic」
+        return Boolean.parseBoolean(System.getProperty("solon.threads.virtual.enabled", "false"));
+    }
+
+    /** 懒建：只在真正开启虚拟线程时才做反射探测（Java 8 探不到则退回 boundedElastic） */
+    private static class VirtualExecutorHolder {
+        static final Executor INSTANCE = createVirtualExecutor();
+    }
+
+    private static Executor createVirtualExecutor() {
+        try {
+            return ThreadsUtil.newVirtualThreadPerTaskExecutor("harness-run-");
+        } catch (Throwable e) {
+            LOG.warn("Virtual threads unavailable, fallback to boundedElastic: {}", e.toString());
+            return null;
+        }
+    }
 
     private final Function<String, HarnessEngine> engines;
     private final HostSink sink;
@@ -1157,7 +1204,7 @@ public final class HarnessHost {
         private Function<String, HarnessEngine> engines;
         private HostSink sink = new HostSink() {
         };
-        private Executor executor = r -> Schedulers.boundedElastic().schedule(r);
+        private Executor executor = HarnessHost::executeDefault;
         private BiFunction<String, Runnable, Runnable> wrap = (tenant, r) -> r;
         private BiConsumer<String, HarnessInput> input;
         private boolean programRuns = true;
@@ -1184,7 +1231,13 @@ public final class HarnessHost {
             return this;
         }
 
-        /** 开流动作的执行器（缺省 Reactor boundedElastic；Agent 管道的同步部分在这里执行） */
+        /**
+         * 开流动作的执行器（Agent 管道的同步部分在这里执行）。
+         *
+         * <p>缺省：开启虚拟线程（{@code solon.threads.virtual.enabled=true}）时一轮一个虚拟线程，
+         * 阻塞等 LLM 不占载体线程，并发上限不受线程池大小约束；未开启时用 Reactor boundedElastic。
+         * 显式传入则完全以传入的为准。</p>
+         */
         public Builder executor(Executor executor) {
             this.executor = Objects.requireNonNull(executor, "executor");
             return this;

@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -58,6 +59,14 @@ public class DefaultSkillCatalog implements SkillCatalog {
     private volatile Map<String, SkillRecord> skills = Collections.emptyMap();
     private volatile Map<String, SkillRecord> shortNames = Collections.emptyMap();
     private final Set<String> disallowSkills = Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
+    /**
+     * 刷新锁。
+     *
+     * <p>临界区内要逐个挂载扫盘读 SKILL.md（远程挂载还会走网络），属于持锁 I/O。
+     * 用 {@link ReentrantLock} 而非方法监视器：在支持虚拟线程的 JDK（21–23）上，
+     * 进入被占用的监视器会钉住载体线程。快照字段均为 volatile，去掉监视器不影响可见性。</p>
+     */
+    private final ReentrantLock refreshLock = new ReentrantLock();
 
     /**
      * 创建目录、立即扫描所有技能来源，并订阅挂载变更。
@@ -141,22 +150,27 @@ public class DefaultSkillCatalog implements SkillCatalog {
      * 全量扫描已启用的技能挂载，并重建标识及唯一短名索引。
      */
     @Override
-    public synchronized void refresh() {
-        Map<String, SkillRecord> result = new LinkedHashMap<>();
-        for (Mount mount : mountManager.getMounts()) {
-            if (mount.isEnabled() && mount.getType() == MountType.SKILLS) {
-                scanMount(mount, result);
+    public void refresh() {
+        refreshLock.lock();
+        try {
+            Map<String, SkillRecord> result = new LinkedHashMap<>();
+            for (Mount mount : mountManager.getMounts()) {
+                if (mount.isEnabled() && mount.getType() == MountType.SKILLS) {
+                    scanMount(mount, result);
+                }
             }
+            Map<String, SkillRecord> names = new LinkedHashMap<>();
+            Set<String> ambiguous = new HashSet<>();
+            for (SkillRecord record : result.values()) {
+                String name = record.descriptor.getName();
+                if (names.putIfAbsent(name, record) != null) ambiguous.add(name);
+            }
+            for (String name : ambiguous) names.remove(name);
+            shortNames = Collections.unmodifiableMap(names);
+            skills = Collections.unmodifiableMap(result);
+        } finally {
+            refreshLock.unlock();
         }
-        Map<String, SkillRecord> names = new LinkedHashMap<>();
-        Set<String> ambiguous = new HashSet<>();
-        for (SkillRecord record : result.values()) {
-            String name = record.descriptor.getName();
-            if (names.putIfAbsent(name, record) != null) ambiguous.add(name);
-        }
-        for (String name : ambiguous) names.remove(name);
-        shortNames = Collections.unmodifiableMap(names);
-        skills = Collections.unmodifiableMap(result);
     }
 
     /**

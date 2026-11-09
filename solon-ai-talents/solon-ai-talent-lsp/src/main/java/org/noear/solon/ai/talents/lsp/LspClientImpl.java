@@ -49,6 +49,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
@@ -191,9 +192,15 @@ public class LspClientImpl implements LspClient {
     private final ConcurrentHashMap<String, ReentrantLock> syncLocks = new ConcurrentHashMap<>();
 
     /**
-     * 诊断等待的唤醒锁（publishDiagnostics 到达时 notifyAll）
+     * 诊断等待的唤醒锁（publishDiagnostics 到达时 signalAll）。
+     *
+     * <p>等待方要在锁内等到本轮推送或超时（最长 {@code timeoutMs}），是典型的持锁阻塞。
+     * 用 {@link ReentrantLock} + {@link Condition} 而非监视器：在支持虚拟线程的 JDK（21–23）
+     * 上，{@code Object.wait()} 会把载体线程一起钉住，而 {@code Condition.await()} 只挂起虚拟线程。</p>
      */
-    private final Object diagMonitor = new Object();
+    private final ReentrantLock diagLock = new ReentrantLock();
+    /** 诊断推送或超时唤醒。{@link #diagLock} 的等待队列。 */
+    private final Condition diagChanged = diagLock.newCondition();
 
     /**
      * 服务器声明的文档同步方式（决定 didChange 用整文替换还是全范围替换）
@@ -792,7 +799,8 @@ public class LspClientImpl implements LspClient {
         int expectVersion = ds.expectVersion;
         long deadline = startAt + Math.max(0, timeoutMs);
 
-        synchronized (diagMonitor) {
+        diagLock.lock();
+        try {
             while (true) {
                 long now = System.currentTimeMillis();
                 if (isFreshPublish(ds, startAt, expectVersion)) {
@@ -811,6 +819,8 @@ public class LspClientImpl implements LspClient {
                 }
                 doWait(left);
             }
+        } finally {
+            diagLock.unlock();
         }
     }
 
@@ -832,9 +842,10 @@ public class LspClientImpl implements LspClient {
         return ds.publishedAt >= startAt;
     }
 
+    /** 在 {@link #diagLock} 内等待（调用方已持锁）。 */
     private void doWait(long ms) {
         try {
-            diagMonitor.wait(Math.max(1, ms));
+            diagChanged.await(Math.max(1, ms), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -976,8 +987,11 @@ public class LspClientImpl implements LspClient {
         ds.publishedAt = System.currentTimeMillis();
 
         // 唤醒 waitForDiagnostics 的等待者（状态均为 volatile 写，持锁区间只做通知）
-        synchronized (diagMonitor) {
-            diagMonitor.notifyAll();
+        diagLock.lock();
+        try {
+            diagChanged.signalAll();
+        } finally {
+            diagLock.unlock();
         }
 
         if (diagnosticsConsumer != null) {

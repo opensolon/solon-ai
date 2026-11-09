@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 基于统一挂载注册表的来源无关 Agent 目录。
@@ -41,6 +42,14 @@ public final class DefaultAgentCatalog implements AgentCatalog {
     private static final Logger LOG = LoggerFactory.getLogger(DefaultAgentCatalog.class);
     private final MountManager mountManager;
     private volatile Map<String, AgentDescriptor> agents = Collections.emptyMap();
+    /**
+     * 刷新锁。
+     *
+     * <p>临界区内要逐个挂载扫盘读 Agent 定义（远程挂载还会走网络），属于持锁 I/O。
+     * 用 {@link ReentrantLock} 而非方法监视器：在支持虚拟线程的 JDK（21–23）上，
+     * 进入被占用的监视器会钉住载体线程。快照字段为 volatile，去掉监视器不影响可见性。</p>
+     */
+    private final ReentrantLock refreshLock = new ReentrantLock();
 
     /**
      * 创建目录、立即扫描挂载中的 Agent，并订阅挂载变更。
@@ -67,14 +76,19 @@ public final class DefaultAgentCatalog implements AgentCatalog {
      * 扫描所有启用的 Agent 来源挂载并替换目录快照。
      */
     @Override
-    public synchronized void refresh() {
-        Map<String, AgentDescriptor> discoveredAgents = new LinkedHashMap<>();
-        for (Mount mount : mountManager.getMounts()) {
-            if (mount.isEnabled() && mount.getType() == MountType.AGENTS) {
-                scanAgents(mount, discoveredAgents);
+    public void refresh() {
+        refreshLock.lock();
+        try {
+            Map<String, AgentDescriptor> discoveredAgents = new LinkedHashMap<>();
+            for (Mount mount : mountManager.getMounts()) {
+                if (mount.isEnabled() && mount.getType() == MountType.AGENTS) {
+                    scanAgents(mount, discoveredAgents);
+                }
             }
+            agents = Collections.unmodifiableMap(discoveredAgents);
+        } finally {
+            refreshLock.unlock();
         }
-        agents = Collections.unmodifiableMap(discoveredAgents);
     }
 
     /**

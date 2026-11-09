@@ -45,6 +45,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -106,6 +107,15 @@ public class TerminalTalent extends AbsTalent {
     private volatile long pythonProbeFailedAt;
     /** 上次 node 探测失败时间（0 表示无失败记录） */
     private volatile long nodeProbeFailedAt;
+    /**
+     * 运行时探测锁。
+     *
+     * <p>专用锁而不是 {@code synchronized (this)}：临界区内要 fork 探测进程（最长等 2s），
+     * 用实例监视器会让所有 {@code synchronized (this)} 的方法一起排队；在 JDK 21~23 上
+     * 阻塞在 synchronized 内还会钉住载体线程。字段本身是 volatile，锁只保护「探测一次」。</p>
+     */
+    private final ReentrantLock pythonProbeLock = new ReentrantLock();
+    private final ReentrantLock nodeProbeLock = new ReentrantLock();
 
     protected Charset fileCharset = StandardCharsets.UTF_8;
     protected final ProcessExecutor executor = new ProcessExecutor();
@@ -604,7 +614,8 @@ public class TerminalTalent extends AbsTalent {
             if (System.currentTimeMillis() - pythonProbeFailedAt < PROBE_RETRY_INTERVAL_MS) {
                 return null;
             }
-            synchronized (this) {
+            pythonProbeLock.lock();
+            try {
                 cmd = pythonCmd;
                 if (cmd == null) {
                     cmd = executor.probePythonCommand();
@@ -615,6 +626,8 @@ public class TerminalTalent extends AbsTalent {
                         pythonProbeFailedAt = System.currentTimeMillis();
                     }
                 }
+            } finally {
+                pythonProbeLock.unlock();
             }
         }
         return cmd;
@@ -629,7 +642,8 @@ public class TerminalTalent extends AbsTalent {
             if (System.currentTimeMillis() - nodeProbeFailedAt < PROBE_RETRY_INTERVAL_MS) {
                 return null;
             }
-            synchronized (this) {
+            nodeProbeLock.lock();
+            try {
                 cmd = nodeCmd;
                 if (cmd == null) {
                     cmd = executor.probeNodeCommand();
@@ -640,6 +654,8 @@ public class TerminalTalent extends AbsTalent {
                         nodeProbeFailedAt = System.currentTimeMillis();
                     }
                 }
+            } finally {
+                nodeProbeLock.unlock();
             }
         }
         return cmd;

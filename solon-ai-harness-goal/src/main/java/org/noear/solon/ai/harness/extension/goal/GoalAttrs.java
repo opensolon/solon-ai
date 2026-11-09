@@ -33,7 +33,18 @@ final class GoalAttrs {
     static final String GOAL_STATE = "session.goal.state";
 
     /**
-     * 轮次防重入标记（{@code attrs()}，一轮执行期间为 TRUE；清除时 notifyAll 唤醒停等者）
+     * 轮次防重入标记（{@code attrs()}，一轮执行期间为 TRUE；清除时唤醒停等者）
+     *
+     * <p>仅作为对外可观测的运行态标记；实际互斥与等待唤醒由 {@code GoalRuntime.RoundGuard}
+     * 的显式锁承担。</p>
      */
     static final String GOAL_RUNNING = "session.goal.running";
+
+    /**
+     * 一轮运行状态的守护对象（{@code attrs()} 中存 {@code GoalRuntime.RoundGuard}，transient）
+     *
+     * <p>显式锁的载体键：把 {@code GOAL_RUNNING} 的读写与停等唤醒从 {@code attrs()} 监视器上拆下来，
+     * 避免虚拟线程等待时 pin 住载体线程，同时不影响其它模块对 {@code attrs()} 的锁协议。</p>
+     */
+    static final String GOAL_ROUND_GUARD = "session.goal.round.guard";
 }

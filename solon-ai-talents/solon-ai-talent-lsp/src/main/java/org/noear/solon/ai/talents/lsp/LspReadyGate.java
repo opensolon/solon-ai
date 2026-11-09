@@ -18,6 +18,10 @@ package org.noear.solon.ai.talents.lsp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
 /**
  * 「项目模型是否已建好」的就绪门禁。
  *
@@ -49,7 +53,13 @@ final class LspReadyGate {
     private final long timeoutMs;
     private final long startedAt = System.currentTimeMillis();
 
-    private final Object monitor = new Object();
+    /**
+     * 就绪状态锁。用专用锁 + 条件变量而非 {@code synchronized (monitor)}：
+     * 等待方会 sleep 到超时或就绪通知，属于典型的长时间阻塞；JDK 21~23 上在
+     * synchronized 内阻塞会钉住载体线程，虚拟线程下会拖垮整个载体。
+     */
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Condition readyCond = lock.newCondition();
     private volatile boolean ready;
 
     LspReadyGate(String serverName, boolean gated, long timeoutMs) {
@@ -88,7 +98,8 @@ final class LspReadyGate {
         }
 
         long deadline = System.currentTimeMillis() + Math.max(0, waitMs);
-        synchronized (monitor) {
+        lock.lock();
+        try {
             while (ready == false) {
                 long left = deadline - System.currentTimeMillis();
                 if (left <= 0) {
@@ -96,12 +107,14 @@ final class LspReadyGate {
                     return isReady();
                 }
                 try {
-                    monitor.wait(left);
+                    readyCond.await(left, TimeUnit.MILLISECONDS);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     return false;
                 }
             }
+        } finally {
+            lock.unlock();
         }
         return true;
     }
@@ -116,12 +129,15 @@ final class LspReadyGate {
             return;
         }
 
-        synchronized (monitor) {
+        lock.lock();
+        try {
             if (ready) {
                 return;
             }
             ready = true;
-            monitor.notifyAll();
+            readyCond.signalAll();
+        } finally {
+            lock.unlock();
         }
 
         LOG.info("LSP server '{}' is ready for analysis after {}ms ({})",
