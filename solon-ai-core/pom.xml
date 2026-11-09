@@ -18,6 +18,11 @@
     <dependencies>
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-net-httputils</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>solon-handle</artifactId>
         </dependency>
 
@@ -44,11 +49,6 @@
         <dependency>
             <groupId>org.noear</groupId>
             <artifactId>solon-web-rx</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
-            <artifactId>solon-net-httputils</artifactId>
         </dependency>
 
         <dependency>
