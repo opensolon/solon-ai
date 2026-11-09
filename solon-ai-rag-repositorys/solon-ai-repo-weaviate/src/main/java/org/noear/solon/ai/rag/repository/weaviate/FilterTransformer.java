@@ -269,14 +269,18 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
 
     /**
      * 转义字符串中的特殊字符
+     *
+     * <p>必须先转反斜杠、再转引号：反过来的话，引号转出来的 {@code \"} 会被后一步再翻一倍变成
+     * {@code \\"}，引号前面的反斜杠反而没了转义效果，字符串在 GraphQL 里提前闭合
+     * （值里只要有一个双引号，where 子句就是一段非法 GraphQL）。</p>
      */
     private String escapeString(String str) {
         if (str == null) {
             return "";
         }
 
-        return str.replace("\"", "\\\"")
-                .replace("\\", "\\\\")
+        return str.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
