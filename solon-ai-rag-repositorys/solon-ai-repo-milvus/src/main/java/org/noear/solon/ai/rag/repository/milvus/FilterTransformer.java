@@ -18,6 +18,7 @@ package org.noear.solon.ai.rag.repository.milvus;
 import org.noear.solon.expression.Expression;
 import org.noear.solon.expression.Transformer;
 import org.noear.solon.expression.snel.ComparisonNode;
+import org.noear.solon.expression.snel.ComparisonOp;
 import org.noear.solon.expression.snel.ConstantNode;
 import org.noear.solon.expression.snel.LogicalNode;
 import org.noear.solon.expression.snel.VariableNode;
@@ -50,16 +51,18 @@ public class FilterTransformer implements Transformer<Boolean, String> {
             // 判断是否为Collection类型
             if (((ConstantNode) filterExpression).isCollection()) {
                 buf.append("[");
+                boolean first = true;
                 for (Object item : (Iterable<?>) value) {
+                    if (first == false) {
+                        buf.append(", ");
+                    }
+                    first = false;
+
                     if (item instanceof String) {
                         buf.append("\"").append(item).append("\"");
                     } else {
                         buf.append(item);
                     }
-                    buf.append(", ");
-                }
-                if (buf.length() > 1) {
-                    buf.setLength(buf.length() - 1);
                 }
                 buf.append("]");
             } else if (value instanceof String) {
@@ -71,7 +74,7 @@ public class FilterTransformer implements Transformer<Boolean, String> {
             ComparisonNode compNode = (ComparisonNode) filterExpression;
             buf.append("(");
             parseFilterExpression(compNode.getLeft(), buf);
-            buf.append(" ").append(compNode.getOperator().getCode().toLowerCase()).append(" ");
+            buf.append(" ").append(operatorCode(compNode.getOperator())).append(" ");
             parseFilterExpression(compNode.getRight(), buf);
             buf.append(")");
         } else if (filterExpression instanceof LogicalNode) {
@@ -87,5 +90,19 @@ public class FilterTransformer implements Transformer<Boolean, String> {
             }
             buf.append(")");
         }
+    }
+
+    /**
+     * 比较运算符在 Milvus 表达式里的写法
+     *
+     * <p>{@link ComparisonOp#nin} 的代号是 {@code "NO IN"}（上游笔误），直接小写输出会得到
+     * {@code no in} —— Milvus 认的是 {@code not in}。</p>
+     */
+    private static String operatorCode(ComparisonOp operator) {
+        if (operator == ComparisonOp.nin) {
+            return "not in";
+        }
+
+        return operator.getCode().toLowerCase();
     }
 }
