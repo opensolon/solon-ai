@@ -125,6 +125,10 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
                         return createMustNotQuery(createTermsQuery(fieldName, (Collection<?>) value));
                     }
                     return createMustNotQuery(createTermQuery(fieldName, value));
+                case lk:
+                    return createWildcardQuery(fieldName, toWildcardPattern(value));
+                case nlk:
+                    return createMustNotQuery(createWildcardQuery(fieldName, toWildcardPattern(value)));
                 default:
                     return null;
             }
@@ -276,6 +280,54 @@ public class FilterTransformer implements Transformer<Boolean, Map<String, Objec
         Map<String, Object> result = new HashMap<>();
         result.put("wildcard", wildcard);
         return result;
+    }
+
+    /**
+     * 把 LIKE 的 SQL 通配符转成 wildcard 查询的通配符
+     *
+     * <p>表达式的 {@code lk} / {@code nlk} 用的是 SQL 写法：{@code %} 匹配任意长度、{@code _} 匹配
+     * 单个字符，反斜杠用于转义；而 wildcard 查询用的是 {@code *} 与 {@code ?}，且这两个字符在 SQL
+     * 写法里是字面量。所以 {@code %} 要换成 {@code *}、{@code _} 换成 {@code ?}，反过来出现的
+     * {@code *} / {@code ?} 要转义掉，被反斜杠转义过的 {@code %} / {@code _} 按字面量保留。</p>
+     */
+    private String toWildcardPattern(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        String text = value.toString();
+        StringBuilder buf = new StringBuilder(text.length());
+
+        boolean escaped = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+
+            if (escaped) {
+                // 被反斜杠转义的字符：% 与 _ 按字面量，反过来 wildcard 的 * 与 ? 仍然要转义
+                if (c == '*' || c == '?' || c == '\\') {
+                    buf.append('\\');
+                }
+                buf.append(c);
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '%') {
+                buf.append('*');
+            } else if (c == '_') {
+                buf.append('?');
+            } else if (c == '*' || c == '?') {
+                buf.append('\\').append(c);
+            } else {
+                buf.append(c);
+            }
+        }
+
+        if (escaped) {
+            // 结尾孤立的反斜杠，按字面量输出
+            buf.append('\\').append('\\');
+        }
+
+        return buf.toString();
     }
 
     /**
