@@ -75,6 +75,8 @@ public final class HarnessInput {
     /** 原始输入文本：命令识别、提及解析与 Prompt 构建的数据源；HITL 决策与续流路径不消费 */
     private final String text;
 
+    private String systemPrompt;
+
     /** 附件装配结果，永不为 null（构造器初始化，attachments(null) 不覆盖）；有附件时不作命令处理 */
     private InputAttachments attachments;
     /** 显式指定的模型名；为空时回退会话级选择，再回退默认模型（resolveSessionModelName） */
@@ -254,6 +256,15 @@ public final class HarnessInput {
      */
     public BusyPolicy getWhenBusy() {
         return whenBusy;
+    }
+
+    public HarnessInput systemPrompt(String systemPrompt){
+        this.systemPrompt = systemPrompt;
+        return this;
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
     }
 
     /**

@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.agent.SessionAgentsTalent;
-import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
@@ -32,7 +31,6 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.*;
-import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
 import org.noear.solon.ai.harness.command.CommandDispatcher;
 import org.noear.solon.ai.harness.command.CommandContextFactory;
@@ -216,7 +214,7 @@ final class InputPipeline {
                 //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
                 rememberEffectiveAgent(session, agentName);
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope), true);
+                        assembleRequest(session, null, input, agentName, scope), true);
             }
 
             //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
@@ -232,7 +230,7 @@ final class InputPipeline {
                     ? input.getExplicitAgent() : effectiveAgentOf(session);
             rememberEffectiveAgent(session, agentName);
             return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    assembleRequest(session, null, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope));
+                    assembleRequest(session, null, input, agentName, scope));
         }
 
         if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
@@ -275,19 +273,21 @@ final class InputPipeline {
         String modelName = resolveSessionModelName(session, input.getSelectedModel());
         rememberEffectiveAgent(session, agentName);
         return InputOutcome.task(prompt, agentName, modelName,
-                assembleRequest(session, prompt, input.getSelectedModel(), agentName, input.getSelectedSkills(), input.getSelectedMcps(), scope));
+                assembleRequest(session, prompt, input, agentName, scope));
     }
 
     /**
      * 装配一轮请求（会话、技能/连接选择、会话工作目录、生效模型）。
      */
     private ReActRequest assembleRequest(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                  @Nullable String selectedModel,
-                                  @Nullable String selectedAgent,
-                                  @Nullable List<String> selectedSkills,
-                                  @Nullable List<String> selectedMcps,
+                                  @Nullable HarnessInput input,
+                                  @Nullable String agentName,
                                   @Nullable InputScope scope) {
-        ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(session, selectedAgent));
+        if(Assert.isEmpty(agentName)){
+            agentName = input.getSelectedAgent();
+        }
+
+        ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(session, agentName));
 
         if (session != null) {
             request.session(session);
@@ -306,13 +306,16 @@ final class InputPipeline {
             }
         }
 
-
-        if (Assert.isNotEmpty(selectedSkills)) {
-            request.options(o -> o.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, selectedSkills));
+        if(Assert.isNotEmpty(input.getSystemPrompt())) {
+            request.options(o->o.systemPrompt(input.getSystemPrompt()));
         }
 
-        if (Assert.isNotEmpty(selectedMcps)) {
-            request.options(o -> o.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, selectedMcps));
+        if (Assert.isNotEmpty(input.getSelectedSkills())) {
+            request.options(o -> o.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, input.getSelectedSkills()));
+        }
+
+        if (Assert.isNotEmpty(input.getSelectedMcps())) {
+            request.options(o -> o.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, input.getSelectedMcps()));
         }
 
 
@@ -327,7 +330,7 @@ final class InputPipeline {
             }
         }
 
-        final String realModelName = resolveSessionModelName(session, selectedModel);
+        final String realModelName = resolveSessionModelName(session, input.getSelectedModel());
         if (realModelName != null) {
             final ChatModel chatModel = engine.getModelOrDefInstance(realModelName);
             if (chatModel != null) {
