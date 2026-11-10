@@ -39,6 +39,9 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
     /// ///////////////////////////////////
 
     private String agentName;
+    private String role;
+    private String instruction;
+    private String systemPrompt;
     private String outputSchema;
 
     protected ChatOptions copy() {
@@ -46,6 +49,9 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
         tmp.putAll(this);
 
         tmp.agentName = this.agentName;
+        tmp.role = this.role;
+        tmp.instruction = this.instruction;
+        tmp.systemPrompt = this.systemPrompt;
         tmp.outputSchema = this.outputSchema;
 
         return tmp;
@@ -63,6 +69,51 @@ public class ChatOptions extends ModelOptionsAmend<ChatOptions, ChatInterceptor>
      */
     public ChatOptions agentName(String agentName) {
         this.agentName = agentName;
+        return this;
+    }
+
+    /**
+     * 角色
+     */
+    public String role() {
+        return role;
+    }
+
+    /**
+     * 角色
+     */
+    public ChatOptions role(String role) {
+        this.role = role;
+        return this;
+    }
+
+    /**
+     * 指令
+     */
+    public String instruction() {
+        return instruction;
+    }
+
+    /**
+     * 指令
+     */
+    public ChatOptions instruction(String instruction) {
+        this.instruction = instruction;
+        return this;
+    }
+
+    /**
+     * 指令
+     */
+    public String systemPrompt() {
+        return systemPrompt;
+    }
+
+    /**
+     * 指令
+     */
+    public ChatOptions systemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
         return this;
     }
 

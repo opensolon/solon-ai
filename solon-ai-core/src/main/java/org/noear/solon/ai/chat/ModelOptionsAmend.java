@@ -47,12 +47,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     static final String REASONING_EFFORT = "reasoning_effort";
     static final String THINKING = "thinking";
 
-    protected String role;
-    protected String instruction;
-    protected String systemPrompt;
-
     protected Consumer<HttpUtils> httpCustomize;
-    protected CacheControl cacheControl;
 
     protected final AtomicBoolean autoToolCall;
 
@@ -63,6 +58,8 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     protected final Map<String, RankEntity<Talent>> talents;
     protected final Map<Class<?>, RankEntity<X>> interceptors;
 
+
+    protected CacheControl cacheControl;
 
     public ModelOptionsAmend() {
         this.autoToolCall = new AtomicBoolean(true);
@@ -88,11 +85,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
 
     public void putAll(ModelOptionsAmend<?, X> from) {
         if (from != null) {
-            role = from.role;
-            instruction = from.instruction;
-            systemPrompt = from.systemPrompt;
             httpCustomize = from.httpCustomize;
-            cacheControl = from.cacheControl;
 
             autoToolCall.set(from.autoToolCall.get());
 
@@ -124,10 +117,34 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
             tools.putAll(from.tools);
             talents.putAll(from.talents);
             interceptors.putAll(from.interceptors);
+
+            if (from.cacheControl != null) {
+                this.cacheControl = from.cacheControl;
+            }
         }
     }
 
     //===================
+    public Consumer<HttpUtils> httpCustomize() {
+        return httpCustomize;
+    }
+
+    public T httpCustomizeAdd(Consumer<HttpUtils> customize) {
+        if (customize != null) {
+            if (httpCustomize == null) {
+                httpCustomize = customize;
+            } else {
+                httpCustomize = httpCustomize.andThen(customize);
+            }
+        }
+
+        return (T) this;
+    }
+
+    public T httpCustomizeSet(Consumer<HttpUtils> customize) {
+        httpCustomize = customize;
+        return (T) this;
+    }
 
     public T autoToolCall(boolean autoToolCall) {
         this.autoToolCall.set(autoToolCall);
@@ -556,72 +573,6 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
     }
 
     /// ///////////////////////////////////
-
-    public Consumer<HttpUtils> httpCustomize() {
-        return httpCustomize;
-    }
-
-    public T httpCustomizeAdd(Consumer<HttpUtils> customize) {
-        if (customize != null) {
-            if (httpCustomize == null) {
-                httpCustomize = customize;
-            } else {
-                httpCustomize = httpCustomize.andThen(customize);
-            }
-        }
-
-        return (T) this;
-    }
-
-    public T httpCustomizeSet(Consumer<HttpUtils> customize) {
-        httpCustomize = customize;
-        return (T) this;
-    }
-
-    /**
-     * 角色
-     */
-    public String role() {
-        return role;
-    }
-
-    /**
-     * 角色
-     */
-    public T role(String role) {
-        this.role = role;
-        return (T) this;
-    }
-
-    /**
-     * 指令
-     */
-    public String instruction() {
-        return instruction;
-    }
-
-    /**
-     * 指令
-     */
-    public T instruction(String instruction) {
-        this.instruction = instruction;
-        return (T) this;
-    }
-
-    /**
-     * 系统提示词
-     */
-    public String systemPrompt() {
-        return systemPrompt;
-    }
-
-    /**
-     * 系统提示词
-     */
-    public T systemPrompt(String systemPrompt) {
-        this.systemPrompt = systemPrompt;
-        return (T) this;
-    }
 
     /**
      * 获取缓存控制
