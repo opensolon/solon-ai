@@ -532,6 +532,14 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
             return this;
         }
 
+        /**
+         * 语言环境（覆盖提示词模板自带的 locale；与 ReActAgent.Builder 对齐）
+         */
+        public Builder locale(Locale locale) {
+            config.getDefaultOptions().setLocale(locale);
+            return this;
+        }
+
         public Builder chatModel(ChatModel chatModel) {
             config.setChatModel(chatModel);
             return this;

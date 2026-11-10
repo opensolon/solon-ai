@@ -22,6 +22,7 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -56,6 +57,12 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     public ReActOptionsAmend systemPrompt(AgentSystemPrompt<ReActTrace> systemPrompt) {
         Assert.notNull(systemPrompt, "systemPrompt");
         options.setSystemPrompt(systemPrompt);
+        return this;
+    }
+
+    public ReActOptionsAmend locale(Locale locale){
+        Assert.notNull(locale, "locale");
+        options.setLocale(locale);
         return this;
     }
 

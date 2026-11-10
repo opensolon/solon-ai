@@ -49,6 +49,8 @@ public class ReActOptions implements NonSerializable {
     private String instruction;
     /** 提示词模板（默认中文） */
     private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
+    /** 语言环境 */
+    private Locale locale;
 
     /**
      * @since 4.0.4
@@ -145,6 +147,7 @@ public class ReActOptions implements NonSerializable {
         tmp.role = role;
         tmp.instruction = instruction;
         tmp.systemPrompt = systemPrompt;
+        tmp.locale = locale;
 
         tmp.chatModel = chatModel;
         tmp.maxTurns = maxTurns;
@@ -184,6 +187,10 @@ public class ReActOptions implements NonSerializable {
 
     protected void setSystemPrompt(AgentSystemPrompt<ReActTrace> val) {
         this.systemPrompt = val;
+    }
+
+    protected void setLocale(Locale locale) {
+        this.locale = locale;
     }
 
     protected void setChatModel(ChatModel chatModel) {
@@ -291,7 +298,13 @@ public class ReActOptions implements NonSerializable {
         return prompt;
     }
 
-    public Locale getLocale() { return systemPrompt.getLocale(); }
+    public Locale getLocale() {
+        if (locale == null) {
+            return systemPrompt.getLocale();
+        } else {
+            return locale;
+        }
+    }
 
     public FunctionTool getTool(String name) {
         return modelOptions.tool(name);

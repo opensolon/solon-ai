@@ -45,11 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -455,8 +451,13 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
             return this;
         }
 
-        public Builder systemPrompt(AgentSystemPrompt<ReActTrace> val) {
-            config.getDefaultOptions().setSystemPrompt(val);
+        public Builder systemPrompt(AgentSystemPrompt<ReActTrace> systemPrompt) {
+            config.getDefaultOptions().setSystemPrompt(systemPrompt);
+            return this;
+        }
+
+        public Builder locale(Locale locale) {
+            config.getDefaultOptions().setLocale(locale);
             return this;
         }
 

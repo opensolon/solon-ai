@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -152,6 +153,8 @@ class HarnessInputSubmitOptionsTest {
         AgentSession target = InMemoryAgentSession.of("s1");
         HarnessInput src = HarnessInput.of("hello @x")
                 .reference("a.txt")
+                .systemPrompt("custom-sp")
+                .locale(Locale.ENGLISH)
                 .selectedModel("m")
                 .selectedAgent("a")
                 .selectedSkill("k")

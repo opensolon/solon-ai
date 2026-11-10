@@ -14,6 +14,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -53,8 +54,8 @@ public final class QueueItem {
     /** 输入快照（技能 / MCP 视野、终端标记、显式作用域规格；版本见 {@link #SNAPSHOT_VERSION}） */
     private Map<String, Object> snapshot = Collections.emptyMap();
 
-    /** 输入快照格式版本 */
-    static final int SNAPSHOT_VERSION = 1;
+    /** 输入快照格式版本（2：新增 systemPrompt / locale；旧数据可读，新键缺失时按默认） */
+    static final int SNAPSHOT_VERSION = 2;
 
     QueueItem(String id, String text, InputOrigin origin, long createdAt, String status) {
         this(id, text, origin, createdAt, status, null, null, null);
@@ -116,7 +117,8 @@ public final class QueueItem {
     }
 
     /**
-     * 从输入采集快照：技能 / MCP 视野、终端标记，以及显式作用域（解析器解析所得的不存，续发时重新解析）。
+     * 从输入采集快照：技能 / MCP 视野、终端标记、显式作用域（解析器解析所得的不存，续发时重新解析），
+     * 以及本轮系统提示词与语言环境（不存的话排队续发会静默回退到智能体默认提示词）。
      * 调用方已保证显式作用域可保存（{@code InputScope#isDeferrable}）。
      */
     static Map<String, Object> snapshotOf(HarnessInput input) {
@@ -124,6 +126,9 @@ public final class QueueItem {
         if (input.hasSkillSelection()) m.put("skills", new ArrayList<>(input.getSelectedSkills()));
         if (input.hasMcpSelection()) m.put("mcps", new ArrayList<>(input.getSelectedMcps()));
         if (input.isTerminal()) m.put("terminal", true);
+        if (input.getSystemPrompt() != null && input.getSystemPrompt().isEmpty() == false)
+            m.put("systemPrompt", input.getSystemPrompt());
+        if (input.getLocale() != null) m.put("locale", input.getLocale().toLanguageTag());
         if (input.isScopeExplicit() && input.getScope().isDeferrable()) m.put("scope", input.getScope().toSpec());
         if (m.isEmpty()) return m;
         m.put("v", SNAPSHOT_VERSION);
@@ -138,6 +143,13 @@ public final class QueueItem {
         Object mcps = snapshot.get("mcps");
         if (mcps instanceof Collection) input.selectedMcp(toArray((Collection<?>) mcps));
         if (Boolean.TRUE.equals(snapshot.get("terminal"))) input.terminal(true);
+        Object systemPrompt = snapshot.get("systemPrompt");
+        if (systemPrompt != null) input.systemPrompt(String.valueOf(systemPrompt));
+        Object locale = snapshot.get("locale");
+        if (locale != null && String.valueOf(locale).trim().isEmpty() == false) {
+            Locale parsed = Locale.forLanguageTag(String.valueOf(locale).trim());
+            if (parsed.getLanguage().isEmpty() == false) input.locale(parsed);
+        }
         Object scope = snapshot.get("scope");
         if (scope instanceof Map) input.restoredScope(InputScope.fromSpec((Map<String, Object>) scope));
     }

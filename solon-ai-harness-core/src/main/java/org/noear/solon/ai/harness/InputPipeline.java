@@ -16,7 +16,9 @@
 package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActRequest;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.agent.SessionAgentsTalent;
@@ -306,10 +308,20 @@ final class InputPipeline {
             }
         }
 
-        // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示
+        // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示。
+        // 语言环境随提示词一起带上：纯文本提示词不带语言信息，不指定时协议指令一律按中文注入，
+        // 英文提示词会与中文“工作范式 / 工具规则”混排。
         final String inputSystemPrompt = input.getSystemPrompt();
+        final Locale inputLocale = input.getLocale();
+
         if (Assert.isNotEmpty(inputSystemPrompt)) {
-            request.options(o -> o.systemPrompt(t -> inputSystemPrompt));
+            // 带上 locale：纯文本提示词不带语言信息，不指定时协议指令按中文注入（英文提示词会错配）
+            request.options(o -> o.systemPrompt(inputSystemPromptOf(inputSystemPrompt, inputLocale)));
+        }
+
+        if (inputLocale != null) {
+            // 单独指定的语言环境：未替换提示词时，按指定语言注入协议指令（locale 不允许 null）
+            request.options(o -> o.locale(inputLocale));
         }
 
         if (Assert.isNotEmpty(input.getSelectedSkills())) {
@@ -346,6 +358,39 @@ final class InputPipeline {
         }
 
         return request;
+    }
+
+    /**
+     * 把宿主输入的纯文本提示词 + 语言环境变成 {@link AgentSystemPrompt}（包内可见：便于直接校验语言环境口径）。
+     */
+    static AgentSystemPrompt<ReActTrace> inputSystemPromptOf(String prompt, @Nullable Locale locale) {
+        return new InputAgentSystemPrompt(prompt, locale);
+    }
+
+    /**
+     * 宿主输入携带的系统提示词（整体替换目标智能体的模板，并自带语言环境）。
+     *
+     * <p>为什么不直接用 lambda：{@link AgentSystemPrompt#getLocale()} 的默认值是中文，
+     * 用 lambda 时宿主传的英文提示词也会配上中文协议指令。</p>
+     */
+    private static final class InputAgentSystemPrompt implements AgentSystemPrompt<ReActTrace> {
+        private final String prompt;
+        private final Locale locale;
+
+        InputAgentSystemPrompt(String prompt, @Nullable Locale locale) {
+            this.prompt = prompt;
+            this.locale = locale;
+        }
+
+        @Override
+        public Locale getLocale() {
+            return locale == null ? AgentSystemPrompt.super.getLocale() : locale;
+        }
+
+        @Override
+        public String getSystemPrompt(ReActTrace trace) {
+            return prompt;
+        }
     }
 
     /**

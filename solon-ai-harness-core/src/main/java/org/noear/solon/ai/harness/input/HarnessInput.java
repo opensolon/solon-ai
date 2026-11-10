@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -57,7 +58,7 @@ import java.util.function.Predicate;
  * <ul>
  *   <li><b>常用</b>：{@link #whenBusy}、{@link #principal}、{@link #selectedModel}、{@link #selectedAgent}、
  *       {@link #selectedSkill}、{@link #selectedMcp}、{@link #media}、{@link #reference}、{@link #attachments}、
- *       {@link #attr}、{@link #hitl}、{@link #hitlOutput}、{@link #resume}；</li>
+ *       {@link #attr}、{@link #hitl}、{@link #hitlOutput}、{@link #resume}、{@link #systemPrompt}、{@link #locale}；</li>
  *   <li><b>渠道特性</b>（接入新端时才需要）：{@link #origin}、{@link #terminal}、{@link #commandAware}、
  *       {@link #agentAware}、{@link #commandContextFactory}、{@link #scope}；</li>
  *   <li><b>进阶</b>（宿主自行解析提及时）：{@link #explicitAgent}、{@link #trimContent}、
@@ -75,7 +76,10 @@ public final class HarnessInput {
     /** 原始输入文本：命令识别、提及解析与 Prompt 构建的数据源；HITL 决策与续流路径不消费 */
     private final String text;
 
+    /** 本轮系统提示词（整体替换目标智能体的模板；为空时沿用智能体配置） */
     private String systemPrompt;
+    /** 本轮系统提示词与协议指令的语言环境（为空时沿用智能体配置或提示词自带值） */
+    private Locale locale;
 
     /** 附件装配结果，永不为 null（构造器初始化，attachments(null) 不覆盖）；有附件时不作命令处理 */
     private InputAttachments attachments;
@@ -178,6 +182,8 @@ public final class HarnessInput {
     public HarnessInput copyFor(@Nullable AgentSession session) {
         HarnessInput c = new HarnessInput(session, text);
         c.attachments = attachments.copy();
+        c.systemPrompt = systemPrompt;
+        c.locale = locale;
         c.selectedModel = selectedModel;
         c.selectedAgent = selectedAgent;
         c.selectedSkills = selectedSkills;
@@ -266,13 +272,50 @@ public final class HarnessInput {
      * 因此调用方应传入<b>自带完整协议提示</b>的文本（含角色、工作范式、工具规则等）；
      * 只想补充业务准则时，请用智能体自身的 {@code instruction(...)} 或才能（Talent）。</p>
      */
-    public HarnessInput systemPrompt(String systemPrompt){
+    public HarnessInput systemPrompt(@Nullable String systemPrompt){
         this.systemPrompt = systemPrompt;
         return this;
     }
 
+    /**
+     * 本轮系统提示词（未设置时为 null：沿用目标智能体的模板）
+     */
+    @Nullable
     public String getSystemPrompt() {
         return systemPrompt;
+    }
+
+    /**
+     * 本轮的语言环境（可选）：决定协议指令注入（{@code AgentProtocol#injectAgentInstruction}）
+     * 以及提示词模板缺省语言。
+     *
+     * <p>未设置（null）时沿用目标智能体的语言环境——即 {@link #systemPrompt} 自带的
+     * {@code AgentSystemPrompt#getLocale()}，或智能体配置的 locale。</p>
+     *
+     * <p><b>为什么要显式传</b>：{@link #systemPrompt} 是纯文本，不带语言信息；
+     * 不传时一律按中文注入协议指令（ReAct 的「工作范式」「工具规则」等），
+     * 英文提示词会与中文协议指令混排。传 {@code Locale.ENGLISH} 即可让两者一致。</p>
+     *
+     * <p>注意：本值只作用于「本轮」；会话内其它轮次仍用智能体默认语言环境。
+     * 只有 {@code systemPrompt} 也替换时，语义才是「这一轮换了一套提示词」；
+     * 单独设置 locale 相当于按目标语言环境改写协议指令部分。</p>
+     *
+     * @since 4.2.0
+     */
+    public HarnessInput locale(@Nullable Locale locale) {
+        this.locale = locale;
+        return this;
+    }
+
+    /**
+     * 本轮的语言环境（未设置时为 null）
+     *
+     * @see #locale(Locale)
+     * @since 4.2.0
+     */
+    @Nullable
+    public Locale getLocale() {
+        return locale;
     }
 
     /**

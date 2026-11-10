@@ -23,14 +23,22 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterceptor> {
     private final Map<String, Object> attrs = new ConcurrentHashMap<>();
 
-    /** 智能体职责描述（用于模型识别角色） */
+    /**
+     * 智能体职责描述（用于模型识别角色）
+     */
     private String role;
-    /** 智能体指令描述（用于模型识别指令） */
+    /**
+     * 智能体指令描述（用于模型识别指令）
+     */
     private String instruction;
     /**
      * 系统提示词模板（支持动态注入上下文）
      */
     private AgentSystemPrompt<SimpleTrace> systemPrompt = SimpleSystemPrompt.getDefault();
+    /**
+     * 语言环境
+     */
+    private Locale locale;
 
     /**
      * @since 4.0.4
@@ -60,7 +68,12 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
     }
 
     public Locale getLocale() {
-        return systemPrompt.getLocale();
+        // locale 显式指定优先（否则该字段永远不会生效，与 ReActOptions 口径不一致）
+        return locale == null ? systemPrompt.getLocale() : locale;
+    }
+
+    public void setLocale(Locale locale) {
+        this.locale = locale;
     }
 
     public String getSystemPromptFor(SimpleTrace trace, FlowContext context) {
@@ -101,6 +114,12 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
     public SimpleOptions systemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
         Assert.notNull(systemPrompt, "systemPrompt");
         this.systemPrompt = systemPrompt;
+        return this;
+    }
+
+    public SimpleOptions locale(Locale locale) {
+        Assert.notNull(locale, "locale");
+        this.locale = locale;
         return this;
     }
 
@@ -146,6 +165,7 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
         tmp.role = this.role;
         tmp.instruction = this.instruction;
         tmp.systemPrompt = this.systemPrompt;
+        tmp.locale = this.locale;
 
         //tmp.streamSink = streamSink;
 

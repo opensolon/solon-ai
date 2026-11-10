@@ -121,6 +121,15 @@ public final class CommandDispatcher {
                 if (input.hasMcpSelection()) {
                     nestedInput.selectedMcp(input.getSelectedMcps().toArray(new String[0]));
                 }
+
+                //提示词与语言环境同理：命令触发的任务也是「这一轮」的一部分，不能凭空换回默认提示词
+                if (input.getSystemPrompt() != null) {
+                    nestedInput.systemPrompt(input.getSystemPrompt());
+                }
+
+                if (input.getLocale() != null) {
+                    nestedInput.locale(input.getLocale());
+                }
             }
 
             nested = engine.handle(nestedInput);
