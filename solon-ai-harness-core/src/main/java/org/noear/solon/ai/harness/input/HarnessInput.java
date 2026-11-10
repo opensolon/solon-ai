@@ -258,6 +258,14 @@ public final class HarnessInput {
         return whenBusy;
     }
 
+    /**
+     * 本轮对话的系统提示词（可选）。
+     *
+     * <p><b>语义：整体替换</b>。非空时会替换目标智能体的系统提示词模板
+     * （与 {@code AgentFactory} 的主 agent 定义一致），而非在默认模板后面追加。
+     * 因此调用方应传入<b>自带完整协议提示</b>的文本（含角色、工作范式、工具规则等）；
+     * 只想补充业务准则时，请用智能体自身的 {@code instruction(...)} 或才能（Talent）。</p>
+     */
     public HarnessInput systemPrompt(String systemPrompt){
         this.systemPrompt = systemPrompt;
         return this;

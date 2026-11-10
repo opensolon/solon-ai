@@ -280,7 +280,7 @@ final class InputPipeline {
      * 装配一轮请求（会话、技能/连接选择、会话工作目录、生效模型）。
      */
     private ReActRequest assembleRequest(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                  @Nullable HarnessInput input,
+                                  HarnessInput input,
                                   @Nullable String agentName,
                                   @Nullable InputScope scope) {
         if(Assert.isEmpty(agentName)){
@@ -306,8 +306,10 @@ final class InputPipeline {
             }
         }
 
-        if(Assert.isNotEmpty(input.getSystemPrompt())) {
-            request.options(o->o.systemPrompt(input.getSystemPrompt()));
+        // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示
+        final String inputSystemPrompt = input.getSystemPrompt();
+        if (Assert.isNotEmpty(inputSystemPrompt)) {
+            request.options(o -> o.systemPrompt(t -> inputSystemPrompt));
         }
 
         if (Assert.isNotEmpty(input.getSelectedSkills())) {
