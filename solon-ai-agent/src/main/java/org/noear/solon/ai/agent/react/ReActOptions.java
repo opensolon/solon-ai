@@ -16,11 +16,14 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentEvent;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.core.util.SnelUtil;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.NonSerializable;
 import org.noear.solon.lang.Preview;
 import reactor.core.publisher.FluxSink;
@@ -39,6 +42,13 @@ import java.util.function.Function;
 @Preview("3.8.1")
 public class ReActOptions implements NonSerializable {
     private final Map<String, Object> attrs = new ConcurrentHashMap<>();
+
+    /** 智能体职责描述（用于模型识别角色） */
+    private String role;
+    /** 智能体指令描述（用于模型识别指令） */
+    private String instruction;
+    /** 提示词模板（默认中文） */
+    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
 
     /**
      * @since 4.0.4
@@ -132,6 +142,10 @@ public class ReActOptions implements NonSerializable {
         tmp.attrs.putAll(this.attrs);
         tmp.modelOptions.putAll(modelOptions);
 
+        tmp.role = role;
+        tmp.instruction = instruction;
+        tmp.systemPrompt = systemPrompt;
+
         tmp.chatModel = chatModel;
         tmp.maxTurns = maxTurns;
         tmp.autoRethink = autoRethink;
@@ -162,6 +176,15 @@ public class ReActOptions implements NonSerializable {
 
     // --- 配置注入 (Protected) ---
 
+    protected void setRole(String role) { this.role = role; }
+
+    protected void setInstruction(String instruction) {
+        this.instruction = instruction;
+    }
+
+    protected void setSystemPrompt(AgentSystemPrompt<ReActTrace> val) {
+        this.systemPrompt = val;
+    }
 
     protected void setChatModel(ChatModel chatModel) {
         this.chatModel = chatModel;
@@ -238,6 +261,37 @@ public class ReActOptions implements NonSerializable {
     }
 
     // --- 参数获取 (Public) ---
+
+    public String getRole() { return role; }
+
+    public String getInstruction() {
+        return instruction;
+    }
+
+    /**
+     * 根据当前上下文获取动态渲染的系统提示词
+     */
+    public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
+        }
+
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
+
+        // Talent 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getTalentInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
+        }
+
+        return prompt;
+    }
+
+    public Locale getLocale() { return systemPrompt.getLocale(); }
 
     public FunctionTool getTool(String name) {
         return modelOptions.tool(name);

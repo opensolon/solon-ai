@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.Assert;
@@ -39,6 +40,24 @@ public class ReActOptionsAmend extends ModelOptionsAmend<ReActOptionsAmend, ReAc
     }
 
     // --- Setter Methods (Fluent) ---
+
+    public ReActOptionsAmend role(String role) {
+        Assert.notNull(role, "role");
+        options.setRole(role);
+        return this;
+    }
+
+    public ReActOptionsAmend instruction(String instruction) {
+        Assert.notNull(instruction, "instruction");
+        options.setInstruction(instruction);
+        return this;
+    }
+
+    public ReActOptionsAmend systemPrompt(AgentSystemPrompt<ReActTrace> systemPrompt) {
+        Assert.notNull(systemPrompt, "systemPrompt");
+        options.setSystemPrompt(systemPrompt);
+        return this;
+    }
 
     public ReActOptionsAmend chatModel(ChatModel chatModel){
         Assert.notNull(chatModel, "chatModel");

@@ -16,10 +16,7 @@
 package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
-import org.noear.solon.core.util.SnelUtil;
-import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -35,16 +32,10 @@ import java.util.*;
 public class ReActAgentConfig {
     /** 智能体唯一标识名 */
     private String name = "react_agent";
-    /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
-    private volatile String traceKey;
-    /** 智能体职责描述（用于模型识别角色） */
-    private String role;
-    /** 智能体指令描述（用于模型识别指令） */
-    private String instruction;
     /** 智能体画像 */
     private AgentProfile profile;
-    /** 提示词模板（默认中文） */
-    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
+    /** 链路追踪 Key (用于在 FlowContext 中存储 Trace 状态) */
+    private volatile String traceKey;
     /** 终止标识符（模型输出此词时停止思考循环） */
     private String finishMarker;
     /** 结果回填 Key */
@@ -67,19 +58,9 @@ public class ReActAgentConfig {
 
     protected void setName(String name) { this.name = name; }
 
-    protected void setRole(String role) { this.role = role; }
-
-    protected void setInstruction(String instruction) {
-        this.instruction = instruction;
-    }
-
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
 
     protected void setFinishMarker(String val) { this.finishMarker = val; }
-
-    protected void setSystemPrompt(AgentSystemPrompt<ReActTrace> val) {
-        this.systemPrompt = val;
-    }
 
     protected void setOutputKey(String val) { this.outputKey = val; }
 
@@ -95,12 +76,6 @@ public class ReActAgentConfig {
             traceKey = "__" + this.name;
         }
         return traceKey;
-    }
-
-    public String getRole() { return role; }
-
-    public String getInstruction() {
-        return instruction;
     }
 
     public AgentProfile getProfile() {
@@ -119,31 +94,6 @@ public class ReActAgentConfig {
         }
         return finishMarker;
     }
-
-    /**
-     * 根据当前上下文获取动态渲染的系统提示词
-     */
-    public String getSystemPromptFor(ReActTrace trace, FlowContext context) {
-        String prompt = systemPrompt.getSystemPrompt(trace);
-        if (prompt == null) {
-            return prompt;
-        }
-
-        if (context != null) {
-            // 动态渲染模板（如解析 #{user_name}）
-            prompt = SnelUtil.render(prompt, context.vars());
-        }
-
-        // Talent 级指令（增加一个子标题，强化感知）
-        if (trace.getOptions().getTalentInstruction() != null) {
-            //sb.append("\n## 补充业务准则\n");
-            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
-        }
-
-        return prompt;
-    }
-
-    public Locale getLocale() { return systemPrompt.getLocale(); }
 
     public String getOutputKey() { return outputKey; }
 

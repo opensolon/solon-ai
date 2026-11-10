@@ -84,16 +84,14 @@ public class ReasonTaskTest {
         when(trace.getLastReasonMessage()).thenReturn(null);
         when(trace.getConfig()).thenReturn(config);  // ← 关键：之前遗漏了
 
-        // === ReActOptions ===
-        ReActOptions options = new ReActOptions(chatModel);
+        // === ReActOptions（真实实例：ReasonTask 需要其真实字段；提示词走子类覆盖） ===
+        ReActOptions options = newTestOptions();
         when(trace.getOptions()).thenReturn(options);
 
         // === ReActAgentConfig ===
-        when(config.getSystemPromptFor(any(), any())).thenReturn("System prompt");
         when(config.getName()).thenReturn("TestAgent");
         when(config.getStyle()).thenReturn(ReActStyle.STRUCTURED_TEXT);
         when(config.getFinishMarker()).thenReturn("[TEST_FINISH]");
-        when(config.getLocale()).thenReturn(Locale.CHINESE);
 
         // === ChatModel chain（使 callWithRetry 可顺利执行） ===
         when(chatModel.prompt(anyList())).thenReturn(reqDesc);
@@ -101,6 +99,26 @@ public class ReasonTaskTest {
     }
 
     // ==================== 辅助方法 ====================
+
+    /**
+     * 构造测试用 ReActOptions
+     *
+     * <p>必须是真实实例（ReasonTask 会读 maxTurns / chatModel / toolContext 等真实字段），
+     * 只把提示词与语言固定为可校验值；注意不能对真实对象使用 when(...) 打桩。</p>
+     */
+    private ReActOptions newTestOptions() {
+        return new ReActOptions(chatModel) {
+            @Override
+            public String getSystemPromptFor(ReActTrace trace, FlowContext ctx) {
+                return "System prompt";
+            }
+
+            @Override
+            public Locale getLocale() {
+                return Locale.CHINESE;
+            }
+        };
+    }
 
     /**
      * 构造一个 mock ChatResponse（便于控制 message 行为）
@@ -126,7 +144,7 @@ public class ReasonTaskTest {
     public void testRepeatedContextLengthExceeded_compressesAgain() throws Throwable {
         org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
                 new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 0.75D, null);
-        ReActOptions options = new ReActOptions(chatModel);
+        ReActOptions options = newTestOptions();
         options.getModelOptions().interceptorAdd(compression);
         when(trace.getOptions()).thenReturn(options);
 
@@ -170,7 +188,7 @@ public class ReasonTaskTest {
                 throw new IllegalStateException("interceptor failed");
             }
         };
-        ReActOptions options = new ReActOptions(chatModel);
+        ReActOptions options = newTestOptions();
         options.getModelOptions().interceptorAdd(broken);
         when(trace.getOptions()).thenReturn(options);
 
@@ -187,7 +205,7 @@ public class ReasonTaskTest {
     public void testContextLengthExceeded_compressesAndRebuildsRequest() throws Throwable {
         org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor compression =
                 new org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor(10, 0.75D, null);
-        ReActOptions options = new ReActOptions(chatModel);
+        ReActOptions options = newTestOptions();
         options.getModelOptions().interceptorAdd(compression);
         when(trace.getOptions()).thenReturn(options);
 
@@ -223,7 +241,7 @@ public class ReasonTaskTest {
     @Test
     @DisplayName("计划看板作为瞬时尾部消息发送且不污染系统提示与工作记忆")
     public void testPlanContextIsTransientTailMessage() throws Throwable {
-        ReActOptions options = spy(new ReActOptions(chatModel));
+        ReActOptions options = spy(newTestOptions());
         doReturn(true).when(options).isPlanningMode();
         when(trace.getOptions()).thenReturn(options);
         when(trace.hasPlans()).thenReturn(true);
@@ -261,7 +279,7 @@ public class ReasonTaskTest {
                 return true;
             }
         };
-        ReActOptions options = spy(new ReActOptions(chatModel));
+        ReActOptions options = spy(newTestOptions());
         doReturn(true).when(options).isPlanningMode();
         options.getModelOptions().interceptorAdd(planUpdater);
         when(trace.getOptions()).thenReturn(options);

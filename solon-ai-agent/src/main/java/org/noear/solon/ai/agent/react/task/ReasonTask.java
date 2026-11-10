@@ -129,7 +129,7 @@ public class ReasonTask {
         // 执行计划进度看板属于「回合级易变」内容，作为瞬时消息追加到消息列表末尾，
         // 以保证 system prompt 作为可缓存前缀块（prompt caching）跨回合稳定命中。
         StringBuilder systemPromptBuf = new StringBuilder();
-        String baseSp = config.getSystemPromptFor(trace, context);
+        String baseSp = trace.getOptions().getSystemPromptFor(trace, context);
         if (baseSp != null) {
             systemPromptBuf.append(baseSp);
         }
@@ -141,7 +141,7 @@ public class ReasonTask {
         }
 
         if (trace.getProtocol() != null) {
-            trace.getProtocol().injectAgentInstruction(context, agent, config.getLocale(),
+            trace.getProtocol().injectAgentInstruction(context, agent, trace.getOptions().getLocale(),
                     systemPromptBuf);
         }
 

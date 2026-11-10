@@ -111,11 +111,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
     @Override
     public String role() {
-        if (config.getRole() == null) {
+        if (config.getDefaultOptions().getRole() == null) {
             return config.getName();
         }
 
-        return config.getRole();
+        return config.getDefaultOptions().getRole();
     }
 
     @Override
@@ -431,7 +431,7 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder role(String role) {
-            config.setRole(role);
+            config.getDefaultOptions().setRole(role);
             return this;
         }
 
@@ -446,17 +446,17 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setInstruction(instruction);
+            config.getDefaultOptions().setInstruction(instruction);
             return this;
         }
 
         public Builder instruction(Function<ReActTrace, String> instruction) {
-            config.setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
+            config.getDefaultOptions().setSystemPrompt(ReActSystemPrompt.builder().instruction(instruction).build());
             return this;
         }
 
         public Builder systemPrompt(AgentSystemPrompt<ReActTrace> val) {
-            config.setSystemPrompt(val);
+            config.getDefaultOptions().setSystemPrompt(val);
             return this;
         }
 

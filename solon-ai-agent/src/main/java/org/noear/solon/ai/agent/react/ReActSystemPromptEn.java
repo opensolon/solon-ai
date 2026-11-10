@@ -88,8 +88,8 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getRole() != null) {
-            return trace.getConfig().getRole();
+        if (trace.getOptions().getRole() != null) {
+            return trace.getOptions().getRole();
         }
 
         return "Professional task expert with autonomous action capabilities";
@@ -192,10 +192,10 @@ public class ReActSystemPromptEn implements ReActSystemPrompt {
             // Agent-level instructions
             sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
-        } else if(trace.getConfig().getInstruction() != null){
+        } else if(trace.getOptions().getInstruction() != null){
             sb.append("## Core Task Instructions\n");
             // Agent-level instructions
-            sb.append(trace.getConfig().getInstruction()).append("\n");
+            sb.append(trace.getOptions().getInstruction()).append("\n");
             sb.append("\n");
         }
     }
