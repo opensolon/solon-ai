@@ -260,7 +260,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);
         tool.metaPut(Agent.META_AGENT, agent.name());
 
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
 
         if (isZh) {
             tool.title("提交投标").description("提交你的执行计划和信心分。")
@@ -307,7 +307,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
         if (awarded != null && awarded.equalsIgnoreCase(agent.name())) {
             ONode bid = state.getBid(agent.name());
             if (bid != null) {
-                boolean isZh = isChinese(locale != null ? locale : config.getLocale());
+                boolean isZh = isChinese(locale != null ? locale : trace.getOptions().getLocale());
                 String plan = bid.get("plan").getString();
 
                 String awardNotice = isZh
@@ -329,7 +329,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
             return;
         }
 
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_CALL_BIDS);
 
         if (isZh) {
@@ -385,7 +385,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
             ContractState state = getContractState(trace);
 
             if (!state.hasAgentBid(agentName)) {
-                boolean isZh = isChinese(config.getLocale());
+                boolean isZh = isChinese(trace.getOptions().getLocale());
                 if (LOG.isWarnEnabled()) {
                     LOG.warn("ContractNet: Compliance violation! Supervisor tried to assign '{}' without a bid.", agentName);
                 }
@@ -439,7 +439,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                 trace.setRoute(ID_BIDDING);
             } else {
                 // 无法再招标：终止非法路径
-                boolean isZh = isChinese(config.getLocale());
+                boolean isZh = isChinese(trace.getOptions().getLocale());
                 String msg = isZh
                         ? "无法定标：目标专家无有效标书且招标次数已耗尽。"
                         : "Cannot award: target has no bid and bidding rounds are exhausted.";
@@ -466,7 +466,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         ContractState state = getContractState(trace);
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
 
         int remaining = Math.max(0, maxBiddingRounds - state.getRounds());
 

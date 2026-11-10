@@ -16,9 +16,12 @@
 package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AgentEvent;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
+import org.noear.solon.core.util.SnelUtil;
+import org.noear.solon.flow.FlowContext;
 import org.noear.solon.lang.NonSerializable;
 import reactor.core.publisher.FluxSink;
 
@@ -36,6 +39,12 @@ import java.util.function.Function;
  */
 public class TeamOptions implements NonSerializable {
     private final Map<String, Object> attrs = new ConcurrentHashMap<>();
+    /** 智能体角色描述（供上层团队调度识别） */
+    private String role;
+    /** 智能体指令描述（供上层团队调度识别） */
+    private String instruction;
+    /** 系统提示词（System Prompt）模板提供者 */
+    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptCn.getDefault();
 
     /**
      * @since 4.0.4
@@ -97,6 +106,11 @@ public class TeamOptions implements NonSerializable {
         TeamOptions tmp = new TeamOptions();
         tmp.attrs.putAll(this.attrs);
         tmp.modelOptions.putAll(this.modelOptions);
+
+        tmp.role = role;
+        tmp.instruction = instruction;
+        tmp.systemPrompt = systemPrompt;
+
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
         tmp.retryDelayMs = this.retryDelayMs;
@@ -122,6 +136,12 @@ public class TeamOptions implements NonSerializable {
 
 
     // --- 配置注入 (Protected) ---
+
+    protected void setRole(String role) { this.role = role; }
+    protected void setInstruction(String instruction) { this.instruction = instruction; }
+    protected void setSystemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
+        this.systemPrompt = promptProvider;
+    }
 
 
     /**
@@ -175,6 +195,33 @@ public class TeamOptions implements NonSerializable {
 
     // --- 参数获取 (Public) ---
 
+    public String getRole() { return role; }
+
+    public String getInstruction() {
+        return instruction;
+    }
+
+    public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
+        String prompt = systemPrompt.getSystemPrompt(trace);
+        if (prompt == null) {
+            return prompt;
+        }
+
+        if (context != null) {
+            // 动态渲染模板（如解析 #{user_name}）
+            prompt = SnelUtil.render(prompt, context.vars());
+        }
+
+        // Talent 级指令（增加一个子标题，强化感知）
+        if (trace.getOptions().getTalentInstruction() != null) {
+            //sb.append("\n## 补充业务准则\n");
+            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
+        }
+
+        return prompt;
+    }
+
+    public Locale getLocale() { return systemPrompt.getLocale(); }
 
     public ModelOptionsAmend<?, TeamInterceptor> getModelOptions() {
         return modelOptions;

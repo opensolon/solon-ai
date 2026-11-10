@@ -286,7 +286,7 @@ public class SwarmProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
         tool.metaPut(Agent.META_AGENT, agent.name());
 
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
         Collection<String> validAgents = config.getAgentMap().keySet();
 
         if (isZh) {
@@ -484,7 +484,7 @@ public class SwarmProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         SwarmState state = getSwarmState(trace);
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
 
         sb.append(isZh ? "\n### 蜂群状态看板 (Swarm Intelligence)\n" : "\n### Swarm Intelligence Dashboard\n");
         // 保持看板的 JSON 可读性

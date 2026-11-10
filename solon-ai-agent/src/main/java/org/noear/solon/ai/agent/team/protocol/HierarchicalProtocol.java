@@ -368,7 +368,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         if (decision != null && decision.contains(config.getFinishMarker())) {
             HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
             if (state != null && state.hasErrors()) {
-                boolean isZh = isChinese(config.getLocale());
+                boolean isZh = isChinese(trace.getOptions().getLocale());
                 String errorHint = isZh
                         ? "【系统干预】由于看板中仍有未解决的错误，任务不能结束。请指派相关专家修复。"
                         : "[System] Task cannot end because errors exist. Assign agents to fix them.";
@@ -446,7 +446,7 @@ public class HierarchicalProtocol extends TeamProtocolBase {
         HierarchicalState state = (HierarchicalState) trace.getProtocolContext().get(KEY_HIERARCHY_STATE);
         Map<String, Integer> usage = (Map<String, Integer>) trace.getProtocolContext().get(KEY_AGENT_USAGE);
 
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
         if (isZh) {
             sb.append("\n## 运行看板 (Hierarchical Dashboard)\n");
         } else {

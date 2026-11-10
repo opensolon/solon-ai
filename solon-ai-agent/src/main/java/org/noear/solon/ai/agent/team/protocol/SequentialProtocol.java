@@ -231,7 +231,7 @@ public class SequentialProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         SequenceState state = getSequenceState(trace);
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getOptions().getLocale().getLanguage());
         sb.append(isZh ? "\n### 流水线进度 (Pipeline Progress)\n" : "\n### Pipeline Progress\n");
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
     }

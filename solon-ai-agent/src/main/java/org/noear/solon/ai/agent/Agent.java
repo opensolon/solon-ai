@@ -159,7 +159,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
             effectivePrompt = trace.getProtocol()
                     .prepareAgentPrompt(trace, this,
                             trace.getWorkingMemory(),
-                            trace.getConfig().getLocale());
+                            trace.getOptions().getLocale());
         } else {
             effectivePrompt = null;
         }

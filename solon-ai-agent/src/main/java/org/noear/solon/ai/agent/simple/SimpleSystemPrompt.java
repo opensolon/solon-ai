@@ -78,8 +78,8 @@ public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
             return roleDesc;
         }
 
-        if (trace.getConfig().getRole() != null) {
-            return trace.getConfig().getRole();
+        if (trace.getOptions().getRole() != null) {
+            return trace.getOptions().getRole();
         }
 
         return null;
@@ -93,8 +93,8 @@ public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
             return instructionProvider.apply(trace);
         }
 
-        if (trace.getConfig().getInstruction() != null) {
-            return trace.getConfig().getInstruction();
+        if (trace.getOptions().getInstruction() != null) {
+            return trace.getOptions().getInstruction();
         }
 
         return null;

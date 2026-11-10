@@ -120,7 +120,7 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         // 首轮/空市场：把全部成员写入 marketplace，使 Price/ROI 从第 1 次决策就可见
         seedMarketplace(state);
 
-        boolean isZh = isChinese(config.getLocale());
+        boolean isZh = isChinese(trace.getOptions().getLocale());
         sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
         

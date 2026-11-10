@@ -132,7 +132,7 @@ public class A2AProtocol extends TeamProtocolBase {
         if (trace == null) return;
 
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = isZh(config.getLocale());
+        boolean isZh = isZh(trace.getOptions().getLocale());
 
         ONode expertsNode = new ONode().asArray();
         config.getAgentMap().entrySet().stream()
@@ -269,7 +269,7 @@ public class A2AProtocol extends TeamProtocolBase {
         String target = stateObj.getLastTempTarget();
 
         if (Utils.isNotEmpty(target)) {
-            boolean isZh = isZh(config.getLocale());
+            boolean isZh = isZh(trace.getOptions().getLocale());
 
             // 1. 熔断检查
             if (stateObj.getTransferCount() >= maxTransferRounds) {
@@ -330,7 +330,7 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = isZh(config.getLocale());
+        boolean isZh = isZh(trace.getOptions().getLocale());
 
         if (stateObj != null) {
             if (isZh) {

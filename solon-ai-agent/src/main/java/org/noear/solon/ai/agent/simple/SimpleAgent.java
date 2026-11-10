@@ -79,11 +79,11 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
 
     @Override
     public String role() {
-        if (config.getRole() == null) {
+        if (config.getDefaultOptions().getRole() == null) {
             return config.getName();
         }
 
-        return config.getRole();
+        return config.getDefaultOptions().getRole();
     }
 
     @Override
@@ -232,7 +232,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
     private Prompt prepareAgentPrompt(SimpleTrace trace, TeamTrace parentTeamTrace, AgentSession session, Prompt originalPrompt) {
         // 1. 获取基础 System Prompt
         StringBuilder systemPromptBuf = new StringBuilder();
-        String baseSp = config.getSystemPromptFor(trace, session.getContext());
+        String baseSp = trace.getOptions().getSystemPromptFor(trace, session.getContext());
         if (baseSp != null) {
             systemPromptBuf.append(baseSp);
         }
@@ -241,7 +241,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         FlowContext context = session.getContext();
         if (trace.getProtocol() != null) {
             // 调用协议注入，它会把 "## 当前接力任务断面" 附加到 spBuf 后面
-            trace.getProtocol().injectAgentInstruction(context, this, config.getLocale(), systemPromptBuf);
+            trace.getProtocol().injectAgentInstruction(context, this, trace.getOptions().getLocale(), systemPromptBuf);
         }
 
         // 3. 注入 JSON Schema 指令
@@ -508,7 +508,7 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder role(String role) {
-            config.setRole(role);
+            config.getDefaultOptions().setRole(role);
             return this;
         }
 
@@ -518,17 +518,17 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setInstruction(instruction);
+            config.getDefaultOptions().setInstruction(instruction);
             return this;
         }
 
         public Builder instruction(Function<SimpleTrace, String> instruction) {
-            config.setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
+            config.getDefaultOptions().setSystemPrompt(SimpleSystemPrompt.builder().instruction(instruction).build());
             return this;
         }
 
         public Builder systemPrompt(AgentSystemPrompt<SimpleTrace> systemPrompt) {
-            config.setSystemPrompt(systemPrompt);
+            config.getDefaultOptions().setSystemPrompt(systemPrompt);
             return this;
         }
 

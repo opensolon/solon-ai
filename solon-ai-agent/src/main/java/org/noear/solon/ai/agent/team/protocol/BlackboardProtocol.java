@@ -259,7 +259,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_SYNC).returnDirect(true);
         tool.metaPut(Agent.META_AGENT, agent.name());
 
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getOptions().getLocale().getLanguage());
 
         // 参数全部可选：避免 schema required 强迫模型编造空 todo/state，导致错误覆盖黑板
         if (isZh) {
@@ -372,7 +372,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         BoardState state = (BoardState) trace.getProtocolContext().get(KEY_BOARD_DATA);
-        boolean isZh = Locale.CHINA.getLanguage().equals(config.getLocale().getLanguage());
+        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getOptions().getLocale().getLanguage());
         sb.append(isZh ? "\n### 全局黑板 (Blackboard Dashboard)\n" : "\n### Global Blackboard\n");
         sb.append(state != null ? "```json\n" + ONode.serialize(state) + "\n```\n" : "- Empty\n");
         super.prepareSupervisorInstruction(context, trace, sb);

@@ -112,11 +112,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
     @Override
     public String role() {
-        if (config.getRole() == null) {
+        if (config.getDefaultOptions().getRole() == null) {
             return config.getName();
         }
 
-        return config.getRole();
+        return config.getDefaultOptions().getRole();
     }
 
     @Override
@@ -354,7 +354,7 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         }
 
         public Builder role(String role) {
-            config.setRole(role);
+            config.getDefaultOptions().setRole(role);
             return this;
         }
 
@@ -369,17 +369,17 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         }
 
         public Builder instruction(String instruction) {
-            config.setInstruction(instruction);
+            config.getDefaultOptions().setInstruction(instruction);
             return this;
         }
 
         public Builder instruction(Function<TeamTrace, String> instruction) {
-            config.setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
+            config.getDefaultOptions().setSystemPrompt(TeamSystemPrompt.builder().instruction(instruction).build());
             return this;
         }
 
         public Builder systemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
-            config.setSystemPrompt(promptProvider);
+            config.getDefaultOptions().setSystemPrompt(promptProvider);
             return this;
         }
 

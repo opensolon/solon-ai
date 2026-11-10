@@ -17,10 +17,8 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.core.util.IgnoreCaseMap;
-import org.noear.solon.core.util.SnelUtil;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.flow.GraphSpec;
 import org.noear.solon.lang.NonSerializable;
@@ -46,10 +44,6 @@ public class TeamAgentConfig implements NonSerializable {
     private String name = "team_agent";
     /** 状态跟踪键（用于隔离 Session 中的轨迹数据） */
     private volatile String traceKey;
-    /** 智能体角色描述（供上层团队调度识别） */
-    private String role;
-    /** 智能体指令描述（供上层团队调度识别） */
-    private String instruction;
     /** 档案信息（能力与边界定义） */
     private AgentProfile profile;
 
@@ -68,8 +62,6 @@ public class TeamAgentConfig implements NonSerializable {
     /** 结果回填 Key（将 Final Answer 自动存入 FlowContext） */
     private String outputKey;
 
-    /** 系统提示词（System Prompt）模板提供者 */
-    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptCn.getDefault();
     /** 运行时全局配置选项 */
     private final TeamOptions defaultOptions = new TeamOptions();
 
@@ -80,15 +72,10 @@ public class TeamAgentConfig implements NonSerializable {
     // --- 配置注入 (Protected) ---
 
     protected void setName(String name) { this.name = name; }
-    protected void setRole(String role) { this.role = role; }
-    protected void setInstruction(String instruction) { this.instruction = instruction; }
     protected void setProfile(AgentProfile profile) { this.profile = profile; }
     protected void setGraphAdjuster(Consumer<GraphSpec> graphAdjuster) { this.graphAdjuster = graphAdjuster; }
     protected void setFinishMarker(String finishMarker) { this.finishMarker = finishMarker; }
     protected void setOutputKey(String outputKey) { this.outputKey = outputKey; }
-    protected void setSystemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
-        this.systemPrompt = promptProvider;
-    }
 
     /**
      * 注册团队成员（专家）
@@ -131,12 +118,6 @@ public class TeamAgentConfig implements NonSerializable {
         return traceKey;
     }
 
-    public String getRole() { return role; }
-
-    public String getInstruction() {
-        return instruction;
-    }
-
     public AgentProfile getProfile() {
         if (profile == null) profile = new AgentProfile();
         return profile;
@@ -159,26 +140,4 @@ public class TeamAgentConfig implements NonSerializable {
     }
 
     public String getOutputKey() { return outputKey; }
-
-    public String getSystemPromptFor(TeamTrace trace, FlowContext context) {
-        String prompt = systemPrompt.getSystemPrompt(trace);
-        if (prompt == null) {
-            return prompt;
-        }
-
-        if (context != null) {
-            // 动态渲染模板（如解析 #{user_name}）
-            prompt = SnelUtil.render(prompt, context.vars());
-        }
-
-        // Talent 级指令（增加一个子标题，强化感知）
-        if (trace.getOptions().getTalentInstruction() != null) {
-            //sb.append("\n## 补充业务准则\n");
-            prompt = prompt + "\n" + trace.getOptions().getTalentInstruction() + "\n";
-        }
-
-        return prompt;
-    }
-
-    public Locale getLocale() { return systemPrompt.getLocale(); }
 }

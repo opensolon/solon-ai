@@ -20,7 +20,6 @@ import org.noear.solon.ai.agent.AgentRequest;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatOptions;
-import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Preview;
@@ -50,8 +49,7 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
     public SimpleRequest(SimpleAgent agent, Prompt prompt) {
         this.agent = agent;
         this.prompt = prompt;
-        this.options = new SimpleOptions();
-        this.options.putAll(agent.getConfig().getDefaultOptions());
+        this.options = agent.getConfig().getDefaultOptions().copy();
     }
 
     /**
@@ -64,9 +62,9 @@ public class SimpleRequest implements AgentRequest<SimpleRequest, SimpleResponse
     }
 
     /**
-     * 配置运行时选项（如调整 Temperature、MaxTokens 等参数）
+     * 配置运行时选项（如调整 Temperature、MaxTokens、role、instruction、systemPrompt 等参数）
      */
-    public SimpleRequest options(Consumer<ModelOptionsAmend<?, SimpleInterceptor>> optionsAdjustor) {
+    public SimpleRequest options(Consumer<SimpleOptions> optionsAdjustor) {
         optionsAdjustor.accept(options);
         return this;
     }

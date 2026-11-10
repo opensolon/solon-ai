@@ -71,8 +71,8 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getRole() != null) {
-            return trace.getConfig().getRole();
+        if (trace.getOptions().getRole() != null) {
+            return trace.getOptions().getRole();
         }
 
         return "Team Supervisor, responsible for coordinating agents to complete the task";
@@ -120,10 +120,10 @@ public class TeamSystemPromptEn implements TeamSystemPrompt {
             // Agent-level instructions
             sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
-        } else if (trace.getConfig().getInstruction() != null) {
+        } else if (trace.getOptions().getInstruction() != null) {
             sb.append("\n## Core Task Instructions\n");
             // Agent-level instructions
-            sb.append(trace.getConfig().getInstruction()).append("\n");
+            sb.append(trace.getOptions().getInstruction()).append("\n");
             sb.append("\n");
         }
 

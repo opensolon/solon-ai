@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.agent.team;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
+import org.noear.solon.core.util.Assert;
 
 import java.util.function.Function;
 
@@ -33,6 +35,44 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
     public TeamOptionsAmend(TeamOptions options) {
         super(options.getModelOptions());
         this.options = options;
+    }
+
+    /**
+     * 设置角色（请求级动态修正）
+     */
+    public TeamOptionsAmend role(String role) {
+        Assert.notNull(role, "role");
+        options.setRole(role);
+        return this;
+    }
+
+    /**
+     * 设置指令（请求级动态修正）
+     */
+    public TeamOptionsAmend instruction(String instruction) {
+        Assert.notNull(instruction, "instruction");
+        options.setInstruction(instruction);
+        return this;
+    }
+
+    /**
+     * 设置系统提示词模板（请求级动态修正；整体替换，非追加）
+     */
+    public TeamOptionsAmend systemPrompt(AgentSystemPrompt<TeamTrace> systemPrompt) {
+        Assert.notNull(systemPrompt, "systemPrompt");
+        options.setSystemPrompt(systemPrompt);
+        return this;
+    }
+
+    /**
+     * 设置请求级属性（仅框架与拦截器可见，不会并入工具调用参数；与 toolContext 不同）
+     *
+     * @since 4.2.0
+     */
+    public TeamOptionsAmend attrPut(String key, Object value) {
+        Assert.notNull(key, "key");
+        options.setAttr(key, value);
+        return this;
     }
 
     /**

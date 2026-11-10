@@ -76,8 +76,8 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             return roleDesc;
         }
 
-        if (trace.getConfig().getRole() != null) {
-            return trace.getConfig().getRole();
+        if (trace.getOptions().getRole() != null) {
+            return trace.getOptions().getRole();
         }
 
         return "团队协作主管 (Supervisor)，负责协调成员完成任务";
@@ -125,10 +125,10 @@ public class TeamSystemPromptCn implements TeamSystemPrompt {
             // Agent 级指令
             sb.append(instructionProvider.apply(trace)).append("\n");
             sb.append("\n");
-        } else if (trace.getConfig().getInstruction() != null) {
+        } else if (trace.getOptions().getInstruction() != null) {
             sb.append("\n## 核心任务指令\n");
             // Agent 级指令
-            sb.append(trace.getConfig().getInstruction()).append("\n");
+            sb.append(trace.getOptions().getInstruction()).append("\n");
             sb.append("\n");
         }
 
