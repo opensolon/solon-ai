@@ -1,0 +1,163 @@
+# solon-ai-agent Team 协议文案（中文）：Hierarchical / Blackboard / ContractNet / MarketBased
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- hierarchical: agent instruction ----
+protocol.hierarchical.agent.title: |-
+  ## 协作与汇报规范
+protocol.hierarchical.agent.report: |-
+  1. 汇报要求：
+  - 请在回复结尾使用 JSON 块反馈核心数据（例：{"result": "...", "status": "done"}）。
+protocol.hierarchical.agent.finish_marker: |-
+  2. **完成标记**：任务完成时，必须包含标记: `{finishMarker}`
+
+# ---- hierarchical: agent prompt ----
+protocol.hierarchical.prompt.pre_context.title: |-
+  ### 前置背景 (Pre-Context)
+protocol.hierarchical.prompt.pre_context.from: |-
+  - 来自 {agent}: **{summary}**
+protocol.hierarchical.prompt.pre_context.hint: |-
+  > 请务必基于上述背景数据进行处理，不要修改原始关键信息。
+protocol.hierarchical.prompt.directive.title: |-
+  ### 来自主管的最新指令 (Supervisor Directive)
+protocol.hierarchical.prompt.error.title: |-
+  ### 错误修正请求：
+protocol.hierarchical.prompt.error.failed: |-
+  - 你之前的执行结果未通过验证：**{error}**
+protocol.hierarchical.prompt.error.fix: |-
+  - 请根据主管的最新指令进行修复，并务必包含正确的完成标记。
+protocol.hierarchical.prompt.multimodal: |-
+  - [重要]：输入包含多媒体附件，请务必结合视觉或文件内容进行处理。
+
+# ---- hierarchical: supervisor ----
+protocol.hierarchical.route.finish_blocked: |-
+  【系统干预】由于看板中仍有未解决的错误，任务不能结束。请指派相关专家修复。
+protocol.hierarchical.supervisor.dashboard.title: |-
+  ## 运行看板 (Hierarchical Dashboard)
+protocol.hierarchical.supervisor.dashboard.empty: |-
+  > 暂无汇报，请下达初始指令。
+protocol.hierarchical.supervisor.sop: |-
+  ### 派发指令准则 (Standard Operating Procedure):
+  > 1. **显式数据传递**：指派专家时，必须复述看板 `_results` 中的核心参数。
+
+  ### 管理与决策指引 (Management & Decision Hints):
+  > **决策指引**：对比看板进度。若 `_meta.errors` 存在或关键环节未产出，请继续调度，严禁提前结束。
+  > **流程完整性**：确保设计与执行角色（如 `implementer`）均已参与。严禁跳过关键执行环节直接结束。
+  > **终结交付**：若认为任务已达成，请输出 `{finishMarker}` 并在此回复中**汇总最终代码或方案**给用户。
+  > **注意**：输出标记后系统将立即停止，你将无法再次指派专家，请务必在这一步提供完整的交付内容。
+  > **负载建议**：参考 `agent_usage` 避免过度指派。若专家多次失败，请尝试更换专家或调整指令。
+protocol.hierarchical.supervisor.overworked: |-
+  > **![风险预警]**：专家 {agents} 已被重复指派多次且未达成目标。请停止无效循环，要求专家提供更详尽的错误说明，或尝试切换到其他专家。
+protocol.hierarchical.supervisor.guidelines: |-
+  ### 管理决策准则：
+  1. **模态适配**：优先指派支持对应模式（图片/文件）的专家。
+  2. **错误恢复**：若 `_meta.errors` 存在，必须指派专家处理，直至错误清除。
+  3. **负载均衡**：参考 `agent_usage` 避免过度使用单一专家。
+
+# ---- blackboard ----
+protocol.blackboard.tool.title: |-
+  同步黑板
+protocol.blackboard.tool.description: |-
+  同步你的结论、已完成待办和后续待办。至少提供 result 或 state 之一。
+protocol.blackboard.tool.param.result: |-
+  本阶段的确切结论；若完成了某 TODO，请在此明确写出该 TODO 原文
+protocol.blackboard.tool.param.todo: |-
+  建议后续协作回合的任务（TODOs），没有则省略
+protocol.blackboard.tool.param.completed_todo: |-
+  已完成的待办原文（可多条，分号/逗号分隔）
+protocol.blackboard.tool.param.state: |-
+  JSON 格式的详细业务数据，可含 todo / completed_todo / status
+protocol.blackboard.tool.updated: |-
+  系统：黑板已更新。后续专家将基于此状态继续。
+protocol.blackboard.agent.guidelines: |-
+  ## 黑板协作规范
+  - **主动同步**：在得出阶段性结论或发现新待办（TODO）时，必须调用 `{tool}` 工具。
+  - **数据导向**：决策前请先查阅“当前协作黑板内容”，避免产生冗余的协作回合（Redundant Turns）。
+  - **闭环意识**：完成黑板上某个 TODO 时，请通过 `completed_todo` 参数传入该 TODO 原文，或在 result 中完整写出该 TODO，系统会自动从待办列表移除。
+protocol.blackboard.prompt.snapshot: |-
+  【协作黑板快照】
+protocol.blackboard.supervisor.dashboard.title: |-
+  ### 全局黑板 (Blackboard Dashboard)
+protocol.blackboard.supervisor.guidelines: |-
+  ### 黑板管理原则：
+  1. **依据待办**：优先处理黑板中 `todo` 列表的任务。
+  2. **结论导向**：若所有待办已完成且信息补全，整理黑板结论并结束。
+
+# ---- contract net: tools ----
+protocol.contractnet.bid_tool.title: |-
+  提交投标
+protocol.contractnet.bid_tool.description: |-
+  提交你的执行计划和信心分。
+protocol.contractnet.bid_tool.param.score: |-
+  信心分(1-100)
+protocol.contractnet.bid_tool.param.plan: |-
+  计划摘要
+protocol.contractnet.bid_tool.plan_required: |-
+  投标失败：plan 不能为空。
+protocol.contractnet.bid_tool.received: |-
+  标书已收录。
+protocol.contractnet.call_tool.title: |-
+  发起招标
+protocol.contractnet.call_tool.description: |-
+  向全体专家征集方案。当你无法确定由谁执行任务时使用此工具。
+protocol.contractnet.call_tool.param.requirement: |-
+  任务具体需求
+protocol.contractnet.call_tool.exhausted: |-
+  招标次数已耗尽。请根据现有标书定标，或直接回复用户无法完成。
+protocol.contractnet.call_tool.started: |-
+  已进入招标流程。
+
+# ---- contract net: agent / routing ----
+protocol.contractnet.prompt.award: |-
+  【中标执行指令】
+  > 你已在竞标中胜出。请严格按你提交的计划执行：
+  {plan}
+protocol.contractnet.route.invalid_assignment: |-
+  【系统指引】指派无效。必须先调用 {tool} 获取标书，且只能指派已出现在 bids_board 中的专家。
+protocol.contractnet.route.cannot_award: |-
+  无法定标：目标专家无有效标书且招标次数已耗尽。
+
+# ---- contract net: supervisor ----
+protocol.contractnet.supervisor.no_bids_warning: |-
+  > [警告] 前一轮招标无人响应。剩余尝试次数: {remaining}
+protocol.contractnet.supervisor.final_warning: |-
+  > [最终警告] 招标次数已耗尽。请停止招标，直接回复用户：该任务超出了当前团队的能力范围。
+protocol.contractnet.supervisor.rounds_used_up: |-
+  > [提示] 招标次数已用尽，请基于当前看板完成定标。
+protocol.contractnet.supervisor.dashboard.title: |-
+  ### 合同网竞标看板
+protocol.contractnet.supervisor.dashboard.tips: |-
+  > 提示：请根据各专家的 `score` 和 `plan` 择优指派。剩余招标次数: {remaining}
+protocol.contractnet.supervisor.dashboard.waiting: |-
+  > **强制规范**：当前处于“待招标”状态。在进行任何指派前，**必须**先获取专家标书。
+  > **操作建议**：请调用 `{tool}` 工具发起招标。剩余次数: {remaining}
+protocol.contractnet.supervisor.profiles.title: |-
+  #### 成员资质表:
+protocol.contractnet.supervisor.guidelines: |-
+  ### CNP 协作规范：
+  1. **工具招标**：若无法确定最佳人选，优先调用 `{tool}`。
+  2. **择优录取**：对比看板中的标书分数，直接回复专家名称进行定标。
+  3. **模态检查**：请确保所选专家的 `Modes` 支持当前任务模态（如识图需具备 `image`）。
+  4. **禁止旁路**：未出现在 bids_board 中的专家禁止指派。
+
+# ---- market based ----
+protocol.market.supervisor.marketplace.title: |-
+  ### 专家人才市场 (Expert Marketplace)
+protocol.market.supervisor.strategy: |-
+  > 策略指引：
+  > - 简单/轻量任务优先 Price 较低的专家。
+  > - 攻坚/深度任务优先 Score/ROI 更高的专家。
+  > - 预算受限时，指派 Price 较低的专家完成基础工作。
+protocol.market.supervisor.roi_king: |-
+  > **今日推荐 (ROI King)**：{agent}
+protocol.market.supervisor.budget_pick: |-
+  > **低价优选 (Budget Pick)**：{agent}
+protocol.market.supervisor.guidelines: |-
+  ### 调度准则：简单任务看价格(Price)，攻坚任务看信誉(Score)与性价比(ROI)。
+
+# ---- 语言无关识别（在所有已知语言中合并匹配；条目以 "|" 分隔，条目内不能含 "|"） ----
+# ContractNet：主管决策中的显式招标关键词（按大写匹配）
+protocol.contractnet.bidding_keywords: |-
+  招标
+# Blackboard：完成语义关键词（按小写匹配）
+protocol.blackboard.completed_keywords: |-
+  完成

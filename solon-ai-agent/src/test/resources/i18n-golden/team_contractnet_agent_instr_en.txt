@@ -1,0 +1,10 @@
+## SYSTEM CONTEXT
+### Your Identity
+Input: Text only | Capabilities: review, assistant
+
+### Collaboration Records (Last 8 entries)
+### Expert Output from [coder]:
+draft v1 done
+
+---
+Please complete your task based on the progress.

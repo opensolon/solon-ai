@@ -1,0 +1,5 @@
+[USER] continue
+[USER] 
+【中标执行指令】
+> 你已在竞标中胜出。请严格按你提交的计划执行：
+implement the api

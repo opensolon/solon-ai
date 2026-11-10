@@ -1,0 +1,2 @@
+__transfer_to__: When you are unable to complete the current task, hand it over to a more appropriate expert.
+{"type":"object","properties":{"memo":{"type":"string","description":"Handover memo: put key findings/output the next expert should continue with."},"state":{"type":"string","description":"Persistent JSON state."},"target":{"type":"string","description":"Expert name. Options: [{\"name\":\"coder\",\"role\":\"coder-role\",\"capabilities\":[\"java\",\"assistant\"],\"inputModes\":[\"text\"]}]"}},"required":["target","state","memo"]}

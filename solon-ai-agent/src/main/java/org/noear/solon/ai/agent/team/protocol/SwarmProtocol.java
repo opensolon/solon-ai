@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -286,22 +288,17 @@ public class SwarmProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_EMERGE).returnDirect(true);
         tool.metaPut(Agent.META_AGENT, agent.name());
 
-        boolean isZh = isChinese(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
         Collection<String> validAgents = config.getAgentMap().keySet();
 
-        if (isZh) {
-            tool.title("涌现任务").description("当你发现需要拆解子任务或建议其他专家介入时调用。")
-                    .stringParamAdd("tasks", "待办任务描述，多个用分号分隔")
-                    .stringParamAdd("agents", "建议执行的专家名，多个用分号分隔");
-        } else {
-            tool.title("Emerge Tasks").description("Call this to decompose tasks or suggest other experts.")
-                    .stringParamAdd("tasks", "Task descriptions, separated by semicolons")
-                    .stringParamAdd("agents", "Suggested agent names, separated by semicolons");
-        }
+        tool.title(AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_TOOL_TITLE))
+                .description(AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_TOOL_DESCRIPTION))
+                .stringParamAdd("tasks", AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_TOOL_PARAM_TASKS))
+                .stringParamAdd("agents", AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_TOOL_PARAM_AGENTS));
 
         tool.doHandle(args -> {
             state.emerge((String) args.get("tasks"), (String) args.get("agents"), validAgents);
-            return isZh ? "系统：子任务已加入任务池。" : "System: Tasks added to pool.";
+            return AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_TOOL_RESULT);
         });
 
         receiver.accept(tool);
@@ -312,16 +309,7 @@ public class SwarmProtocol extends TeamProtocolBase {
         // 保留基类身份 / 协作历史，再追加蜂群规范
         super.injectAgentInstruction(context, agent, locale, sb);
 
-        boolean isZh = isChinese(locale);
-        if (isZh) {
-            sb.append("\n## 蜂群协作规范\n");
-            sb.append("- **任务涌现**：若当前任务需他人配合或拆解，请调用 `").append(TOOL_EMERGE).append("` 将子任务放入池中。\n");
-            sb.append("- **专注性**：仅在发现新任务维度时调用工具，不要重复同步已有任务。\n");
-        } else {
-            sb.append("\n## Swarm Collaboration\n");
-            sb.append("- **Emergence**: Use `").append(TOOL_EMERGE).append("` to add sub-tasks to the pool when delegation or decomposition is needed.\n");
-            sb.append("- **Focus**: Only call the tool for new task dimensions; do not re-sync existing tasks.\n");
-        }
+        sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SWARM_AGENT_GUIDE, "tool", TOOL_EMERGE)).append("\n");
     }
 
     /**
@@ -336,8 +324,7 @@ public class SwarmProtocol extends TeamProtocolBase {
             return finalPrompt;
         }
 
-        boolean isZh = isChinese(locale);
-        String info = isZh ? "【蜂群任务池快照】" : "[Swarm Task Pool Snapshot]";
+        String info = AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_POOL_SNAPSHOT);
         String snapshot = info + "\n```json\n" + ONode.serialize(state) + "\n```";
         return finalPrompt.addMessage(ChatMessage.ofUser(snapshot));
     }
@@ -466,53 +453,24 @@ public class SwarmProtocol extends TeamProtocolBase {
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = isChinese(locale);
-
-        if (isZh) {
-            sb.append("\n### SWARM 决策准则：\n");
-            sb.append("1. **任务终止**：若任务完成，输出 `").append(config.getFinishMarker()).append("`。\n");
-            sb.append("2. **决策优先**：若未完成，仅输出下一位 Agent 名字。不要解释。\n");
-            sb.append("3. **任务池优先**：看板 task_pool 非空时，优先指派其中建议的专家。");
-        } else {
-            sb.append("\n### SWARM Decision Rules:\n");
-            sb.append("1. **Termination**: Output `").append(config.getFinishMarker()).append("` when done.\n");
-            sb.append("2. **Routing**: Output only the next Agent name.\n");
-            sb.append("3. **Task Pool First**: When task_pool is non-empty, prioritize suggested agents.");
-        }
+        sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SWARM_SUPERVISOR_RULES, "finishMarker", config.getFinishMarker()));
     }
 
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         SwarmState state = getSwarmState(trace);
-        boolean isZh = isChinese(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
 
-        sb.append(isZh ? "\n### 蜂群状态看板 (Swarm Intelligence)\n" : "\n### Swarm Intelligence Dashboard\n");
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_DASHBOARD_TITLE)).append("\n");
         // 保持看板的 JSON 可读性
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
 
         String recommended = state.pickNextAgent(config.getAgentMap().keySet(), trace.getLastAgentName());
 
-        if (isZh) {
-            sb.append("> **调度指引**：\n");
-            sb.append("> 1. **负载均衡**：优先指派 pheromones 值较低的成员。\n");
-            sb.append("> 2. **能力匹配**：确保 task_pool 中的任务描述与 Agent 的 Capabilities 一致。\n");
-            sb.append("> 3. **冷却避障**：避免连续指派刚执行完的 Agent。\n");
-            if (Utils.isNotEmpty(recommended) && !state.getTaskPool().isEmpty()) {
-                sb.append("> 4. **推荐下一执行者**：`").append(recommended).append("`\n");
-            }
-        } else {
-            sb.append("> **Instruction**:\n");
-            sb.append("> 1. **Load Balancing**: Prioritize agents with lower pheromone values.\n");
-            sb.append("> 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Capabilities.\n");
-            sb.append("> 3. **Cool-down**: Avoid re-assigning the agent that just finished.\n");
-            if (Utils.isNotEmpty(recommended) && !state.getTaskPool().isEmpty()) {
-                sb.append("> 4. **Recommended next**: `").append(recommended).append("`\n");
-            }
+        sb.append(AgentI18n.get(locale, AgentI18nKeys.TEAM_SWARM_DASHBOARD_GUIDE)).append("\n");
+        if (Utils.isNotEmpty(recommended) && !state.getTaskPool().isEmpty()) {
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SWARM_DASHBOARD_RECOMMENDED, "agent", recommended)).append("\n");
         }
-    }
-
-    private static boolean isChinese(Locale locale) {
-        return locale != null && Locale.CHINA.getLanguage().equals(locale.getLanguage());
     }
 
     private static int maxTurnsOf(TeamTrace trace) {

@@ -1,0 +1,8 @@
+## 协作进度 (最近 8 轮历史)
+### Expert Output from [coder]:
+draft v1 done
+
+---
+当前迭代轮次: 1
+指令：请指派下一位执行者。已完成则输出 [FINISH]
+> **待命专家**：[reviewer].

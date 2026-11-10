@@ -15,17 +15,21 @@
  */
 package org.noear.solon.ai.agent.react.task;
 
+import org.noear.snack4.codec.TypeRef;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
-import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
-import org.noear.solon.annotation.Param;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.lang.Preview;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -38,11 +42,59 @@ import java.util.regex.Pattern;
 @Preview("3.9.3")
 public class PlanTalent extends AbsTalent {
     private static final Pattern PLAN_LINE_PREFIX_PATTERN = Pattern.compile("^[\\d\\.\\-\\s*]+");
+    private static final Type STRING_LIST_TYPE = TypeRef.listOf(String.class).getType();
 
     private final ReActTrace trace;
 
+    @SuppressWarnings("unchecked")
     public PlanTalent(ReActTrace trace) {
         this.trace = trace;
+
+        // 工具描述按语言构建（替代 @ToolMapping 编译期常量）；工具名、参数名与 schema 保持不变
+        Locale locale = getLocale();
+
+        internalAddTool(new FunctionToolDesc("create_plan")
+                .title("")
+                .returnType(String.class)
+                .description(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_CREATE_DESCRIPTION))
+                .paramAdd("steps", STRING_LIST_TYPE, AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_CREATE_STEPS))
+                .doHandle(args -> create_plan((List<String>) args.get("steps"))));
+
+        internalAddTool(new FunctionToolDesc("update_plan_progress")
+                .title("")
+                .returnType(String.class)
+                .description(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_PROGRESS_DESCRIPTION))
+                .paramAdd("next_plan_index", int.class, AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_PROGRESS_NEXT_PLAN_INDEX))
+                .doHandle(args -> update_plan_progress(toInt(args.get("next_plan_index")))));
+
+        internalAddTool(new FunctionToolDesc("revise_plan")
+                .title("")
+                .returnType(String.class)
+                .description(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_REVISE_DESCRIPTION))
+                .paramAdd("new_steps", STRING_LIST_TYPE, AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_REVISE_NEW_STEPS))
+                .paramAdd("from_index", int.class, AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_TOOL_REVISE_FROM_INDEX))
+                .doHandle(args -> revise_plan((List<String>) args.get("new_steps"), toInt(args.get("from_index")))));
+    }
+
+    /**
+     * 参数已由 FunctionToolDesc 按 schema 转换（非法值在转换时抛 IllegalArgumentException，
+     * 由 ActionTask 转为带 schema 的纠正提示返回给模型）；这里只处理缺失（按 0，由下游收敛到合法范围）
+     */
+    private static int toInt(Object val) {
+        if (val instanceof Number) {
+            return ((Number) val).intValue();
+        } else if (val == null) {
+            return 0;
+        } else {
+            return Integer.parseInt(String.valueOf(val).trim());
+        }
+    }
+
+    private Locale getLocale() {
+        if (trace == null || trace.getOptions() == null) {
+            return null;
+        }
+        return trace.getOptions().getLocale();
     }
 
     @Override
@@ -52,35 +104,33 @@ public class PlanTalent extends AbsTalent {
 
     @Override
     public String description() {
-        return "提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。";
+        return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_TALENT_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        String baseGuide = "## 任务规划指南 (Task Planning Guide)\n" +
-                "1. **启动机制**: 复杂任务通过 `create_plan` 拆解步骤。若判定为简单任务，忽略计划并直接回复。\n" +
-                "2. **进度同步**: 所有索引从 1 开始。每完成一步，必须调用 `update_plan_progress` 切换至下一环节。\n" +
-                "3. **动态修订**: 发现计划有误或环境变化时，通过 `revise_plan` 实时调整后续步骤。\n" +
-                "4. **适用边界**: 不要为常识性提问、简单计算或单次工具调用创建计划。";
+        String baseGuide = AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_TALENT_GUIDE);
 
         String dynamicInstruction = trace.getOptions().getPlanningInstruction(trace);
 
         if (dynamicInstruction == null) {
             return baseGuide;
         } else {
-            return baseGuide + "\n**拆解策略建议**：\n" + dynamicInstruction;
+            return baseGuide + "\n" + AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_TALENT_STRATEGY) + "\n" + dynamicInstruction;
         }
     }
 
-    @ToolMapping(description = "初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。")
-    public String create_plan(@Param(name = "steps", description = "结构化的步骤列表（每步应为一个独立的动作描述）。") List<String> steps) {
+    /**
+     * 初始化执行计划（工具：create_plan）
+     */
+    public String create_plan(List<String> steps) {
         List<String> cleaned = cleanPlans(steps);
 
         if (cleaned.size() <= 1) {
             trace.setPlans(null); // 清空计划，不触发看板逻辑
             trace.setPlanIndex(0);
 
-            return "成功：检测到任务逻辑简单，已忽略计划模式。请直接执行并给出最终答案，无需调用 update_plan_progress。";
+            return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_CREATE_IGNORED);
         } else {
             trace.setPlans(cleaned);
             trace.setPlanIndex(0);
@@ -95,14 +145,16 @@ public class PlanTalent extends AbsTalent {
                 trace.pushAgentEvent(new PlanEvent(trace, PlanStage.CREATE));
             }
 
-            return "成功：计划已初始化，共 " + cleaned.size() + " 步。请开始执行第一步。";
+            return AgentI18n.fmt(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_CREATE_OK, "count", cleaned.size());
         }
     }
 
-    @ToolMapping(description = "更新计划进度。完成当前步骤准备进入下一步时，必须调用。")
-    public String update_plan_progress(@Param(name = "next_plan_index", description = "下一个步骤索引（从 1 开始计数的数字）。") int next_plan_index) {
+    /**
+     * 更新计划进度（工具：update_plan_progress）
+     */
+    public String update_plan_progress(int next_plan_index) {
         if (trace.getPlans() == null || trace.getPlans().isEmpty()) {
-            return "错误：当前不在计划模式中，请直接执行任务。";
+            return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_NOT_PLANNING);
         }
 
         int totalSteps = trace.getPlans().size();
@@ -112,9 +164,9 @@ public class PlanTalent extends AbsTalent {
         final String desc;
         if (totalSteps >= safeIdx) {
             String nextStepDesc = trace.getPlans().get(safeIdx - 1);
-            desc = "成功：计划进度已更新。下一步是：第 " + safeIdx + " 步 - " + nextStepDesc;
+            desc = AgentI18n.fmt(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_NEXT, "step", safeIdx, "desc", nextStepDesc);
         } else {
-            desc = "成功：所有计划步骤已执行完毕。";
+            desc = AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_DONE);
         }
 
         for (RankEntity<ReActInterceptor> entity : trace.getOptions().getInterceptors()) {
@@ -130,18 +182,18 @@ public class PlanTalent extends AbsTalent {
         return desc;
     }
 
-    @ToolMapping(description = "修订后续计划。当发现原计划有误或环境变化导致后续步骤不可行时调用。")
-    public String revise_plan(
-            @Param(name = "new_steps", description = "新的后续计划步骤列表。") List<String> new_steps,
-            @Param(name = "from_index", description = "从哪一步开始替换（从 1 开始）。") int from_index) {
+    /**
+     * 修订后续计划（工具：revise_plan）
+     */
+    public String revise_plan(List<String> new_steps, int from_index) {
 
         if (trace.getPlans() == null) {
-            return "错误：计划尚未初始化，无法修订。";
+            return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_REVISE_NOT_INIT);
         }
 
         List<String> nextSteps = cleanPlans(new_steps);
         if (nextSteps.isEmpty()) {
-            return "反馈：未提供有效的修订步骤，计划保持不变。";
+            return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_REVISE_EMPTY);
         }
 
         List<String> currentPlans = new ArrayList<>(trace.getPlans());
@@ -172,7 +224,7 @@ public class PlanTalent extends AbsTalent {
             trace.pushAgentEvent(new PlanEvent(trace, PlanStage.REVISE));
         }
 
-        return "成功：计划已从第 " + from_index + " 步开始重构。请按照新计划继续执行。";
+        return AgentI18n.fmt(getLocale(), AgentI18nKeys.REACT_PLAN_RESULT_REVISE_OK, "fromIndex", from_index);
     }
 
     /**

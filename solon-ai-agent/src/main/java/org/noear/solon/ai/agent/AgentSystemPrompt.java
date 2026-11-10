@@ -15,12 +15,18 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.lang.Preview;
-
-import java.util.Locale;
 
 /**
  * 智能体系统提示词
+ *
+ * <p>语言只由配置决定，模板不得自带语言：渲染时取 {@code trace.getOptions().getLocale()}，
+ * 规则为 {@code options.locale}（或所在团队的语言）&gt; {@link AgentI18n#getDefaultLocale()}（默认中文）。
+ * 模板只负责“按给定语言渲染文案”，因此同一个模板实例可以在不同请求上输出不同语言。</p>
+ *
+ * <p>4.2 起删除了 {@code AgentSystemPrompt#getLocale()}：模板自带语言不可配置，它会让
+ * {@code options.locale} 之外多出一个语言来源，导致提示词与协议指令中英混排。</p>
  *
  * @author noear
  * @since 3.9.5
@@ -28,13 +34,6 @@ import java.util.Locale;
 @Preview("3.9.5")
 @FunctionalInterface
 public interface AgentSystemPrompt<Tr> {
-    /**
-     * 获取提示词对应的语言环境
-     */
-    default Locale getLocale() {
-        return Locale.CHINESE;
-    }
-
     /**
      * 获取系统提示词（支持 SnEL 模板）
      */

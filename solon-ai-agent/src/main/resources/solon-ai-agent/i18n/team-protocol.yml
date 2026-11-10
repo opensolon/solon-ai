@@ -1,0 +1,163 @@
+# solon-ai-agent Team protocol messages (English, fallback): Hierarchical / Blackboard / ContractNet / MarketBased
+# Conventions: every value is a "|-" block scalar holding content only - no leading/trailing newlines or spaces (separators between parts are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- hierarchical: agent instruction ----
+protocol.hierarchical.agent.title: |-
+  ## Collaboration & Reporting
+protocol.hierarchical.agent.report: |-
+  1. Reporting Requirement:
+  - End response with a JSON block for key data (e.g., {"result": "...", "status": "done"}).
+protocol.hierarchical.agent.finish_marker: |-
+  2. **Finish Marker**: Upon completion, must include: `{finishMarker}`
+
+# ---- hierarchical: agent prompt ----
+protocol.hierarchical.prompt.pre_context.title: |-
+  ### Pre-Context
+protocol.hierarchical.prompt.pre_context.from: |-
+  - From {agent}: **{summary}**
+protocol.hierarchical.prompt.pre_context.hint: |-
+  > Please process based on the data above without altering core information.
+protocol.hierarchical.prompt.directive.title: |-
+  ### Supervisor Directive
+protocol.hierarchical.prompt.error.title: |-
+  ### Error Correction Required:
+protocol.hierarchical.prompt.error.failed: |-
+  - Your previous response failed validation: **{error}**
+protocol.hierarchical.prompt.error.fix: |-
+  - Please fix this based on the directive and ensure the correct finish marker.
+protocol.hierarchical.prompt.multimodal: |-
+  - [IMPORTANT]: Multimodal content detected. Process based on the attachments.
+
+# ---- hierarchical: supervisor ----
+protocol.hierarchical.route.finish_blocked: |-
+  [System] Task cannot end because errors exist. Assign agents to fix them.
+protocol.hierarchical.supervisor.dashboard.title: |-
+  ## Hierarchical Dashboard
+protocol.hierarchical.supervisor.dashboard.empty: |-
+  > No reports yet. Issue instructions.
+protocol.hierarchical.supervisor.sop: |-
+  ### Directive Standards (SOP):
+  > 1. **Explicit Data Transfer**: Always restate core parameters from `_results`.
+
+  ### Management & Decision Hints:
+  > **Decision Hint**: Check progress. Keep scheduling if errors exist or key steps are missing.
+  > **Workflow Integrity**: Ensure both design and implementation (e.g., `implementer`) roles have participated. Do not skip execution steps.
+  > **Final Delivery**: If satisfied, output `{finishMarker}` and **consolidate the final code/result** in this response for the USER.
+  > **Crucial**: Once the marker is output, the workflow ends. You cannot assign agents anymore. Ensure the final delivery is complete.
+  > **Load Balance**: Refer to `agent_usage`. If an agent fails repeatedly, switch approach or adjust instructions.
+protocol.hierarchical.supervisor.overworked: |-
+  > **![Risk Alert]**: Agents {agents} have been called repeatedly. Stop the loop, request detailed feedback, or try a different approach.
+protocol.hierarchical.supervisor.guidelines: |-
+  ### Management Guidelines:
+  1. **Modality Match**: Assign experts based on capabilities.
+  2. **Error Recovery**: Handle `_meta.errors` by re-assignment.
+  3. **Load Balance**: Use `agent_usage` for efficient distribution.
+
+# ---- blackboard ----
+protocol.blackboard.tool.title: |-
+  Sync Blackboard
+protocol.blackboard.tool.description: |-
+  Sync findings, completed todos and future todos. Provide at least result or state.
+protocol.blackboard.tool.param.result: |-
+  Key findings; mention completed TODO text if any
+protocol.blackboard.tool.param.todo: |-
+  Suggested tasks for next turns; omit if none
+protocol.blackboard.tool.param.completed_todo: |-
+  Completed TODO text (semicolon/comma separated)
+protocol.blackboard.tool.param.state: |-
+  Detailed JSON state (todo/completed_todo/status)
+protocol.blackboard.tool.updated: |-
+  System: Blackboard updated. Subsequent experts will proceed based on this state.
+protocol.blackboard.agent.guidelines: |-
+  ## Blackboard Guidelines
+  - **Proactive Sync**: You must call `{tool}` when you reach a conclusion or identify new tasks (TODOs).
+  - **Data-Driven**: Check the "Current blackboard content" before acting to avoid redundant turns.
+  - **Closure**: When a board TODO is done, pass its exact text via `completed_todo` (or include it in result) so the system can remove it from the list.
+protocol.blackboard.prompt.snapshot: |-
+  [Blackboard Snapshot]
+protocol.blackboard.supervisor.dashboard.title: |-
+  ### Global Blackboard
+protocol.blackboard.supervisor.guidelines: |-
+  ### Blackboard Management:
+  1. **Todo Driven**: Prioritize agents based on `todo` list.
+  2. **Summary**: Finalize findings when todos are cleared.
+
+# ---- contract net: tools ----
+protocol.contractnet.bid_tool.title: |-
+  Submit Bid
+protocol.contractnet.bid_tool.description: |-
+  Submit your execution plan and confidence score.
+protocol.contractnet.bid_tool.param.score: |-
+  Confidence score(1-100)
+protocol.contractnet.bid_tool.param.plan: |-
+  Plan summary
+protocol.contractnet.bid_tool.plan_required: |-
+  Bid rejected: plan is required.
+protocol.contractnet.bid_tool.received: |-
+  Bid received.
+protocol.contractnet.call_tool.title: |-
+  Call for Bids
+protocol.contractnet.call_tool.description: |-
+  Collect proposals from all experts when the best executor is not obvious.
+protocol.contractnet.call_tool.param.requirement: |-
+  Task requirements
+protocol.contractnet.call_tool.exhausted: |-
+  Bidding rounds exhausted. Award an existing bid or inform the user.
+protocol.contractnet.call_tool.started: |-
+  Bidding phase initiated.
+
+# ---- contract net: agent / routing ----
+protocol.contractnet.prompt.award: |-
+  [Award Execution Order]
+  > You won the bid. Execute strictly according to your plan:
+  {plan}
+protocol.contractnet.route.invalid_assignment: |-
+  [System] Invalid assignment. You must call {tool} first and only assign experts listed in bids_board.
+protocol.contractnet.route.cannot_award: |-
+  Cannot award: target has no bid and bidding rounds are exhausted.
+
+# ---- contract net: supervisor ----
+protocol.contractnet.supervisor.no_bids_warning: |-
+  > [Warning] No bids in previous round. Remaining attempts: {remaining}
+protocol.contractnet.supervisor.final_warning: |-
+  > [Final Warning] No more bidding rounds. Stop bidding and inform the user that the task is out of scope.
+protocol.contractnet.supervisor.rounds_used_up: |-
+  > [Note] No more bidding rounds. Award based on the current board.
+protocol.contractnet.supervisor.dashboard.title: |-
+  ### Contract Net Dashboard
+protocol.contractnet.supervisor.dashboard.tips: |-
+  > Tips: Award the best candidate by `score`/`plan`. Remaining bidding rounds: {remaining}
+protocol.contractnet.supervisor.dashboard.waiting: |-
+  > **Mandatory**: Status is 'Waiting'. You **MUST** collect proposals before any assignment.
+  > **Action**: Please call `{tool}` to initiate bidding. Remaining: {remaining}
+protocol.contractnet.supervisor.profiles.title: |-
+  #### Agent Profiles:
+protocol.contractnet.supervisor.guidelines: |-
+  ### CNP Collaboration Rules:
+  1. **Tool Usage**: Call `{tool}` if unsure about assignments.
+  2. **Decision**: Award the task by naming the best agent based on their bid score.
+  3. **Constraint**: Match task requirements with agent `Modes` (e.g., `image` for vision tasks).
+  4. **No Bypass**: Never assign an expert not listed in bids_board.
+
+# ---- market based ----
+protocol.market.supervisor.marketplace.title: |-
+  ### Expert Marketplace
+protocol.market.supervisor.strategy: |-
+  > Strategy Tips:
+  > - Prefer lower Price agents for simple/light tasks.
+  > - Prefer higher Score/ROI agents for deep/critical tasks.
+  > - Assign lower Price agents for routine tasks under budget constraints.
+protocol.market.supervisor.roi_king: |-
+  > **Top ROI Agent**:{agent}
+protocol.market.supervisor.budget_pick: |-
+  > **Budget Pick**:{agent}
+protocol.market.supervisor.guidelines: |-
+  ### Guidelines: Price for simple tasks; Score/ROI for critical challenges.
+
+# ---- language-neutral recognition (matched across ALL known languages; items separated by "|", no "|" inside an item) ----
+# ContractNet: explicit call-for-bids keywords in supervisor decisions (matched in upper case; do not add a bare "BID")
+protocol.contractnet.bidding_keywords: |-
+  BIDDING|CALL FOR BIDS|CALL-FOR-BIDS|CALL_FOR_BIDS
+# Blackboard: completion keywords (matched in lower case)
+protocol.blackboard.completed_keywords: |-
+  completed|done|finished

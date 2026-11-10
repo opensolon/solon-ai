@@ -1,0 +1,6 @@
+[System Instruction: Self-Reflection]
+You returned an empty response in reasoning turn 1 (attempt 1). Start a self-reflection immediately:
+
+1. **Revisit the task goal**: Re-examine the core goal of the task you were originally assigned and check whether you have drifted from the main line.
+2. **Review the history**: Go over the latest Observations and previous chain of thought to locate the cause of the empty response.
+3. **Correct the strategy**: If the current path is blocked, decisively switch approaches or break the task into smaller sub-tasks.

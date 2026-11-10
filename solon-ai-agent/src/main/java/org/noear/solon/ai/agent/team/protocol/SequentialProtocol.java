@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -231,8 +233,7 @@ public class SequentialProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         SequenceState state = getSequenceState(trace);
-        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getOptions().getLocale().getLanguage());
-        sb.append(isZh ? "\n### 流水线进度 (Pipeline Progress)\n" : "\n### Pipeline Progress\n");
+        sb.append("\n").append(AgentI18n.get(trace.getOptions().getLocale(), AgentI18nKeys.TEAM_SEQUENTIAL_PROGRESS_TITLE)).append("\n");
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
     }
 

@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -178,6 +179,11 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
         if (parentTeamTrace != null) {
             //传递流控
             options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+
+            //继承上层团队的语言（自己显式设置的优先）
+            if (options.isLocaleExplicit() == false) {
+                options.setLocale(parentTeamTrace.getOptions().getLocale());
+            }
         }
 
         // 1. 运行时环境准备
@@ -380,6 +386,16 @@ public class TeamAgent implements Agent<TeamRequest, TeamResponse> {
 
         public Builder systemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
             config.getDefaultOptions().setSystemPrompt(promptProvider);
+            return this;
+        }
+
+        /**
+         * 设置语言环境（优先于提示词模板自带的语言）
+         *
+         * @since 4.2.0
+         */
+        public Builder locale(Locale locale) {
+            config.getDefaultOptions().setLocale(locale);
             return this;
         }
 

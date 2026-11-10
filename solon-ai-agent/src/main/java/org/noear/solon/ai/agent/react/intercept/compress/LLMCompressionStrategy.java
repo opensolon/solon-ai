@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
@@ -25,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 基于 LLM 的语义压缩策略实现
@@ -42,22 +45,26 @@ import java.util.List;
 public class LLMCompressionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(LLMCompressionStrategy.class);
 
-    // 1. 系统指令：定义压缩逻辑和约束
-    private String systemInstruction = "## 角色定义\n" +
-            "你是一个高效的任务进度分析员。请简要总结 AI Agent 的执行历史片段。\n\n" +
-            "## 总结要点\n" +
-            "1. **操作回顾**：已尝试的主要操作（工具调用及其关键参数）。\n" +
-            "2. **关键发现**：获取到的核心信息或结论。\n" +
-            "3. **当前进度**：目前处于任务的哪个阶段，还剩什么未完成。\n" +
-            "4. **信息保留**：必须保留所有文件路径、函数名和技术细节，这些是后续执行的关键上下文。\n\n" +
-            "## 输出规范\n" +
-            "- 要求：精炼、准确，不超过 300 字。\n" +
-            "- 严禁包含：无关的客套话或自我介绍。\n" +
-            "- 若无可总结内容，请回复：(无显著进度)"; // 统一为英文括号，去掉句号结尾
+    // 1. 系统指令：定义压缩逻辑和约束（为 null 时按语言使用内置文案）
+    private String systemInstruction;
 
     public LLMCompressionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
+    }
+
+    /**
+     * 获取系统指令（显式设置优先，否则按语言使用内置文案）
+     *
+     * @param locale 语言（null 时使用默认语言）
+     * @since 4.2
+     */
+    public String getSystemInstruction(Locale locale) {
+        if (systemInstruction != null) {
+            return systemInstruction;
+        }
+        // 统一为英文括号，去掉句号结尾
+        return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_LLM_SYSTEM, "emptyMarker", AgentI18n.get(locale, AgentI18nKeys.COMPRESS_LLM_EMPTY_MARKER));
     }
 
     @Override
@@ -75,22 +82,24 @@ public class LLMCompressionStrategy implements CompressionStrategy {
         }
         if (filtered.isEmpty()) return null;
 
+        Locale locale = CompressionUtil.localeOf(trace);
+
         try {
             // PTL 重试循环
             String summary = CompressionUtil.compressWithPTLRetry(
                     chatModel, Math.max(1, maxRetries), trace, filtered,
-                    systemInstruction,
+                    getSystemInstruction(locale),
                     LLMCompressionStrategy.class.getSimpleName(),
                     CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH,
-                    "### 待压缩历史片段\n",
-                    "\n\n### 任务指令\n请根据系统指令对上述执行过程进行语义总结：");
+                    AgentI18n.get(locale, AgentI18nKeys.COMPRESS_LLM_USER_PREFIX) + "\n",
+                    "\n\n" + AgentI18n.get(locale, AgentI18nKeys.COMPRESS_LLM_USER_SUFFIX));
 
-            // 模糊匹配“无显著进度”，防大模型胡乱加标点或 Markdown 样式
-            if (CompressionUtil.isEmptySummary(summary)) {
+            // 匹配“无显著进度”（识别所有内置语言）
+            if (CompressionUtil.isEmptySummary(summary, locale)) {
                 return null;
             }
 
-            return CompressionUtil.buildCompressedMessage("--- [执行进度总结] ---", summary);
+            return CompressionUtil.buildCompressedMessage(AgentI18n.get(locale, AgentI18nKeys.COMPRESS_LLM_SUMMARY_PREFIX), summary);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

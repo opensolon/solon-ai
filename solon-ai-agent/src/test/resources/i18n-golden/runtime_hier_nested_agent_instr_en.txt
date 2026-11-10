@@ -1,0 +1,23 @@
+## SYSTEM CONTEXT
+### Your Identity
+Input: Text only | Capabilities: assistant
+
+### Collaboration Records (Last 8 entries)
+### Expert Output from [coder]:
+step 0 FAILED
+
+### Expert Output from [coder]:
+step 1 FAILED
+
+### Expert Output from [coder]:
+step 2 FAILED
+
+---
+Please complete your task based on the progress.
+
+---
+## Collaboration & Reporting
+
+1. Reporting Requirement:
+- End response with a JSON block for key data (e.g., {"result": "...", "status": "done"}).
+2. **Finish Marker**: Upon completion, must include: `[SUB_DONE]`

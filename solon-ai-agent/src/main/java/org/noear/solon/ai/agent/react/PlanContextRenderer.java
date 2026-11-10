@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.agent.react;
 
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.lang.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * ReAct 计划上下文渲染器。
@@ -42,8 +45,9 @@ public final class PlanContextRenderer {
             return null;
         }
 
+        Locale locale = trace.getOptions().getLocale();
         StringBuilder buf = new StringBuilder();
-        buf.append("[执行计划进度看板]\n");
+        buf.append(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_BOARD_TITLE)).append("\n");
 
         List<String> plans = trace.getPlans();
         int total = plans.size();
@@ -54,24 +58,23 @@ public final class PlanContextRenderer {
             buf.append(i + 1).append(". ").append(status).append(plans.get(i)).append("\n");
         }
 
-        buf.append("\n**计划进度同步协议 (Plan Sync Protocol)：**\n");
+        buf.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_BOARD_PROTOCOL)).append("\n");
         if (currIdx < total) {
             int currentStepNum = currIdx + 1;
             int nextStepNum = currIdx + 2;
 
-            buf.append("- **当前状态**: 你正在执行步骤 [").append(currentStepNum).append("]。\n");
-            buf.append("- **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `").append(nextStepNum).append("` ");
+            buf.append(AgentI18n.fmt(locale, AgentI18nKeys.REACT_PLAN_BOARD_CURRENT, "step", currentStepNum)).append("\n");
 
             if (currIdx == total - 1) {
-                buf.append("(标志所有计划已达成)。\n");
+                buf.append(AgentI18n.fmt(locale, AgentI18nKeys.REACT_PLAN_BOARD_ADVANCE_LAST, "nextStep", nextStepNum)).append("\n");
             } else {
-                buf.append("(切换至下一环节)。\n");
+                buf.append(AgentI18n.fmt(locale, AgentI18nKeys.REACT_PLAN_BOARD_ADVANCE_NEXT, "nextStep", nextStepNum)).append("\n");
             }
 
-            buf.append("- **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。\n");
-            buf.append("- **禁止跳步**: 在更新进度前，禁止直接提供最终回答。");
+            buf.append(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_BOARD_REVISE)).append("\n");
+            buf.append(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_BOARD_NO_SKIP));
         } else {
-            buf.append("- **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。");
+            buf.append(AgentI18n.get(locale, AgentI18nKeys.REACT_PLAN_BOARD_DONE));
         }
 
         return buf.toString();

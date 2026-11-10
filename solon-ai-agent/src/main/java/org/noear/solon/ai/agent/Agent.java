@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent;
 
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.team.*;
 import org.noear.solon.ai.agent.util.AgentUtil;
@@ -137,7 +139,8 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                 if (item.target.isEnabled()) {
                     if (item.target.shouldAgentContinue(trace, this) == false) {
                         trace.addRecord(ChatRole.ASSISTANT, name(),
-                                "[Skipped] Cancelled by " + item.target.getClass().getSimpleName(), 0);
+                                AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.TEAM_RUN_SKIPPED,
+                                        "interceptor", item.target.getClass().getSimpleName()), 0);
 
                         if (LOG.isDebugEnabled()) {
                             LOG.debug("Agent [{}] execution skipped by interceptor: {}", name(), item.target.getClass().getSimpleName());
@@ -160,6 +163,9 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                     .prepareAgentPrompt(trace, this,
                             trace.getWorkingMemory(),
                             trace.getOptions().getLocale());
+
+            //团队语言（供自定义 Agent 实现经 AgentI18n.localeOf(prompt) 读取；内置智能体直接继承团队 options）
+            AgentI18n.putLocale(effectivePrompt, trace.getOptions().getLocale());
         } else {
             effectivePrompt = null;
         }
@@ -191,7 +197,7 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
             String finalResult = trace.getProtocol().resolveAgentOutput(trace, this, rawContent);
 
             if (finalResult == null || finalResult.isEmpty()) {
-                finalResult = "Agent [" + name() + "] processed but returned no textual content.";
+                finalResult = AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.TEAM_RUN_NO_CONTENT, "agent", name());
             }
 
             //指标自动化同步

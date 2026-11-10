@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.team;
 
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.core.util.RankEntity;
@@ -44,7 +45,9 @@ public class TeamOptions implements NonSerializable {
     /** 智能体指令描述（供上层团队调度识别） */
     private String instruction;
     /** 系统提示词（System Prompt）模板提供者 */
-    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptCn.getDefault();
+    private AgentSystemPrompt<TeamTrace> systemPrompt = TeamSystemPromptDefault.getDefault();
+    /** 语言环境（显式指定优先，否则用默认语言） */
+    private Locale locale;
 
     /**
      * @since 4.0.4
@@ -110,6 +113,7 @@ public class TeamOptions implements NonSerializable {
         tmp.role = role;
         tmp.instruction = instruction;
         tmp.systemPrompt = systemPrompt;
+        tmp.locale = locale;
 
         tmp.maxTurns = this.maxTurns;
         tmp.maxRetries = this.maxRetries;
@@ -141,6 +145,13 @@ public class TeamOptions implements NonSerializable {
     protected void setInstruction(String instruction) { this.instruction = instruction; }
     protected void setSystemPrompt(AgentSystemPrompt<TeamTrace> promptProvider) {
         this.systemPrompt = promptProvider;
+    }
+
+    /**
+     * @since 4.2
+     */
+    protected void setLocale(Locale locale) {
+        this.locale = locale;
     }
 
 
@@ -221,7 +232,26 @@ public class TeamOptions implements NonSerializable {
         return prompt;
     }
 
-    public Locale getLocale() { return systemPrompt.getLocale(); }
+    /**
+     * 获取语言环境（显式指定优先，否则取提示词模板的默认语言）
+     */
+    /**
+     * 获取语言环境（配置驱动：显式设置优先，否则用默认语言，默认中文）
+     *
+     * @see AgentI18n#getDefaultLocale()
+     */
+    public Locale getLocale() {
+        return locale == null ? AgentI18n.getDefaultLocale() : locale;
+    }
+
+    /**
+     * 是否显式设置了 locale（未设置时，作为嵌套团队成员会继承上层团队的语言）
+     *
+     * @since 4.2
+     */
+    public boolean isLocaleExplicit() {
+        return locale != null;
+    }
 
     public ModelOptionsAmend<?, TeamInterceptor> getModelOptions() {
         return modelOptions;

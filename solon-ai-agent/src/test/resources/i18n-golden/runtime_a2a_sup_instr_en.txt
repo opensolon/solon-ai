@@ -1,0 +1,4 @@
+
+### A2A Dashboard
+- Global State: api drafted
+- Handovers: 1

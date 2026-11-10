@@ -1,0 +1,18 @@
+[USER] please describe
+[USER] 
+
+### Pre-Context
+- From coder: **step 2 FAILED**
+> Please process based on the data above without altering core information.
+
+
+### Supervisor Directive
+> Fix the failing step.
+> Then report.
+---
+
+### Error Correction Required:
+- Your previous response failed validation: **Task reported as failed (content or status contains FAILED).**
+- Please fix this based on the directive and ensure the correct finish marker.
+
+- [IMPORTANT]: Multimodal content detected. Process based on the attachments.

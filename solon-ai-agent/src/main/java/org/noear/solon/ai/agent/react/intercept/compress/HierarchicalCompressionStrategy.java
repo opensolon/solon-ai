@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 
 /**
  * 层级滚动压缩策略
@@ -40,31 +43,59 @@ import java.util.ArrayList;
 public class HierarchicalCompressionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(HierarchicalCompressionStrategy.class);
 
-    // 1. 定义系统指令（静态部分）
-    private String systemInstruction = "## 角色定义\n" +
-            "你是一个专业的记忆管理专家，负责对 Agent 的执行历史进行层级化压缩。\n\n" +
-            "## 处理逻辑\n" +
-            "请将『旧的压缩内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。\n\n" +
-            "## 核心要求\n" +
-            "1. **信息提取**：重点保留已确认的关键数据、当前的逻辑位置、以及已达成的阶段性结论。\n" +
-            "2. **去重降噪**：移除重复的思考过程、已失效的尝试方案、以及无意义的中间状态。\n" +
-            "3. **长度约束**：严格控制摘要长度，使用简洁的陈述句。\n" +
-            "4. **路径保留**：必须保留所有文件路径、函数名和技术细节，这些是 Agent 后续执行的关键导航信息。\n\n" +
-            "## 注意事项\n" +
-            "直接输出摘要正文，不要包含\"好的\"、\"明白\"或\"根据您的要求\"等废话。";
-
+    // 1. 定义系统指令（静态部分；为 null 时按语言使用内置文案）
+    private String systemInstruction;
 
     private int maxSummaryLength = 500;    // 压缩结果 Token 长度硬性保护（按 Token 计量，与拦截器一致）
 
-    private static final String SUMMARY_PREFIX = "--- [全局进度滚动摘要 (层级压缩)] ---";
     private static final String STRATEGY_LASTSUMMARY_KEY = "agent:summary:hierarchical";
     private static final String TRUNCATED_SUFFIX = "...[Truncated]";
     private static final int MAX_MODEL_CALLS = 3;
 
-
     public HierarchicalCompressionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
+    }
+
+    /**
+     * 获取系统指令（显式设置优先，否则按语言使用内置文案）
+     *
+     * @param locale 语言（null 时使用默认语言）
+     * @since 4.2
+     */
+    public String getSystemInstruction(Locale locale) {
+        if (systemInstruction != null) {
+            return systemInstruction;
+        }
+        return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_HIERARCHICAL_SYSTEM);
+    }
+
+    /**
+     * 获取摘要前缀
+     *
+     * @param locale 语言（null 时使用默认语言）
+     * @since 4.2
+     */
+    public static String getSummaryPrefix(Locale locale) {
+        return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_HIERARCHICAL_SUMMARY_PREFIX);
+    }
+
+    /**
+     * 是否为本策略生成的摘要文本（识别所有内置语言的前缀，兼容会话中切换语言）
+     *
+     * @param content 消息文本
+     * @since 4.2
+     */
+    public static boolean isSummaryContent(String content) {
+        if (content == null) {
+            return false;
+        }
+        for (String prefix : CompressionUtil.textsOfAllLocales(null, AgentI18nKeys.COMPRESS_HIERARCHICAL_SUMMARY_PREFIX)) {
+            if (content.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public HierarchicalCompressionStrategy maxSummaryLength(int maxSummaryLength) {
@@ -105,8 +136,10 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
             }
         }
 
+        Locale locale = CompressionUtil.localeOf(trace);
+
         if (pureExpired.isEmpty()) {
-            return buildMessage(lastSummary);
+            return buildMessage(locale, lastSummary);
         }
 
         try {
@@ -118,7 +151,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
 
             // 所有分块均成功后才提交，避免中间摘要污染 Trace。
             trace.setExtra(STRATEGY_LASTSUMMARY_KEY, candidate);
-            return buildMessage(candidate);
+            return buildMessage(locale, candidate);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("Hierarchical compression interrupted");
@@ -164,27 +197,24 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
 
     private String mergeOnce(ChatModel chatModel, ReActTrace trace, String baseSummary,
                              List<ChatMessage> history, CallBudget callBudget) throws Throwable {
+        Locale locale = CompressionUtil.localeOf(trace);
         String newHistoryText = CompressionUtil.formatMessages(
-                history, CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH);
+                history, CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH, locale);
         if (Assert.isEmpty(newHistoryText)) {
             return baseSummary;
         }
 
-        String userData = "### 旧的摘要内容\n" +
-                (baseSummary.isEmpty() ? "（暂无）" : baseSummary) +
-                "\n\n" +
-                "### 新增的过期历史记录\n" +
-                newHistoryText +
-                "\n\n" +
-                "### 最终任务要求\n" +
-                "请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：";
+        String userData = AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_HIERARCHICAL_USER_DATA,
+                "summary", (baseSummary.isEmpty() ? AgentI18n.get(locale, AgentI18nKeys.COMPRESS_HIERARCHICAL_NO_SUMMARY) : baseSummary),
+                "history", newHistoryText);
+        String systemPrompt = getSystemInstruction(locale);
 
         callBudget.acquire();
         ChatResponse resp = chatModel.prompt(userData)
                 .options(o -> {
                     o.httpCustomizeAdd(trace.getOptions().getModelOptions().httpCustomize());
                     o.agentName(HierarchicalCompressionStrategy.class.getSimpleName());
-                    o.systemPrompt(systemInstruction);
+                    o.systemPrompt(systemPrompt);
                 })
                 .call();
 
@@ -293,7 +323,7 @@ public class HierarchicalCompressionStrategy implements CompressionStrategy {
         }
     }
 
-    private ChatMessage buildMessage(String content) {
-        return CompressionUtil.buildCompressedMessage(SUMMARY_PREFIX, content);
+    private ChatMessage buildMessage(Locale locale, String content) {
+        return CompressionUtil.buildCompressedMessage(getSummaryPrefix(locale), content);
     }
 }

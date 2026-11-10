@@ -2,6 +2,7 @@ package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.SnelUtil;
@@ -67,13 +68,26 @@ public class SimpleOptions extends ModelOptionsAmend<SimpleOptions, SimpleInterc
         return instruction;
     }
 
+    /**
+     * 获取语言环境（配置驱动：显式设置优先，否则用默认语言，默认中文）
+     *
+     * @see AgentI18n#getDefaultLocale()
+     */
     public Locale getLocale() {
-        // locale 显式指定优先（否则该字段永远不会生效，与 ReActOptions 口径不一致）
-        return locale == null ? systemPrompt.getLocale() : locale;
+        return locale == null ? AgentI18n.getDefaultLocale() : locale;
     }
 
     public void setLocale(Locale locale) {
         this.locale = locale;
+    }
+
+    /**
+     * 是否显式设置了 locale（未设置时，作为团队成员会继承团队的语言）
+     *
+     * @since 4.2
+     */
+    public boolean isLocaleExplicit() {
+        return locale != null;
     }
 
     public String getSystemPromptFor(SimpleTrace trace, FlowContext context) {

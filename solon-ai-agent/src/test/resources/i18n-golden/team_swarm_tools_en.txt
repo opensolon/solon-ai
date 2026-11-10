@@ -1,0 +1,2 @@
+__emerge_tasks__: Call this to decompose tasks or suggest other experts.
+{"type":"object","properties":{"agents":{"type":"string","description":"Suggested agent names, separated by semicolons"},"tasks":{"type":"string","description":"Task descriptions, separated by semicolons"}},"required":["tasks","agents"]}

@@ -1,0 +1,9 @@
+[Execution Plan Progress Board]
+1. [√] collect
+2. [●] conclude
+
+**Plan Sync Protocol:**
+- **Current status**: You are executing step [2].
+- **Normal progress**: After the step is completed and the result meets expectations, you MUST call `update_plan_progress` with `next_plan_index` set to `3` (marking all plans as completed).
+- **Dynamic adjustment**: If the Observation shows the original plan is no longer feasible, you MUST first call `revise_plan` to revise the remaining steps; never force your way into a wrong step.
+- **No skipping**: Do not provide the final answer before updating the progress.

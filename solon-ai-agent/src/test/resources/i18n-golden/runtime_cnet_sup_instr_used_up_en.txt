@@ -1,0 +1,11 @@
+
+> [Note] No more bidding rounds. Award based on the current board.
+
+### Contract Net Dashboard
+```json
+{"bids":{"coder":{"score":80,"plan":"implement the api","auto_bid":false}},"history":[{"coder":{"score":80,"plan":"implement the api","auto_bid":false}}],"requirement":"java api","rounds":2}
+```
+> Tips: Award the best candidate by `score`/`plan`. Remaining bidding rounds: 0
+#### Agent Profiles:
+- {"name":"coder","role":"coder-role","capabilities":["java","assistant"],"inputModes":["text"]}
+- {"name":"reviewer","role":"reviewer-role","capabilities":["review","assistant"],"inputModes":["text"]}

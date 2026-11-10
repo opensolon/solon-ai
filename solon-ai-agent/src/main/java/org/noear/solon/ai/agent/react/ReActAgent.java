@@ -174,6 +174,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         if (parentTeamTrace != null) {
             //传递流控
             options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+
+            //继承团队的语言（成员自己显式设置的优先）
+            if (options.isLocaleExplicit() == false) {
+                options.setLocale(parentTeamTrace.getOptions().getLocale());
+            }
         }
 
         //添加必要的工具上下文
@@ -240,7 +245,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         if (trace.getOptions().isFeedbackMode()) {
             trace.getOptions().getModelOptions().toolAdd(FeedbackTool.getTool(
                     trace.getOptions().getFeedbackDescription(trace),
-                    trace.getOptions().getFeedbackReasonDescription(trace)));
+                    trace.getOptions().getFeedbackReasonDescription(trace),
+                    trace.getOptions().getLocale()));
         }
 
 

@@ -1,0 +1,2 @@
+__call_for_bids__: Collect proposals from all experts when the best executor is not obvious.
+{"type":"object","properties":{"requirement":{"type":"string","description":"Task requirements"}},"required":["requirement"]}

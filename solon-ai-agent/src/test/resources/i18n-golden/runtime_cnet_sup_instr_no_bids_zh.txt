@@ -1,0 +1,8 @@
+
+> [警告] 前一轮招标无人响应。剩余尝试次数: 1
+### 合同网竞标看板
+> **强制规范**：当前处于“待招标”状态。在进行任何指派前，**必须**先获取专家标书。
+> **操作建议**：请调用 `__call_for_bids__` 工具发起招标。剩余次数: 1
+#### 成员资质表:
+- {"name":"coder","role":"coder-role","capabilities":["java","assistant"],"inputModes":["text"]}
+- {"name":"reviewer","role":"reviewer-role","capabilities":["review","assistant"],"inputModes":["text"]}

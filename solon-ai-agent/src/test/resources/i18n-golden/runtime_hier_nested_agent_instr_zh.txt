@@ -1,0 +1,23 @@
+## 任务上下文 (SYSTEM CONTEXT)
+### 你的身份
+输入限制: 仅限文本 | 核心能力: assistant
+
+### 协作进度 (最近 8 条)
+### Expert Output from [coder]:
+step 0 FAILED
+
+### Expert Output from [coder]:
+step 1 FAILED
+
+### Expert Output from [coder]:
+step 2 FAILED
+
+---
+请根据上述进度完成你的任务。
+
+---
+## 协作与汇报规范
+
+1. 汇报要求：
+- 请在回复结尾使用 JSON 块反馈核心数据（例：{"result": "...", "status": "done"}）。
+2. **完成标记**：任务完成时，必须包含标记: `[SUB_DONE]`

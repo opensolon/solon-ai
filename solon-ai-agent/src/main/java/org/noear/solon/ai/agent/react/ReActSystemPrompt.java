@@ -36,7 +36,7 @@ public interface ReActSystemPrompt extends AgentSystemPrompt<ReActTrace> {
      * 获取提示词构建器
      */
     static Builder builder() {
-        return ReActSystemPromptCn.builder();
+        return ReActSystemPromptDefault.builder();
     }
 
     /**

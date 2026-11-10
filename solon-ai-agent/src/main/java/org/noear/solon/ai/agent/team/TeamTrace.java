@@ -21,6 +21,7 @@ import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.ChatRole;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -168,6 +169,9 @@ public class TeamTrace implements AgentTrace {
         this.session = session;
         this.agentName = agentName;
         this.finalAnswer = null;
+
+        //会话恢复：登记旧会话的语言（旧消息中的标记需在所有已知语言中识别）
+        AgentI18n.registerLocaleOf(originalPrompt);
 
         //每次执行重置中断状态
         session.pending(false, null);

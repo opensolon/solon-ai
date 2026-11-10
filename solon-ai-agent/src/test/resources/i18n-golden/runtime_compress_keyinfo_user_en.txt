@@ -1,0 +1,6 @@
+### History Segment to Process
+USER: read a.txt
+[Text]: done
+
+### Audit Requirement
+Please extract the key information from the segment above according to the system instruction.

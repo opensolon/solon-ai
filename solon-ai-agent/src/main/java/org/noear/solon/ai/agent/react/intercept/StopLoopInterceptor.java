@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.react.intercept;
 import org.noear.snack4.ONode;
 import org.noear.snack4.json.JsonReader;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ToolExchanger;
@@ -85,15 +87,8 @@ public class StopLoopInterceptor extends AbsReActInterceptor {
         long count = history.stream().filter(fp -> fp.equals(fingerprint)).count();
 
         if (count >= maxRepeatCount) {
-            String breakMsg = String.format(
-                    "【系统提示：检测到潜在循环 (Loop Detected)】\n" +
-                            "系统检测到最近 %d 个动作的窗口内，当前操作已出现 %d 次，可能存在\"原地打转\"的情况。\n\n" +
-                            "请立即暂停当前操作思路，审视历史 Observation 并执行以下步骤：\n" +
-                            "1. **有效性评估**：如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。\n" +
-                            "2. **强制收敛**：若已有足够信息供用户参考，请直接输出 Final Answer 结束任务。\n" +
-                            "3. **避免重复**：不要重复执行已经执行过且未产生新信息的操作。",
-                    windowSize, count
-            );
+            String breakMsg = AgentI18n.fmt(trace.getOptions() == null ? null : trace.getOptions().getLocale(),
+                    AgentI18nKeys.REACT_STOPLOOP_PROMPT, "window", windowSize, "count", count);
 
             // Action 尚未执行；绑定当前轮次并延后注入，避免陈旧提醒被后续 Action 消费。
             trace.setExtra(EXTRAS_PENDING_PROMPT_KEY, breakMsg);

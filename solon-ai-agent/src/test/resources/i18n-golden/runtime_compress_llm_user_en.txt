@@ -1,0 +1,6 @@
+### History Segment to Compress
+USER: read a.txt
+[Text]: done
+
+### Task Instruction
+Please produce a semantic summary of the execution process above according to the system instruction:

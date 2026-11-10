@@ -1,0 +1,153 @@
+# solon-ai-agent Team messages (English, fallback for all languages)
+# Conventions: every value is a "|-" block scalar holding content only - no leading/trailing newlines or spaces (separators between parts are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- supervisor main prompt ----
+team.prompt.role.default: |-
+  Team Supervisor, responsible for coordinating agents to complete the task
+team.prompt.role: |-
+  ## Your Role
+  {role}
+team.prompt.members.title: |-
+  ## Team Members
+team.prompt.task: |-
+  ## Current Task
+  {task}
+team.prompt.output: |-
+  ## Output Specification
+  1. **Termination**: If the task is finished, output: {finishMarker} followed by the final result. If responding directly to the user, **DO NOT** include any analysis process.
+  2. **Routing**: If the task is ongoing, output **ONLY** the name of the next Agent to execute. Do not provide extra text.
+team.prompt.guide: |-
+  ## History Analysis & Guidelines
+  - Reference collaboration history to avoid redundant turns.
+  - Task Finish Marker: {finishMarker}.
+  - Note: Do not terminate prematurely; ensure necessary expert input is obtained.
+team.prompt.instruction.title: |-
+  ## Core Task Instructions
+
+# ---- protocol base (TeamProtocolBase) ----
+team.base.agent.identity: |-
+  ## SYSTEM CONTEXT
+  ### Your Identity
+team.base.agent.history: |-
+  ### Collaboration Records (Last {window} entries)
+team.base.agent.footer: |-
+  ---
+  Please complete your task based on the progress.
+team.base.supervisor.protocol: |-
+  ## Collaboration Protocol: {protocol}
+  - Candidates: [{candidates}]
+  - Requirement: Output {finishMarker} when finished.
+
+# ---- agent run in team (Agent.run) ; the "[Skipped]" tag is a language-neutral marker ----
+team.run.skipped: |-
+  [Skipped] Cancelled by {interceptor}
+team.run.no_content: |-
+  Agent [{agent}] processed but returned no textual content.
+
+# ---- supervisor task (SupervisorTask) ----
+team.supervisor.skipped: |-
+  [Skipped] Intercepted by {interceptor}
+team.supervisor.progress: |-
+  ## Collaboration Progress (Last {window} rounds)
+team.supervisor.turn: |-
+  Current Iteration: {turn}
+team.supervisor.command: |-
+  Command: Assign next agent or output {finishMarker} to finish.
+team.supervisor.pending: |-
+  > **Pending Experts**: [{agents}].
+
+# ---- agent profile (AgentProfile.toFormatString) ----
+team.profile.input.text_only: |-
+  Input: Text only
+team.profile.input.modes: |-
+  Input Modes: {modes}
+team.profile.output.image: |-
+  Outputs: Images
+team.profile.capabilities: |-
+  Capabilities: {capabilities}
+team.profile.constraints: |-
+  Constraints: {constraints}
+team.profile.style: |-
+  Style: {style}
+
+# ---- A2A protocol ----
+team.a2a.tool.title: |-
+  Transfer
+team.a2a.tool.description: |-
+  When you are unable to complete the current task, hand it over to a more appropriate expert.
+team.a2a.tool.param.target: |-
+  Expert name. Options: {experts}
+team.a2a.tool.param.state: |-
+  Persistent JSON state.
+team.a2a.tool.param.memo: |-
+  Handover memo: put key findings/output the next expert should continue with.
+team.a2a.tool.result: |-
+  Transfer to [{target}] requested.
+team.a2a.agent.guide: |-
+  ## Collaboration Guidelines
+  - You must choose the target precisely based on [Capabilities] and [Modes] tags. Never transfer to an agent that lacks the required modality.
+team.a2a.agent.session.title: |-
+  ## Active Session Context
+  > This snapshot records the current state of the task. Continue execution based on this data.
+team.a2a.agent.session.trail: |-
+  - **Collaboration Trail**: {path}
+team.a2a.agent.session.prior: |-
+  - **Prior Expert**: {agent}
+team.a2a.agent.session.pending: |-
+  - **Pending Output**: {output}
+team.a2a.agent.session.state: |-
+  - **Global State**: {state}
+team.a2a.route.max_transfer: |-
+  Max transfer limit reached.
+team.a2a.route.transfer_failed: |-
+  [System] Transfer failed: Expert [{target}] is invalid or lacks required capabilities. Please re-select or resolve yourself.
+team.a2a.dashboard.title: |-
+  ### A2A Dashboard
+team.a2a.dashboard.state: |-
+  - Global State: {state}
+team.a2a.dashboard.count: |-
+  - Handovers: {count}
+team.a2a.supervisor.rules: |-
+  ### A2A Collaboration Rules:
+  1. **Direct Delivery**: Output `{finishMarker}` directly. **DO NOT** summarize.
+  2. **Handover Audit**: Force termination if more than 5 handovers occur.
+
+# ---- Swarm protocol ----
+team.swarm.tool.title: |-
+  Emerge Tasks
+team.swarm.tool.description: |-
+  Call this to decompose tasks or suggest other experts.
+team.swarm.tool.param.tasks: |-
+  Task descriptions, separated by semicolons
+team.swarm.tool.param.agents: |-
+  Suggested agent names, separated by semicolons
+team.swarm.tool.result: |-
+  System: Tasks added to pool.
+team.swarm.agent.guide: |-
+  ## Swarm Collaboration
+  - **Emergence**: Use `{tool}` to add sub-tasks to the pool when delegation or decomposition is needed.
+  - **Focus**: Only call the tool for new task dimensions; do not re-sync existing tasks.
+team.swarm.pool.snapshot: |-
+  [Swarm Task Pool Snapshot]
+team.swarm.supervisor.rules: |-
+  ### SWARM Decision Rules:
+  1. **Termination**: Output `{finishMarker}` when done.
+  2. **Routing**: Output only the next Agent name.
+  3. **Task Pool First**: When task_pool is non-empty, prioritize suggested agents.
+team.swarm.dashboard.title: |-
+  ### Swarm Intelligence Dashboard
+team.swarm.dashboard.guide: |-
+  > **Instruction**:
+  > 1. **Load Balancing**: Prioritize agents with lower pheromone values.
+  > 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Capabilities.
+  > 3. **Cool-down**: Avoid re-assigning the agent that just finished.
+team.swarm.dashboard.recommended: |-
+  > 4. **Recommended next**: `{agent}`
+
+# ---- Sequential protocol ----
+team.sequential.progress.title: |-
+  ### Pipeline Progress
+
+# ---- language-neutral recognition: assignment verbs in supervisor decisions (regex alternatives, separated by "|"; no "|" inside an item) ----
+team.supervisor.assign_verbs: |-
+  next(?:\s+agent)?|route(?:\s+to)?

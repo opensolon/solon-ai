@@ -1,0 +1,121 @@
+# solon-ai-agent 上下文压缩文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- LLMCompressionStrategy ----
+compress.llm.empty_marker: |-
+  (无显著进度)
+compress.llm.system: |-
+  ## 角色定义
+  你是一个高效的任务进度分析员。请简要总结 AI Agent 的执行历史片段。
+
+  ## 总结要点
+  1. **操作回顾**：已尝试的主要操作（工具调用及其关键参数）。
+  2. **关键发现**：获取到的核心信息或结论。
+  3. **当前进度**：目前处于任务的哪个阶段，还剩什么未完成。
+  4. **信息保留**：必须保留所有文件路径、函数名和技术细节，这些是后续执行的关键上下文。
+
+  ## 输出规范
+  - 要求：精炼、准确，不超过 300 字。
+  - 严禁包含：无关的客套话或自我介绍。
+  - 若无可总结内容，请回复：{emptyMarker}
+compress.llm.user_prefix: |-
+  ### 待压缩历史片段
+compress.llm.user_suffix: |-
+  ### 任务指令
+  请根据系统指令对上述执行过程进行语义总结：
+compress.llm.summary_prefix: |-
+  --- [执行进度总结] ---
+
+# ---- KeyInfoExtractionStrategy ----
+compress.keyinfo.empty_marker: |-
+  (无关键增量)
+compress.keyinfo.system: |-
+  ## 角色定义
+  你是一个精密的信息审计专家。你的任务是从杂乱的对话历史中"脱水"，仅保留高价值的结构化信息。
+
+  ## 提取维度
+  1. **业务参数**：用户提及的特定 ID、数值、时间、偏好或硬性约束。
+  2. **确定性事实**：通过工具调用已证实的真实状态或返回的关键结果。
+  3. **负面路径**：已验证为无效的尝试（防止 Agent 重复错误）。
+  4. **技术细节**：必须保留所有文件路径、函数名和技术标识，不可省略。
+
+  ## 输出规范
+  - 必须以简洁的 **Markdown 列表** 形式输出。
+  - 严禁包含任何推测、解释或修饰性语句。
+  - 如果没有发现关键信息，请直接回复：{emptyMarker}。
+compress.keyinfo.user_prefix: |-
+  ### 待处理历史片段
+compress.keyinfo.user_suffix: |-
+  ### 审计要求
+  请根据系统指令，提取上述片段中的关键信息。
+compress.keyinfo.summary_prefix: |-
+  --- [已确认的关键信息] ---
+
+# ---- HierarchicalCompressionStrategy ----
+compress.hierarchical.system: |-
+  ## 角色定义
+  你是一个专业的记忆管理专家，负责对 Agent 的执行历史进行层级化压缩。
+
+  ## 处理逻辑
+  请将『旧的压缩内容』与『新增的过期历史记录』合并，生成精炼的『当前进度摘要』。
+
+  ## 核心要求
+  1. **信息提取**：重点保留已确认的关键数据、当前的逻辑位置、以及已达成的阶段性结论。
+  2. **去重降噪**：移除重复的思考过程、已失效的尝试方案、以及无意义的中间状态。
+  3. **长度约束**：严格控制摘要长度，使用简洁的陈述句。
+  4. **路径保留**：必须保留所有文件路径、函数名和技术细节，这些是 Agent 后续执行的关键导航信息。
+
+  ## 注意事项
+  直接输出摘要正文，不要包含"好的"、"明白"或"根据您的要求"等废话。
+compress.hierarchical.no_summary: |-
+  （暂无）
+compress.hierarchical.user_data: |-
+  ### 旧的摘要内容
+  {summary}
+
+  ### 新增的过期历史记录
+  {history}
+
+  ### 最终任务要求
+  请根据 System Message（系统指令）中的逻辑，输出更新后的『进度摘要』：
+compress.hierarchical.summary_prefix: |-
+  --- [全局进度滚动摘要 (层级压缩)] ---
+
+# ---- VectorStoreCompressionStrategy ----
+compress.vector.description: |-
+  历史记忆回溯
+compress.vector.archived_tag: |-
+  历史细节已归档
+compress.vector.instruction: |-
+  - 当你看到内容包含 '--- [{archivedTag}] ---' 标记时，说明部分执行细节已转入冷记忆。
+  - 如果后续任务需要早前的具体事实、ID 或详细数据，请调用 `recall_history` 工具找回。
+compress.vector.archived_notice: |-
+  --- [{archivedTag}，必要时请使用 recall_history 工具回溯] ---
+compress.vector.tool.description: |-
+  回溯本会话中早前已归档的长记忆、历史细节或事实
+compress.vector.tool.param.query: |-
+  检索关键词或核心短语
+compress.vector.tool.param.limit: |-
+  返回记忆片段的数量
+compress.vector.recall.empty_query: |-
+  请提供具体的关键词以进行历史回溯。
+compress.vector.recall.invalid_session: |-
+  [系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。
+compress.vector.recall.not_found: |-
+  记忆库中暂未找到关于 '{query}' 的相关记录。可能是该话题未被归档，或关键词不匹配。
+compress.vector.recall.failed: |-
+  [系统通知] 历史记忆访问受阻。请尝试基于当前已知对话继续执行。
+
+# ---- CompressionUtil ----
+compress.util.action: |-
+  [Action]: 调用工具 {tool}
+compress.util.action_args: |-
+  ，参数: {args}
+compress.util.observation: |-
+  [Observation]: 得到结果 {content}
+
+# ---- ContextCompressionInterceptor ----
+compress.interceptor.truncated: |-
+  ... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。如需完整内容，请用分页方式重新获取] ...
+compress.interceptor.truncated_short: |-
+  [内容已截断]

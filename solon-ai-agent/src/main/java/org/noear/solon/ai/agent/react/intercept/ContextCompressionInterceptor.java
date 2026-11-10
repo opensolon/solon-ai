@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.react.intercept;
 import com.knuddels.jtokkit.api.Encoding;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.PlanContextRenderer;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActOptions;
@@ -46,6 +48,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -740,7 +743,7 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
             }
 
             ChatMessage bounded = rebuildWithContent(summary,
-                    truncateTextToTokens(content, effectiveSummaryBudget));
+                    truncateTextToTokens(content, effectiveSummaryBudget, CompressionUtil.localeOf(trace)));
             if (bounded == null) {
                 // 自定义策略可能返回带厂商扩展字段或多模态块的消息；宁可回退，也不做有损重建。
                 log.warn("ReActAgent [{}] oversized compression result cannot be safely rebuilt, fallback to safe trimming",
@@ -1247,7 +1250,7 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
                 continue;
             }
 
-            String truncated = truncateTextToTokens(content, cap);
+            String truncated = truncateTextToTokens(content, cap, CompressionUtil.localeOf(trace));
             ChatMessage replacement = rebuildWithContent(msg, truncated);
             if (replacement == null) {
                 // 无法安全重建（类型不支持）→ 保持原样，交由后续逻辑处理
@@ -1373,16 +1376,15 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
      * 将文本按 Token 预算做头尾保留截断（中间插入显式占位）。
      * 以字符切分逼近，再用编码器精确收敛，确保结果不超过 tokenThreshold。
      */
-    private String truncateTextToTokens(String text, int tokenThreshold) {
+    private String truncateTextToTokens(String text, int tokenThreshold, Locale locale) {
         if (text == null || ENCODING_FOR_MODEL.countTokens(text) <= tokenThreshold) {
             return text;
         }
 
-        String marker = "\n... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。"
-                + "如需完整内容，请用分页方式重新获取] ...\n";
+        String marker = "\n" + AgentI18n.get(locale, AgentI18nKeys.COMPRESS_INTERCEPTOR_TRUNCATED) + "\n";
         int markerTokens = ENCODING_FOR_MODEL.countTokens(marker);
         if (markerTokens > tokenThreshold) {
-            String shortMarker = "[内容已截断]";
+            String shortMarker = AgentI18n.get(locale, AgentI18nKeys.COMPRESS_INTERCEPTOR_TRUNCATED_SHORT);
             while (!shortMarker.isEmpty() && ENCODING_FOR_MODEL.countTokens(shortMarker) > tokenThreshold) {
                 shortMarker = shortMarker.substring(0, shortMarker.length() - 1);
             }

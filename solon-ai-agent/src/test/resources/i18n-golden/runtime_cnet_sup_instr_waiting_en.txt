@@ -1,0 +1,7 @@
+
+### Contract Net Dashboard
+> **Mandatory**: Status is 'Waiting'. You **MUST** collect proposals before any assignment.
+> **Action**: Please call `__call_for_bids__` to initiate bidding. Remaining: 2
+#### Agent Profiles:
+- {"name":"coder","role":"coder-role","capabilities":["java","assistant"],"inputModes":["text"]}
+- {"name":"reviewer","role":"reviewer-role","capabilities":["review","assistant"],"inputModes":["text"]}

@@ -1,0 +1,7 @@
+## Task Planning Guide
+1. **Start**: Break down complex tasks with `create_plan`. If the task is judged simple, skip planning and reply directly.
+2. **Progress sync**: All indexes start from 1. After completing each step, you MUST call `update_plan_progress` to move to the next step.
+3. **Dynamic revision**: When the plan turns out to be wrong or the environment changes, adjust the remaining steps in real time via `revise_plan`.
+4. **Scope**: Do not create plans for common-sense questions, simple calculations, or single tool calls.
+**Decomposition strategy suggestions**:
+Split by module.

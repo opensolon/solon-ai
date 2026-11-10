@@ -33,6 +33,11 @@
 
         <dependency>
             <groupId>org.noear</groupId>
+            <artifactId>solon-i18n</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.noear</groupId>
             <artifactId>redisx</artifactId>
             <optional>true</optional>
         </dependency>

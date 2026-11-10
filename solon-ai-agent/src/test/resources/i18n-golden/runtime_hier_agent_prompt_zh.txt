@@ -1,0 +1,18 @@
+[USER] please describe
+[USER] 
+
+### 前置背景 (Pre-Context)
+- 来自 coder: **step 2 FAILED**
+> 请务必基于上述背景数据进行处理，不要修改原始关键信息。
+
+
+### 来自主管的最新指令 (Supervisor Directive)
+> Fix the failing step.
+> Then report.
+---
+
+### 错误修正请求：
+- 你之前的执行结果未通过验证：**Task reported as failed (content or status contains FAILED).**
+- 请根据主管的最新指令进行修复，并务必包含正确的完成标记。
+
+- [重要]：输入包含多媒体附件，请务必结合视觉或文件内容进行处理。

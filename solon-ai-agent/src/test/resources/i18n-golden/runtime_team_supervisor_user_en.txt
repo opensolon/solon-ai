@@ -1,0 +1,8 @@
+## Collaboration Progress (Last 8 rounds)
+### Expert Output from [coder]:
+draft v1 done
+
+---
+Current Iteration: 1
+Command: Assign next agent or output [FINISH] to finish.
+> **Pending Experts**: [reviewer].

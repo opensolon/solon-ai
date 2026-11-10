@@ -16,22 +16,30 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
-import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
-import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -45,30 +53,145 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
     private static final Logger log = LoggerFactory.getLogger(VectorStoreCompressionStrategy.class);
 
     private final RepositoryStorable vectorRepository;
+    private final Map<Locale, Collection<FunctionTool>> localizedTools = new ConcurrentHashMap<>();
+    private volatile Locale locale;
 
     public VectorStoreCompressionStrategy(RepositoryStorable vectorRepository) {
         this.vectorRepository = vectorRepository;
+
+        //默认语言的工具同时登记到内部工具表（兼容 getToolAry()/getToolMap()）
+        Locale defLocale = AgentI18n.getDefaultLocale();
+        Collection<FunctionTool> defTools = buildTools(defLocale);
+        defTools.forEach(this::internalAddTool);
+        localizedTools.put(defLocale, defTools);
+    }
+
+    /**
+     * 设置语言（影响才能描述、指令、工具描述与工具返回文案；为 null 时使用默认语言）
+     *
+     * <p>未设置时，指令、工具描述与工具返回文案跟随请求语言（Prompt.attrs 中的 {@link AgentI18n#ATTR_LOCALE}），归档通知跟随 trace 语言。</p>
+     *
+     * @since 4.2
+     */
+    public VectorStoreCompressionStrategy locale(Locale locale) {
+        this.locale = locale;
+        return this;
+    }
+
+    /**
+     * 获取语言（未设置时为 null）
+     *
+     * @since 4.2
+     */
+    public Locale getLocale() {
+        return locale;
+    }
+
+    /**
+     * 获取归档通知文本（压缩产物）
+     *
+     * @param locale 语言（null 时使用默认语言）
+     * @since 4.2
+     */
+    public static String getArchivedNotice(Locale locale) {
+        return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_VECTOR_ARCHIVED_NOTICE, "archivedTag", AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_ARCHIVED_TAG));
+    }
+
+    /**
+     * 是否包含归档标记（识别所有内置语言，兼容会话中切换语言）
+     *
+     * <p>标记文本与指令中提到的标记来自同一 key（compress.vector.archived_tag）。</p>
+     *
+     * @param content 消息文本
+     * @since 4.2
+     */
+    public static boolean isArchivedNotice(String content) {
+        if (content == null) {
+            return false;
+        }
+        for (String tag : CompressionUtil.textsOfAllLocales(null, AgentI18nKeys.COMPRESS_VECTOR_ARCHIVED_TAG)) {
+            if (content.contains("--- [" + tag)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
     public String description() {
-        return "历史记忆回溯";
+        return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "- 当你看到内容包含 '--- [历史细节已归档] ---' 标记时，说明部分执行细节已转入冷记忆。\n" +
-                "- 如果后续任务需要早前的具体事实、ID 或详细数据，请调用 `recall_history` 工具找回。";
+        Locale l = localeOf(prompt);
+        return AgentI18n.fmt(l, AgentI18nKeys.COMPRESS_VECTOR_INSTRUCTION, "archivedTag", AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_ARCHIVED_TAG));
+    }
+
+    /**
+     * 有效语言：显式设置 > 请求语言 > 默认语言
+     */
+    private Locale localeOf(Prompt prompt) {
+        return locale != null ? locale : AgentI18n.localeOf(prompt);
+    }
+
+    /**
+     * 工具按有效语言构建并缓存：描述、参数描述与工具返回文案都绑定同一语言。
+     *
+     * <p>策略实例会被多个请求共用，故不在字段里保存请求语言，而是每种语言一套工具（处理器闭包捕获语言）。</p>
+     */
+    @Override
+    public Collection<FunctionTool> getTools(Prompt prompt) {
+        Locale l = AgentI18n.resolve(localeOf(prompt));
+        return localizedTools.computeIfAbsent(l, this::buildTools);
+    }
+
+    private Collection<FunctionTool> buildTools(Locale l) {
+        FunctionTool tool = new FunctionToolDesc("recall_history")
+                .title("")
+                .returnType(String.class)
+                .description(AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_TOOL_DESCRIPTION))
+                .paramAdd("query", String.class, AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_TOOL_PARAM_QUERY))
+                .paramAdd("limit", int.class, true, AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_TOOL_PARAM_LIMIT), "3")
+                .doHandle(args -> recall(l,
+                        args.get("query") == null ? null : String.valueOf(args.get("query")),
+                        toLimit(args.get("limit")),
+                        args.get(ChatSession.ATTR_SESSIONID) == null ? null : String.valueOf(args.get(ChatSession.ATTR_SESSIONID))));
+
+        return Collections.singletonList(tool);
+    }
+
+    private static int toLimit(Object val) {
+        if (val instanceof Number) {
+            return Math.max(1, ((Number) val).intValue());
+        }
+        if (val != null) {
+            try {
+                return Math.max(1, (int) Double.parseDouble(String.valueOf(val).trim()));
+            } catch (NumberFormatException ignore) {
+                //非法值按默认数量处理
+            }
+        }
+        return 3;
     }
 
     // --- Tool 实现（负责"取"） ---
-    @ToolMapping(name = "recall_history", description = "回溯本会话中早前已归档的长记忆、历史细节或事实")
-    public String recall(@Param(name = "query", description = "检索关键词或核心短语") String query,
-                         @Param(name = "limit", description = "返回记忆片段的数量", defaultValue = "3") int limit,
-                         String __sessionId) {
 
+    /**
+     * 回溯历史（返回文案使用显式设置的语言，未设置时为默认语言）
+     */
+    public String recall(String query, int limit, String __sessionId) {
+        return recall(locale, query, limit, __sessionId);
+    }
+
+    /**
+     * 回溯历史（返回文案使用指定语言）
+     *
+     * @since 4.2
+     */
+    public String recall(Locale locale, String query, int limit, String __sessionId) {
         if (Assert.isEmpty(query)) {
-            return "请提供具体的关键词以进行历史回溯。";
+            return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_RECALL_EMPTY_QUERY);
         }
 
         // sessionId 防护：白名单校验优于转义。不同向量库的 filterExpression 方言对元字符
@@ -76,18 +199,18 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
         // 本就仅包含字母、数字、-_。不符合白名单则拒绝查询，从根本上消除表达式注入面。
         if (__sessionId == null || !isSafeSessionId(__sessionId)) {
             log.warn("Recall history rejected: invalid sessionId format: {}", __sessionId);
-            return "[系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。";
+            return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_RECALL_INVALID_SESSION);
         }
 
         QueryCondition condition = new QueryCondition(query)
-                .filterExpression("sessionId = '" + __sessionId + "'")
+                .filterExpression("sessionId == '" + __sessionId + "'")
                 .limit(limit);
 
         try {
             List<Document> docs = vectorRepository.search(condition);
 
             if (docs.isEmpty()) {
-                return "记忆库中暂未找到关于 '" + query + "' 的相关记录。可能是该话题未被归档，或关键词不匹配。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_VECTOR_RECALL_NOT_FOUND, "query", query);
             }
 
             return docs.stream()
@@ -99,7 +222,7 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
 
         } catch (Throwable e) {
             log.error("Recall history failed. SessionId: {}, Query: {}", __sessionId, query, e);
-            return "[系统通知] 历史记忆访问受阻。请尝试基于当前已知对话继续执行。";
+            return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_RECALL_FAILED);
         }
     }
 
@@ -130,10 +253,14 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             return null;
         }
 
+        // 显式设置的语言优先，否则跟随智能体语言
+        Locale msgLocale = (locale != null ? locale : CompressionUtil.localeOf(trace));
+
         // 使用 CompressionUtil 统一格式化消息（超长内容自动截断）
         String archivedContent = messagesToCompress.stream()
                 .filter(m -> !m.hasMetadata(AgentTrace.META_FIRST))
-                .map(CompressionUtil::formatMessageForCompression)
+                .map(m -> CompressionUtil.formatMessageForCompression(m,
+                        CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH, msgLocale))
                 .collect(Collectors.joining("\n"));
 
         if (Assert.isEmpty(archivedContent.trim())) return null;
@@ -149,7 +276,7 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             vectorRepository.save(doc);
 
             // 返回一个紧凑的系统通知
-            return ChatMessage.ofUser("--- [历史细节已归档，必要时请使用 recall_history 工具回溯] ---");
+            return ChatMessage.ofUser(getArchivedNotice(msgLocale));
 
         } catch (Throwable e) {
             log.error("Failed to archive to vector store", e);

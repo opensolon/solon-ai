@@ -16,9 +16,12 @@
 package org.noear.solon.ai.agent.simple;
 
 import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
+import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -57,14 +60,15 @@ public class SimpleSystemPrompt implements AgentSystemPrompt<SimpleTrace> {
         String role = getRole(trace);
         String instruction = getInstruction(trace);
 
+        Locale locale = AgentI18n.resolve(trace.getOptions().getLocale());
         StringBuilder sb = new StringBuilder();
 
         if (Assert.isNotEmpty(role)) {
-            sb.append("## 你的角色\n").append(role).append("。\n\n");
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.SIMPLE_PROMPT_ROLE, "role", role)).append("\n\n");
         }
 
         if (Assert.isNotEmpty(instruction)) {
-            sb.append("## 执行指令\n").append(instruction);
+            sb.append(AgentI18n.get(locale, AgentI18nKeys.SIMPLE_PROMPT_INSTRUCTION_TITLE)).append("\n").append(instruction);
         }
 
         return sb.toString();

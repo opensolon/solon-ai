@@ -1,0 +1,10 @@
+## 任务上下文 (SYSTEM CONTEXT)
+### 你的身份
+输入限制: 仅限文本 | 核心能力: review, assistant
+
+### 协作进度 (最近 8 条)
+### Expert Output from [coder]:
+draft v1 done
+
+---
+请根据上述进度完成你的任务。

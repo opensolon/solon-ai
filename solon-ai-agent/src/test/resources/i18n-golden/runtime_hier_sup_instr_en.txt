@@ -1,0 +1,17 @@
+
+## Hierarchical Dashboard
+```json
+{"_reports":{"coder":"step 2 FAILED"},"_meta":{"errors":{"coder":"Task reported as failed (content or status contains FAILED)."},"agent_usage":{"coder":3},"capabilities":{"coder":["text"],"reviewer":["text"]}}}
+```
+
+### Directive Standards (SOP):
+> 1. **Explicit Data Transfer**: Always restate core parameters from `_results`.
+
+### Management & Decision Hints:
+> **Decision Hint**: Check progress. Keep scheduling if errors exist or key steps are missing.
+> **Workflow Integrity**: Ensure both design and implementation (e.g., `implementer`) roles have participated. Do not skip execution steps.
+> **Final Delivery**: If satisfied, output `[FINISH]` and **consolidate the final code/result** in this response for the USER.
+> **Crucial**: Once the marker is output, the workflow ends. You cannot assign agents anymore. Ensure the final delivery is complete.
+> **Load Balance**: Refer to `agent_usage`. If an agent fails repeatedly, switch approach or adjust instructions.
+
+> **![Risk Alert]**: Agents [coder] have been called repeatedly. Stop the loop, request detailed feedback, or try a different approach.

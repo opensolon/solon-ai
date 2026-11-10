@@ -1,0 +1,10 @@
+
+### 蜂群状态看板 (Swarm Intelligence)
+```json
+{"pheromones":{},"taskPool":[{"task":"write tests","agent":"reviewer"}]}
+```
+> **调度指引**：
+> 1. **负载均衡**：优先指派 pheromones 值较低的成员。
+> 2. **能力匹配**：确保 task_pool 中的任务描述与 Agent 的 Capabilities 一致。
+> 3. **冷却避障**：避免连续指派刚执行完的 Agent。
+> 4. **推荐下一执行者**：`reviewer`

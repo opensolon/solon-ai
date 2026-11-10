@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.agent.AgentTrace;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
@@ -198,6 +199,9 @@ public class ReActTrace implements AgentTrace {
         this.finalMediaBlocks = null;
         this.abnormal = false;
 
+        //会话恢复：登记旧会话的语言（旧消息中的标记需在所有已知语言中识别；此处早于 activeTalents 的 putLocale）
+        AgentI18n.registerLocaleOf(originalPrompt);
+
         //空响应计数器按“本次执行”隔离：它计的是连续空响应，续跑（HITL 恢复、无 prompt 恢复）
         //不走 reset(prompt)，若沿用上次的历史值，会让本次首个偶发空响应直接跨过重试上限而误熔断
         this.emptyRetryCounter.set(0);
@@ -210,6 +214,9 @@ public class ReActTrace implements AgentTrace {
         if (originalPrompt != null && Assert.isNotEmpty(getOptions().getToolContext())) {
             originalPrompt.attrs().putAll(getOptions().getToolContext());
         }
+
+        //请求语言（Talent 拿不到 trace，经 Prompt.attrs 读取；存为语言标签字符串，保证会话快照可还原）
+        AgentI18n.putLocale(originalPrompt, getOptions().getLocale());
 
         //设置指令
         StringBuilder talentsInstruction = TalentUtil.activeTalents(options.getModelOptions(), originalPrompt, new StringBuilder());

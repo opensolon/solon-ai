@@ -1,0 +1,20 @@
+## SYSTEM CONTEXT
+### Your Identity
+Input: Text only | Capabilities: review, assistant
+
+### Collaboration Records (Last 8 entries)
+### Expert Output from [coder]:
+draft v1 done
+
+---
+Please complete your task based on the progress.
+## Collaboration Guidelines
+- You must choose the target precisely based on [Capabilities] and [Modes] tags. Never transfer to an agent that lacks the required modality.
+
+## Active Session Context
+> This snapshot records the current state of the task. Continue execution based on this data.
+
+- **Collaboration Trail**: coder
+- **Prior Expert**: coder
+- **Pending Output**: please review the api
+- **Global State**: api drafted

@@ -19,6 +19,8 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentProfile;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -57,6 +59,17 @@ public class ContractNetProtocol extends TeamProtocolBase {
     private static final String TOOL_SUBMIT_BID = "__submit_proposal__";
 
     private final int maxBiddingRounds = 2;
+
+    /**
+     * 内置的招标关键词（与资源文件 {@code protocol.contractnet.bidding_keywords} 合并使用；扩展语言请改资源文件）
+     */
+    protected static final List<String> BIDDING_KEYWORDS = Collections.unmodifiableList(Arrays.asList(
+            "招标",
+            "BIDDING",
+            "CALL FOR BIDS",
+            "CALL-FOR-BIDS",
+            "CALL_FOR_BIDS",
+            TOOL_CALL_BIDS.toUpperCase(Locale.ROOT)));
 
     public static class ContractState {
         private final Map<String, ONode> bids = new LinkedHashMap<>();
@@ -260,23 +273,18 @@ public class ContractNetProtocol extends TeamProtocolBase {
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_SUBMIT_BID).returnDirect(true);
         tool.metaPut(Agent.META_AGENT, agent.name());
 
-        boolean isZh = isChinese(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
 
-        if (isZh) {
-            tool.title("提交投标").description("提交你的执行计划和信心分。")
-                    .intParamAdd("score", "信心分(1-100)")
-                    .stringParamAdd("plan", "计划摘要");
-        } else {
-            tool.title("Submit Bid").description("Submit your execution plan and confidence score.")
-                    .intParamAdd("score", "Confidence score(1-100)")
-                    .stringParamAdd("plan", "Plan summary");
-        }
+        tool.title(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_TITLE))
+                .description(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_DESCRIPTION))
+                .intParamAdd("score", AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_PARAM_SCORE))
+                .stringParamAdd("plan", AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_PARAM_PLAN));
 
         tool.doHandle(args -> {
             int score = normalizeScore(args.get("score"));
             String plan = args.get("plan") == null ? "" : String.valueOf(args.get("plan")).trim();
             if (plan.isEmpty()) {
-                return isZh ? "投标失败：plan 不能为空。" : "Bid rejected: plan is required.";
+                return AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_PLAN_REQUIRED);
             }
 
             if (LOG.isDebugEnabled()) {
@@ -289,7 +297,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
             bid.set("plan", plan);
             bid.set("auto_bid", false);
             state.addBid(agent.name(), bid);
-            return isZh ? "标书已收录。" : "Bid received.";
+            return AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_RECEIVED);
         });
 
         receiver.accept(tool);
@@ -307,12 +315,10 @@ public class ContractNetProtocol extends TeamProtocolBase {
         if (awarded != null && awarded.equalsIgnoreCase(agent.name())) {
             ONode bid = state.getBid(agent.name());
             if (bid != null) {
-                boolean isZh = isChinese(locale != null ? locale : trace.getOptions().getLocale());
+                Locale effectiveLocale = locale != null ? locale : trace.getOptions().getLocale();
                 String plan = bid.get("plan").getString();
 
-                String awardNotice = isZh
-                        ? "\n【中标执行指令】\n> 你已在竞标中胜出。请严格按你提交的计划执行：\n" + plan
-                        : "\n [Award Execution Order] \n> You won the bid. Execute strictly according to your plan:\n" + plan;
+                String awardNotice = "\n" + AgentI18n.fmt(effectiveLocale, AgentI18nKeys.PROTOCOL_CONTRACTNET_PROMPT_AWARD, "plan", plan);
 
                 finalPrompt.addMessage(ChatMessage.ofUser(awardNotice));
             }
@@ -329,16 +335,12 @@ public class ContractNetProtocol extends TeamProtocolBase {
             return;
         }
 
-        boolean isZh = isChinese(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
         FunctionToolDesc tool = new FunctionToolDesc(TOOL_CALL_BIDS);
 
-        if (isZh) {
-            tool.title("发起招标").description("向全体专家征集方案。当你无法确定由谁执行任务时使用此工具。")
-                    .stringParamAdd("requirement", "任务具体需求");
-        } else {
-            tool.title("Call for Bids").description("Collect proposals from all experts when the best executor is not obvious.")
-                    .stringParamAdd("requirement", "Task requirements");
-        }
+        tool.title(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_TITLE))
+                .description(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_DESCRIPTION))
+                .stringParamAdd("requirement", AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_PARAM_REQUIREMENT));
 
         tool.doHandle(args -> {
             String requirement = args.get("requirement") == null ? null : String.valueOf(args.get("requirement")).trim();
@@ -351,13 +353,11 @@ public class ContractNetProtocol extends TeamProtocolBase {
             }
 
             if (!tryStartNewBidding(trace, requirement)) {
-                return isZh
-                        ? "招标次数已耗尽。请根据现有标书定标，或直接回复用户无法完成。"
-                        : "Bidding rounds exhausted. Award an existing bid or inform the user.";
+                return AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_EXHAUSTED);
             }
 
             trace.setRoute(ID_BIDDING);
-            return isZh ? "已进入招标流程。" : "Bidding phase initiated.";
+            return AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_STARTED);
         });
 
         receiver.accept(tool);
@@ -385,14 +385,12 @@ public class ContractNetProtocol extends TeamProtocolBase {
             ContractState state = getContractState(trace);
 
             if (!state.hasAgentBid(agentName)) {
-                boolean isZh = isChinese(trace.getOptions().getLocale());
                 if (LOG.isWarnEnabled()) {
                     LOG.warn("ContractNet: Compliance violation! Supervisor tried to assign '{}' without a bid.", agentName);
                 }
 
-                String warnMsg = isZh
-                        ? "【系统指引】指派无效。必须先调用 " + TOOL_CALL_BIDS + " 获取标书，且只能指派已出现在 bids_board 中的专家。"
-                        : "[System] Invalid assignment. You must call " + TOOL_CALL_BIDS + " first and only assign experts listed in bids_board.";
+                String warnMsg = AgentI18n.fmt(trace.getOptions().getLocale(),
+                        AgentI18nKeys.PROTOCOL_CONTRACTNET_ROUTE_INVALID_ASSIGNMENT, "tool", TOOL_CALL_BIDS);
                 trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, warnMsg, 0);
 
                 if (tryStartNewBidding(trace, null)) {
@@ -439,10 +437,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
                 trace.setRoute(ID_BIDDING);
             } else {
                 // 无法再招标：终止非法路径
-                boolean isZh = isChinese(trace.getOptions().getLocale());
-                String msg = isZh
-                        ? "无法定标：目标专家无有效标书且招标次数已耗尽。"
-                        : "Cannot award: target has no bid and bidding rounds are exhausted.";
+                String msg = AgentI18n.get(trace.getOptions().getLocale(), AgentI18nKeys.PROTOCOL_CONTRACTNET_ROUTE_CANNOT_AWARD);
                 trace.addRecord(ChatRole.SYSTEM, ID_BIDDING, msg, 0);
                 trace.setFinalAnswer(msg);
                 trace.setRoute(Agent.ID_END);
@@ -466,39 +461,29 @@ public class ContractNetProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         ContractState state = getContractState(trace);
-        boolean isZh = isChinese(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
 
         int remaining = Math.max(0, maxBiddingRounds - state.getRounds());
 
         if (state.getRounds() > 0 && !state.hasBids()) {
             if (remaining > 0) {
-                sb.append(isZh ? "\n> [警告] 前一轮招标无人响应。剩余尝试次数: " + remaining
-                        : "\n> [Warning] No bids in previous round. Remaining attempts: " + remaining);
+                sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_NO_BIDS_WARNING, "remaining", remaining));
             } else {
-                sb.append(isZh ? "\n> [最终警告] 招标次数已耗尽。请停止招标，直接回复用户：该任务超出了当前团队的能力范围。"
-                        : "\n> [Final Warning] No more bidding rounds. Stop bidding and inform the user that the task is out of scope.");
+                sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_FINAL_WARNING));
             }
         } else if (remaining == 0 && state.hasBids()) {
-            sb.append(isZh ? "\n> [提示] 招标次数已用尽，请基于当前看板完成定标。\n"
-                    : "\n> [Note] No more bidding rounds. Award based on the current board.\n");
+            sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_ROUNDS_USED_UP)).append("\n");
         }
 
-        sb.append(isZh ? "\n### 合同网竞标看板\n" : "\n### Contract Net Dashboard\n");
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_DASHBOARD_TITLE)).append("\n");
         if (state.hasBids()) {
             sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
-            sb.append(isZh ? "> 提示：请根据各专家的 `score` 和 `plan` 择优指派。剩余招标次数: " + remaining + "\n"
-                    : "> Tips: Award the best candidate by `score`/`plan`. Remaining bidding rounds: " + remaining + "\n");
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_DASHBOARD_TIPS, "remaining", remaining)).append("\n");
         } else {
-            if (isZh) {
-                sb.append("> **强制规范**：当前处于“待招标”状态。在进行任何指派前，**必须**先获取专家标书。\n");
-                sb.append("> **操作建议**：请调用 `").append(TOOL_CALL_BIDS).append("` 工具发起招标。剩余次数: ").append(remaining).append("\n");
-            } else {
-                sb.append("> **Mandatory**: Status is 'Waiting'. You **MUST** collect proposals before any assignment.\n");
-                sb.append("> **Action**: Please call `").append(TOOL_CALL_BIDS).append("` to initiate bidding. Remaining: ").append(remaining).append("\n");
-            }
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_DASHBOARD_WAITING, "tool", TOOL_CALL_BIDS, "remaining", remaining)).append("\n");
         }
 
-        sb.append(isZh ? "#### 成员资质表:\n" : "#### Agent Profiles:\n");
+        sb.append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_PROFILES_TITLE)).append("\n");
         config.getAgentMap().forEach((name, ag) -> {
             sb.append("- ").append(ag.toMetadata(context).toJson()).append("\n");
         });
@@ -507,20 +492,7 @@ public class ContractNetProtocol extends TeamProtocolBase {
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = isChinese(locale);
-        if (isZh) {
-            sb.append("\n### CNP 协作规范：\n");
-            sb.append("1. **工具招标**：若无法确定最佳人选，优先调用 `").append(TOOL_CALL_BIDS).append("`。\n");
-            sb.append("2. **择优录取**：对比看板中的标书分数，直接回复专家名称进行定标。\n");
-            sb.append("3. **模态检查**：请确保所选专家的 `Modes` 支持当前任务模态（如识图需具备 `image`）。\n");
-            sb.append("4. **禁止旁路**：未出现在 bids_board 中的专家禁止指派。");
-        } else {
-            sb.append("\n### CNP Collaboration Rules:\n");
-            sb.append("1. **Tool Usage**: Call `").append(TOOL_CALL_BIDS).append("` if unsure about assignments.\n");
-            sb.append("2. **Decision**: Award the task by naming the best agent based on their bid score.\n");
-            sb.append("3. **Constraint**: Match task requirements with agent `Modes` (e.g., `image` for vision tasks).\n");
-            sb.append("4. **No Bypass**: Never assign an expert not listed in bids_board.");
-        }
+        sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_CONTRACTNET_SUPERVISOR_GUIDELINES, "tool", TOOL_CALL_BIDS));
     }
 
     /**
@@ -616,10 +588,18 @@ public class ContractNetProtocol extends TeamProtocolBase {
             return false;
         }
         String upper = decision.toUpperCase(Locale.ROOT);
-        return upper.contains("BIDDING")
-                || upper.contains("招标")
-                || upper.contains("CALL_FOR_BIDS")
-                || upper.contains(TOOL_CALL_BIDS.toUpperCase(Locale.ROOT));
+        for (String kw : BIDDING_KEYWORDS) {
+            if (upper.contains(kw)) {
+                return true;
+            }
+        }
+        //资源文件中的关键词（合并所有已知语言；用户新增语言文件后自动生效）
+        for (String kw : AgentI18n.itemsOfAllLocales(AgentI18nKeys.PROTOCOL_CONTRACTNET_BIDDING_KEYWORDS)) {
+            if (upper.contains(kw.toUpperCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -718,6 +698,6 @@ public class ContractNetProtocol extends TeamProtocolBase {
     }
 
     protected boolean isChinese(Locale locale) {
-        return locale != null && Locale.CHINA.getLanguage().equals(locale.getLanguage());
+        return AgentI18n.isChinese(locale);
     }
 }

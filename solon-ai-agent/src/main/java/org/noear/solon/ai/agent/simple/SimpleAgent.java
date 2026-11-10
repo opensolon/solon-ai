@@ -136,6 +136,11 @@ public class SimpleAgent implements Agent<SimpleRequest, SimpleResponse> {
         if (parentTeamTrace != null && parentTeamTrace.getOptions() != null) {
             //传递流控
             options.setStreamSink(parentTeamTrace.getOptions().getStreamSink());
+
+            //继承团队的语言（成员自己显式设置的优先）
+            if (options.isLocaleExplicit() == false) {
+                options.setLocale(parentTeamTrace.getOptions().getLocale());
+            }
         }
 
         //添加必要的工具上下文

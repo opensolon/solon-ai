@@ -17,6 +17,7 @@ package org.noear.solon.ai.agent.react;
 
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
@@ -47,8 +48,8 @@ public class ReActOptions implements NonSerializable {
     private String role;
     /** 智能体指令描述（用于模型识别指令） */
     private String instruction;
-    /** 提示词模板（默认中文） */
-    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptCn.getDefault();
+    /** 提示词模板（语言由 locale 决定，默认中文） */
+    private AgentSystemPrompt<ReActTrace> systemPrompt = ReActSystemPromptDefault.getDefault();
     /** 语言环境 */
     private Locale locale;
 
@@ -298,12 +299,22 @@ public class ReActOptions implements NonSerializable {
         return prompt;
     }
 
+    /**
+     * 获取语言环境（配置驱动：显式设置优先，否则用默认语言，默认中文）
+     *
+     * @see AgentI18n#getDefaultLocale()
+     */
     public Locale getLocale() {
-        if (locale == null) {
-            return systemPrompt.getLocale();
-        } else {
-            return locale;
-        }
+        return locale == null ? AgentI18n.getDefaultLocale() : locale;
+    }
+
+    /**
+     * 是否显式设置了 locale（未设置时，作为团队成员会继承团队的语言）
+     *
+     * @since 4.2
+     */
+    public boolean isLocaleExplicit() {
+        return locale != null;
     }
 
     public FunctionTool getTool(String name) {

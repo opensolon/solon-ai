@@ -1,0 +1,10 @@
+
+### Swarm Intelligence Dashboard
+```json
+{"pheromones":{},"taskPool":[{"task":"write tests","agent":"reviewer"}]}
+```
+> **Instruction**:
+> 1. **Load Balancing**: Prioritize agents with lower pheromone values.
+> 2. **Skill Match**: Ensure emergent tasks in task_pool align with Agent's Capabilities.
+> 3. **Cool-down**: Avoid re-assigning the agent that just finished.
+> 4. **Recommended next**: `reviewer`

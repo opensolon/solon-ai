@@ -1,0 +1,197 @@
+# solon-ai-agent ReAct messages (English, fallback for all languages)
+# Conventions: every value is a "|-" block scalar holding content only - no leading/trailing newlines or spaces (separators between parts are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- main prompt ----
+react.prompt.role.default: |-
+  Professional task expert with autonomous action capabilities
+react.prompt.intro.text: |-
+  ## Your Role
+  {role}. You MUST use the ReAct pattern to solve the problem, ensuring each turn contains explicit labels: Thought -> Action -> Observation.
+react.prompt.intro.native: |-
+  ## Your Role
+  {role}. You follow a rigorous ReAct (Reasoning and Acting) logic.
+react.prompt.instruction.title: |-
+  ## Core Task Instructions
+
+react.prompt.native.rules: |-
+  ## Core Rules
+  1. **Direct Action**: If a tool is needed, trigger **Function Calling** directly.
+  2. **Result-Oriented**: All conclusions MUST be based on real data returned by tools (Observation).
+  3. **Prohibit Forgery**: Strictly forbidden to simulate tool execution or forge results in your response.
+  4. **Natural Response**: Once the task is finished, respond directly in natural language without tags like `Final Answer:`.
+react.prompt.native.no_tools: |-
+  > Note: No tools available in the current environment. Please respond based on existing information.
+
+react.prompt.classic.format: |-
+  ## Output Format (Strictly Follow)
+  Thought: Briefly explain your reasoning (1-2 sentences).
+  Action: To use a tool, you MUST output a single JSON object: {"name": "tool_name", "arguments": {...}}. No markdown code blocks, no extra text.
+  Final Answer: Once the task is finished, start with {finishMarker} followed by the answer.
+react.prompt.classic.final: |-
+  ## Final Answer Requirements
+  1. When the task is complete, you MUST provide the final answer.
+  2. The final answer MUST start with {finishMarker}.
+  3. Directly provide your complete answer after {finishMarker} without extra tags.
+react.prompt.classic.rules: |-
+  ## Core Rules
+  1. Only use tools from the 'Available Tools' list.
+  2. Output ONLY one Action and STOP immediately to wait for Observation.
+  3. Completion is signaled ONLY by {finishMarker}.
+react.prompt.classic.example: |-
+  ## Example
+  User: What is the weather in Paris?
+  Thought: I need to check the current weather for Paris.
+  Action: {"name": "get_weather", "arguments": {"location": "Paris"}}
+  Thought: I have obtained the weather information.
+  Final Answer: {finishMarker}The weather in Paris is 18°C and sunny.
+react.prompt.classic.no_tools: |-
+  Note: No tools available. Provide the Final Answer directly.
+react.prompt.classic.tools.title: |-
+  ## Available Tools
+  You can invoke the following tools via the Action field:
+react.prompt.classic.tools.schema: |-
+  Input Schema:
+
+# ---- Simple main prompt ----
+simple.prompt.role: |-
+  ## Your Role
+  {role}.
+simple.prompt.instruction.title: |-
+  ## Instructions
+
+# ---- ReAct runtime: ReasonTask ----
+react.reason.rethink: |-
+  [System Instruction: Self-Reflection]
+  The current task has reached turn {turn}. To ensure the task is completed accurately and efficiently, start a self-review immediately:
+
+  1. **Core goal check**: Re-examine the user's original core question and the task at hand. Has your current direction drifted from the main line?
+  2. **Effectiveness assessment**: Review the past Observations. If recent attempts have produced no useful new clues, the current strategy has failed; you MUST change your approach or tackle it from a different angle.
+  3. **Forced convergence**: If you determine the goal truly cannot be achieved due to objective limitations, summarize the known clues, then recap them to the user in the Final Answer and ask for assistance.
+
+  Decide the next action based on the new strategy, or output a Final Answer to finish the task
+react.reason.format_fix: |-
+  [System Instruction: Format Correction]
+  In turn {turn} you produced thinking content, but it contained no valid Action or Final Answer (attempt {attempt}).
+
+  Please review your latest Observation and previous chain of thought, and make sure the next action or final conclusion is stated explicitly.
+react.reason.reflect: |-
+  [System Instruction: Self-Reflection]
+  You returned an empty response in reasoning turn {turn} (attempt {attempt}). Start a self-reflection immediately:
+
+  1. **Revisit the task goal**: Re-examine the core goal of the task you were originally assigned and check whether you have drifted from the main line.
+  2. **Review the history**: Go over the latest Observations and previous chain of thought to locate the cause of the empty response.
+  3. **Correct the strategy**: If the current path is blocked, decisively switch approaches or break the task into smaller sub-tasks.
+react.reason.empty_exhausted: |-
+  Sorry, the model repeatedly returned no valid content. Please try again later.
+react.reason.http.rate_limit: |-
+  Sorry, requests to the model service are too frequent or hit an upstream rate limit (CODE: {code}). Please try again later or reduce concurrency.
+react.reason.http.upstream_unavailable: |-
+  Sorry, the model service is temporarily unavailable (CODE: {code}). This may be due to upstream rate limiting, service overload, or a gateway error. Please try again later.
+react.reason.http.server_error: |-
+  Sorry, the model service encountered an internal error (CODE: {code}). Please try again later.
+react.reason.http.timeout: |-
+  Sorry, the request to the model service timed out (CODE: {code}). Please try again later.
+react.reason.http.other: |-
+  Sorry, the model service responded with an error (CODE: {code}). Please check the request parameters or service configuration and try again.
+react.reason.error.no_return: |-
+  Sorry, the model service returned no content. Please try again later.
+react.reason.error.ssl: |-
+  Sorry, the secure connection to the model service failed, possibly due to an SSL certificate or trust chain configuration issue. Please check the model service address, certificate validity, certificate trust chain, domain name match, and system time.
+react.reason.error.dns: |-
+  Sorry, the model service address could not be resolved. Please check the service domain, DNS configuration, or network proxy settings.
+react.reason.error.timeout: |-
+  Sorry, the model service response timed out. Please try again later.
+react.reason.error.connection_refused: |-
+  Sorry, unable to connect to the model service; the target port may be closed or the service may not be running. Please check the model service address, port, and firewall configuration.
+react.reason.error.connection: |-
+  Sorry, the connection to the model service failed. Please try again later.
+react.reason.error.network: |-
+  Sorry, a network error occurred while accessing the model service. Please check the network connection, proxy configuration, or model service status.
+react.reason.error.other: |-
+  Sorry, the model service is temporarily unavailable (see logs for details). Please try again later.
+
+# ---- ReAct runtime: plan board ----
+react.plan.board.title: |-
+  [Execution Plan Progress Board]
+react.plan.board.protocol: |-
+  **Plan Sync Protocol:**
+react.plan.board.current: |-
+  - **Current status**: You are executing step [{step}].
+react.plan.board.advance.last: |-
+  - **Normal progress**: After the step is completed and the result meets expectations, you MUST call `update_plan_progress` with `next_plan_index` set to `{nextStep}` (marking all plans as completed).
+react.plan.board.advance.next: |-
+  - **Normal progress**: After the step is completed and the result meets expectations, you MUST call `update_plan_progress` with `next_plan_index` set to `{nextStep}` (moving to the next step).
+react.plan.board.revise: |-
+  - **Dynamic adjustment**: If the Observation shows the original plan is no longer feasible, you MUST first call `revise_plan` to revise the remaining steps; never force your way into a wrong step.
+react.plan.board.no_skip: |-
+  - **No skipping**: Do not provide the final answer before updating the progress.
+react.plan.board.done: |-
+  - **Goal achieved**: All items on the plan board are marked [√]. Synthesize all observations from the execution above and directly give the final detailed answer.
+
+# ---- ReAct runtime: PlanTalent ----
+react.plan.talent.description: |-
+  Provides task decomposition, progress tracking, and plan revision for complex tasks. Suitable for long-running tasks that require multi-step collaboration.
+react.plan.talent.guide: |-
+  ## Task Planning Guide
+  1. **Start**: Break down complex tasks with `create_plan`. If the task is judged simple, skip planning and reply directly.
+  2. **Progress sync**: All indexes start from 1. After completing each step, you MUST call `update_plan_progress` to move to the next step.
+  3. **Dynamic revision**: When the plan turns out to be wrong or the environment changes, adjust the remaining steps in real time via `revise_plan`.
+  4. **Scope**: Do not create plans for common-sense questions, simple calculations, or single tool calls.
+react.plan.talent.strategy: |-
+  **Decomposition strategy suggestions**:
+react.plan.tool.create.description: |-
+  Initialize the execution plan. This is the first step in handling a complex task, used to break down all subsequent action steps.
+react.plan.tool.create.steps: |-
+  A structured list of steps (each step should be an independent action description).
+react.plan.tool.progress.description: |-
+  Update the plan progress. MUST be called when the current step is completed and you are ready to move to the next one.
+react.plan.tool.progress.next_plan_index: |-
+  The index of the next step (a number counted from 1).
+react.plan.tool.revise.description: |-
+  Revise the remaining plan. Call this when the original plan is wrong or environment changes make the remaining steps infeasible.
+react.plan.tool.revise.new_steps: |-
+  The new list of remaining plan steps.
+react.plan.tool.revise.from_index: |-
+  The step from which to start replacing (counted from 1).
+react.plan.result.create.ignored: |-
+  Success: The task logic is simple, so plan mode has been skipped. Execute directly and give the final answer; there is no need to call update_plan_progress.
+react.plan.result.create.ok: |-
+  Success: The plan has been initialized with {count} steps. Please start executing the first step.
+react.plan.result.progress.not_planning: |-
+  Error: Not currently in plan mode. Please execute the task directly.
+react.plan.result.progress.next: |-
+  Success: Plan progress updated. Next is step {step} - {desc}
+react.plan.result.progress.done: |-
+  Success: All plan steps have been completed.
+react.plan.result.revise.not_init: |-
+  Error: The plan has not been initialized and cannot be revised.
+react.plan.result.revise.empty: |-
+  Feedback: No valid revision steps were provided; the plan remains unchanged.
+react.plan.result.revise.ok: |-
+  Success: The plan has been restructured starting from step {fromIndex}. Please continue according to the new plan.
+
+# ---- ReAct runtime: StopLoopInterceptor ----
+react.stoploop.prompt: |-
+  [System Notice: Loop Detected]
+  The system detected that, within the window of the last {window} actions, the current operation has occurred {count} times; you may be "going in circles".
+
+  Pause your current line of action immediately, review the past Observations, and follow these steps:
+  1. **Effectiveness assessment**: If recent attempts have produced no useful new clues, the current strategy has failed; you MUST change your approach or tackle it from a different angle.
+  2. **Forced convergence**: If there is already enough information for the user, output the Final Answer directly to finish the task.
+  3. **Avoid repetition**: Do not repeat operations that have already been executed without yielding new information.
+
+# ---- ReAct runtime: HITL ----
+react.hitl.pending_batch: |-
+  {count} operations are pending human confirmation
+react.hitl.skipped: |-
+  Operation skipped: please continue with the next step.
+react.hitl.rejected: |-
+  Operation rejected: human approval was not granted.
+react.hitl.sensitive: |-
+  Sensitive operation; human confirmation is required
+
+# ---- ReAct runtime: FeedbackTool ----
+react.feedback.description: |-
+  When the task cannot continue because required parameters, conditions, or external feedback are missing, you MUST call this tool to report it and explain the reason to the user.
+react.feedback.reason: |-
+  Explain the reason to the user

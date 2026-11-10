@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react.intercept;
 
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -305,7 +307,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
 
         String summary = pendingTasks.size() == 1
                 ? pendingTasks.get(0).getComment()
-                : ("有 " + pendingTasks.size() + " 项操作待人工确认");
+                : AgentI18n.fmt(localeOf(trace), AgentI18nKeys.REACT_HITL_PENDING_BATCH, "count", pendingTasks.size());
         if (trace.getSession() != null) {
             trace.getSession().pending(true, summary);
         }
@@ -340,11 +342,11 @@ public class HITLInterceptor extends AbsReActInterceptor {
                 approvedCallback.onApproved(trace, ex.getToolName(), ex.getArgs());
             }
         } else if (decision.isSkipped()) {
-            String msg = decision.getCommentOrDefault("操作跳过：请继续下一步。");
+            String msg = decision.getCommentOrDefault(AgentI18n.get(localeOf(trace), AgentI18nKeys.REACT_HITL_SKIPPED));
             ex.setResult(msg);
         } else {
             // REJECT
-            String msg = decision.getCommentOrDefault("操作拒绝：人工审批未通过。");
+            String msg = decision.getCommentOrDefault(AgentI18n.get(localeOf(trace), AgentI18nKeys.REACT_HITL_REJECTED));
             if (hitlTargetCount <= 1) {
                 // 单敏感工具：兼容旧语义，整 run END（不进 doAction，立即清全部 HITL 状态）
                 trace.setFinalAnswer(msg);
@@ -365,6 +367,16 @@ public class HITLInterceptor extends AbsReActInterceptor {
         }
     }
 
+    /**
+     * 获取文案语言（无 trace 或 options 时回退默认语言）
+     */
+    private static Locale localeOf(ReActTrace trace) {
+        if (trace == null || trace.getOptions() == null) {
+            return null;
+        }
+        return trace.getOptions().getLocale();
+    }
+
     public static class HITLSensitiveStrategy implements HITLStrategy {
         private String comment;
 
@@ -379,7 +391,7 @@ public class HITLInterceptor extends AbsReActInterceptor {
         @Override
         public String evaluate(ReActTrace trace, Map<String, Object> args) {
             if (Assert.isEmpty(comment)) {
-                return "敏感操作，需要人工介入确认";
+                return AgentI18n.get(localeOf(trace), AgentI18nKeys.REACT_HITL_SENSITIVE);
             } else {
                 return comment;
             }

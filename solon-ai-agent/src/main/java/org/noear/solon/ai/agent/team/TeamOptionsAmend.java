@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.core.util.Assert;
 
+import java.util.Locale;
 import java.util.function.Function;
 
 /**
@@ -61,6 +62,17 @@ public class TeamOptionsAmend extends ModelOptionsAmend<TeamOptionsAmend, TeamIn
     public TeamOptionsAmend systemPrompt(AgentSystemPrompt<TeamTrace> systemPrompt) {
         Assert.notNull(systemPrompt, "systemPrompt");
         options.setSystemPrompt(systemPrompt);
+        return this;
+    }
+
+    /**
+     * 设置语言环境（请求级动态修正）
+     *
+     * @since 4.2.0
+     */
+    public TeamOptionsAmend locale(Locale locale) {
+        Assert.notNull(locale, "locale");
+        options.setLocale(locale);
         return this;
     }
 

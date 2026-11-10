@@ -1,0 +1,197 @@
+# solon-ai-agent ReAct 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- 主提示词 ----
+react.prompt.role.default: |-
+  具备自主行动能力的专业任务解决专家
+react.prompt.intro.text: |-
+  ## 你的角色
+  {role}。你必须使用 ReAct 模式解决问题，每一轮推理必须包含显式的标签：Thought（思考） -> Action（行动） -> Observation（观察）。
+react.prompt.intro.native: |-
+  ## 你的角色
+  {role}。你遵循严谨的 ReAct (Reasoning and Acting) 逻辑。
+react.prompt.instruction.title: |-
+  ## 核心任务指令
+
+react.prompt.native.rules: |-
+  ## 核心规则
+  1. **工具调用**：如果需要调用工具，请【直接】触发函数调用（Function Calling）。
+  2. **结果导向**：所有结论必须基于工具返回的真实数据（Observation）。
+  3. **严禁伪造**：禁止在回复中模拟或伪造工具的执行过程。
+  4. **自然回复**：任务完成后，请以自然语言直接回复，无需输出 `Final Answer:` 等标签。
+react.prompt.native.no_tools: |-
+  > 注意：当前环境无可用工具，请根据已有信息直接回复。
+
+react.prompt.classic.format: |-
+  ## 输出格式（必须遵守）
+  Thought: 简要解释你的思考过程（1-2句话）。
+  Action: 如果需要调用工具，必须输出 JSON 对象：{"name": "工具名", "arguments": {...}}。不要使用代码块，不要有额外文本。
+  Final Answer: 任务完成后，以 {finishMarker} 开头给出回答。
+react.prompt.classic.final: |-
+  ## 最终答案要求
+  1. 当你获得结论或信息已足够时，必须给出最终答案。
+  2. 最终答案**必须**以 {finishMarker} 开头。
+  3. 在 {finishMarker} 之后直接提供完整回答，不要换行，不要输出标注标签。
+react.prompt.classic.rules: |-
+  ## 核心规则
+  1. 每次仅输出一个 Action，输出后立即停止等待 Observation。
+  2. 严禁伪造 Observation，严禁调用‘可用工具’之外的工具。
+  3. 最终回答未带上 {finishMarker} 将被视为无效。
+react.prompt.classic.example: |-
+  ## 示例
+  用户: 北京天气怎么样？
+  Thought: 我需要查询北京当前的实时天气信息。
+  Action: {"name": "get_weather", "arguments": {"location": "北京"}}
+  Thought: 根据观察结果，北京天气良好。
+  Final Answer: {finishMarker}北京目前天气晴间多云，气温约 25°C。
+react.prompt.classic.no_tools: |-
+  注意：当前没有可用工具。请直接给出 Final Answer。
+react.prompt.classic.tools.title: |-
+  ## 可用工具
+  你可以通过 Action 字段调用以下工具：
+react.prompt.classic.tools.schema: |-
+  参数定义:
+
+# ---- Simple 主提示词 ----
+simple.prompt.role: |-
+  ## 你的角色
+  {role}。
+simple.prompt.instruction.title: |-
+  ## 执行指令
+
+# ---- ReAct runtime: ReasonTask ----
+react.reason.rethink: |-
+  【系统指令：自我反思 (Self-Reflection)】
+  当前任务已执行至第 {turn} 回合。为了确保任务准确高效完成，请立即启动自审程序：
+
+  1. **核心目标检查**：重新审视用户最初提出的核心问题和当前要解决的任务，评估你当前的方向是否偏离了主线？
+  2. **有效性评估**：检查历史 Observation。如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。
+  3. **强制收敛**：若评估判定由于客观限制确实无法达成，请梳理已知线索，并在 Final Answer 中向用户复盘并申请协助。
+
+  根据新策略决定下一步行动，或输出 Final Answer 结束任务
+react.reason.format_fix: |-
+  【系统指令：输出格式修正 (Format Correction)】
+  您在第 {turn} 轮中输出了思考内容，但未包含有效的行动（Action）或最终答案（Final Answer）（第 {attempt} 次尝试）。
+
+  请检查您最近的 Observation 和之前的思考链，确保下一步操作或最终结论已明确给出。
+react.reason.reflect: |-
+  【系统指令：自我反思 (Self-Reflection)】
+  您在第 {turn} 轮推理中返回了空响应（第 {attempt} 次尝试），请立即启动自我反思：
+
+  1. **回溯任务目标**：重新审视您最初被分配的任务核心目标，检查是否偏离了主线。
+  2. **审视历史轨迹**：回顾最近的 Observation 和之前的思考链，定位导致空响应的原因。
+  3. **策略修正**：若当前路径受阻，请果断切换思路或拆分为更小的子任务推进。
+react.reason.empty_exhausted: |-
+  抱歉，模型多次未返回有效内容。请稍后重试。
+react.reason.http.rate_limit: |-
+  抱歉，模型服务请求过于频繁或触发了上游限流（CODE: {code}）。请稍后重试，或降低并发数量。
+react.reason.http.upstream_unavailable: |-
+  抱歉，模型服务暂时不可用（CODE: {code}）。可能是上游限流、服务过载或网关异常，请稍后重试。
+react.reason.http.server_error: |-
+  抱歉，模型服务发生内部错误（CODE: {code}）。请稍后重试。
+react.reason.http.timeout: |-
+  抱歉，模型服务请求超时（CODE: {code}）。请稍后重试。
+react.reason.http.other: |-
+  抱歉，模型服务响应出错（CODE: {code}）。请检查请求参数或服务配置后重试。
+react.reason.error.no_return: |-
+  抱歉，模型服务没有内容返回。请稍后重试。
+react.reason.error.ssl: |-
+  抱歉，模型服务安全连接失败，可能是 SSL 证书或信任链配置问题。请检查模型服务地址、证书有效期、证书信任链、域名匹配及系统时间。
+react.reason.error.dns: |-
+  抱歉，无法解析模型服务地址。请检查服务域名、DNS 配置或网络代理设置。
+react.reason.error.timeout: |-
+  抱歉，模型服务响应超时。请稍后重试。
+react.reason.error.connection_refused: |-
+  抱歉，无法连接模型服务，目标端口可能未开放或服务未启动。请检查模型服务地址、端口及防火墙配置。
+react.reason.error.connection: |-
+  抱歉，模型服务连接失败。请稍后重试。
+react.reason.error.network: |-
+  抱歉，访问模型服务时发生网络错误。请检查网络连接、代理配置或模型服务状态。
+react.reason.error.other: |-
+  抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。
+
+# ---- ReAct runtime: plan board ----
+react.plan.board.title: |-
+  [执行计划进度看板]
+react.plan.board.protocol: |-
+  **计划进度同步协议 (Plan Sync Protocol)：**
+react.plan.board.current: |-
+  - **当前状态**: 你正在执行步骤 [{step}]。
+react.plan.board.advance.last: |-
+  - **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `{nextStep}` (标志所有计划已达成)。
+react.plan.board.advance.next: |-
+  - **正常推进**: 步骤完成后，若结果符合预期，必须调用 `update_plan_progress` 并将 `next_plan_index` 设为 `{nextStep}` (切换至下一环节)。
+react.plan.board.revise: |-
+  - **动态调整**: 若观察结果（Observation）显示原计划已不可行，必须优先调用 `revise_plan` 修正后续步骤，严禁强行进入错误环节。
+react.plan.board.no_skip: |-
+  - **禁止跳步**: 在更新进度前，禁止直接提供最终回答。
+react.plan.board.done: |-
+  - **目标达成**: 计划看板已全部标记为 [√]。请综合上述执行过程中的所有观察结果，直接给出最终的详细回答。
+
+# ---- ReAct runtime: PlanTalent ----
+react.plan.talent.description: |-
+  提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。
+react.plan.talent.guide: |-
+  ## 任务规划指南 (Task Planning Guide)
+  1. **启动机制**: 复杂任务通过 `create_plan` 拆解步骤。若判定为简单任务，忽略计划并直接回复。
+  2. **进度同步**: 所有索引从 1 开始。每完成一步，必须调用 `update_plan_progress` 切换至下一环节。
+  3. **动态修订**: 发现计划有误或环境变化时，通过 `revise_plan` 实时调整后续步骤。
+  4. **适用边界**: 不要为常识性提问、简单计算或单次工具调用创建计划。
+react.plan.talent.strategy: |-
+  **拆解策略建议**：
+react.plan.tool.create.description: |-
+  初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。
+react.plan.tool.create.steps: |-
+  结构化的步骤列表（每步应为一个独立的动作描述）。
+react.plan.tool.progress.description: |-
+  更新计划进度。完成当前步骤准备进入下一步时，必须调用。
+react.plan.tool.progress.next_plan_index: |-
+  下一个步骤索引（从 1 开始计数的数字）。
+react.plan.tool.revise.description: |-
+  修订后续计划。当发现原计划有误或环境变化导致后续步骤不可行时调用。
+react.plan.tool.revise.new_steps: |-
+  新的后续计划步骤列表。
+react.plan.tool.revise.from_index: |-
+  从哪一步开始替换（从 1 开始）。
+react.plan.result.create.ignored: |-
+  成功：检测到任务逻辑简单，已忽略计划模式。请直接执行并给出最终答案，无需调用 update_plan_progress。
+react.plan.result.create.ok: |-
+  成功：计划已初始化，共 {count} 步。请开始执行第一步。
+react.plan.result.progress.not_planning: |-
+  错误：当前不在计划模式中，请直接执行任务。
+react.plan.result.progress.next: |-
+  成功：计划进度已更新。下一步是：第 {step} 步 - {desc}
+react.plan.result.progress.done: |-
+  成功：所有计划步骤已执行完毕。
+react.plan.result.revise.not_init: |-
+  错误：计划尚未初始化，无法修订。
+react.plan.result.revise.empty: |-
+  反馈：未提供有效的修订步骤，计划保持不变。
+react.plan.result.revise.ok: |-
+  成功：计划已从第 {fromIndex} 步开始重构。请按照新计划继续执行。
+
+# ---- ReAct runtime: StopLoopInterceptor ----
+react.stoploop.prompt: |-
+  【系统提示：检测到潜在循环 (Loop Detected)】
+  系统检测到最近 {window} 个动作的窗口内，当前操作已出现 {count} 次，可能存在"原地打转"的情况。
+
+  请立即暂停当前操作思路，审视历史 Observation 并执行以下步骤：
+  1. **有效性评估**：如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。
+  2. **强制收敛**：若已有足够信息供用户参考，请直接输出 Final Answer 结束任务。
+  3. **避免重复**：不要重复执行已经执行过且未产生新信息的操作。
+
+# ---- ReAct runtime: HITL ----
+react.hitl.pending_batch: |-
+  有 {count} 项操作待人工确认
+react.hitl.skipped: |-
+  操作跳过：请继续下一步。
+react.hitl.rejected: |-
+  操作拒绝：人工审批未通过。
+react.hitl.sensitive: |-
+  敏感操作，需要人工介入确认
+
+# ---- ReAct runtime: FeedbackTool ----
+react.feedback.description: |-
+  当任务缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具反馈，并向用户说明原因。
+react.feedback.reason: |-
+  向用户说明原因

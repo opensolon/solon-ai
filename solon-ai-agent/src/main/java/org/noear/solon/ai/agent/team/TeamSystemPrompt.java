@@ -35,7 +35,7 @@ public interface TeamSystemPrompt extends AgentSystemPrompt<TeamTrace> {
      * 获取构建器实例
      */
     static Builder builder() {
-        return TeamSystemPromptCn.builder();
+        return TeamSystemPromptDefault.builder();
     }
 
     /**

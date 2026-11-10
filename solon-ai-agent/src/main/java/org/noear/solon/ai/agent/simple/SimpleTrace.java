@@ -19,6 +19,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -77,6 +78,9 @@ public class SimpleTrace implements AgentTrace {
         this.options = options;
         this.session = session;
         this.protocol = protocol;
+
+        //会话恢复：登记旧会话的语言（旧消息中的标记需在所有已知语言中识别）
+        AgentI18n.registerLocaleOf(originalPrompt);
     }
 
     protected void reset(Prompt originalPrompt) {

@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent;
 
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
@@ -123,36 +125,35 @@ public class AgentProfile implements Serializable {
     /**
      * 转换为格式化描述字符串（常用于注入 SystemPrompt 帮助 AI 理解队友能力）
      *
-     * @param locale 语言区域（支持中英自适应）
+     * @param locale 语言区域（null 时使用 AgentI18n 默认语言；未内置语言回落英文）
      */
     public String toFormatString(Locale locale) {
-        boolean isZh = (locale != null && Locale.CHINESE.getLanguage().equals(locale.getLanguage()));
         List<String> segments = new ArrayList<>();
 
         // 1. 模态声明 (A2A 路由基础)
         if (!inputModes.contains("image") && inputModes.contains("text") && inputModes.size() == 1) {
-            segments.add(isZh ? "输入限制: 仅限文本" : "Input: Text only");
+            segments.add(AgentI18n.get(locale, AgentI18nKeys.TEAM_PROFILE_INPUT_TEXT_ONLY));
         } else {
-            segments.add((isZh ? "输入模态: " : "Input Modes: ") + String.join(", ", inputModes));
+            segments.add(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_PROFILE_INPUT_MODES, "modes", String.join(", ", inputModes)));
         }
 
         if (outputModes.contains("image")) {
-            segments.add(isZh ? "产出: 包含图像" : "Outputs: Images");
+            segments.add(AgentI18n.get(locale, AgentI18nKeys.TEAM_PROFILE_OUTPUT_IMAGE));
         }
 
         // 2. 能力部分
         if (!capabilities.isEmpty()) {
-            segments.add((isZh ? "核心能力: " : "Capabilities: ") + String.join(", ", capabilities));
+            segments.add(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_PROFILE_CAPABILITIES, "capabilities", String.join(", ", capabilities)));
         }
 
         // 3. 约束部分
         if (!constraints.isEmpty()) {
-            segments.add((isZh ? "行为约束: " : "Constraints: ") + String.join(", ", constraints));
+            segments.add(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_PROFILE_CONSTRAINTS, "constraints", String.join(", ", constraints)));
         }
 
         // 4. 风格部分
         if (style != null && !style.isEmpty()) {
-            segments.add((isZh ? "交互风格: " : "Style: ") + style);
+            segments.add(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_PROFILE_STYLE, "style", style));
         }
 
         return String.join(" | ", segments);

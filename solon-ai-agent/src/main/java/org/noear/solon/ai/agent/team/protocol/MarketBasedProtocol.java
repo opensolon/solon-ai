@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
 import org.noear.solon.flow.FlowContext;
@@ -120,31 +122,21 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
         // 首轮/空市场：把全部成员写入 marketplace，使 Price/ROI 从第 1 次决策就可见
         seedMarketplace(state);
 
-        boolean isZh = isChinese(trace.getOptions().getLocale());
-        sb.append(isZh ? "\n### 专家人才市场 (Expert Marketplace)\n" : "\n### Expert Marketplace\n");
+        Locale locale = trace.getOptions().getLocale();
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_MARKET_SUPERVISOR_MARKETPLACE_TITLE)).append("\n");
         sb.append("```json\n").append(ONode.serialize(state)).append("\n```\n");
         
-        if (isZh) {
-            sb.append("> 策略指引：\n> - 简单/轻量任务优先 Price 较低的专家。\n");
-            sb.append("> - 攻坚/深度任务优先 Score/ROI 更高的专家。\n");
-            sb.append("> - 预算受限时，指派 Price 较低的专家完成基础工作。");
-        } else {
-            sb.append("> Strategy Tips:\n> - Prefer lower Price agents for simple/light tasks.\n");
-            sb.append("> - Prefer higher Score/ROI agents for deep/critical tasks.\n");
-            sb.append("> - Assign lower Price agents for routine tasks under budget constraints.");
-        }
+        sb.append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_MARKET_SUPERVISOR_STRATEGY));
 
         // 识别性价比之王 (ROI Champion)
         state.getMarketplace().entrySet().stream()
                 .max(Comparator.comparingDouble(e -> e.getValue().getROI()))
-                .ifPresent(e -> sb.append(isZh ? "\n> **今日推荐 (ROI King)**：" : "\n> **Top ROI Agent**:")
-                        .append(e.getKey()));
+                .ifPresent(e -> sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_MARKET_SUPERVISOR_ROI_KING, "agent", e.getKey())));
     
         // 价格最低专家（简单任务提示）
         state.getMarketplace().entrySet().stream()
                 .min(Comparator.comparingDouble(e -> e.getValue().currentPrice))
-                .ifPresent(e -> sb.append(isZh ? "\n> **低价优选 (Budget Pick)**：" : "\n> **Budget Pick**:")
-                        .append(e.getKey()));
+                .ifPresent(e -> sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.PROTOCOL_MARKET_SUPERVISOR_BUDGET_PICK, "agent", e.getKey())));
     
         super.prepareSupervisorInstruction(context, trace, sb);
     }
@@ -250,11 +242,6 @@ public class MarketBasedProtocol extends HierarchicalProtocol {
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = isChinese(locale);
-        if (isZh) {
-            sb.append("\n### 调度准则：简单任务看价格(Price)，攻坚任务看信誉(Score)与性价比(ROI)。");
-        } else {
-            sb.append("\n### Guidelines: Price for simple tasks; Score/ROI for critical challenges.");
-        }
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.PROTOCOL_MARKET_SUPERVISOR_GUIDELINES));
     }
 }

@@ -1,0 +1,5 @@
+
+### 流水线进度 (Pipeline Progress)
+```json
+{"pipeline":["coder","reviewer"],"currentIndex":1,"stages":{"coder":{"status":1,"retries":0},"reviewer":{"status":0,"retries":0}}}
+```

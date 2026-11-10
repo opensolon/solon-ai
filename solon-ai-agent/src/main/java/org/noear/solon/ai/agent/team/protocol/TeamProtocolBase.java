@@ -17,6 +17,8 @@ package org.noear.solon.ai.agent.team.protocol;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamProtocol;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -123,26 +125,16 @@ public abstract class TeamProtocolBase implements TeamProtocol {
             return;
         }
 
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         String profileDesc = (agent.profile() != null) ? agent.profile().toFormatString(locale) : "";
         int windowSize = 5;
         if (trace.getOptions() != null) {
             windowSize = Math.max(1, trace.getOptions().getRecordWindowSize());
         }
 
-        if (isZh) {
-            sb.append("## 任务上下文 (SYSTEM CONTEXT)\n");
-            sb.append("### 你的身份\n").append(profileDesc).append("\n\n");
-            sb.append("### 协作进度 (最近 ").append(windowSize).append(" 条)\n");
-            sb.append(trace.getFormattedHistory(windowSize, false)).append("\n\n");
-            sb.append("---\n请根据上述进度完成你的任务。");
-        } else {
-            sb.append("## SYSTEM CONTEXT\n");
-            sb.append("### Your Identity\n").append(profileDesc).append("\n\n");
-            sb.append("### Collaboration Records (Last ").append(windowSize).append(" entries)\n");
-            sb.append(trace.getFormattedHistory(windowSize, false)).append("\n\n");
-            sb.append("---\nPlease complete your task based on the progress.");
-        }
+        sb.append(AgentI18n.get(locale, AgentI18nKeys.TEAM_BASE_AGENT_IDENTITY)).append("\n").append(profileDesc).append("\n\n");
+        sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_BASE_AGENT_HISTORY, "window", windowSize)).append("\n");
+        sb.append(trace.getFormattedHistory(windowSize, false)).append("\n\n");
+        sb.append(AgentI18n.get(locale, AgentI18nKeys.TEAM_BASE_AGENT_FOOTER));
     }
 
     /**
@@ -173,18 +165,9 @@ public abstract class TeamProtocolBase implements TeamProtocol {
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
-        boolean isZh = Locale.CHINA.getLanguage().equals(locale.getLanguage());
         String candidates = String.join(", ", getCandidateAgents(null));
 
-        if (isZh) {
-            sb.append("\n## 协作协议：").append(name()).append("\n");
-            sb.append("- 备选成员: [").append(candidates).append("]\n");
-            sb.append("- 决策要求：任务完成请输出 ").append(config.getFinishMarker());
-        } else {
-            sb.append("\n## Collaboration Protocol: ").append(name()).append("\n");
-            sb.append("- Candidates: [").append(candidates).append("]\n");
-            sb.append("- Requirement: Output ").append(config.getFinishMarker()).append(" when finished.");
-        }
+        sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_BASE_SUPERVISOR_PROTOCOL, "protocol", name(), "candidates", candidates, "finishMarker", config.getFinishMarker()));
     }
 
     @Override

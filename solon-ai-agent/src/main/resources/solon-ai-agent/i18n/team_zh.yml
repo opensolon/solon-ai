@@ -1,0 +1,153 @@
+# solon-ai-agent Team 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- 主管主提示词 ----
+team.prompt.role.default: |-
+  团队协作主管 (Supervisor)，负责协调成员完成任务
+team.prompt.role: |-
+  ## 你的角色
+  {role}
+team.prompt.members.title: |-
+  ## 团队成员
+team.prompt.task: |-
+  ## 当前任务
+  {task}
+team.prompt.output: |-
+  ## 输出规范
+  1. **任务终止**：如果任务已完成，必须输出: {finishMarker} 并在其后提供最终答案。若直接回复用户，**禁止**包括分析过程。
+  2. **继续执行**：若任务未完成，请**仅输出**下一个要执行的 Agent 名字，不要有额外文本。
+team.prompt.guide: |-
+  ## 历史分析与准则
+  - 参考协作历史，避免重复执行相同逻辑。
+  - 任务完成信号：{finishMarker}。
+  - 注意：严禁过早结束，确保专家意见已被充分获取。
+team.prompt.instruction.title: |-
+  ## 核心任务指令
+
+# ---- 协议基类（TeamProtocolBase） ----
+team.base.agent.identity: |-
+  ## 任务上下文 (SYSTEM CONTEXT)
+  ### 你的身份
+team.base.agent.history: |-
+  ### 协作进度 (最近 {window} 条)
+team.base.agent.footer: |-
+  ---
+  请根据上述进度完成你的任务。
+team.base.supervisor.protocol: |-
+  ## 协作协议：{protocol}
+  - 备选成员: [{candidates}]
+  - 决策要求：任务完成请输出 {finishMarker}
+
+# ---- 团队内成员执行（Agent.run）；"[Skipped]" 是语言无关的标记 ----
+team.run.skipped: |-
+  [Skipped] 已被 {interceptor} 取消执行
+team.run.no_content: |-
+  智能体 [{agent}] 已执行，但没有返回文本内容。
+
+# ---- 主管任务（SupervisorTask） ----
+team.supervisor.skipped: |-
+  [Skipped] 主管调度已被 {interceptor} 拦截
+team.supervisor.progress: |-
+  ## 协作进度 (最近 {window} 轮历史)
+team.supervisor.turn: |-
+  当前迭代轮次: {turn}
+team.supervisor.command: |-
+  指令：请指派下一位执行者。已完成则输出 {finishMarker}
+team.supervisor.pending: |-
+  > **待命专家**：[{agents}].
+
+# ---- 智能体档案（AgentProfile.toFormatString） ----
+team.profile.input.text_only: |-
+  输入限制: 仅限文本
+team.profile.input.modes: |-
+  输入模态: {modes}
+team.profile.output.image: |-
+  产出: 包含图像
+team.profile.capabilities: |-
+  核心能力: {capabilities}
+team.profile.constraints: |-
+  行为约束: {constraints}
+team.profile.style: |-
+  交互风格: {style}
+
+# ---- A2A 协议 ----
+team.a2a.tool.title: |-
+  任务移交
+team.a2a.tool.description: |-
+  当你无法完成当前任务时，将其移交给更合适的专家。
+team.a2a.tool.param.target: |-
+  目标专家名。必选范围: {experts}
+team.a2a.tool.param.state: |-
+  业务状态 JSON。
+team.a2a.tool.param.memo: |-
+  交接备忘：把需要下游专家继续处理的关键产出/结论写在这里。
+team.a2a.tool.result: |-
+  已发起向 [{target}] 的接力请求。
+team.a2a.agent.guide: |-
+  ## 专家协作指引
+  - 必须根据各专家的 [核心能力] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。
+team.a2a.agent.session.title: |-
+  ## 当前接力任务断面 (Active Session Context)
+  > 本部分记录了任务流转至此时的关键快照，请基于此状态继续执行，严禁编造断面之外的信息。
+team.a2a.agent.session.trail: |-
+  - **协作轨迹**: {path}
+team.a2a.agent.session.prior: |-
+  - **上一步专家**: {agent}
+team.a2a.agent.session.pending: |-
+  - **待处理产出**: {output}
+team.a2a.agent.session.state: |-
+  - **累积业务状态**: {state}
+team.a2a.route.max_transfer: |-
+  协作达到最大流转次数，任务中止。
+team.a2a.route.transfer_failed: |-
+  【系统通知】移交失败：专家 [{target}] 不存在或能力不匹配（如无法处理图片）。请重新选择或尝试自行解决。
+team.a2a.dashboard.title: |-
+  ### A2A 接力看板
+team.a2a.dashboard.state: |-
+  - 全局状态: {state}
+team.a2a.dashboard.count: |-
+  - 接力次数: {count}
+team.a2a.supervisor.rules: |-
+  ### A2A 协作准则：
+  1. **直接交付**：任务完成时请直接输出 `{finishMarker}`，**禁止**对专家的内容进行二次总结或润色。
+  2. **流转审计**：若专家间接力流转超过 5 次仍无实质进展，请立即介入并强制收尾。
+
+# ---- Swarm 协议 ----
+team.swarm.tool.title: |-
+  涌现任务
+team.swarm.tool.description: |-
+  当你发现需要拆解子任务或建议其他专家介入时调用。
+team.swarm.tool.param.tasks: |-
+  待办任务描述，多个用分号分隔
+team.swarm.tool.param.agents: |-
+  建议执行的专家名，多个用分号分隔
+team.swarm.tool.result: |-
+  系统：子任务已加入任务池。
+team.swarm.agent.guide: |-
+  ## 蜂群协作规范
+  - **任务涌现**：若当前任务需他人配合或拆解，请调用 `{tool}` 将子任务放入池中。
+  - **专注性**：仅在发现新任务维度时调用工具，不要重复同步已有任务。
+team.swarm.pool.snapshot: |-
+  【蜂群任务池快照】
+team.swarm.supervisor.rules: |-
+  ### SWARM 决策准则：
+  1. **任务终止**：若任务完成，输出 `{finishMarker}`。
+  2. **决策优先**：若未完成，仅输出下一位 Agent 名字。不要解释。
+  3. **任务池优先**：看板 task_pool 非空时，优先指派其中建议的专家。
+team.swarm.dashboard.title: |-
+  ### 蜂群状态看板 (Swarm Intelligence)
+team.swarm.dashboard.guide: |-
+  > **调度指引**：
+  > 1. **负载均衡**：优先指派 pheromones 值较低的成员。
+  > 2. **能力匹配**：确保 task_pool 中的任务描述与 Agent 的 Capabilities 一致。
+  > 3. **冷却避障**：避免连续指派刚执行完的 Agent。
+team.swarm.dashboard.recommended: |-
+  > 4. **推荐下一执行者**：`{agent}`
+
+# ---- Sequential 协议 ----
+team.sequential.progress.title: |-
+  ### 流水线进度 (Pipeline Progress)
+
+# ---- 语言无关识别：主管决策中的指派动词（正则备选项，以 "|" 分隔；条目内不能含 "|"；长词在前） ----
+team.supervisor.assign_verbs: |-
+  指派(?:专家)?|派发|先派|再派|派

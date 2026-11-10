@@ -1,0 +1,2 @@
+__call_for_bids__: 向全体专家征集方案。当你无法确定由谁执行任务时使用此工具。
+{"type":"object","properties":{"requirement":{"type":"string","description":"任务具体需求"}},"required":["requirement"]}

@@ -1,0 +1,19 @@
+line 0 of the long tool result
+line 1 of the long tool result
+line 2 of the long tool result
+line 3 of the long tool result
+line 4 of the long tool result
+line 5 of the long tool result
+line 6 of the long tool result
+line 7 of the long tool result
+line 8 of t
+... [内容过大已截断：单条消息超过上下文预算，省略中间部分，仅保留首尾。如需完整内容，请用分页方式重新获取] ...
+of the long tool result
+line 392 of the long tool result
+line 393 of the long tool result
+line 394 of the long tool result
+line 395 of the long tool result
+line 396 of the long tool result
+line 397 of the long tool result
+line 398 of the long tool result
+line 399 of the long tool result

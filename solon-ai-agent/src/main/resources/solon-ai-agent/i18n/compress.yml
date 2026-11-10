@@ -1,0 +1,121 @@
+# solon-ai-agent context compression messages (English, fallback for all languages)
+# Conventions: every value is a "|-" block scalar holding content only - no leading/trailing newlines or spaces (separators between parts are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- LLMCompressionStrategy ----
+compress.llm.empty_marker: |-
+  (No significant progress)
+compress.llm.system: |-
+  ## Role
+  You are an efficient task progress analyst. Briefly summarize the execution history segment of the AI Agent.
+
+  ## Key Points
+  1. **Actions Taken**: The main operations attempted (tool calls and their key arguments).
+  2. **Key Findings**: The core information or conclusions obtained.
+  3. **Current Progress**: Which stage of the task is reached and what remains unfinished.
+  4. **Information Retention**: You MUST keep all file paths, function names and technical details; they are key context for subsequent execution.
+
+  ## Output Rules
+  - Requirement: concise and accurate, no more than 200 words.
+  - Strictly forbidden: irrelevant pleasantries or self-introduction.
+  - If there is nothing to summarize, reply: {emptyMarker}
+compress.llm.user_prefix: |-
+  ### History Segment to Compress
+compress.llm.user_suffix: |-
+  ### Task Instruction
+  Please produce a semantic summary of the execution process above according to the system instruction:
+compress.llm.summary_prefix: |-
+  --- [Execution Progress Summary] ---
+
+# ---- KeyInfoExtractionStrategy ----
+compress.keyinfo.empty_marker: |-
+  (No key delta)
+compress.keyinfo.system: |-
+  ## Role
+  You are a meticulous information audit expert. Your task is to "dehydrate" the messy conversation history and keep only high-value structured information.
+
+  ## Extraction Dimensions
+  1. **Business Parameters**: Specific IDs, values, times, preferences or hard constraints mentioned by the user.
+  2. **Confirmed Facts**: Real states or key results verified through tool calls.
+  3. **Negative Paths**: Attempts verified to be ineffective (to prevent the Agent from repeating mistakes).
+  4. **Technical Details**: You MUST keep all file paths, function names and technical identifiers; do not omit them.
+
+  ## Output Rules
+  - Output MUST be a concise **Markdown list**.
+  - Strictly forbidden: any speculation, explanation or decorative statements.
+  - If no key information is found, reply directly: {emptyMarker}.
+compress.keyinfo.user_prefix: |-
+  ### History Segment to Process
+compress.keyinfo.user_suffix: |-
+  ### Audit Requirement
+  Please extract the key information from the segment above according to the system instruction.
+compress.keyinfo.summary_prefix: |-
+  --- [Confirmed Key Information] ---
+
+# ---- HierarchicalCompressionStrategy ----
+compress.hierarchical.system: |-
+  ## Role
+  You are a professional memory management expert responsible for hierarchical compression of the Agent's execution history.
+
+  ## Processing Logic
+  Merge the "previous compressed content" with the "newly expired history records" to produce a concise "current progress summary".
+
+  ## Core Requirements
+  1. **Information Extraction**: Focus on keeping confirmed key data, the current logical position, and the stage conclusions already reached.
+  2. **Deduplication and Denoising**: Remove repeated reasoning, abandoned attempts and meaningless intermediate states.
+  3. **Length Constraint**: Strictly control the summary length and use concise declarative sentences.
+  4. **Path Retention**: You MUST keep all file paths, function names and technical details; they are key navigation information for the Agent's subsequent execution.
+
+  ## Notes
+  Output the summary body directly, without filler such as "OK", "Understood" or "As you requested".
+compress.hierarchical.no_summary: |-
+  (None yet)
+compress.hierarchical.user_data: |-
+  ### Previous Summary
+  {summary}
+
+  ### Newly Expired History Records
+  {history}
+
+  ### Final Task Requirement
+  Following the logic in the System Message (system instruction), output the updated "progress summary":
+compress.hierarchical.summary_prefix: |-
+  --- [Global Rolling Progress Summary (Hierarchical Compression)] ---
+
+# ---- VectorStoreCompressionStrategy ----
+compress.vector.description: |-
+  History memory recall
+compress.vector.archived_tag: |-
+  History details archived
+compress.vector.instruction: |-
+  - When you see content containing the '--- [{archivedTag}] ---' marker, some execution details have been moved to cold memory.
+  - If a later task needs earlier specific facts, IDs or detailed data, call the `recall_history` tool to retrieve them.
+compress.vector.archived_notice: |-
+  --- [{archivedTag}; use the recall_history tool to look back if needed] ---
+compress.vector.tool.description: |-
+  Recall long-term memory, historical details or facts archived earlier in this session
+compress.vector.tool.param.query: |-
+  Search keywords or key phrases
+compress.vector.tool.param.limit: |-
+  Number of memory fragments to return
+compress.vector.recall.empty_query: |-
+  Please provide specific keywords to recall history.
+compress.vector.recall.invalid_session: |-
+  [System Notice] The current session identifier is invalid, so history cannot be recalled. Please continue based on the conversation known so far.
+compress.vector.recall.not_found: |-
+  No records about '{query}' were found in the memory store. The topic may not have been archived, or the keywords do not match.
+compress.vector.recall.failed: |-
+  [System Notice] Access to history memory is blocked. Please try to continue based on the conversation known so far.
+
+# ---- CompressionUtil ----
+compress.util.action: |-
+  [Action]: Call tool {tool}
+compress.util.action_args: |-
+  , arguments: {args}
+compress.util.observation: |-
+  [Observation]: Got result {content}
+
+# ---- ContextCompressionInterceptor ----
+compress.interceptor.truncated: |-
+  ... [Content too large and truncated: a single message exceeded the context budget; the middle part was omitted and only the head and tail were kept. To get the full content, re-fetch it with pagination] ...
+compress.interceptor.truncated_short: |-
+  [Content truncated]

@@ -1,0 +1,26 @@
+
+### Expert Marketplace
+```json
+{"marketplace":{"coder":{"quality":0.8,"efficiency":0.8,"completedTasks":0,"basePrice":1.0,"currentPrice":1.0},"reviewer":{"quality":0.8,"efficiency":0.8,"completedTasks":0,"basePrice":1.0,"currentPrice":1.0}}}
+```
+> Strategy Tips:
+> - Prefer lower Price agents for simple/light tasks.
+> - Prefer higher Score/ROI agents for deep/critical tasks.
+> - Assign lower Price agents for routine tasks under budget constraints.
+> **Top ROI Agent**:coder
+> **Budget Pick**:coder
+## Hierarchical Dashboard
+> No reports yet. Issue instructions.
+```json
+{"_meta":{"capabilities":{"coder":["text"],"reviewer":["text"]}}}
+```
+
+### Directive Standards (SOP):
+> 1. **Explicit Data Transfer**: Always restate core parameters from `_results`.
+
+### Management & Decision Hints:
+> **Decision Hint**: Check progress. Keep scheduling if errors exist or key steps are missing.
+> **Workflow Integrity**: Ensure both design and implementation (e.g., `implementer`) roles have participated. Do not skip execution steps.
+> **Final Delivery**: If satisfied, output `[FINISH]` and **consolidate the final code/result** in this response for the USER.
+> **Crucial**: Once the marker is output, the workflow ends. You cannot assign agents anymore. Ensure the final delivery is complete.
+> **Load Balance**: Refer to `agent_usage`. If an agent fails repeatedly, switch approach or adjust instructions.

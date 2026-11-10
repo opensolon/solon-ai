@@ -1,0 +1,11 @@
+
+> [提示] 招标次数已用尽，请基于当前看板完成定标。
+
+### 合同网竞标看板
+```json
+{"bids":{"coder":{"score":80,"plan":"implement the api","auto_bid":false}},"history":[{"coder":{"score":80,"plan":"implement the api","auto_bid":false}}],"requirement":"java api","rounds":2}
+```
+> 提示：请根据各专家的 `score` 和 `plan` 择优指派。剩余招标次数: 0
+#### 成员资质表:
+- {"name":"coder","role":"coder-role","capabilities":["java","assistant"],"inputModes":["text"]}
+- {"name":"reviewer","role":"reviewer-role","capabilities":["review","assistant"],"inputModes":["text"]}

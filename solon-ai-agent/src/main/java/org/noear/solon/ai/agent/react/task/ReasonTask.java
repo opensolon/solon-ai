@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.react.task;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.*;
 import org.noear.solon.ai.chat.ChatRequestDesc;
 import org.noear.solon.ai.chat.ChatResponse;
@@ -101,15 +103,7 @@ public class ReasonTask {
                 trace.getOptions().addMaxTurns(addTurns);
                 LOG.info("ReActAgent [{}] auto-rethink triggered. New maxTurns: {}", config.getName(), trace.getOptions().getMaxTurns());
 
-                String rethinkPrompt = String.format(
-                                "【系统指令：自我反思 (Self-Reflection)】\n" +
-                                "当前任务已执行至第 %d 回合。为了确保任务准确高效完成，请立即启动自审程序：\n\n" +
-                                "1. **核心目标检查**：重新审视用户最初提出的核心问题和当前要解决的任务，评估你当前的方向是否偏离了主线？\n" +
-                                "2. **有效性评估**：检查历史 Observation。如果最近的尝试没有带来有效新线索，说明当前策略已失效，请必须更换思路或换个角度切入。\n" +
-                                "3. **强制收敛**：若评估判定由于客观限制确实无法达成，请梳理已知线索，并在 Final Answer 中向用户复盘并申请协助。\n\n" +
-                                "根据新策略决定下一步行动，或输出 Final Answer 结束任务",
-                        currentTurn
-                );
+                String rethinkPrompt = AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.REACT_REASON_RETHINK, "turn", currentTurn);
 
                 trace.getWorkingMemory().addMessage(ChatMessage.ofUser(rethinkPrompt));
                 LOG.info("ReActAgent [{}] auto-rethink triggered at turn {}", config.getName(), currentTurn);
@@ -222,24 +216,14 @@ public class ReasonTask {
                 if (responseMessage.hasThinking()) {
                     trace.getWorkingMemory().addMessage(responseMessage); //保留思考上下文，避免下一轮失忆
                     int retryCount = trace.getEmptyRetryCounter().get();
-                    String formatFixPrompt = String.format(
-                            "【系统指令：输出格式修正 (Format Correction)】\n" +
-                            "您在第 %d 轮中输出了思考内容，但未包含有效的行动（Action）或最终答案（Final Answer）（第 %d 次尝试）。\n\n" +
-                            "请检查您最近的 Observation 和之前的思考链，确保下一步操作或最终结论已明确给出。",
-                            currentTurn, retryCount
-                    );
+                    String formatFixPrompt = AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.REACT_REASON_FORMAT_FIX,
+                            "turn", currentTurn, "attempt", retryCount);
                     trace.getWorkingMemory().addMessage(ChatMessage.ofUser(formatFixPrompt));
                 } else {
                     // 反思机制：模型返回完全空响应（无内容、无工具调用）时， 通过自我反思提示引导模型回溯任务目标、审视历史轨迹并重新输出
                     int retryCount = trace.getEmptyRetryCounter().get();
-                    String reflectPrompt = String.format(
-                            "【系统指令：自我反思 (Self-Reflection)】\n" +
-                            "您在第 %d 轮推理中返回了空响应（第 %d 次尝试），请立即启动自我反思：\n\n" +
-                            "1. **回溯任务目标**：重新审视您最初被分配的任务核心目标，检查是否偏离了主线。\n" +
-                            "2. **审视历史轨迹**：回顾最近的 Observation 和之前的思考链，定位导致空响应的原因。\n" +
-                            "3. **策略修正**：若当前路径受阻，请果断切换思路或拆分为更小的子任务推进。\n",
-                            currentTurn, retryCount
-                    );
+                    String reflectPrompt = AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.REACT_REASON_REFLECT,
+                            "turn", currentTurn, "attempt", retryCount) + "\n";
                     trace.getWorkingMemory().addMessage(ChatMessage.ofUser(reflectPrompt));
                 }
 
@@ -254,7 +238,7 @@ public class ReasonTask {
                 // 再用兜底文案覆盖会造成“内容都出来了却报未返回有效内容”的割裂；此处降级用思考内容作答。
                 String thinkingFallback = responseMessage.getThinking();
                 if (Assert.isBlank(thinkingFallback)) {
-                    trace.setFinalAnswer("抱歉，模型多次未返回有效内容。请稍后重试。");
+                    trace.setFinalAnswer(AgentI18n.get(trace.getOptions().getLocale(), AgentI18nKeys.REACT_REASON_EMPTY_EXHAUSTED));
                 } else {
                     trace.setFinalAnswer(thinkingFallback.trim(), false);
                 }
@@ -518,9 +502,9 @@ public class ReasonTask {
 
         HttpResponseException httpRespEx = findCause(lastException, HttpResponseException.class);
         if (httpRespEx != null) {
-            trace.setFinalAnswer(buildHttpErrorMessage(httpRespEx.code(), type));
+            trace.setFinalAnswer(buildHttpErrorMessage(trace.getOptions().getLocale(), httpRespEx.code(), type));
         } else {
-            trace.setFinalAnswer(buildExceptionErrorMessage(type));
+            trace.setFinalAnswer(buildExceptionErrorMessage(trace.getOptions().getLocale(), type));
         }
 
         return null;
@@ -532,18 +516,18 @@ public class ReasonTask {
         }
     }
 
-    private static String buildHttpErrorMessage(int code, LlmErrorEvent.Type type) {
+    private static String buildHttpErrorMessage(Locale locale, int code, LlmErrorEvent.Type type) {
         switch (type) {
             case RATE_LIMIT:
-                return "抱歉，模型服务请求过于频繁或触发了上游限流（CODE: " + code + "）。请稍后重试，或降低并发数量。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.REACT_REASON_HTTP_RATE_LIMIT, "code", code);
             case UPSTREAM_UNAVAILABLE:
-                return "抱歉，模型服务暂时不可用（CODE: " + code + "）。可能是上游限流、服务过载或网关异常，请稍后重试。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.REACT_REASON_HTTP_UPSTREAM_UNAVAILABLE, "code", code);
             case SERVER_ERROR:
-                return "抱歉，模型服务发生内部错误（CODE: " + code + "）。请稍后重试。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.REACT_REASON_HTTP_SERVER_ERROR, "code", code);
             case TIMEOUT:
-                return "抱歉，模型服务请求超时（CODE: " + code + "）。请稍后重试。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.REACT_REASON_HTTP_TIMEOUT, "code", code);
             default:
-                return "抱歉，模型服务响应出错（CODE: " + code + "）。请检查请求参数或服务配置后重试。";
+                return AgentI18n.fmt(locale, AgentI18nKeys.REACT_REASON_HTTP_OTHER, "code", code);
         }
     }
 
@@ -582,24 +566,24 @@ public class ReasonTask {
                 || code == 524 || code == 529;
     }
 
-    private static String buildExceptionErrorMessage(LlmErrorEvent.Type type) {
+    private static String buildExceptionErrorMessage(Locale locale, LlmErrorEvent.Type type) {
         switch (type) {
             case NO_RETURN:
-                return "抱歉，模型服务没有内容返回。请稍后重试。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_NO_RETURN);
             case SSL:
-                return "抱歉，模型服务安全连接失败，可能是 SSL 证书或信任链配置问题。请检查模型服务地址、证书有效期、证书信任链、域名匹配及系统时间。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_SSL);
             case DNS:
-                return "抱歉，无法解析模型服务地址。请检查服务域名、DNS 配置或网络代理设置。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_DNS);
             case TIMEOUT:
-                return "抱歉，模型服务响应超时。请稍后重试。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_TIMEOUT);
             case CONNECTION_REFUSED:
-                return "抱歉，无法连接模型服务，目标端口可能未开放或服务未启动。请检查模型服务地址、端口及防火墙配置。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_CONNECTION_REFUSED);
             case CONNECTION:
-                return "抱歉，模型服务连接失败。请稍后重试。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_CONNECTION);
             case NETWORK:
-                return "抱歉，访问模型服务时发生网络错误。请检查网络连接、代理配置或模型服务状态。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_NETWORK);
             default:
-                return "抱歉，暂时无法使用模型服务（具体参考日志）。请稍后重试。";
+                return AgentI18n.get(locale, AgentI18nKeys.REACT_REASON_ERROR_OTHER);
         }
     }
 

@@ -1,0 +1,9 @@
+
+### Contract Net Dashboard
+```json
+{"bids":{"coder":{"score":80,"plan":"implement the api","auto_bid":false}},"history":[],"requirement":"java api","rounds":1}
+```
+> Tips: Award the best candidate by `score`/`plan`. Remaining bidding rounds: 1
+#### Agent Profiles:
+- {"name":"coder","role":"coder-role","capabilities":["java","assistant"],"inputModes":["text"]}
+- {"name":"reviewer","role":"reviewer-role","capabilities":["review","assistant"],"inputModes":["text"]}

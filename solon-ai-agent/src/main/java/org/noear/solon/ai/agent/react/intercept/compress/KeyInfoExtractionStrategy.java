@@ -16,6 +16,8 @@
 package org.noear.solon.ai.agent.react.intercept.compress;
 
 import org.noear.solon.ai.agent.AgentTrace;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.CompressionStrategy;
 import org.noear.solon.ai.chat.ChatModel;
@@ -25,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Locale;
 
 /**
  * 基于 LLM 的关键信息提取策略实现
@@ -36,22 +39,25 @@ import java.util.ArrayList;
 public class KeyInfoExtractionStrategy implements CompressionStrategy {
     private static final Logger log = LoggerFactory.getLogger(KeyInfoExtractionStrategy.class);
 
-    // 1. 系统指令：定义提取协议和专家身份
-    private String systemInstruction = "## 角色定义\n" +
-            "你是一个精密的信息审计专家。你的任务是从杂乱的对话历史中\"脱水\"，仅保留高价值的结构化信息。\n\n" +
-            "## 提取维度\n" +
-            "1. **业务参数**：用户提及的特定 ID、数值、时间、偏好或硬性约束。\n" +
-            "2. **确定性事实**：通过工具调用已证实的真实状态或返回的关键结果。\n" +
-            "3. **负面路径**：已验证为无效的尝试（防止 Agent 重复错误）。\n" +
-            "4. **技术细节**：必须保留所有文件路径、函数名和技术标识，不可省略。\n\n" +
-            "## 输出规范\n" +
-            "- 必须以简洁的 **Markdown 列表** 形式输出。\n" +
-            "- 严禁包含任何推测、解释或修饰性语句。\n" +
-            "- 如果没有发现关键信息，请直接回复：(无关键增量)。";
+    // 1. 系统指令：定义提取协议和专家身份（为 null 时按语言使用内置文案）
+    private String systemInstruction;
 
     public KeyInfoExtractionStrategy systemInstruction(String systemInstruction) {
         this.systemInstruction = systemInstruction;
         return this;
+    }
+
+    /**
+     * 获取系统指令（显式设置优先，否则按语言使用内置文案）
+     *
+     * @param locale 语言（null 时使用默认语言）
+     * @since 4.2
+     */
+    public String getSystemInstruction(Locale locale) {
+        if (systemInstruction != null) {
+            return systemInstruction;
+        }
+        return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_KEYINFO_SYSTEM, "emptyMarker", AgentI18n.get(locale, AgentI18nKeys.COMPRESS_KEYINFO_EMPTY_MARKER));
     }
 
     @Override
@@ -69,20 +75,22 @@ public class KeyInfoExtractionStrategy implements CompressionStrategy {
         }
         if (filtered.isEmpty()) return null;
 
+        Locale locale = CompressionUtil.localeOf(trace);
+
         try {
             String keyInfo = CompressionUtil.compressWithPTLRetry(
                     chatModel, maxRetries, trace, filtered,
-                    systemInstruction,
+                    getSystemInstruction(locale),
                     KeyInfoExtractionStrategy.class.getSimpleName(),
                     CompressionUtil.DEFAULT_MAX_TOOL_RESULT_LENGTH,
-                    "### 待处理历史片段\n",
-                    "\n\n### 审计要求\n请根据系统指令，提取上述片段中的关键信息。");
+                    AgentI18n.get(locale, AgentI18nKeys.COMPRESS_KEYINFO_USER_PREFIX) + "\n",
+                    "\n\n" + AgentI18n.get(locale, AgentI18nKeys.COMPRESS_KEYINFO_USER_SUFFIX));
 
-            if (CompressionUtil.isEmptySummary(keyInfo)) {
+            if (CompressionUtil.isEmptySummary(keyInfo, locale)) {
                 return null;
             }
 
-            return CompressionUtil.buildCompressedMessage("--- [已确认的关键信息] ---", keyInfo);
+            return CompressionUtil.buildCompressedMessage(AgentI18n.get(locale, AgentI18nKeys.COMPRESS_KEYINFO_SUMMARY_PREFIX), keyInfo);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

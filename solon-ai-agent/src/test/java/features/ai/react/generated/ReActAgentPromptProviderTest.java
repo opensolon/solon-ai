@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActSystemPrompt;
-import org.noear.solon.ai.agent.react.ReActSystemPromptCn;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatModel;
@@ -81,7 +80,7 @@ public class ReActAgentPromptProviderTest {
 
     /**
      * 测试 2：使用内置默认中文增强单例
-     * <p>验证框架自带的 ReActSystemPromptCn.getDefault() 在中文任务下的表现。</p>
+     * <p>验证框架自带的默认提示词（ReActSystemPromptDefault，语言由 locale 决定）在中文任务下的表现。</p>
      */
     @Test
     public void testChinesePromptProvider() throws Throwable {
@@ -89,8 +88,7 @@ public class ReActAgentPromptProviderTest {
 
         ReActAgent agent = ReActAgent.of(chatModel)
                 .defaultToolAdd(new ChineseTools())
-                // 直接使用默认实现，适合通用中文场景
-                .systemPrompt(ReActSystemPromptCn.getDefault())
+                // 直接使用默认实现（语言由 locale 决定，默认中文）
                 .build();
 
         AgentSession session = InMemoryAgentSession.of("session_weather_001");

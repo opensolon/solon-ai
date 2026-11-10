@@ -18,6 +18,8 @@ package org.noear.solon.ai.agent.team.protocol;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.Agent;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
 import org.noear.solon.ai.agent.team.TeamTrace;
@@ -42,10 +44,6 @@ public class A2AProtocol extends TeamProtocolBase {
     private static final String KEY_A2A_STATE = "a2a_state_obj";
     private static final String TOOL_TRANSFER = "__transfer_to__";
     private final int maxTransferRounds = 5;
-
-    private boolean isZh(Locale locale) {
-        return Locale.CHINA.getLanguage().equals(locale.getLanguage());
-    }
 
     public A2AProtocol(TeamAgentConfig config) {
         super(config);
@@ -132,7 +130,7 @@ public class A2AProtocol extends TeamProtocolBase {
         if (trace == null) return;
 
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = isZh(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
 
         ONode expertsNode = new ONode().asArray();
         config.getAgentMap().entrySet().stream()
@@ -154,26 +152,14 @@ public class A2AProtocol extends TeamProtocolBase {
 
             stateObj.setTransferRequest(target, state, memo);
 
-            if (isZh) {
-                return "已发起向 [" + target + "] 的接力请求。";
-            } else {
-                return "Transfer to [" + target + "] requested.";
-            }
+            return AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_TOOL_RESULT, "target", target);
         });
 
-        if (isZh) {
-            tool.title("任务移交")
-                    .description("当你无法完成当前任务时，将其移交给更合适的专家。")
-                    .stringParamAdd("target", "目标专家名。必选范围: " + expertsNode.toJson())
-                    .stringParamAdd("state", "业务状态 JSON。")
-                    .stringParamAdd("memo", "交接备忘：把需要下游专家继续处理的关键产出/结论写在这里。");
-        } else {
-            tool.title("Transfer")
-                    .description("When you are unable to complete the current task, hand it over to a more appropriate expert.")
-                    .stringParamAdd("target", "Expert name. Options: " + expertsNode.toJson())
-                    .stringParamAdd("state", "Persistent JSON state.")
-                    .stringParamAdd("memo", "Handover memo: put key findings/output the next expert should continue with.");
-        }
+        tool.title(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_TOOL_TITLE))
+                .description(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_TOOL_DESCRIPTION))
+                .stringParamAdd("target", AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_TOOL_PARAM_TARGET, "experts", expertsNode.toJson()))
+                .stringParamAdd("state", AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_TOOL_PARAM_STATE))
+                .stringParamAdd("memo", AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_TOOL_PARAM_MEMO));
 
         receiver.accept(tool);
     }
@@ -183,16 +169,8 @@ public class A2AProtocol extends TeamProtocolBase {
         // 1. 基类注入：身份描述 + 协作历史 (最近 5 条)
         super.injectAgentInstruction(context, agent, locale, sb);
 
-        boolean isZh = isZh(locale);
-
         // 2. 注入专家协作准则
-        if (isZh) {
-            sb.append("\n## 专家协作指引\n");
-            sb.append("- 必须根据各专家的 [核心能力] 和 [模态] 标签精准选择目标，严禁向不支持相关模态的专家移交任务。\n");
-        } else {
-            sb.append("\n## Collaboration Guidelines\n");
-            sb.append("- You must choose the target precisely based on [Capabilities] and [Modes] tags. Never transfer to an agent that lacks the required modality.\n");
-        }
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_AGENT_GUIDE)).append("\n");
 
         //---------
 
@@ -227,38 +205,19 @@ public class A2AProtocol extends TeamProtocolBase {
 
         // 4. 注入当前任务断面 (Session Level - 确保模型感知其处于接力状态)
 
-        if (isZh) {
-            sb.append("\n## 当前接力任务断面 (Active Session Context)\n");
-            sb.append("> 本部分记录了任务流转至此时的关键快照，请基于此状态继续执行，严禁编造断面之外的信息。\n\n");
+        sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_AGENT_SESSION_TITLE)).append("\n\n");
 
-            if (!path.isEmpty()) {
-                sb.append("- **协作轨迹**: ").append(String.join(" -> ", path)).append("\n");
-                sb.append("- **上一步专家**: ").append(path.get(path.size() - 1)).append("\n");
-            }
+        if (!path.isEmpty()) {
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_AGENT_SESSION_TRAIL, "path", String.join(" -> ", path))).append("\n");
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_AGENT_SESSION_PRIOR, "agent", path.get(path.size() - 1))).append("\n");
+        }
 
-            if (Utils.isNotEmpty(effectiveOutput)) {
-                sb.append("- **待处理产出**: ").append(effectiveOutput).append("\n");
-            }
+        if (Utils.isNotEmpty(effectiveOutput)) {
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_AGENT_SESSION_PENDING, "output", effectiveOutput)).append("\n");
+        }
 
-            if (Utils.isNotEmpty(state)) {
-                sb.append("- **累积业务状态**: ").append(state).append("\n");
-            }
-        } else {
-            sb.append("\n## Active Session Context\n");
-            sb.append("> This snapshot records the current state of the task. Continue execution based on this data.\n\n");
-
-            if (!path.isEmpty()) {
-                sb.append("- **Collaboration Trail**: ").append(String.join(" -> ", path)).append("\n");
-                sb.append("- **Prior Expert**: ").append(path.get(path.size() - 1)).append("\n");
-            }
-
-            if (Utils.isNotEmpty(effectiveOutput)) {
-                sb.append("- **Pending Output**: ").append(effectiveOutput).append("\n");
-            }
-
-            if (Utils.isNotEmpty(state)) {
-                sb.append("- **Global State**: ").append(state).append("\n");
-            }
+        if (Utils.isNotEmpty(state)) {
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_AGENT_SESSION_STATE, "state", state)).append("\n");
         }
     }
 
@@ -269,15 +228,11 @@ public class A2AProtocol extends TeamProtocolBase {
         String target = stateObj.getLastTempTarget();
 
         if (Utils.isNotEmpty(target)) {
-            boolean isZh = isZh(trace.getOptions().getLocale());
+            Locale locale = trace.getOptions().getLocale();
 
             // 1. 熔断检查
             if (stateObj.getTransferCount() >= maxTransferRounds) {
-                if (isZh) {
-                    trace.setFinalAnswer("协作达到最大流转次数，任务中止。");
-                } else {
-                    trace.setFinalAnswer("Max transfer limit reached.");
-                }
+                trace.setFinalAnswer(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_ROUTE_MAX_TRANSFER));
                 return null;
             }
 
@@ -286,12 +241,7 @@ public class A2AProtocol extends TeamProtocolBase {
                 // 失败移交不计入 transferCount
                 stateObj.clearPendingTransfer();
 
-                String feedback;
-                if (isZh) {
-                    feedback = "【系统通知】移交失败：专家 [" + target + "] 不存在或能力不匹配（如无法处理图片）。请重新选择或尝试自行解决。";
-                } else {
-                    feedback = "[System] Transfer failed: Expert [" + target + "] is invalid or lacks required capabilities. Please re-select or resolve yourself.";
-                }
+                String feedback = AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_ROUTE_TRANSFER_FAILED, "target", target);
 
                 // 失败反馈只记协作历史，不改写 originalPrompt（避免污染任务原始输入）
                 trace.addRecord(ChatRole.SYSTEM, "Supervisor", feedback, 0);
@@ -330,38 +280,20 @@ public class A2AProtocol extends TeamProtocolBase {
     @Override
     public void prepareSupervisorInstruction(FlowContext context, TeamTrace trace, StringBuilder sb) {
         A2AState stateObj = getA2AState(trace);
-        boolean isZh = isZh(trace.getOptions().getLocale());
+        Locale locale = trace.getOptions().getLocale();
 
         if (stateObj != null) {
-            if (isZh) {
-                sb.append("\n### A2A 接力看板\n");
-                if (Utils.isNotEmpty(stateObj.getGlobalState())) {
-                    sb.append("- 全局状态: ").append(stateObj.getGlobalState()).append("\n");
-                }
-                sb.append("- 接力次数: ").append(stateObj.getTransferCount()).append("\n");
-            } else {
-                sb.append("\n### A2A Dashboard\n");
-                if (Utils.isNotEmpty(stateObj.getGlobalState())) {
-                    sb.append("- Global State: ").append(stateObj.getGlobalState()).append("\n");
-                }
-                sb.append("- Handovers: ").append(stateObj.getTransferCount()).append("\n");
+            sb.append("\n").append(AgentI18n.get(locale, AgentI18nKeys.TEAM_A2A_DASHBOARD_TITLE)).append("\n");
+            if (Utils.isNotEmpty(stateObj.getGlobalState())) {
+                sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_DASHBOARD_STATE, "state", stateObj.getGlobalState())).append("\n");
             }
+            sb.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_DASHBOARD_COUNT, "count", stateObj.getTransferCount())).append("\n");
         }
     }
 
     @Override
     public void injectSupervisorInstruction(Locale locale, StringBuilder sb) {
         super.injectSupervisorInstruction(locale, sb);
-        boolean isZh = isZh(locale);
-
-        if (isZh) {
-            sb.append("\n### A2A 协作准则：\n");
-            sb.append("1. **直接交付**：任务完成时请直接输出 `" + config.getFinishMarker() + "`，**禁止**对专家的内容进行二次总结或润色。\n");
-            sb.append("2. **流转审计**：若专家间接力流转超过 5 次仍无实质进展，请立即介入并强制收尾。");
-        } else {
-            sb.append("\n### A2A Collaboration Rules:\n");
-            sb.append("1. **Direct Delivery**: Output `" + config.getFinishMarker() + "` directly. **DO NOT** summarize.\n");
-            sb.append("2. **Handover Audit**: Force termination if more than 5 handovers occur.");
-        }
+        sb.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_A2A_SUPERVISOR_RULES, "finishMarker", config.getFinishMarker()));
     }
 }

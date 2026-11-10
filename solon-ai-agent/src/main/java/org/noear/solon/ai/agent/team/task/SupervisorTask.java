@@ -12,6 +12,8 @@ package org.noear.solon.ai.agent.team.task;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.exception.LlmNoReturnException;
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.util.FeedbackTool;
 import org.noear.solon.ai.agent.team.TeamAgent;
 import org.noear.solon.ai.agent.team.TeamAgentConfig;
@@ -78,7 +80,9 @@ public class SupervisorTask implements NamedTaskComponent {
             for (RankEntity<TeamInterceptor> item : trace.getOptions().getInterceptors()) {
                 if (item.target.isEnabled()) {
                     if (!item.target.shouldSupervisorContinue(trace)) {
-                        trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR, "[Skipped] Intercepted by " + item.target.getClass().getSimpleName(), 0);
+                        trace.addRecord(ChatRole.SYSTEM, TeamAgent.ID_SUPERVISOR,
+                                AgentI18n.fmt(trace.getOptions().getLocale(), AgentI18nKeys.TEAM_SUPERVISOR_SKIPPED,
+                                        "interceptor", item.target.getClass().getSimpleName()), 0);
                         if (TeamAgent.ID_SUPERVISOR.equals(trace.getRoute())) {
                             routeTo(context, trace, Agent.ID_END);
                         }
@@ -114,8 +118,6 @@ public class SupervisorTask implements NamedTaskComponent {
      * 构建 Prompt 并调用模型进行调度决策
      */
     protected void dispatch(Node node, FlowContext context, TeamTrace trace) throws Exception {
-        boolean isZh = Locale.CHINA.getLanguage().equals(trace.getOptions().getLocale().getLanguage());
-
         // 组装系统提示词 (基础模版 + 协议扩展)
         StringBuilder protocolExt = new StringBuilder();
         config.getProtocol().prepareSupervisorInstruction(context, trace, protocolExt);
@@ -123,36 +125,7 @@ public class SupervisorTask implements NamedTaskComponent {
         String finalSystemPrompt = (protocolExt.length() > 0) ? basePrompt + "\n\n" + protocolExt : basePrompt;
 
         // 组装用户输入 (包含协作历史、当前轮次、候选成员)
-        StringBuilder userContent = new StringBuilder();
-        config.getProtocol().prepareSupervisorContext(context, trace, userContent);
-        int windowSize = trace.getOptions().getRecordWindowSize();
-
-        if (isZh) {
-            userContent.append("## 协作进度 (最近 ").append(windowSize).append(" 轮历史)\n").append(trace.getFormattedHistory(windowSize)).append("\n\n");
-            userContent.append("---\n");
-            userContent.append("当前迭代轮次: ").append(trace.nextTurn()).append("\n");
-            userContent.append("指令：请指派下一位执行者。已完成则输出 ").append(config.getFinishMarker());
-        } else {
-            userContent.append("## Collaboration Progress (Last ").append(windowSize).append(" rounds)\n").append(trace.getFormattedHistory(windowSize)).append("\n\n");
-            userContent.append("---\n");
-            userContent.append("Current Iteration: ").append(trace.nextTurn()).append("\n");
-            userContent.append("Command: Assign next agent or output ").append(config.getFinishMarker()).append(" to finish.");
-        }
-
-        // 过滤已参与成员，提示待命专家
-        Set<String> participatedAgentNames = trace.getRecords().stream()
-                .filter(TeamTrace.TeamRecord::isAgent)
-                .map(s -> s.getSource().toLowerCase())
-                .collect(Collectors.toSet());
-
-        List<String> remainingAgents = config.getAgentMap().keySet().stream()
-                .filter(name -> !participatedAgentNames.contains(name.toLowerCase()))
-                .collect(Collectors.toList());
-
-        if (!remainingAgents.isEmpty()) {
-            String agentsList = String.join(", ", remainingAgents);
-            userContent.append(isZh ? "\n> **待命专家**：[" : "\n> **Pending Experts**: [").append(agentsList).append("].");
-        }
+        String userContent = buildSupervisorUserContent(context, trace);
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("TeamAgent SystemPrompt rendered for agent [{}]:\n{}", trace.getAgentName(), finalSystemPrompt);
@@ -161,7 +134,7 @@ public class SupervisorTask implements NamedTaskComponent {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.ofSystem(finalSystemPrompt));
         messages.addAll(trace.getWorkingMemory().getMessages());
-        messages.add(ChatMessage.ofUser(userContent.toString()));
+        messages.add(ChatMessage.ofUser(userContent));
 
 
         ChatResponse response = callWithRetry(node, trace, messages);
@@ -234,6 +207,41 @@ public class SupervisorTask implements NamedTaskComponent {
         }
 
         commitRoute(trace, decision, context);
+    }
+
+    /**
+     * 构建主管决策的用户输入（协议上下文 + 协作进度 + 当前轮次 + 待命专家）
+     *
+     * <p>注意：会推进轮次（{@link TeamTrace#nextTurn()}）。</p>
+     */
+    protected String buildSupervisorUserContent(FlowContext context, TeamTrace trace) {
+        Locale locale = trace.getOptions().getLocale();
+
+        StringBuilder userContent = new StringBuilder();
+        config.getProtocol().prepareSupervisorContext(context, trace, userContent);
+        int windowSize = trace.getOptions().getRecordWindowSize();
+
+        userContent.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SUPERVISOR_PROGRESS, "window", windowSize)).append("\n").append(trace.getFormattedHistory(windowSize)).append("\n\n");
+        userContent.append("---\n");
+        userContent.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SUPERVISOR_TURN, "turn", trace.nextTurn())).append("\n");
+        userContent.append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SUPERVISOR_COMMAND, "finishMarker", config.getFinishMarker()));
+
+        // 过滤已参与成员，提示待命专家
+        Set<String> participatedAgentNames = trace.getRecords().stream()
+                .filter(TeamTrace.TeamRecord::isAgent)
+                .map(s -> s.getSource().toLowerCase())
+                .collect(Collectors.toSet());
+
+        List<String> remainingAgents = config.getAgentMap().keySet().stream()
+                .filter(name -> !participatedAgentNames.contains(name.toLowerCase()))
+                .collect(Collectors.toList());
+
+        if (!remainingAgents.isEmpty()) {
+            String agentsList = String.join(", ", remainingAgents);
+            userContent.append("\n").append(AgentI18n.fmt(locale, AgentI18nKeys.TEAM_SUPERVISOR_PENDING, "agents", agentsList));
+        }
+
+        return userContent.toString();
     }
 
     /**
@@ -446,12 +454,15 @@ public class SupervisorTask implements NamedTaskComponent {
         }
         String cleanText = text.replaceAll("[\\*\\`]", "").trim();
 
+        // 指派动词来自资源文件 team.supervisor.assign_verbs（合并所有已知语言；新增语言只需加资源文件）
+        final String verbs = assignVerbsRegex();
+
         // 1) agent name：指派动词 + name（避免中文角色后吞掉整句）
         String assignedByName = null;
         int assignedByNameIdx = -1;
         for (String name : config.getAgentMap().keySet()) {
             Pattern nameAssign = Pattern.compile(
-                    "(?is)(?:指派(?:专家)?|派发|先派|再派|派|next(?:\\s+agent)?|route(?:\\s+to)?)\\s*[:：]?\\s*"
+                    "(?is)(?:" + verbs + ")\\s*[:：]?\\s*"
                             + Pattern.quote(name) + "(?=[^a-zA-Z0-9_]|$)");
             Matcher nm = nameAssign.matcher(cleanText);
             while (nm.find()) {
@@ -474,7 +485,7 @@ public class SupervisorTask implements NamedTaskComponent {
                 continue;
             }
             Pattern roleAssign = Pattern.compile(
-                    "(?is)(?:指派(?:专家)?|派发|先派|再派|派|next(?:\\s+agent)?|route(?:\\s+to)?)\\s*[:：]?\\s*"
+                    "(?is)(?:" + verbs + ")\\s*[:：]?\\s*"
                             + Pattern.quote(role));
             Matcher rm = roleAssign.matcher(cleanText);
             while (rm.find()) {
@@ -485,6 +496,13 @@ public class SupervisorTask implements NamedTaskComponent {
             }
         }
         return assignedByRole;
+    }
+
+    /**
+     * 指派动词正则（所有已知语言的 team.supervisor.assign_verbs 备选项合并）
+     */
+    protected String assignVerbsRegex() {
+        return String.join("|", AgentI18n.itemsOfAllLocales(AgentI18nKeys.TEAM_SUPERVISOR_ASSIGN_VERBS));
     }
 
     /**
@@ -558,7 +576,8 @@ public class SupervisorTask implements NamedTaskComponent {
                     if (trace.getOptions().isFeedbackMode()) {
                         o.toolAdd(FeedbackTool.getTool(
                                 trace.getOptions().getFeedbackDescription(trace),
-                                trace.getOptions().getFeedbackReasonDescription(trace)));
+                                trace.getOptions().getFeedbackReasonDescription(trace),
+                                trace.getOptions().getLocale()));
                     }
 
                     o.toolAdd(trace.getOptions().getTools());

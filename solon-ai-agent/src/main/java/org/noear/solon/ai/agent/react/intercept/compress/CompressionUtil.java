@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.agent.react.intercept.compress;
 
+import org.noear.solon.ai.agent.i18n.AgentI18n;
+import org.noear.solon.ai.agent.i18n.AgentI18nKeys;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
@@ -29,7 +31,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * 压缩策略公用工具类
@@ -56,6 +62,41 @@ public class CompressionUtil {
      * 工具调用内容的截断后缀标记（对齐 claude-code-java 的 "... [truncated, N chars total]" 格式）
      */
     public static final String TRUNCATION_SUFFIX = "... [truncated";
+
+    /**
+     * “无显著增量”标记的文案 key（各策略在系统指令中要求模型回复该标记）
+     */
+    private static final List<String> EMPTY_MARKER_KEYS = Collections.unmodifiableList(Arrays.asList(
+            AgentI18nKeys.COMPRESS_LLM_EMPTY_MARKER,
+            AgentI18nKeys.COMPRESS_KEYINFO_EMPTY_MARKER));
+
+    /**
+     * 获取执行轨迹的语言（trace 或 options 缺失时返回 null，即使用默认语言）
+     *
+     * @since 4.2
+     */
+    public static Locale localeOf(ReActTrace trace) {
+        if (trace == null || trace.getOptions() == null) {
+            return null;
+        }
+        return trace.getOptions().getLocale();
+    }
+
+    /**
+     * 获取某个 key 在所有已知语言（内置、已使用、已登记、默认，以及指定语言）下的文案集合，用于跨语言识别
+     *
+     * <p>用户通过资源文件新增的语言（如 _ja）在首次使用后自动纳入识别，无需改代码。</p>
+     *
+     * @param locale 额外纳入的语言（可为 null）
+     * @param key    文案 key
+     * @since 4.2
+     */
+    public static Set<String> textsOfAllLocales(Locale locale, String key) {
+        if (locale != null) {
+            AgentI18n.registerLocale(locale);
+        }
+        return AgentI18n.textsOfAllLocales(key);
+    }
 
     /**
      * 将消息格式化为供 LLM 压缩或归档用的文本行。
@@ -86,6 +127,19 @@ public class CompressionUtil {
      * @return 格式化后的文本行，不会为 null
      */
     public static String formatMessageForCompression(ChatMessage msg, int maxToolResultLength) {
+        return formatMessageForCompression(msg, maxToolResultLength, null);
+    }
+
+    /**
+     * 将消息格式化为供 LLM 压缩或归档用的文本行（按语言输出动作/结果描述）。
+     *
+     * @param msg                 待格式化的消息
+     * @param maxToolResultLength ToolMessage 内容截断的最大字符数
+     * @param locale              语言（null 时使用默认语言）
+     * @return 格式化后的文本行，不会为 null
+     * @since 4.2
+     */
+    public static String formatMessageForCompression(ChatMessage msg, int maxToolResultLength, Locale locale) {
         if (msg instanceof AssistantMessage) {
             AssistantMessage am = (AssistantMessage) msg;
             StringBuilder sb = new StringBuilder();
@@ -103,9 +157,9 @@ public class CompressionUtil {
                     if (sb.length() > 0) sb.append('\n');
                     String name = tc.getName() != null ? tc.getName() : "";
                     String args = tc.getArgumentsStr() != null ? tc.getArgumentsStr() : "";
-                    sb.append("[Action]: 调用工具 ").append(name);
+                    sb.append(AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_UTIL_ACTION, "tool", name));
                     if (!args.isEmpty()) {
-                        sb.append("，参数: ").append(args);
+                        sb.append(AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_UTIL_ACTION_ARGS, "args", args));
                     }
                 }
             }
@@ -138,7 +192,7 @@ public class CompressionUtil {
                 int totalLen = content.length();
                 content = content.substring(0, maxToolResultLength) + TRUNCATION_SUFFIX + ", " + totalLen + " chars total]";
             }
-            return "[Observation]: 得到结果 " + content;
+            return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_UTIL_OBSERVATION, "content", content);
         }
         return msg.getRole().name() + ": " + msg.getContent();
     }
@@ -161,9 +215,22 @@ public class CompressionUtil {
      * @return 拼接后的文本，如全部为空则返回空字符串
      */
     public static String formatMessages(Iterable<ChatMessage> messages, int maxToolResultLength) {
+        return formatMessages(messages, maxToolResultLength, null);
+    }
+
+    /**
+     * 将多条消息拼接为压缩用的文本块（按语言输出动作/结果描述）。
+     *
+     * @param messages            消息列表
+     * @param maxToolResultLength ToolMessage 截断长度
+     * @param locale              语言（null 时使用默认语言）
+     * @return 拼接后的文本，如全部为空则返回空字符串
+     * @since 4.2
+     */
+    public static String formatMessages(Iterable<ChatMessage> messages, int maxToolResultLength, Locale locale) {
         StringBuilder buf = new StringBuilder(1024);
         for (ChatMessage m : messages) {
-            String line = formatMessageForCompression(m, maxToolResultLength);
+            String line = formatMessageForCompression(m, maxToolResultLength, locale);
             if (line != null) {
                 if (buf.length() > 0) {
                     buf.append('\n');
@@ -176,21 +243,38 @@ public class CompressionUtil {
 
     /**
      * 检查压缩策略的 LLM 返回结果是否标记为"无显著增量"。
-     * <p>当前支持以下标记（trim 后完全匹配）：
+     * <p>当前支持以下标记（trim 后完全匹配；同时识别所有内置语言）：
      * <ul>
-     *     <li>{@code (无显著进度)} — LLMCompressionStrategy 使用</li>
-     *     <li>{@code (无关键增量)} — KeyInfoExtractionStrategy 使用</li>
+     *     <li>{@code (无显著进度)} / {@code (No significant progress)} — LLMCompressionStrategy 使用</li>
+     *     <li>{@code (无关键增量)} / {@code (No key delta)} — KeyInfoExtractionStrategy 使用</li>
      * </ul>
      *
      * @param summary LLM 返回的摘要文本
      * @return true 表示无显著增量，应丢弃该结果
      */
     public static boolean isEmptySummary(String summary) {
+        return isEmptySummary(summary, null);
+    }
+
+    /**
+     * 检查压缩策略的 LLM 返回结果是否标记为"无显著增量"（识别所有内置语言，以及指定语言）。
+     *
+     * @param summary LLM 返回的摘要文本
+     * @param locale  额外纳入识别的语言（可为 null）
+     * @return true 表示无显著增量，应丢弃该结果
+     * @since 4.2
+     */
+    public static boolean isEmptySummary(String summary, Locale locale) {
         if (Assert.isEmpty(summary)) {
             return true;
         }
         String trimmed = summary.trim();
-        return trimmed.equals("(无显著进度)") || trimmed.equals("(无关键增量)");
+        for (String key : EMPTY_MARKER_KEYS) {
+            if (textsOfAllLocales(locale, key).contains(trimmed)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -485,7 +569,7 @@ public class CompressionUtil {
         for (int ptlAttempt = 0; ptlAttempt <= MAX_PTL_RETRIES; ptlAttempt++) {
             final List<ChatMessage> batch = currentBatch;
 
-            String newHistoryText = formatMessages(batch, maxToolResultLength);
+            String newHistoryText = formatMessages(batch, maxToolResultLength, localeOf(trace));
             if (Assert.isEmpty(newHistoryText)) return null;
 
             String userData = userDataPrefix + newHistoryText + userDataSuffix;
