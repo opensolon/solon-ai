@@ -133,6 +133,16 @@ public class FilterTransformer implements Transformer<Boolean, String> {
                     buf.append(" NOT IN ");
                     parseFilterExpression(right, buf);
                     break;
+                case lk:
+                    parseFilterExpression(left, buf);
+                    buf.append(" LIKE ");
+                    parseFilterExpression(right, buf);
+                    break;
+                case nlk:
+                    parseFilterExpression(left, buf);
+                    buf.append(" NOT LIKE ");
+                    parseFilterExpression(right, buf);
+                    break;
                 default:
                     parseFilterExpression(left, buf);
                     buf.append(" = ");
