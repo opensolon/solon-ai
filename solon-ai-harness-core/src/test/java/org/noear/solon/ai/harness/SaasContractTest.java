@@ -7,6 +7,8 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.agent.SessionAgents;
 import org.noear.solon.ai.harness.agent.GenerateTalent;
@@ -353,6 +355,40 @@ class SaasContractTest {
         AgentSession s2 = session("s-admin");
         admin.setSessionPrincipal(s2, "admin");
         assertTrue(new GenerateTalent(admin).generate("x2", "d", "p", null, null, true, null, "s-admin").startsWith("[OK]"));
+    }
+
+    /**
+     * 会话级子代理的清单由 TaskTalent 按 prompt 携带的会话 ID 现查列出（替代原按请求挂载的 SessionAgentsTalent）：
+     * 只对创建它的会话可见，且列清单不得顺带把不存在的会话建出来。
+     */
+    @Test
+    void taskInstructionListsSessionAgentsOnlyForOwnerSession() {
+        HarnessEngine engine = builder().build();
+        session("s1");
+        session("s2");
+
+        String r = new GenerateTalent(engine).generate("helper", "helper-desc", "you are helper", null, null, false, null, "s1");
+        assertTrue(r.startsWith("[OK]"), r);
+
+        String own = engine.getTaskTalent().getInstruction(promptOf("s1"));
+        assertTrue(own.contains("<session_agents>"), own);
+        assertTrue(own.contains("\"helper\": helper-desc"), own);
+        assertTrue(own.indexOf("</session_agents>") < own.indexOf("## 任务分配策略"), "清单应在分配策略之前: " + own);
+
+        String other = engine.getTaskTalent().getInstruction(promptOf("s2"));
+        assertFalse(other.contains("<session_agents>"), "其它会话不列: " + other);
+
+        assertFalse(engine.getTaskTalent().getInstruction(null).contains("<session_agents>"), "无 prompt 不列");
+        assertFalse(engine.getTaskTalent().getInstruction(Prompt.of("hi")).contains("<session_agents>"), "无会话 ID 不列");
+
+        assertFalse(engine.getTaskTalent().getInstruction(promptOf("s-missing")).contains("<session_agents>"));
+        assertFalse(sessions.containsKey("s-missing"), "列清单不得新建会话");
+    }
+
+    private static Prompt promptOf(String sessionId) {
+        Prompt prompt = Prompt.of("hi");
+        prompt.attrs().put(ChatSession.ATTR_SESSIONID, sessionId);
+        return prompt;
     }
 
     @Test

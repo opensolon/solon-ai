@@ -21,7 +21,6 @@ import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.OwnerCheck;
-import org.noear.solon.ai.harness.agent.SessionAgentsTalent;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
@@ -292,20 +291,8 @@ final class InputPipeline {
         ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(session, agentName));
 
         if (session != null) {
+            // 会话级子代理的清单与委派解析都由 TaskTalent 按会话完成，这里不再转递
             request.session(session);
-
-            // 本会话的会话级子代理：只在本会话的请求里列出（委派解析本身由 TaskTalent 按会话完成）
-            Collection<String> localAgents = SessionAgents.names(session);
-            if (localAgents.isEmpty() == false && options.isSubagentEnabled()) {
-                List<AgentDefinition> defs = new ArrayList<>();
-                for (String name : localAgents) {
-                    AgentDefinition def = SessionAgents.get(session, name);
-                    if (def != null) {
-                        defs.add(def);
-                    }
-                }
-                request.options(o -> o.talentAdd(new SessionAgentsTalent(defs)));
-            }
         }
 
         // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示。

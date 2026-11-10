@@ -50,6 +50,7 @@ import reactor.core.publisher.FluxSink;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -228,12 +229,48 @@ public class TaskTalent extends AbsTalent {
         }
         sb.append("</available_agents>\n\n");
 
+        appendSessionAgents(prompt, sb);
+
         sb.append("## 任务分配策略：\n");
         sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。\n");
         sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
         sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
 
         return sb.toString();
+    }
+
+    /**
+     * 补充列出本会话的会话级子代理（{@code generate(saveToFile=false)} 的产物）。
+     *
+     * <p>按 prompt 携带的会话 ID 现查会话：清单只对创建它的会话可见，其它会话的请求查不到，自然不列；
+     * 与委派时的解析（{@link HarnessEngine#getAgentBuilderOrNil}）同一来源，不再经请求上下文转递。</p>
+     */
+    private void appendSessionAgents(Prompt prompt, StringBuilder sb) {
+        if (prompt == null) {
+            return;
+        }
+
+        Object sessionId = prompt.attrs().get(ChatSession.ATTR_SESSIONID);
+        if (!(sessionId instanceof String)) {
+            return;
+        }
+
+        // 只取已存在的会话：列清单不能顺带把会话建出来
+        AgentSession session = engine.getSessionOrNull((String) sessionId);
+        Collection<String> names = SessionAgents.names(session);
+        if (names.isEmpty()) {
+            return;
+        }
+
+        sb.append("## 本会话专用的子代理（仅当前会话可用，同样通过 task / multitask 调用）\n");
+        sb.append("<session_agents>\n");
+        for (String name : names) {
+            AgentDefinition agent = SessionAgents.get(session, name);
+            if (agent != null) {
+                sb.append(String.format("  - \"%s\": %s\n", agent.getName(), agent.getDescription()));
+            }
+        }
+        sb.append("</session_agents>\n\n");
     }
 
     @ToolMapping(name = TOOL_TASK, description =

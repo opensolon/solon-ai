@@ -1050,7 +1050,7 @@ org.noear.solon.ai.harness
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、AgentMentions
 ├── command/                      命令框架：Command / CommandContext / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
-├── agent/                        子代理（一个包覆盖定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName（定义）、AgentManager / SessionAgents / GenerateTalent（注册与创建）、AgentFactory（构建）、TaskTalent / TaskWrapEvent（委派与子事件）；SubTaskScheduler 包内、SessionAgentsTalent @Internal
+├── agent/                        子代理（一个包覆盖定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName（定义）、AgentManager / SessionAgents / GenerateTalent（注册与创建）、AgentFactory（构建）、TaskTalent / TaskWrapEvent（委派与子事件；TaskTalent 按会话一并列出会话级子代理）；SubTaskScheduler 包内
 ├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
 ├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership（宿主实现的租约）/ OwnerCheck / NotOwnerException
