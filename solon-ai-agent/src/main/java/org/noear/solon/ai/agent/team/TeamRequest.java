@@ -86,8 +86,9 @@ public class TeamRequest implements AgentRequest<TeamRequest, TeamResponse> {
         }
 
         TeamTrace trace = agent.getTrace(session);
-        if (trace != null) {
-            options = trace.getOptions();
+        if (trace != null && trace.getOptions() != null) {
+            // 续跑时从上次 options 拷贝，避免在同一实例上叠加 interceptor/streamSink
+            options = trace.getOptions().copy();
         }
 
         if (options == null) {
