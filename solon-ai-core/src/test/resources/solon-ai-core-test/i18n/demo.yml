@@ -1,0 +1,9 @@
+# 测试用内容包（默认英文）
+demo.hello: |-
+  Hello {name}
+demo.pair: |-
+  {a} and {b}
+demo.triple: |-
+  {a}, {b}, {c}
+demo.keywords: |-
+  done|finished

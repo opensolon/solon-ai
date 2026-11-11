@@ -306,6 +306,9 @@ public class ToolSchemaUtil {
             return true;
         } else if (type == String.class) {
             return true;
+        } else if (type == ToolResult.class) {
+            //工具结果是传输信封（内容块），不是工具的结构化输出
+            return true;
         } else if (type == Boolean.class) {
             return true;
         } else if (type instanceof Class) {
