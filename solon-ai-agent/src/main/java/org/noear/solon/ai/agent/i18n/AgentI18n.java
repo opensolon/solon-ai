@@ -116,14 +116,9 @@ public final class AgentI18n {
     }
 
     /**
-     * 将请求语言写入 Prompt.attrs（存为语言标签字符串，保证会话快照可序列化与还原）
-     */
-    public static void putLocale(Prompt prompt, Locale locale) {
-        AiI18n.putLocale(prompt, locale);
-    }
-
-    /**
-     * 从 Prompt.attrs 取请求语言（由智能体在激活 Talent 前写入；取不到时返回 null）
+     * 取请求语言（由智能体在激活 Talent 前写入；prompt 为 null 或取不到时返回 null）
+     *
+     * <p>写入用 {@link Prompt#locale(Locale)}。</p>
      */
     public static Locale localeOf(Prompt prompt) {
         return AiI18n.localeOf(prompt);

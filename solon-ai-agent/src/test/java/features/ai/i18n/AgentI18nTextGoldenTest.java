@@ -74,7 +74,7 @@ public class AgentI18nTextGoldenTest {
 
         //计划
         PlanTalent plan = ReActRuntimeI18nTest.planTalent(l);
-        out.put(p + "plan_talent" + s, "description: " + plan.description()
+        out.put(p + "plan_talent" + s, "description: " + plan.description(null)
                 + "\n--- tools ---\n" + dump(plan.getToolAry()));
         out.put(p + "plan_results" + s, String.join("\n---\n",
                 plan.update_plan_progress(1),
@@ -102,7 +102,7 @@ public class AgentI18nTextGoldenTest {
         out.put(p + "compress_result_keyinfo" + s, compressResult(new KeyInfoExtractionStrategy()::compress, l));
 
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null).locale(l);
-        out.put(p + "vector" + s, "description: " + vs.description()
+        out.put(p + "vector" + s, "description: " + vs.description(null)
                 + "\n--- recall(empty) ---\n" + vs.recall("", 3, "s1")
                 + "\n--- recall(bad session) ---\n" + vs.recall("q", 3, "bad id")
                 + "\n--- tools ---\n" + dump(vs.getTools(Prompt.of("x"))));

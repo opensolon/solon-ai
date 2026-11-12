@@ -266,7 +266,7 @@ public class ReActRuntimeI18nTest {
         args.put("from_index", "2");
         assertEquals("成功：计划已从第 2 步开始重构。请按照新计划继续执行。", tools.get("revise_plan").handle(args));
 
-        assertEquals("提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。", talent.description());
+        assertEquals("提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。", talent.description(null));
         assertTrue(talent.getInstruction(null).startsWith("## 任务规划指南 (Task Planning Guide)\n"));
     }
 
@@ -277,7 +277,7 @@ public class ReActRuntimeI18nTest {
             assertNoChinese(tool.description());
             assertNoChinese(tool.inputSchema());
         }
-        assertNoChinese(talent.description());
+        assertNoChinese(talent.description(null));
         assertNoChinese(talent.getInstruction(null));
 
         assertNoChinese(talent.update_plan_progress(1));

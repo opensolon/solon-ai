@@ -171,7 +171,7 @@ public class TeamLocaleInheritTest {
     public void localeAttrSurvivesSnapshot() {
         // 写入方式与智能体运行时一致（存语言标签字符串；Locale 对象会导致快照无法反序列化）
         Prompt prompt = Prompt.of("hi");
-        AgentI18n.putLocale(prompt, Locale.ENGLISH);
+        prompt.locale(Locale.ENGLISH);
 
         FlowContext ctx = FlowContext.of("i18n_snapshot");
         ctx.put("prompt", prompt);
@@ -183,13 +183,13 @@ public class TeamLocaleInheritTest {
     }
 
     @Test
-    public void localeOfAcceptsString() {
+    public void localeOfFollowsPrompt() {
         Prompt prompt = Prompt.of("hi");
-        prompt.attrs().put(AgentI18n.ATTR_LOCALE, "zh_CN");
+        prompt.locale(Locale.SIMPLIFIED_CHINESE);
         assertEquals(Locale.forLanguageTag("zh-CN"), AgentI18n.localeOf(prompt));
-        prompt.attrs().put(AgentI18n.ATTR_LOCALE, "en");
+        prompt.locale(Locale.ENGLISH);
         assertEquals(Locale.ENGLISH, AgentI18n.localeOf(prompt));
-        prompt.attrs().put(AgentI18n.ATTR_LOCALE, " ");
+        prompt.locale(null);
         assertNull(AgentI18n.localeOf(prompt));
     }
 
@@ -212,7 +212,7 @@ public class TeamLocaleInheritTest {
         ReActTrace trace = session.getContext().getAs(agent.getConfig().getTraceKey());
         assertNotNull(trace, "trace should be stored in session context");
         assertNotNull(trace.getOriginalPrompt(), "trace should hold the original prompt");
-        trace.getOriginalPrompt().attrs().put(AgentI18n.ATTR_LOCALE, old.toLanguageTag());
+        trace.getOriginalPrompt().locale(old);
 
         //续跑（不带 prompt）：沿用旧会话这一轮的语言，且该语言应被自动登记
         agent.prompt().session(session).call();

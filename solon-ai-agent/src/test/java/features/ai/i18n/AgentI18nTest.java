@@ -90,7 +90,7 @@ public class AgentI18nTest {
         Assertions.assertFalse(AgentI18n.knownLocales().contains(other), "precondition");
 
         Prompt prompt = Prompt.of("hi");
-        prompt.attrs().put(AgentI18n.ATTR_LOCALE, other.toLanguageTag());
+        prompt.locale(other);
         AgentI18n.registerLocaleOf(prompt);
 
         Assertions.assertTrue(AgentI18n.knownLocales().contains(other), "locale from prompt should be registered");

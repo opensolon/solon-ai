@@ -149,7 +149,7 @@ public class ReActRunLocaleTest {
         InMemoryAgentSession session = InMemoryAgentSession.of("run_locale_legacy");
 
         agent.prompt("hi").session(session).options(o -> o.locale(Locale.CHINESE)).call();
-        agent.getTrace(session).getOriginalPrompt().attrs().remove(AgentI18n.ATTR_LOCALE);
+        agent.getTrace(session).getOriginalPrompt().locale(null);
         assertNull(agent.getTrace(session).getRunLocale());
 
         interrupted(agent, session);

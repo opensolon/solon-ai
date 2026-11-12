@@ -200,7 +200,7 @@ public class ReActTrace implements AgentTrace {
         this.finalMediaBlocks = null;
         this.abnormal = false;
 
-        //会话恢复：登记旧会话的语言（旧消息中的标记需在所有已知语言中识别；此处早于 activeTalents 的 putLocale）
+        //会话恢复：登记旧会话的语言（旧消息中的标记需在所有已知语言中识别；此处早于 activeTalents 写入本轮语言）
         AgentI18n.registerLocaleOf(originalPrompt);
 
         //空响应计数器按“本次执行”隔离：它计的是连续空响应，续跑（HITL 恢复、无 prompt 恢复）
@@ -216,8 +216,10 @@ public class ReActTrace implements AgentTrace {
             originalPrompt.attrs().putAll(getOptions().getToolContext());
         }
 
-        //请求语言（Talent 拿不到 trace，经 Prompt.attrs 读取；存为语言标签字符串，保证会话快照可还原）
-        AgentI18n.putLocale(originalPrompt, getOptions().getLocale());
+        //请求语言（Talent 拿不到 trace，经 prompt.locale() 读取；未配置时记下当时的默认语言，续流沿用）
+        if (originalPrompt != null) {
+            originalPrompt.locale(AgentI18n.resolve(getOptions().getLocale()));
+        }
 
         //设置指令
         StringBuilder talentsInstruction = TalentUtil.activeTalents(options.getModelOptions(), originalPrompt, new StringBuilder());
@@ -360,7 +362,7 @@ public class ReActTrace implements AgentTrace {
      * @since 4.2.0
      */
     public @Nullable Locale getRunLocale() {
-        return AgentI18n.localeOf(originalPrompt);
+        return originalPrompt == null ? null : originalPrompt.locale();
     }
 
     @Override

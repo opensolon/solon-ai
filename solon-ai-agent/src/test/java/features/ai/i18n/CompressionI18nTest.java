@@ -114,7 +114,7 @@ public class CompressionI18nTest {
 
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null);
         Assertions.assertEquals(ZH_VECTOR_INSTRUCTION, vs.getInstruction(Prompt.of("x")));
-        Assertions.assertEquals("历史记忆回溯", vs.description());
+        Assertions.assertEquals("历史记忆回溯", vs.description(null));
     }
 
     @Test
@@ -137,7 +137,7 @@ public class CompressionI18nTest {
 
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null).locale(Locale.ENGLISH);
         assertNoChinese(vs.getInstruction(Prompt.of("x")), "vector.instruction");
-        assertNoChinese(vs.description(), "vector.description");
+        assertNoChinese(vs.description(null), "vector.description");
         Assertions.assertTrue(vs.getInstruction(Prompt.of("x")).contains("--- [History details archived] ---"));
     }
 
@@ -251,8 +251,7 @@ public class CompressionI18nTest {
         // 未显式设置 locale 的共享实例：描述与返回值都跟随请求语言
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null);
 
-        Prompt enPrompt = Prompt.of("x");
-        enPrompt.attrs().put(AgentI18n.ATTR_LOCALE, Locale.ENGLISH);
+        Prompt enPrompt = Prompt.of("x").locale(Locale.ENGLISH);
         FunctionTool enTool = vs.getTools(enPrompt).iterator().next();
         assertNoChinese(enTool.description(), "tool.description");
 

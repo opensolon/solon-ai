@@ -103,7 +103,7 @@ public class PlanTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return AgentI18n.get(getLocale(), AgentI18nKeys.REACT_PLAN_TALENT_DESCRIPTION);
     }
 

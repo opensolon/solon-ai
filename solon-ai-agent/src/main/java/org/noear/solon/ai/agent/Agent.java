@@ -164,8 +164,10 @@ public interface Agent<Req extends AgentRequest<Req, Resp>, Resp extends AgentRe
                             trace.getWorkingMemory(),
                             trace.getOptions().getLocale());
 
-            //团队语言（供自定义 Agent 实现经 AgentI18n.localeOf(prompt) 读取；内置智能体直接继承团队 options）
-            AgentI18n.putLocale(effectivePrompt, trace.getOptions().getLocale());
+            //团队语言（供自定义 Agent 实现经 prompt.locale() 读取；内置智能体直接继承团队 options）
+            if (effectivePrompt != null) {
+                effectivePrompt.locale(AgentI18n.resolve(trace.getOptions().getLocale()));
+            }
         } else {
             effectivePrompt = null;
         }

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.i18n.AgentI18n;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.core.Props;
 import org.noear.solon.i18n.I18nBundle;
 
@@ -66,53 +67,28 @@ public class AgentI18nCoverageTest {
     // ==================== Prompt 语言标签 ====================
 
     @Test
-    public void testPutLocale() {
-        //空提示词：不写、不抛
-        AgentI18n.putLocale(null, Locale.ENGLISH);
-
+    public void testPromptLocale() {
         Prompt prompt = Prompt.of("hi");
-        AgentI18n.putLocale(prompt, Locale.ENGLISH);
+        prompt.locale(Locale.ENGLISH);
         //存的是语言标签字符串：Locale 对象无法序列化进会话快照
         Assertions.assertEquals("en", prompt.attrs().get(AgentI18n.ATTR_LOCALE));
-        Assertions.assertEquals(Locale.ENGLISH, AgentI18n.localeOf(prompt));
+        Assertions.assertEquals(Locale.ENGLISH, AiI18n.localeOf(prompt));
 
-        //未指定语言：写入默认语言
-        Prompt prompt2 = Prompt.of("hi");
-        AgentI18n.putLocale(prompt2, null);
-        Assertions.assertEquals(Locale.CHINESE.toLanguageTag(), prompt2.attrs().get(AgentI18n.ATTR_LOCALE));
+        //null 表示移除（需要记下默认语言时，调用方先 resolve）
+        prompt.locale(null);
+        Assertions.assertNull(AiI18n.localeOf(prompt));
+        prompt.locale(AiI18n.resolve(null));
+        Assertions.assertEquals(Locale.CHINESE.toLanguageTag(), prompt.attrs().get(AgentI18n.ATTR_LOCALE));
     }
 
     @Test
     public void testLocaleOfVariants() {
-        Assertions.assertNull(AgentI18n.localeOf(null), "空提示词");
-        Assertions.assertNull(AgentI18n.localeOf(Prompt.of("hi")), "未携带语言");
+        Assertions.assertNull(AiI18n.localeOf(null), "空提示词");
+        Assertions.assertNull(AiI18n.localeOf(Prompt.of("hi")), "未携带语言");
 
-        //Locale 对象（进程内传递，非快照还原）
-        Prompt byLocale = Prompt.of("hi");
-        byLocale.attrs().put(AgentI18n.ATTR_LOCALE, Locale.ENGLISH);
-        Assertions.assertEquals(Locale.ENGLISH, AgentI18n.localeOf(byLocale));
-
-        //快照还原后的字符串标签：下划线与连字符都认
-        Assertions.assertEquals(Locale.ENGLISH, localeOf("en"));
-        Assertions.assertEquals(Locale.SIMPLIFIED_CHINESE, localeOf("zh-CN"));
-        Assertions.assertEquals(Locale.SIMPLIFIED_CHINESE, localeOf("zh_CN"));
-        Assertions.assertEquals(Locale.ENGLISH, localeOf("  en  "));
-
-        //空串：视为未携带
-        Assertions.assertNull(localeOf(""));
-        Assertions.assertNull(localeOf("   "));
-        //非法标签：解析结果无语言，按未携带处理
-        Assertions.assertNull(localeOf("!!!"));
-        //其它类型：忽略
-        Prompt byOther = Prompt.of("hi");
-        byOther.attrs().put(AgentI18n.ATTR_LOCALE, 123);
-        Assertions.assertNull(AgentI18n.localeOf(byOther));
-    }
-
-    private static Locale localeOf(String tag) {
-        Prompt prompt = Prompt.of("hi");
-        prompt.attrs().put(AgentI18n.ATTR_LOCALE, tag);
-        return AgentI18n.localeOf(prompt);
+        Assertions.assertEquals(Locale.ENGLISH, AiI18n.localeOf(Prompt.of("hi").locale(Locale.ENGLISH)));
+        Assertions.assertEquals(Locale.SIMPLIFIED_CHINESE, AiI18n.localeOf(Prompt.of("hi").locale(Locale.SIMPLIFIED_CHINESE)));
+        //语言值各种形态的解析规则由 core 的 AiI18nTest#testPromptLocale 覆盖
     }
 
     // ==================== 占位符替换的非法形式 ====================

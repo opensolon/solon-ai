@@ -118,8 +118,8 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
     }
 
     @Override
-    public String description() {
-        return AgentI18n.get(locale, AgentI18nKeys.COMPRESS_VECTOR_DESCRIPTION);
+    public String description(Prompt prompt) {
+        return AgentI18n.get(localeOf(prompt), AgentI18nKeys.COMPRESS_VECTOR_DESCRIPTION);
     }
 
     @Override
