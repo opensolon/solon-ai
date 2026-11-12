@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.cli;
 
+import org.noear.solon.ai.talents.cli.i18n.CliI18n;
+import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
@@ -33,6 +35,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -192,8 +195,17 @@ public class ProcessExecutor {
      * 执行结束后立即删除，并注册 {@code deleteOnExit} 作为兜底。</p>
      */
     public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
+        return executeCode(rootPath, code, cmd, ext, envs, timeoutMs, maxOutputChars, onOutput, null);
+    }
+
+    /**
+     * 执行代码脚本（提示文案按指定语言；null 为默认语言）
+     *
+     * @since 4.2
+     */
+    public String executeCode(Path rootPath, String code, String cmd, String ext, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput, Locale locale) {
         if (Assert.isEmpty(cmd)) {
-            return "执行失败: 未找到可用的运行命令（Command not found）";
+            return CliI18n.get(locale, CliI18nKeys.EXECUTOR_NO_CMD);
         }
 
         Path tempScript = null;
@@ -210,10 +222,10 @@ public class ProcessExecutor {
             List<String> fullCmd = CmdUtil.parseArguments(cmd);
             fullCmd.add(tempScript.toAbsolutePath().toString());
 
-            return executeCmd(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput);
+            return executeCmd(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput, locale);
         } catch (Throwable e) {
             LOG.error("Code execution failed", e);
-            return "代码执行失败: " + e.getMessage();
+            return CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_CODE_FAILED, "error", e.getMessage());
         } finally {
             if (tempScript != null) {
                 try {
@@ -263,7 +275,16 @@ public class ProcessExecutor {
      * 不影响 {@code onOutput} 的实时流式回调。</p>
      */
     public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
-        return executeCmdResult(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput).getText();
+        return executeCmd(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput, null);
+    }
+
+    /**
+     * 执行完整命令（提示文案按指定语言；null 为默认语言）
+     *
+     * @since 4.2
+     */
+    public String executeCmd(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput, Locale locale) {
+        return executeCmdResult(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput, locale).getText();
     }
 
     /**
@@ -271,6 +292,15 @@ public class ProcessExecutor {
      * 程序侧调用方（如 goal 验证器）靠状态与退出码判定成败，不解析文本。
      */
     public CommandResult executeCmdResult(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput) {
+        return executeCmdResult(rootPath, fullCmd, envs, timeoutMs, maxOutputChars, onOutput, null);
+    }
+
+    /**
+     * 执行完整命令并返回结构化结果（提示文案按指定语言；null 为默认语言）
+     *
+     * @since 4.2
+     */
+    public CommandResult executeCmdResult(Path rootPath, List<String> fullCmd, Map<String, String> envs, Integer timeoutMs, Integer maxOutputChars, Consumer<String> onOutput, Locale locale) {
         if (timeoutMs == null || timeoutMs < 0) {
             timeoutMs = DEFAULT_TIMEOUT_MS;
         }
@@ -377,9 +407,10 @@ public class ProcessExecutor {
                 // 超时前已产生的输出是最有价值的诊断线索（卡在哪一步、最后一条日志是什么），
                 // 不能连同超时一起丢弃。进程树已终止，读取线程会随管道关闭而收尾，故此处等待极短
                 String partial = renderOutput(awaitOutput(outputFuture, OUTPUT_DRAIN_TIMEOUT_MS),
-                        streamDecoder, cliXmlMessages, maxOutputChars);
-                String head = "执行超时：运行时间超过 " + timeoutMs + " 毫秒（已终止进程树）。";
-                return CommandResult.timedOut(partial.isEmpty() ? head : (head + "\n--- 超时前已产生的输出 ---\n" + partial));
+                        streamDecoder, cliXmlMessages, maxOutputChars, locale);
+                String head = CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_TIMEOUT, "ms", timeoutMs);
+                return CommandResult.timedOut(partial.isEmpty() ? head
+                        : (head + "\n" + CliI18n.get(locale, CliI18nKeys.EXECUTOR_TIMEOUT_OUTPUT) + "\n" + partial));
             }
 
             // 3. 获取原始字节输出（读取线程可能仍在收尾：给足排空时间，而不是 1 秒硬超时后抛异常
@@ -389,13 +420,13 @@ public class ProcessExecutor {
             // 二进制输出降级：在字节层探测，避免乱码塞满上下文（如 cat 某个 jar/class/图片）
             boolean binary = isLikelyBinary(raw);
             String result = binary
-                    ? summarizeBinaryOutput(raw)
-                    : renderOutput(raw, streamDecoder, cliXmlMessages, maxOutputChars);
+                    ? summarizeBinaryOutput(raw, locale)
+                    : renderOutput(raw, streamDecoder, cliXmlMessages, maxOutputChars, locale);
 
             if (sizeCapped[0]) {
                 // 被上限终止不是命令自然结束，退出码无意义：归为 FAILED（验证器据此判「无法判定」而不是「失败」）
-                return CommandResult.failed(result + "\n... [输出超过 " + maxOutputSize
-                        + " 字节的物理上限，命令已被终止。请缩小输出范围（如加过滤/分页），或重定向到文件后再分段查看]");
+                return CommandResult.failed(result + "\n"
+                        + CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_SIZE_CAPPED, "bytes", maxOutputSize));
             }
 
             if (binary) {
@@ -410,7 +441,7 @@ public class ProcessExecutor {
             }
 
             if (result.isEmpty()) {
-                return CommandResult.completed(exitCode, "执行成功");
+                return CommandResult.completed(exitCode, CliI18n.get(locale, CliI18nKeys.EXECUTOR_OK));
             }
             return CommandResult.completed(exitCode, result);
 
@@ -420,10 +451,10 @@ public class ProcessExecutor {
                 TerminalSessionManager.destroyProcessTree(process);
             }
             Thread.currentThread().interrupt();
-            return CommandResult.failed("执行被中断（已终止进程树）");
+            return CommandResult.failed(CliI18n.get(locale, CliI18nKeys.EXECUTOR_INTERRUPTED));
         } catch (Throwable e) {
             LOG.error("Process execution failed", e);
-            return CommandResult.failed("系统失败: " + e);
+            return CommandResult.failed(CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_SYSTEM_FAILED, "error", e));
         }
     }
 
@@ -448,7 +479,7 @@ public class ProcessExecutor {
      *                        因此无法保持原始交错顺序，统一补在末尾）
      */
     private String renderOutput(byte[] raw, OutputDecoder streamDecoder,
-                                StringBuffer cliXmlMessages, Integer maxOutputChars) {
+                                StringBuffer cliXmlMessages, Integer maxOutputChars, Locale locale) {
         Charset locked = streamDecoder == null ? null : streamDecoder.selectedCharset();
         String result = (raw == null || raw.length == 0)
                 ? ""
@@ -461,7 +492,7 @@ public class ProcessExecutor {
             }
         }
 
-        return truncateForLlm(result, normalizeMaxOutputChars(maxOutputChars));
+        return truncateForLlm(result, normalizeMaxOutputChars(maxOutputChars), locale);
     }
 
     private static int normalizeMaxOutputChars(Integer maxOutputChars) {
@@ -595,7 +626,7 @@ public class ProcessExecutor {
      *   <li>Magic bytes 文件类型识别：对真正二进制告诉用户是什么文件类型（class/jar/png 等）</li>
      * </ul></p>
      */
-    private static String summarizeBinaryOutput(byte[] bytes) {
+    private static String summarizeBinaryOutput(byte[] bytes, Locale locale) {
         // 尝试1：解码为文本，检查可读性
         String decoded = new String(bytes, StandardCharsets.UTF_8);
         int scanLen = Math.min(decoded.length(), 10000);
@@ -623,15 +654,15 @@ public class ProcessExecutor {
             String preview;
             if (total > 6000) {
                 preview = decoded.substring(0, 3000)
-                        + "\n... [中间省略 " + (total - 6000) + " 字符] ...\n"
+                        + "\n" + CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_OMITTED, "count", total - 6000) + "\n"
                         + decoded.substring(total - 3000);
             } else {
                 preview = decoded;
             }
-            return "[注意：输出中检测到二进制特征，但大部分内容可读，已尝试解码显示]\n"
+            return CliI18n.get(locale, CliI18nKeys.EXECUTOR_BINARY_READABLE) + "\n"
                     + preview
                     + "\n---\n"
-                    + "(原始大小: " + bytes.length + " 字节)";
+                    + CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_BINARY_SIZE, "bytes", bytes.length);
         }
 
         // 尝试2：检查 magic bytes 识别文件类型
@@ -644,19 +675,22 @@ public class ProcessExecutor {
             hex.append(String.format("%02x ", bytes[i] & 0xFF));
         }
 
+        Map<String, Object> vars = new java.util.HashMap<>();
+        vars.put("bytes", bytes.length);
+        vars.put("type", fileType);
+        vars.put("count", previewLen);
+        vars.put("hex", hex.toString().trim());
+
         StringBuilder msg = new StringBuilder();
-        msg.append("[检测到二进制输出，已省略乱码正文]\n");
-        msg.append("约 ").append(bytes.length).append(" 字节");
+        msg.append(CliI18n.get(locale, CliI18nKeys.EXECUTOR_BINARY_TITLE)).append("\n");
         if (fileType != null) {
-            msg.append("，识别类型: ").append(fileType);
+            msg.append(CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_BINARY_SUMMARY_TYPED, vars));
+            msg.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_BINARY_HINT_TYPED, "type", fileType));
+        } else {
+            vars.remove("type");
+            msg.append(CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_BINARY_SUMMARY, vars));
+            msg.append("\n").append(CliI18n.get(locale, CliI18nKeys.EXECUTOR_BINARY_HINT));
         }
-        msg.append("，前 ").append(previewLen).append(" 字节: ").append(hex.toString().trim());
-        msg.append("\n提示：该命令的输出疑似二进制内容");
-        if (fileType != null) {
-            msg.append("（").append(fileType).append("）");
-        }
-        msg.append("。若需查看详细内容，请改用对应的工具（如 jar tf、unzip -l、javap、file、xxd 等）");
-        msg.append("或先做合适的解码（或解压）再输出。");
 
         return msg.toString();
     }
@@ -695,6 +729,10 @@ public class ProcessExecutor {
      * 面向 LLM 的头尾保留截断：超限时保留首尾片段，中间插入显式占位。
      */
     static String truncateForLlm(String text, int maxOutputChars) {
+        return truncateForLlm(text, maxOutputChars, null);
+    }
+
+    static String truncateForLlm(String text, int maxOutputChars, Locale locale) {
         if (text == null || text.length() <= maxOutputChars) {
             return text;
         }
@@ -710,9 +748,7 @@ public class ProcessExecutor {
         int omitted = total - headLen - tailLen;
 
         return head
-                + "\n... [输出过大已截断：总计 " + total + " 字符，省略中间 " + omitted
-                + " 字符，仅保留首尾。如需完整内容，请用 read 工具分页读取，"
-                + "或将输出重定向到文件后再处理] ...\n"
+                + "\n" + CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_TRUNCATED, "total", total, "omitted", omitted) + "\n"
                 + tail;
     }
 }

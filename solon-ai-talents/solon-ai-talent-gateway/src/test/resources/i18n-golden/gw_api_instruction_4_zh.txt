@@ -1,0 +1,19 @@
+## 业务 OpenAPI 发现规范 (共 4 个接口)
+由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：
+- **Step 1 (锁定)**: 从下方“可用业务接口清单”中根据功能描述选定接口名。
+- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。
+- **Step 3 (执行)**: 通过 `call_api` 执行。
+
+### 可用业务接口清单 (按业务分组摘要):
+- **分组: [订单]**:
+  - `api4`: 接口 api4 (GET /api/ok)
+  - `getOrder`: 接口 getOrder (GET /api/orders/{id})
+- **分组: [文件]**:
+  - `upload`: 接口 upload (POST /api/files)
+- **分组: [常规接口]**:
+  - `createOrder`: 接口 createOrder (POST /api/orders)
+
+
+## 执行约束
+1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。
+2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。

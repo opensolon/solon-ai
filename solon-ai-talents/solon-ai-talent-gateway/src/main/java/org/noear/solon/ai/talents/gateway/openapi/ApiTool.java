@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.talents.gateway.openapi;
 
+import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18n;
+import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18nKeys;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
@@ -136,7 +138,8 @@ public class ApiTool {
 
     public String getCategory() {
         if (Assert.isEmpty(tags)) {
-            return "常规接口";
+            //默认分组按默认语言（网关展示时再按请求语言换成对应文案）
+            return OpenApiGatewayI18n.get(null, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DEFAULT_CATEGORY);
         } else {
             return tags.get(0);
         }

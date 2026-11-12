@@ -1,0 +1,12 @@
+## MCP Tool Discovery (2 tools in total)
+### Mode: Dynamic discovery (summary)
+There are many tools, so follow this flow:
+- **Step 1 (Pick)**: Choose the tool name from the "Available MCP tools" below by its description.
+- **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+#### Available MCP tools:
+- **[alpha]**:
+  - `mcp_1`: MCP 工具 1
+- **[beta]**:
+  - `mcp_2`: MCP 工具 2

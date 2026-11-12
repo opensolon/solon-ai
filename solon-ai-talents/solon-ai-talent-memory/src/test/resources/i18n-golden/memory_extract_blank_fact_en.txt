@@ -1,0 +1,1 @@
+[Failed] fact is empty, so there is nothing to record.

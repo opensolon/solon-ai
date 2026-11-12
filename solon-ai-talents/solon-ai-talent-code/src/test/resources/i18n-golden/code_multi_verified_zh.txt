@@ -1,0 +1,1 @@
+已验证项目工程规范 (检测到技术栈: Maven (Root), web (Node)) (环境版本: Maven (Root): Java 1.8, web (Node): Node >=18)

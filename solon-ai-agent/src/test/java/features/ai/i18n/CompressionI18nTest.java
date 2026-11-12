@@ -135,10 +135,11 @@ public class CompressionI18nTest {
                     .contains(FrozenMessages.of(Locale.ENGLISH).get("compress.keyinfo.empty_marker")));
         }
 
-        VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null).locale(Locale.ENGLISH);
-        assertNoChinese(vs.getInstruction(Prompt.of("x")), "vector.instruction");
-        assertNoChinese(vs.description(null), "vector.description");
-        Assertions.assertTrue(vs.getInstruction(Prompt.of("x")).contains("--- [History details archived] ---"));
+        VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null);
+        Prompt enPrompt = Prompt.of("x").locale(Locale.ENGLISH);
+        assertNoChinese(vs.getInstruction(enPrompt), "vector.instruction");
+        assertNoChinese(vs.description(enPrompt), "vector.description");
+        Assertions.assertTrue(vs.getInstruction(enPrompt).contains("--- [History details archived] ---"));
     }
 
     @Test
@@ -227,8 +228,9 @@ public class CompressionI18nTest {
         Assertions.assertEquals(legacy.description(), zhTool.description());
         Assertions.assertEquals(legacy.inputSchema(), zhTool.inputSchema());
 
-        VectorStoreCompressionStrategy enVs = new VectorStoreCompressionStrategy(null).locale(Locale.ENGLISH);
-        Collection<FunctionTool> enTools = enVs.getTools(Prompt.of("x"));
+        // 同一个共享实例：语言只走请求
+        VectorStoreCompressionStrategy enVs = zhVs;
+        Collection<FunctionTool> enTools = enVs.getTools(Prompt.of("x").locale(Locale.ENGLISH));
         Assertions.assertEquals(1, enTools.size());
         FunctionTool enTool = enTools.iterator().next();
         Assertions.assertEquals("recall_history", enTool.name());
@@ -236,19 +238,19 @@ public class CompressionI18nTest {
         assertNoChinese(enTool.inputSchema(), "tool.inputSchema");
         Assertions.assertTrue(enTool.inputSchema().contains("\"query\""));
         Assertions.assertTrue(enTool.inputSchema().contains("\"limit\""));
-        Assertions.assertSame(enTools, enVs.getTools(Prompt.of("y")));
+        Assertions.assertSame(enTools, enVs.getTools(Prompt.of("y").locale(Locale.ENGLISH)));
 
         // 执行委托给原工具（空 query 直接返回提示，不访问向量库）
         Assertions.assertEquals("请提供具体的关键词以进行历史回溯。", zhVs.recall("", 3, "s1"));
-        Assertions.assertEquals(FrozenMessages.of(Locale.ENGLISH).get("compress.vector.recall.empty_query"), enVs.recall("", 3, "s1"));
+        Assertions.assertEquals(FrozenMessages.of(Locale.ENGLISH).get("compress.vector.recall.empty_query"), enVs.recall(Locale.ENGLISH, "", 3, "s1"));
         Assertions.assertEquals("[系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。",
                 zhVs.recall("q", 3, "bad id"));
-        assertNoChinese(enVs.recall("q", 3, "bad id"), "recall.invalid_session");
+        assertNoChinese(enVs.recall(Locale.ENGLISH, "q", 3, "bad id"), "recall.invalid_session");
     }
 
     @Test
     public void testVectorToolResultFollowsRequestLocale() throws Throwable {
-        // 未显式设置 locale 的共享实例：描述与返回值都跟随请求语言
+        // 策略不保存语言的共享实例：描述与返回值都跟随请求语言
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null);
 
         Prompt enPrompt = Prompt.of("x").locale(Locale.ENGLISH);

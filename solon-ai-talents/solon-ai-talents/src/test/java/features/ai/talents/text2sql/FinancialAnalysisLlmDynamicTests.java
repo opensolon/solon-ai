@@ -130,7 +130,7 @@ public class FinancialAnalysisLlmDynamicTests {
                 .defaultTalentAdd(sqlTalent)
                 .defaultTalentAdd(new AbsTalent() { // 模拟一个容易混淆的工具包
                     @Override public String name() { return "file_expert"; }
-                    @Override public String description() { return "文件专家，严禁读写数据库"; }
+                    @Override public String description(Prompt p) { return "文件专家，严禁读写数据库"; }
                     @Override public String getInstruction(Prompt p) { return "只能操作 .txt 文件"; }
                 })
                 .build();

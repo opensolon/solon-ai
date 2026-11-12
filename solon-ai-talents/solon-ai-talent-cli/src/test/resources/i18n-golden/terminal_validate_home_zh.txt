@@ -1,0 +1,1 @@
+错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。

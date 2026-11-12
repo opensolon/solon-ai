@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Node)) (environment versions: libs/core (Node): Node >=18)

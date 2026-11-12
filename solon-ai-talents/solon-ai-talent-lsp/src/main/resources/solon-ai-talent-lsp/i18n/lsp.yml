@@ -1,0 +1,5 @@
+# solon-ai-talent-lsp messages (English, default fallback)
+# Convention: every value is a "|-" block scalar with body text only -- no leading/trailing newlines or spaces (separators between paragraphs are added in code); placeholders use {name}; "${" and "#{" are not allowed
+
+lsp.file_missing: |-
+  File not found: {path}

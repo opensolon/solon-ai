@@ -1,0 +1,2 @@
+Error: the path of glob accepts only a single directory, but the separator '\n' was found (current value: a
+b). Call it several times, or use the common parent directory of these directories and narrow the scope with pattern/include.

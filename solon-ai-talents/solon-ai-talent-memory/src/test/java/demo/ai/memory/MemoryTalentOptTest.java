@@ -3,7 +3,6 @@ package demo.ai.memory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
 import org.noear.solon.ai.talents.memory.MemorySearcher;
@@ -13,7 +12,6 @@ import org.noear.solon.ai.talents.memory.MemoryStorer;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -545,17 +543,14 @@ public class MemoryTalentOptTest {
         assertTrue(instruction.contains("拿不准时不超过 6"), instruction);
         assertFalse(instruction.contains("以时间戳最近的记录为准"), instruction);
 
-        Method extract = MemoryTalent.class.getMethod("extract", String.class, String.class, int.class,
-                String.class, String.class, String.class);
-        String extractDescription = extract.getAnnotation(ToolMapping.class).description();
+        //工具描述在文案资源里（注解不再写描述），按默认语言取本地化后的工具
+        String extractDescription = talent.getToolMap().get("memory_extract").description();
         assertTrue(extractDescription.length() < 120, "extract 工具描述应保持精简: " + extractDescription);
         assertTrue(extractDescription.contains("用户明确要求"), "应保留显式跨会话进度能力: " + extractDescription);
         assertTrue(extractDescription.contains("默认不存临时进度"), "不应鼓励主动保存临时进度: " + extractDescription);
         assertTrue(extractDescription.contains("敏感凭据"), "应保留敏感信息边界: " + extractDescription);
 
-        Method consolidate = MemoryTalent.class.getMethod("consolidate", java.util.List.class, String.class,
-                String.class, String.class, String.class, String.class);
-        String consolidateDescription = consolidate.getAnnotation(ToolMapping.class).description();
+        String consolidateDescription = talent.getToolMap().get("memory_consolidate").description();
         assertTrue(consolidateDescription.length() < 160,
                 "consolidate 工具描述应保持精简: " + consolidateDescription);
         assertTrue(consolidateDescription.startsWith("心智演进："), "应保留心智演进定位: " + consolidateDescription);
@@ -563,8 +558,7 @@ public class MemoryTalentOptTest {
         assertTrue(consolidateDescription.contains("保留 Imp=10 来源"), "应披露永久来源保护: " + consolidateDescription);
         assertFalse(consolidateDescription.contains("新洞察自动赋最高重要度"), "不得错误承诺自动永久化: " + consolidateDescription);
 
-        Method prune = MemoryTalent.class.getMethod("prune", String.class, String.class, String.class);
-        String pruneDescription = prune.getAnnotation(ToolMapping.class).description();
+        String pruneDescription = talent.getToolMap().get("memory_prune").description();
         assertTrue(pruneDescription.contains("全部作用域"), "prune 应披露跨作用域删除范围: " + pruneDescription);
     }
 

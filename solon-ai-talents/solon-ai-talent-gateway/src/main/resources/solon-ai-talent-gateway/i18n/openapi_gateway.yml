@@ -1,0 +1,89 @@
+# solon-ai-talent-gateway OpenAPI gateway messages (English, also the fallback)
+# Convention: every value is a "|-" block scalar with body text only - no leading/trailing newlines or spaces (separators are added by code); placeholders use {name}; never use ${ or #{
+
+gateway.openapi.description: |-
+  OpenAPI expert: automatically parses OpenAPI (Swagger) documents, discovers REST endpoints and calls them precisely.
+gateway.openapi.default_category: |-
+  General APIs
+
+# ---- instruction (four modes) ----
+gateway.openapi.instruction.title: |-
+  ## Business OpenAPI Discovery ({count} APIs in total)
+gateway.openapi.instruction.full: |-
+  ### Mode: Direct call
+  All API definitions are loaded. Analyze the request and call `call_api` directly.
+
+  #### API definitions (OpenAPI Specs):
+gateway.openapi.instruction.summary: |-
+  There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+  - **Step 1 (Pick)**: Choose the API name from the "Available business APIs" below by its description.
+  - **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: Execute it with `call_api`.
+
+  ### Available business APIs (summary by group):
+gateway.openapi.instruction.summary_group: |-
+  - **Group: [{category}]**:
+gateway.openapi.instruction.list: |-
+  There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+  - **Step 1 (Shortlist)**: Infer the function from the "API list" below, or search with `search_apis`.
+  - **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: Execute it with `call_api`.
+
+  ### Available business API list (by group):
+gateway.openapi.instruction.list_group: |-
+  - **Group: {category}** -> [{names}]
+gateway.openapi.instruction.list_tip: |-
+  > Tip: group names and API names carry semantic hints; once you pick a target, always check its details first.
+gateway.openapi.instruction.search: |-
+  There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+  - **Step 1 (Search)**: The list is collapsed. First use `search_apis` to find matching APIs by keywords. **Note**: results are returned by "business group"; use the group semantics to judge whether an API is the right one.
+  - **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: Execute it with `call_api`.
+
+  > **Note**: The API library is huge. Search by keywords, e.g. search_apis('order query').
+gateway.openapi.instruction.constraints: |-
+  ## Execution Constraints
+  1. **Responses**: If the returned data carries the `[Data truncated]` mark, analyze the part you have; do not call again to get everything.
+  2. **Retries**: If an API returns an error, check that the arguments match the schema from Step 2; do not retry blindly.
+
+# ---- API definition (shared by the instruction and get_api_detail; code adds the "  - " prefix to each line) ----
+gateway.openapi.doc.tags: |-
+  Business groups: {tags}
+gateway.openapi.doc.description: |-
+  Function: {description}
+gateway.openapi.doc.path: |-
+  Path: {method} {path}
+gateway.openapi.doc.header: |-
+  Header params: {schema}
+gateway.openapi.doc.path_params: |-
+  Path params (fill the path {}): {schema}
+gateway.openapi.doc.query: |-
+  Query params (URL): {schema}
+gateway.openapi.doc.body_multipart: |-
+  Body params (Multipart/Form): {schema}
+gateway.openapi.doc.body_json: |-
+  Body params (JSON): {schema}
+gateway.openapi.doc.output: |-
+  Returns: {schema}
+
+# ---- built-in tool results ----
+gateway.openapi.search.blank: |-
+  Error: the search keyword must not be empty.
+gateway.openapi.search.none: |-
+  Note: no business API fully matches the keyword '{keyword}'.
+  You can try:
+  1. Check that the keywords are separated by spaces (e.g. 'hangzhou travel').
+  2. Use more general words, or search again with fewer keywords.
+  3. If you are sure the system does not have this function, tell the user. Do not repeat searches with similar keywords.
+gateway.openapi.detail.blank: |-
+  Error: api_name must not be empty
+gateway.openapi.detail.missing: |-
+  Error: OpenAPI '{name}' was not found. Confirm the name with search_apis first.
+gateway.openapi.call.missing: |-
+  Error: no OpenAPI named [{name}] was found. Confirm the correct name with 'search_apis' first.
+gateway.openapi.call.no_path: |-
+  Execution failed: required path parameters are missing. The path still has placeholders: {path}. Check that 'path_params' provides all required variables.
+gateway.openapi.call.error: |-
+  API execution error: {error} (check the service availability or the arguments)
+gateway.openapi.call.no_response: |-
+  the remote service did not respond

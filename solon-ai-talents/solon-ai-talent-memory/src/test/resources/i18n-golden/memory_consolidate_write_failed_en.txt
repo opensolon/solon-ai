@@ -1,0 +1,1 @@
+[Merge error] Failed to write the new insight; the old fragments are kept and nothing was cleaned up.

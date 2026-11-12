@@ -1,0 +1,36 @@
+## Build and Test Commands
+
+### Root Project (Maven)
+- Build: `mvn clean compile`
+- Full test: `mvn test`
+- Single test: `mvn test -Dtest=ClassName` (replace with the actual class name)
+
+### Module: web (Node/TS)
+- Install: `cd web && npm install`
+- Build: `cd web && npm run build`
+- Full test: `cd web && npm test`
+- Single-file test: `cd web && npm test -- path/to/file.test.ts` (replace with the actual file path)
+
+### Sub-modules & Sub-projects
+> The following modules are governed by the root project commands (build and test them with the root project commands above).
+- Maven module (2)
+  - api
+  - core (Java 17)
+
+## Environment Versions
+
+> The versions below are **declared** in the project configuration files (not the versions installed on this machine). Match the syntax features of these versions when writing code.
+
+- Maven (Root): Java 1.8
+- web (Node): Node >=18
+
+## Guidelines
+
+- **Read before editing**: Always read the relevant files in full before making any change.
+- **Atomic work**: Implement only one feature or fix only one bug at a time.
+- **Verification-driven**: Run tests to verify before finishing a task.
+- **Path convention**: Use relative paths only (e.g. `src/main/java/App.java`; never use `./src/...`).
+- **Style alignment**: Follow the coding style and design patterns already used in the codebase.
+- **Version alignment**: Follow the versions declared in the "Environment Versions" section and do not use syntax features beyond them; if no version is listed, check the configuration files or build tool before deciding.
+- **Environment awareness**: Use your knowledge of each language's default local repository paths (e.g. Maven, Node) to help troubleshoot dependency issues or analyze source code.
+

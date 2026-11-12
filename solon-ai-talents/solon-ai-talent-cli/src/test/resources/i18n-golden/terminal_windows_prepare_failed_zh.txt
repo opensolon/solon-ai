@@ -1,0 +1,1 @@
+错误：无法准备 Windows 执行方案: disk full

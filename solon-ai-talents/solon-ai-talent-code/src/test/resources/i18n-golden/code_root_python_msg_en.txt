@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: Python (Root)) (environment versions: Python (Root): Python >=3.9)

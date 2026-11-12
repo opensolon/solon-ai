@@ -1,0 +1,10 @@
+line 0
+line 1
+line 2
+line 3
+li
+... [output too large, truncated: 3490 characters in total, 3430 characters omitted in the middle, only the head and tail kept. For the full content, read it page by page with the read tool, or redirect the output to a file and process it there] ...
+96
+line 397
+line 398
+line 399

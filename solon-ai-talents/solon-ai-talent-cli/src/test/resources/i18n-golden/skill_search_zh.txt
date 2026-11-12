@@ -1,0 +1,3 @@
+<skill_list>
+  <skill name="@m/s1">技能 1</skill>
+</skill_list>

@@ -1,0 +1,19 @@
+## Business OpenAPI Discovery (4 APIs in total)
+There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+- **Step 1 (Pick)**: Choose the API name from the "Available business APIs" below by its description.
+- **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+- **Step 3 (Execute)**: Execute it with `call_api`.
+
+### Available business APIs (summary by group):
+- **Group: [订单]**:
+  - `api4`: 接口 api4 (GET /api/ok)
+  - `getOrder`: 接口 getOrder (GET /api/orders/{id})
+- **Group: [文件]**:
+  - `upload`: 接口 upload (POST /api/files)
+- **Group: [General APIs]**:
+  - `createOrder`: 接口 createOrder (POST /api/orders)
+
+
+## Execution Constraints
+1. **Responses**: If the returned data carries the `[Data truncated]` mark, analyze the part you have; do not call again to get everything.
+2. **Retries**: If an API returns an error, check that the arguments match the schema from Step 2; do not retry blindly.

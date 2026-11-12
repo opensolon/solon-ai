@@ -1,0 +1,1 @@
+Error: nope is not a valid skill directory (SKILL.md is missing)

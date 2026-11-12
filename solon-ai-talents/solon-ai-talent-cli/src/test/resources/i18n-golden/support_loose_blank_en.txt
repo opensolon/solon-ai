@@ -1,0 +1,1 @@
+old_str consists only of blank lines

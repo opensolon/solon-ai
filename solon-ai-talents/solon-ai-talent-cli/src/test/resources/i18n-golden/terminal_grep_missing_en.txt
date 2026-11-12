@@ -1,0 +1,1 @@
+Error: the path does not exist (grep path=nope). Check the directory levels with ls first; note that path accepts only a single directory and must not contain wildcards (wildcards belong in pattern).

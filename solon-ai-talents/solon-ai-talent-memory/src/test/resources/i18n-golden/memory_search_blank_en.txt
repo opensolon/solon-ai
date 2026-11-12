@@ -1,0 +1,1 @@
+The search query is empty. Provide a natural-language description, or pass '*' to list all entries.

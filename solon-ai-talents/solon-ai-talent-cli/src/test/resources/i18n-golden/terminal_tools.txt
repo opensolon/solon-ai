@@ -1,0 +1,77 @@
+name: bash
+--- description ---
+在当前终端执行非交互式命令。工具名叫 bash 仅为历史兼容，**实际 shell 未必是 bash**：请以系统提示中「Terminal 环境状态 → 终端类型」为准（可为 PowerShell / CMD / Unix shell），并按对应方言书写命令。支持逻辑路径（如 `cd @pool1/bin/tool/`）。多步逻辑可把多行脚本整段作为 command 传入，系统会按当前 shell 选择可靠的执行方案（必要时自动写入系统临时目录并在结束后删除）。含空格或特殊字符的参数请用引号包裹；输出编码由系统自动识别。
+--- inputSchema ---
+{"type":"object","properties":{"command":{"type":"string","description":"要执行的指令。"},"max_output_chars":{"type":"integer","description":"本次最多返回多少字符输出，超出保留首尾片段。读取大文件请改用 read 工具。","default":64000},"timeout":{"type":"integer","description":"可选超时时间，单位为毫秒","default":120000}},"required":["command"]}
+
+===
+
+name: bash_start
+--- description ---
+启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待或输入（chars 参数）、bash_stop 终止。
+--- inputSchema ---
+{"type":"object","properties":{"command":{"type":"string","description":"要执行的 shell 命令。"},"hard_timeout_ms":{"type":"integer","description":"硬超时兜底，超过后终止进程树，单位毫秒。","default":120000},"max_output_chars":{"type":"integer","description":"本次最多返回多少字符输出，超出保留最新部分。","default":64000},"workdir":{"type":"string","description":"工作目录。默认使用当前工作区。"},"yield_time_ms":{"type":"integer","description":"先等待多久再把控制权交还给模型，单位毫秒。","default":1000}},"required":["command"]}
+
+===
+
+name: bash_stop
+--- description ---
+终止仍在运行的命令会话及其子进程树。
+--- inputSchema ---
+{"type":"object","properties":{"max_output_chars":{"type":"integer","description":"终止后最多返回多少字符新增输出。","default":64000},"reason":{"type":"string","description":"终止原因，便于日志诊断。"},"session_id":{"type":"string","description":"bash_start 返回的命令会话 id。"}},"required":["session_id"]}
+
+===
+
+name: bash_wait
+--- description ---
+继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态；也可通过 chars 向进程写入 stdin（应答确认、退出分页器等），不传时仅等待。
+--- inputSchema ---
+{"type":"object","properties":{"chars":{"type":"string","description":"可选。要写入 stdin 的文本；不传表示只等待新增输出。"},"max_output_chars":{"type":"integer","description":"本次最多返回多少字符新增输出，超出保留最新部分。","default":64000},"session_id":{"type":"string","description":"bash_start 返回的命令会话 id。"},"yield_time_ms":{"type":"integer","description":"等待新增输出或进程结束的时长，单位毫秒。","default":1000}},"required":["session_id"]}
+
+===
+
+name: edit
+--- description ---
+对文件进行文本替换，自动忽略行首行尾空白差异。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。
+--- inputSchema ---
+{"type":"object","properties":{"edits":{"type":"array","items":{"type":"object","properties":{"new_str":{"type":"string","description":"替换后的新内容"},"old_StrStartLine":{"type":"integer","description":"old_str 在 read 输出中的起始行号，用于定位替换起点；系统会忽略缩进和末尾空白差异进行匹配。"},"old_str":{"type":"string","description":"待替换的文本块。比较时会自动忽略每行的首尾空白差异（缩进、末尾空格等），并容忍末尾多余空行。结合 old_StrStartLine 定位替换起点。"},"replace_all":{"type":"boolean","description":"是否替换所有匹配项。为 true 时，会忽略 old_StrStartLine，全文替换所有匹配文本（同样忽略首尾空白差异）。","default":false}},"required":["old_str","old_StrStartLine","new_str"]},"description":"编辑操作列表"},"file_path":{"type":"string","description":"文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。"}},"required":["file_path","edits"]}
+
+===
+
+name: glob
+--- description ---
+按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。
+--- inputSchema ---
+{"type":"object","properties":{"path":{"type":"string","description":"（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。"},"pattern":{"type":"string","description":"glob 模式。"}},"required":["pattern","path"]}
+
+===
+
+name: grep
+--- description ---
+递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。pattern 支持正则表达式匹配。
+--- inputSchema ---
+{"type":"object","properties":{"include":{"type":"string","description":"要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）"},"path":{"type":"string","description":"（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。"},"pattern":{"type":"string","description":"搜索内容，支持正则表达式匹配"}},"required":["pattern","path"]}
+
+===
+
+name: ls
+--- description ---
+列出目录内容。支持递归 Tree 结构展示。支持逻辑路径（如 @pool）。
+--- inputSchema ---
+{"type":"object","properties":{"path":{"type":"string","description":"目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。"},"recursive":{"type":"boolean","description":"是否递归展示"},"show_hidden":{"type":"boolean","description":"是否显示隐藏文件"}},"required":["path"]}
+
+===
+
+name: read
+--- description ---
+读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。
+--- inputSchema ---
+{"type":"object","properties":{"file_path":{"type":"string","description":"文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。"},"limit":{"type":"integer","description":"（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。"},"offset":{"type":"integer","description":"（可选）开始读取的行号（默认从1开始索引）"}},"required":["file_path"]}
+
+===
+
+name: write
+--- description ---
+创建新文件或覆盖现有文件。仅用于项目产物；要执行的多行脚本请直接交给 `bash`，不必先落成临时脚本文件。
+--- inputSchema ---
+{"type":"object","properties":{"content":{"type":"string","description":"完整文本内容。"},"file_path":{"type":"string","description":"文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。"}},"required":["file_path","content"]}

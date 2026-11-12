@@ -1,0 +1,9 @@
+Prefer an appropriate skill to solve the problem (if unsure which one, search with skillsearch). **Note: while executing a task, always read or review the skill's rules with `skillread`.**
+
+## Skill Library Rules (available skills: 2)
+### Mode: path navigation
+There are many skills, so only the path index is shown (no descriptions). Infer the function and call `skillread`. If unsure, search with `skillsearch`:
+<skill_list>
+  <skill name="@m/s1" />
+  <skill name="@m/s2" />
+</skill_list>

@@ -1,0 +1,23 @@
+## Build and Test Commands
+
+### Module: libs/core (Go)
+- Build: `cd libs/core && go build`
+- Full test: `cd libs/core && go test ./...`
+- Single test: `cd libs/core && go test -v -run TestName` (replace TestName with the actual function name)
+
+## Environment Versions
+
+> The versions below are **declared** in the project configuration files (not the versions installed on this machine). Match the syntax features of these versions when writing code.
+
+- libs/core (Go): Go 1.21
+
+## Guidelines
+
+- **Read before editing**: Always read the relevant files in full before making any change.
+- **Atomic work**: Implement only one feature or fix only one bug at a time.
+- **Verification-driven**: Run tests to verify before finishing a task.
+- **Path convention**: Use relative paths only (e.g. `src/main/java/App.java`; never use `./src/...`).
+- **Style alignment**: Follow the coding style and design patterns already used in the codebase.
+- **Version alignment**: Follow the versions declared in the "Environment Versions" section and do not use syntax features beyond them; if no version is listed, check the configuration files or build tool before deciding.
+- **Environment awareness**: Use your knowledge of each language's default local repository paths (e.g. Maven, Node) to help troubleshoot dependency issues or analyze source code.
+

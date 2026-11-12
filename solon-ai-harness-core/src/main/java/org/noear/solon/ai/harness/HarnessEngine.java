@@ -1736,8 +1736,8 @@ public class HarnessEngine {
 
         // 清单是会话级状态：经数据来源读写（默认 <workspace>/<harnessHome>/sessions/<sid>/TODO.md，与旧路径一致）
         this.todoTalent = new TodoTalent(options.getStateSource(), "sessions/");
-        //CODE.md 是写在工作区里的共用文件：按引擎实例的语言生成（指令仍跟随每轮的请求语言）
-        this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome()).locale(options.getLocale());
+        //语言只走请求（prompt）：CODE.md 已有则沿用其语言，新建时用本轮请求语言（引擎默认语言已并入请求）
+        this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
         this.taskTalent = new TaskTalent(this, options.getTaskExecutor());
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
         this.taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());

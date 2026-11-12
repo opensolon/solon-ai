@@ -1,0 +1,6 @@
+### Business tool details: tool_1
+- Description: 工具 1
+- Parameter schema (JSON Schema): 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```

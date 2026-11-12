@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * @author noear
@@ -34,7 +37,12 @@ public class CangjieProvider implements LanguageProvider {
 
     @Override
     public String typeName() {
-        return "仓颉项目";
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_CANGJIE_TYPE);
     }
 
     @Override
@@ -58,18 +66,21 @@ public class CangjieProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Cangjie)\n")
-                .append("- 构建: `cjpm build`\n")
-                .append("- 全量测试: `cjpm test`\n")
-                .append("- 运行: `cjpm run`\n")
-                .append("- 单项测试: `cjpm test --filter <test_case>` (替换为实际测试用例名)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_CANGJIE_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Cangjie)\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && cjpm build`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && cjpm test`\n")
-                .append("- 单项测试: `cd ").append(moduleName).append(" && cjpm test --filter <test_case>`\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_CANGJIE_MODULE, "module", moduleName)).append("\n\n");
     }
 }

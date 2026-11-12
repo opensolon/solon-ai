@@ -1,0 +1,1 @@
+! Permission denied: path @ro/x.txt belongs to a read-only mount and cannot be written. Write results to a relative path in the workspace.

@@ -1,0 +1,3 @@
+匹配到以下认知参考（如有冲突，请结合当前陈述与可核验事实判断）：
+- [<time>] [workspace] (Key: stack-note) Imp:6: 项目使用 Solon 4 框架，Java 8
+- [<time>] [user] (Key: user-stack) Imp:8: 项目使用 Solon 4 框架

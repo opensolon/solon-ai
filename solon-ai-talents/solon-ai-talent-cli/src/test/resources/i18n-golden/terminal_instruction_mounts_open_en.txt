@@ -1,0 +1,31 @@
+## Terminal Environment
+- **Sandbox mode**: off (open)
+- **Runtime**: <os> (<arch>)
+- **Shell type**: UNIX_SHELL — bash (POSIX shell)
+- **Self-protection**:
+  - All your commands run in a child shell of the Java process (PID: <pid>).
+  - Killing this PID or its parent stops you immediately and loses all context.
+  - Never run `pkill java` or `killall java`. Never run `kill -9` on any number unless you have first run `ps` to confirm that PID is unrelated to the current Java process.
+  - Tip: to clean up, use `pkill -P [PID]` to stop only child processes.
+- **Forbidden commands**:
+  - Never run `exit` (it is blocked by the security policy). To end a script, let it finish naturally.
+  - Never delete the root directory `/` or system directories (such as `/etc`, `/usr`).
+- **Runtimes**: 
+  - Python command: `python3` (preset variable `$PYTHON`)
+  - Node.js command: `node` (preset variable `$NODE`)
+- **Path rules**: 
+  - **Workspace (default scope)**: directory "proj" (the root for relative paths and "."): your home directory, readable and writable. All file lookups (ls/glob/grep/read) and path resolution are rooted at the workspace by default; use relative paths (such as `src/app.java`).
+  - **Mounts (access only when needed)**: access sources through logical paths starting with `@` (such as `@pool1/bin/tool/`). See the mount list below. **Only look under a mount when the user's prompt explicitly mentions that mount name** (such as `@global-skills`, `@workspace-agents`).
+
+<mount_list>
+  <mount alias="@pool" description="公共池" type="FILES" writeable="true" shell="true" env="$POOL" />
+  <mount alias="@ro" type="FILES" writeable="false" shell="true" env="$RO" />
+  <mount alias="@cp" type="SKILLS" writeable="false" shell="materialized" scheme="classpath" env="$CP" />
+  <mount alias="@mem" type="FILES" writeable="true" shell="false" scheme="mem" />
+</mount_list>
+  - **Security level**: open mode. Absolute, relative and logical paths are supported.
+## Execution Rules
+- **Mount isolation**: logical paths (starting with @) are read-only by default. Writes are allowed only when the mount list shows `writeable="true"`.
+- **Command execution**: in `bash`, local mounts and materializable mounts (shell="true" or "materialized") can use logical paths (such as `cd @pool1/bin/tool/`), which the system converts automatically (a materializable mount is copied into a user-level cache on first use and reused by later commands); other virtual sources can only be used through file tools. Absolute paths are also supported.
+- **Tools first (choose a tool before a command)**: to read files, list directories, find files, search text, write files and edit files, always use the `read` / `ls` / `glob` / `grep` / `write` / `edit` tools instead of shell commands (such as `cat`, `ls`, `find`, `grep`, `sed -i`, `echo >`): the tool layer already handles encodings and BOM, line-number positioning, ignored directories (node_modules/target/.git, etc.), paged truncation of large files and atomic rollback of writes, which the command line cannot do. Use `bash` for what really needs executing: builds, tests, git, package management, running scripts, and pipelines or statistics the tools cannot cover.
+- **Arguments and encoding**: always quote arguments containing spaces, quotes or other special characters (such as `python3 a.py "hello world"`, `cat "my file.txt"`). Output is decoded as UTF-8; no need to set encoding environment variables.

@@ -1,0 +1,89 @@
+# solon-ai-talent-gateway OpenAPI 网关文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+gateway.openapi.description: |-
+  OpenAPI 接口调用专家：自动解析 OpenAPI(Swagger) 文档，智能发现并精准调用 REST 接口。
+gateway.openapi.default_category: |-
+  常规接口
+
+# ---- 指令（四种模式） ----
+gateway.openapi.instruction.title: |-
+  ## 业务 OpenAPI 发现规范 (共 {count} 个接口)
+gateway.openapi.instruction.full: |-
+  ### 运行模式: 直接调用
+  当前已加载全量接口定义。请分析需求并直接调用 `call_api`。
+
+  #### 接口详细定义 (OpenAPI Specs):
+gateway.openapi.instruction.summary: |-
+  由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：
+  - **Step 1 (锁定)**: 从下方“可用业务接口清单”中根据功能描述选定接口名。
+  - **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 通过 `call_api` 执行。
+
+  ### 可用业务接口清单 (按业务分组摘要):
+gateway.openapi.instruction.summary_group: |-
+  - **分组: [{category}]**:
+gateway.openapi.instruction.list: |-
+  由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：
+  - **Step 1 (预选)**: 从下方“接口列表”中推断功能，或用 `search_apis` 检索。
+  - **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 通过 `call_api` 执行。
+
+  ### 可用业务接口列表 (按业务分组展示):
+gateway.openapi.instruction.list_group: |-
+  - **分组: {category}** -> [{names}]
+gateway.openapi.instruction.list_tip: |-
+  > 提示：分组名和接口名具有语义参考价值，锁定目标后务必先查详情。
+gateway.openapi.instruction.search: |-
+  由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：
+  - **Step 1 (搜索)**: 清单已折叠。必须先使用 `search_apis` 通过关键词寻找匹配的接口。**注意**: 搜索结果将按“业务分组”返回，请结合分组语义判断接口准确性。
+  - **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 通过 `call_api` 执行。
+
+  > **注意**: 接口库规模巨大。建议搜索关键词，如：search_apis('订单 查询')。
+gateway.openapi.instruction.constraints: |-
+  ## 执行约束
+  1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。
+  2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。
+
+# ---- 接口定义（指令与 get_api_detail 共用；每行由代码补 "  - " 前缀） ----
+gateway.openapi.doc.tags: |-
+  业务分组: {tags}
+gateway.openapi.doc.description: |-
+  功能: {description}
+gateway.openapi.doc.path: |-
+  路径: {method} {path}
+gateway.openapi.doc.header: |-
+  Header 参数: {schema}
+gateway.openapi.doc.path_params: |-
+  Path 参数 (填充路径 {}): {schema}
+gateway.openapi.doc.query: |-
+  Query 参数 (URL): {schema}
+gateway.openapi.doc.body_multipart: |-
+  Body 参数 (Multipart/Form): {schema}
+gateway.openapi.doc.body_json: |-
+  Body 参数 (JSON): {schema}
+gateway.openapi.doc.output: |-
+  返回结果: {schema}
+
+# ---- 内置工具返回值 ----
+gateway.openapi.search.blank: |-
+  错误：搜索关键词不能为空。
+gateway.openapi.search.none: |-
+  提醒：未找到完全匹配关键词 '{keyword}' 的业务接口。
+  您可以尝试：
+  1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。
+  2. 换用更通用的词汇，或减少关键词数量重新搜索。
+  3. 如果确定系统无此功能，请告知用户。禁止重复尝试相似关键词搜索。
+gateway.openapi.detail.blank: |-
+  错误：api_name 不能为空
+gateway.openapi.detail.missing: |-
+  错误: 未找到 OpenAPI '{name}'。请先通过 search_apis 确认名称。
+gateway.openapi.call.missing: |-
+  错误: 未找到名为 [{name}] 的 OpenAPI。请先通过 'search_apis' 确认正确的名称。
+gateway.openapi.call.no_path: |-
+  执行失败: 缺少必要的路径参数。当前路径仍存在占位符: {path}。请检查 'path_params' 是否提供了所有必需的变量。
+gateway.openapi.call.error: |-
+  接口执行异常: {error} (请检查服务可用性或参数正确性)
+gateway.openapi.call.no_response: |-
+  远程服务未响应

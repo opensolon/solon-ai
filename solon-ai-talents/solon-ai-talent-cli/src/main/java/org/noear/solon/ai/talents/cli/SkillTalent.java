@@ -19,9 +19,12 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mount.catalog.SkillCatalog;
 import org.noear.solon.ai.mount.catalog.SkillContent;
 import org.noear.solon.ai.mount.catalog.SkillDescriptor;
+import org.noear.solon.ai.talents.cli.i18n.CliI18n;
+import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Nullable;
 
@@ -163,8 +166,8 @@ public class SkillTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
-        return "技能管理器。支持从本地或挂载点发现并加载技能 (SKILL.md)。";
+    public String description(Prompt prompt) {
+        return CliI18n.get(AiI18n.localeOf(prompt), CliI18nKeys.SKILL_DESCRIPTION);
     }
 
     @Override
@@ -172,20 +175,20 @@ public class SkillTalent extends AbsTalent {
         Collection<SkillDescriptor> skillList = availableSkills(prompt);
         if (skillList.isEmpty()) return null;
 
+        Locale locale = AiI18n.localeOf(prompt);
         int total = skillList.size();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**\n\n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_HEAD)).append("\n\n");
 
         // 显式选中的技能：先给正文，再给清单（让模型不必为一个已选技能多跑一次 skillread）
-        appendPreloadedSkills(prompt, sb);
+        appendPreloadedSkills(prompt, sb, locale);
 
-        sb.append("## 技能库执行规约 (当前可用技能: " + total + ")\n");
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.SKILL_INSTRUCTION_TITLE, "total", total)).append("\n");
 
         if (total <= listThreshold) {
             // --- 档位 1: SUMMARY  ---
-            sb.append("### 运行模式: 摘要发现\n");
-            sb.append("请审阅下方技能清单。若某个技能匹配当前需求，请调用 `skillread` 获取具体执行规约与工具参数：\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_SUMMARY)).append("\n");
 
             sb.append("<skill_list>\n");
             for (SkillDescriptor s : skillList) {
@@ -194,8 +197,7 @@ public class SkillTalent extends AbsTalent {
             sb.append("</skill_list>");
         } else if (total <= searchThreshold) {
             // --- 模式 2: LIST ---
-            sb.append("### 运行模式: 路径导航\n");
-            sb.append("当前技能较多，仅展示路径索引（没有描述）。请推断功能并调用 `skillread`。如果不确定，请使用 `skillsearch` 检索：\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_LIST)).append("\n");
 
             sb.append("<skill_list>\n");
             for (SkillDescriptor s : skillList) {
@@ -204,8 +206,7 @@ public class SkillTalent extends AbsTalent {
             sb.append("</skill_list>");
         } else {
             // --- 模式 3: SEARCH ---
-            sb.append("### 运行模式: 动态发现\n");
-            sb.append("由于技能库规模较大。**禁止猜测路径**。你必须先通过 `skillsearch` 检索关键字，确认 name 后再调用 `skillread` 读取。\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_SEARCH)).append("\n");
         }
 
         return sb.toString();
@@ -217,20 +218,22 @@ public class SkillTalent extends AbsTalent {
         if (skillList.isEmpty()) return null;
 
         int total = skillList.size();
+        // 按请求语言本地化的工具描述
+        Collection<FunctionTool> tools = super.getTools(prompt);
 
         if (total <= listThreshold) {
             // 少量时，直接 read 即可，不需要 search 和 list 干扰
-            return getToolAry().stream().filter(t -> t.name().equals("skillread")
+            return tools.stream().filter(t -> t.name().equals("skillread")
                     || t.name().equals("skillrefresh")).collect(Collectors.toList());
         }
 
         if (total <= searchThreshold) {
             // 中等规模，保留所有（read, list, refresh），但不强制 search
-            return getToolAry().stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
+            return tools.stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
         }
 
         // 大规模，强制搜索（全量工具开放）
-        return getToolAry();
+        return tools;
     }
 
     /** 便捷入口（非工具注册，供内部/测试直接调用）：无视野约束 */
@@ -238,20 +241,26 @@ public class SkillTalent extends AbsTalent {
         return skilllist(null, null);
     }
 
-    @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
+    /** 列出技能（默认语言） */
     public String skilllist(List<String> _skills_selected, List<String> _skills_allowed) {
+        return skilllist(_skills_selected, _skills_allowed, null);
+    }
+
+    @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
+    public String skilllist(List<String> _skills_selected, List<String> _skills_allowed, String __locale) {
         // _skills_selected / _skills_allowed 由 toolContext 隐式注入（未设置时为 null），模型不可见；
         // 与指令清单同口径：只列视野内的技能
+        Locale locale = AiI18n.toLocale(__locale);
         Collection<SkillDescriptor> skillList = availableSkills(_skills_selected, _skills_allowed);
         if (skillList.isEmpty()) {
-            return "当前没有可用的技能。";
+            return CliI18n.get(locale, CliI18nKeys.SKILL_LIST_EMPTY);
         }
 
         if (skillList.size() > searchThreshold) {
-            return String.format("Error: 当前技能库规模较大 (%d)，禁止全量列出。请使用 `skillsearch` 配合关键字定位。", skillList.size());
+            return CliI18n.fmt(locale, CliI18nKeys.SKILL_LIST_TOO_MANY, "count", skillList.size());
         }
 
-        StringBuilder sb = new StringBuilder("可用技能列表：\n");
+        StringBuilder sb = new StringBuilder(CliI18n.get(locale, CliI18nKeys.SKILL_LIST_TITLE)).append("\n");
 
         sb.append("<skill_list>\n");
         for (SkillDescriptor s : skillList) {
@@ -266,11 +275,17 @@ public class SkillTalent extends AbsTalent {
         return skillsearch(query, null, null);
     }
 
+    /** 搜索技能（默认语言） */
+    public String skillsearch(String query, List<String> _skills_selected, List<String> _skills_allowed) {
+        return skillsearch(query, _skills_selected, _skills_allowed, null);
+    }
+
     @ToolMapping(name = "skillsearch", description = "在所有挂载点中搜索技能关键字。支持空格分隔多个词。")
-    public String skillsearch(@Param("query") String query, List<String> _skills_selected, List<String> _skills_allowed) {
+    public String skillsearch(@Param("query") String query, List<String> _skills_selected, List<String> _skills_allowed,
+                              String __locale) {
         Collection<SkillDescriptor> matches = skillCatalog.searchDescriptors(query);
 
-        if (matches.isEmpty()) return "未找到匹配技能。";
+        if (matches.isEmpty()) return CliI18n.get(AiI18n.toLocale(__locale), CliI18nKeys.SKILL_SEARCH_NONE);
 
         StringBuilder sb = new StringBuilder("<skill_list>\n");
         for (SkillDescriptor s : matches) {
@@ -287,9 +302,15 @@ public class SkillTalent extends AbsTalent {
         return skillread(name, null);
     }
 
+    /** 读取技能（默认语言） */
+    public String skillread(String name, List<String> _skills_allowed) throws IOException {
+        return skillread(name, _skills_allowed, null);
+    }
+
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
     public String skillread(@Param(value = "name", description = "技能的唯一路径标识（例如：'deep-research'）") String name,
-                            List<String> _skills_allowed) throws IOException {
+                            List<String> _skills_allowed,
+                            String __locale) throws IOException {
         // 从技能目录按逻辑标识查找（与会话工作目录无关，故不接收 __cwd）
         SkillContent content = skillCatalog.readContent(name);
 
@@ -298,7 +319,7 @@ public class SkillTalent extends AbsTalent {
             return content.getRenderedText();
         }
 
-        return "Error: " + name + " 不是有效的技能目录 (缺少 SKILL.md)";
+        return CliI18n.fmt(AiI18n.toLocale(__locale), CliI18nKeys.SKILL_READ_INVALID, "name", name);
     }
 
     /**
@@ -352,7 +373,7 @@ public class SkillTalent extends AbsTalent {
     /**
      * 预加载选中技能的正文（受 {@link #preloadCharLimit} 约束）
      */
-    private void appendPreloadedSkills(@Nullable Prompt prompt, StringBuilder sb) {
+    private void appendPreloadedSkills(@Nullable Prompt prompt, StringBuilder sb, Locale locale) {
         List<String> selected = getSelected(prompt);
         if (selected.isEmpty() || preloadCharLimit <= 0) {
             return;
@@ -381,14 +402,19 @@ public class SkillTalent extends AbsTalent {
         }
 
         if (block.length() > 0) {
-            sb.append("### 已选技能（正文已预加载，无需再次 skillread）\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_PRELOADED_TITLE)).append("\n");
             sb.append(block).append("\n");
         }
     }
 
-    @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载点，更新技能列表。")
+    /** 刷新技能（默认语言） */
     public String skillrefresh() {
+        return skillrefresh(null);
+    }
+
+    @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载点，更新技能列表。")
+    public String skillrefresh(String __locale) {
         skillCatalog.refresh();
-        return "技能库已刷新，当前可用技能数：" + skillCatalog.getSkillCount();
+        return CliI18n.fmt(AiI18n.toLocale(__locale), CliI18nKeys.SKILL_REFRESH_OK, "count", skillCatalog.getSkillCount());
     }
 }

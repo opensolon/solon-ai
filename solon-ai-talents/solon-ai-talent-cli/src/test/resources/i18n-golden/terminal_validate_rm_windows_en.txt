@@ -1,0 +1,1 @@
+Error: high-risk command detected. Deleting a drive root or system directories (Windows / Program Files / Users, etc.) is forbidden.

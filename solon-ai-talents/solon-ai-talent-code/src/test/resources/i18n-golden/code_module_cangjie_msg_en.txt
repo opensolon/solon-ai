@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Cangjie)) (environment versions: libs/core (Cangjie): Cangjie 0.53)

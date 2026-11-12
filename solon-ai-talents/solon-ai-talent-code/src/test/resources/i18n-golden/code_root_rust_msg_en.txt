@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: Rust (Root)) (environment versions: Rust (Root): Rust 1.70)

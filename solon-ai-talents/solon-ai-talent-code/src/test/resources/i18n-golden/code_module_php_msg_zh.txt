@@ -1,0 +1,1 @@
+已更新项目工程规范 (检测到技术栈: libs/core (PHP)) (环境版本: libs/core (PHP): PHP >=8.1)

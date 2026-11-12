@@ -1,0 +1,22 @@
+# solon-ai-talent-web 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- CodeSearchTalent ----
+codesearch.timeout: |-
+  代码搜索请求超时
+codesearch.error: |-
+  代码搜索出错: {error}
+codesearch.empty: |-
+  未找到相关的代码片段或文档。请尝试更换查询词，明确具体的库或编程概念，并检查框架名称拼写是否正确。
+
+# ---- WebSearchDriverTalent ----
+search.empty: |-
+  未找到相关搜索结果。
+search.fail: |-
+  搜索服务暂时不可用: {error}
+
+# ---- WebCrawlerDriverTalent ----
+crawl.invalid_url: |-
+  错误：URL 无效。
+crawl.fail: |-
+  抓取失败: {error}

@@ -1,0 +1,5 @@
+name: web_search
+--- description ---
+联网搜索，返回标题、链接和摘要
+--- inputSchema ---
+{"type":"object","properties":{"query":{"type":"string","description":""}},"required":["query"]}

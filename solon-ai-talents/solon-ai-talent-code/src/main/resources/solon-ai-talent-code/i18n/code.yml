@@ -1,0 +1,214 @@
+# solon-ai-talent-code messages (English, also the fallback)
+# Convention: every value is a "|-" block scalar with body text only - no leading/trailing newlines or spaces (separators are added by code); placeholders use {name}; never use ${ or #{
+
+code.description: |-
+  Code expert. Supports project initialization, automatic tech stack detection, and generation of the `{path}` conventions.
+code.instruction: |-
+  ## Core Engineering Protocol
+  > Current project context: {context}
+
+  To ensure engineering quality, strictly follow these steps:
+  1. **Read first**: Before starting any task, read `{path}` for the build and test commands.
+  2. **Verify**: After changing code, run the tests as described in `{path}`; never submit unverified changes.
+
+# ---- Init result (the "current project context" in the instruction) ----
+code.init.updated: |-
+  Updated the project engineering conventions
+code.init.verified: |-
+  Verified the project engineering conventions
+code.init.stacks: |-
+  (detected tech stacks: {stacks})
+code.init.no_stacks: |-
+  (no clear tech stack detected)
+code.init.versions: |-
+  (environment versions: {versions})
+code.init.failed: |-
+  Could not generate the project engineering conventions ({reason}); read the source code and build configuration directly to understand the project structure
+code.init.reason.not_writable: |-
+  the directory is not writable, so no conventions file was generated this time
+code.init.reason.error: |-
+  initialization error: {error}
+
+# ---- CODE.md ----
+code.md.title: |-
+  ## Build and Test Commands
+code.md.modules_title: |-
+  ### Sub-modules & Sub-projects
+  > The following modules are governed by the root project commands (build and test them with the root project commands above).
+code.md.modules_group: |-
+  {type} ({count})
+code.md.modules_item_version: |-
+  {path} ({version})
+code.md.modules_more: |-
+  … and {count} more module(s) (not expanded; search {globs} for the full list)
+code.md.modules_glob_or: |-
+  or
+code.md.modules_glob_fallback: |-
+  the corresponding build marker files
+code.md.versions: |-
+  ## Environment Versions
+
+  > The versions below are **declared** in the project configuration files (not the versions installed on this machine). Match the syntax features of these versions when writing code.
+code.md.guidelines: |-
+  ## Guidelines
+
+  - **Read before editing**: Always read the relevant files in full before making any change.
+  - **Atomic work**: Implement only one feature or fix only one bug at a time.
+  - **Verification-driven**: Run tests to verify before finishing a task.
+  - **Path convention**: Use relative paths only (e.g. `src/main/java/App.java`; never use `./src/...`).
+  - **Style alignment**: Follow the coding style and design patterns already used in the codebase.
+  - **Version alignment**: Follow the versions declared in the "Environment Versions" section and do not use syntax features beyond them; if no version is listed, check the configuration files or build tool before deciding.
+  - **Environment awareness**: Use your knowledge of each language's default local repository paths (e.g. Maven, Node) to help troubleshoot dependency issues or analyze source code.
+
+# ---- Built-in languages (type: module type name; root: root project commands; module: sub-module commands) ----
+code.lang.maven.type: |-
+  Maven module
+code.lang.maven.root: |-
+  ### Root Project (Maven)
+  - Build: `mvn clean compile`
+  - Full test: `mvn test`
+  - Single test: `mvn test -Dtest=ClassName` (replace with the actual class name)
+code.lang.maven.module: |-
+  ### Module: {module} (Maven)
+  - Build: `cd {module} && mvn clean compile`
+  - Full test: `cd {module} && mvn test`
+  - Single test: `cd {module} && mvn test -Dtest=ClassName` (replace with the actual class name)
+
+code.lang.gradle.type: |-
+  Gradle module
+code.lang.gradle.root: |-
+  ### Root Project (Gradle)
+  - Build: `./gradlew build` (or `gradle build`)
+  - Full test: `./gradlew test`
+  - Single test: `./gradlew test --tests "ClassName"` (replace with the actual class name)
+code.lang.gradle.module: |-
+  ### Module: {module} (Gradle)
+  - Build: `./gradlew :{project}:build`
+  - Full test: `./gradlew :{project}:test`
+  - Single test: `./gradlew :{project}:test --tests "ClassName"`
+
+code.lang.node.type: |-
+  Node project
+code.lang.node.root: |-
+  ### Root Project (Node/TS)
+  - Install: `npm install`
+  - Build: `npm run build`
+  - Full test: `npm test`
+  - Single-file test: `npm test -- path/to/file.test.ts` (replace with the actual file path)
+code.lang.node.module: |-
+  ### Module: {module} (Node/TS)
+  - Install: `cd {module} && npm install`
+  - Build: `cd {module} && npm run build`
+  - Full test: `cd {module} && npm test`
+  - Single-file test: `cd {module} && npm test -- path/to/file.test.ts` (replace with the actual file path)
+
+code.lang.go.type: |-
+  Go module
+code.lang.go.root: |-
+  ### Root Project (Go)
+  - Sync dependencies: `go mod tidy`
+  - Build: `go build ./...`
+  - Full test: `go test ./...`
+  - Single test: `go test -v -run TestName ./...` (replace TestName with the actual function name)
+code.lang.go.module: |-
+  ### Module: {module} (Go)
+  - Build: `cd {module} && go build`
+  - Full test: `cd {module} && go test ./...`
+  - Single test: `cd {module} && go test -v -run TestName` (replace TestName with the actual function name)
+
+code.lang.python.type: |-
+  Python project
+code.lang.python.root: |-
+  ### Root Project (Python)
+  - Environment: check for and activate `venv` or `.venv` first
+  - Dependencies: `pip install -r requirements.txt` (or use poetry/pdm)
+  - Full test: `pytest` or `python -m unittest discover`
+  - Single-file test: `pytest path/to/test_file.py` (replace with the actual path)
+code.lang.python.module: |-
+  ### Module: {module} (Python)
+  - Environment: check for and activate `venv` or `.venv` first
+  - Dependencies: `cd {module} && pip install -r requirements.txt`
+  - Full test: `cd {module} && pytest`
+  - Single-file test: `cd {module} && pytest path/to/test_file.py` (replace with the actual path)
+
+code.lang.rust.type: |-
+  Rust project
+code.lang.rust.root: |-
+  ### Root Project (Rust)
+  - Build: `cargo build`
+  - Full test: `cargo test`
+  - Run: `cargo run`
+  - Single test: `cargo test -- test_name` (replace with the actual module or function name)
+code.lang.rust.module: |-
+  ### Module: {module} (Rust)
+  - Build: `cd {module} && cargo build`
+  - Full test: `cd {module} && cargo test`
+  - Single test: `cd {module} && cargo test -- test_name` (replace with the actual module or function name)
+
+code.lang.cangjie.type: |-
+  Cangjie project
+code.lang.cangjie.root: |-
+  ### Root Project (Cangjie)
+  - Build: `cjpm build`
+  - Full test: `cjpm test`
+  - Run: `cjpm run`
+  - Single test: `cjpm test --filter <test_case>` (replace with the actual test case name)
+code.lang.cangjie.module: |-
+  ### Module: {module} (Cangjie)
+  - Build: `cd {module} && cjpm build`
+  - Full test: `cd {module} && cjpm test`
+  - Single test: `cd {module} && cjpm test --filter <test_case>`
+
+code.lang.cmake.type: |-
+  C/C++ project
+code.lang.cmake.root: |-
+  ### Root Project (C/C++)
+  - Build: `mkdir -p build && cd build && cmake .. && make`
+  - Full test: `cd build && ctest`
+  - Single test: `cd build && ctest -R <test_name_regexp>` (replace with a regex filter)
+code.lang.cmake.module: |-
+  ### Module: {module} (C/C++)
+  - Build: `cd {module} && mkdir -p build && cd build && cmake .. && make`
+  - Full test: `cd {module}/build && ctest`
+  - Single test: `cd {module}/build && ctest -R <test_name_regexp>`
+
+code.lang.flutter.type: |-
+  Flutter project
+code.lang.flutter.root: |-
+  ### Root Project (Flutter/Dart)
+  - Dependencies: `flutter pub get`
+  - Full test: `flutter test`
+  - Single-file test: `flutter test path/to/test_file.dart` (replace with the actual path)
+code.lang.flutter.module: |-
+  ### Module: {module} (Flutter/Dart)
+  - Dependencies: `cd {module} && flutter pub get`
+  - Full test: `cd {module} && flutter test`
+  - Single-file test: `cd {module} && flutter test path/to/test_file.dart`
+
+code.lang.php.type: |-
+  PHP project
+code.lang.php.root: |-
+  ### Root Project (PHP/Composer)
+  - Dependencies: `composer install`
+  - Full test: `./vendor/bin/phpunit`
+  - Single-file test: `./vendor/bin/phpunit path/to/TestFile.php` (replace with the actual path)
+code.lang.php.module: |-
+  ### Module: {module} (PHP/Composer)
+  - Dependencies: `cd {module} && composer install`
+  - Full test: `cd {module} && ./vendor/bin/phpunit`
+  - Single-file test: `cd {module} && ./vendor/bin/phpunit path/to/TestFile.php`
+
+code.lang.dotnet.type: |-
+  C# project
+code.lang.dotnet.root: |-
+  ### Root Project (C#/.NET)
+  - Restore: `dotnet restore`
+  - Build: `dotnet build`
+  - Full test: `dotnet test`
+  - Single test: `dotnet test --filter FullyQualifiedName=Namespace.ClassName` (replace with the actual class name)
+code.lang.dotnet.module: |-
+  ### Module: {module} (C#/.NET)
+  - Restore: `cd {module} && dotnet restore`
+  - Build: `cd {module} && dotnet build`
+  - Full test: `cd {module} && dotnet test`
+  - Single test: `cd {module} && dotnet test --filter FullyQualifiedName=Namespace.ClassName` (replace with the actual class name)

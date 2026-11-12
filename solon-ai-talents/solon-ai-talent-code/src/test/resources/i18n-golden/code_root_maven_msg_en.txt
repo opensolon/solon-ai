@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: Maven (Root)) (environment versions: Maven (Root): Java 1.8)

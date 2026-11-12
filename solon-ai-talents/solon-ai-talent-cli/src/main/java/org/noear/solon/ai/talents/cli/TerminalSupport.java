@@ -22,6 +22,8 @@ import org.noear.solon.ai.mount.Mount;
 import org.noear.solon.ai.mount.MountManager;
 import org.noear.solon.ai.mount.ResolvedResource;
 import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.talents.cli.i18n.CliI18n;
+import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
@@ -153,7 +155,7 @@ public class TerminalSupport {
 
     String applyEditLogic(String content, String oldStr, String newStr, boolean replaceAll, Integer oldStrStartLine) {
         if (Utils.isEmpty(oldStr)) {
-            throw new IllegalArgumentException("old_str 不能为空");
+            throw new CliArgumentException(CliI18nKeys.TERMINAL_APPLY_EMPTY_OLD);
         }
 
         if (oldStr.equals(newStr)) {
@@ -165,7 +167,7 @@ public class TerminalSupport {
 
         if (replaceAll) {
             if (!content.contains(finalOld)) {
-                throw new IllegalArgumentException("找不到待替换的文本块");
+                throw new CliArgumentException(CliI18nKeys.TERMINAL_APPLY_ALL_MISSING);
             }
             return content.replace(finalOld, finalNew);
         } else {
@@ -181,10 +183,10 @@ public class TerminalSupport {
 
             int firstIndex = content.indexOf(finalOld);
             if (firstIndex == -1) {
-                throw new IllegalArgumentException("找不到文本块。这通常是由于前面的修改改变了文件的字符偏移或内容，建议分步执行。");
+                throw new CliArgumentException(CliI18nKeys.TERMINAL_APPLY_MISSING);
             }
             if (content.lastIndexOf(finalOld) != firstIndex) {
-                throw new IllegalArgumentException("文本块在当前状态下不唯一");
+                throw new CliArgumentException(CliI18nKeys.TERMINAL_APPLY_NOT_UNIQUE);
             }
             return content.substring(0, firstIndex) + finalNew + content.substring(firstIndex + finalOld.length());
         }
@@ -306,6 +308,13 @@ public class TerminalSupport {
      * @param lineStartIndex 1-based 行号（来自 edit.oldStrStartLine），注意不是字符偏移量
      */
     String findLooseMatchDiagnostics(String content, String oldStr, int lineStartIndex) {
+        return findLooseMatchDiagnostics(content, oldStr, lineStartIndex, null);
+    }
+
+    /**
+     * 多策略匹配诊断（诊断文案按指定语言；null 为默认语言）
+     */
+    String findLooseMatchDiagnostics(String content, String oldStr, int lineStartIndex, Locale locale) {
         // 先将 1-based 行号转换为字符偏移量（和 findAtStartLine 的转换方式保持一致）
         int startOffset = getLineStartIndex(content, lineStartIndex);
         if (startOffset < 0) {
@@ -313,13 +322,13 @@ public class TerminalSupport {
         }
 
         // 先尝试 trim 策略检查
-        String diag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "trim");
+        String diag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "trim", locale);
         if (diag == null) {
             return null; // trim 策略匹配成功
         }
 
         // trim 策略失败，检查是否是 whitespace 折叠可以解决的差异
-        String collapseDiag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "collapse");
+        String collapseDiag = tryTrimMatchDiagnostics(content, oldStr, startOffset, "collapse", locale);
         if (collapseDiag == null) {
             return null; // collapse 策略匹配成功
         }
@@ -333,21 +342,21 @@ public class TerminalSupport {
      *
      * @param mode "trim" 使用 trimLine 比较，"collapse" 使用 collapseWhitespace 比较
      */
-    private String tryTrimMatchDiagnostics(String content, String oldStr, int startOffset, String mode) {
+    private String tryTrimMatchDiagnostics(String content, String oldStr, int startOffset, String mode, Locale locale) {
         List<String> contentLines = extractTrimmedLines(content, startOffset);
         if (contentLines.isEmpty()) {
-            return "文件在指定行号处无内容";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_DIAG_NO_CONTENT);
         }
 
         String[] oldStrLinesRaw = oldStr.split("\\r?\\n", -1);
         List<String> oldStrLines = trimTrailingEmptyLines(oldStrLinesRaw);
         if (oldStrLines.isEmpty()) {
-            return "old_str 全为空行";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_DIAG_BLANK);
         }
 
         if (oldStrLines.size() > contentLines.size()) {
-            return String.format("行数不匹配：old_str 有 %d 行，但文件中从起始行开始只剩 %d 行",
-                    oldStrLines.size(), contentLines.size());
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_DIAG_LINES,
+                    "expected", oldStrLines.size(), "actual", contentLines.size());
         }
 
         boolean useCollapse = "collapse".equals(mode);
@@ -359,11 +368,11 @@ public class TerminalSupport {
             if (!actual.equals(expected)) {
                 int fileLineNum = lineStartIndexToLineNumber(content, startOffset) + i;
                 if (useCollapse) {
-                    return String.format("第 %d 行内容不匹配（折叠空白后）：期待「%s」，文件中是「%s」",
-                            fileLineNum, expected, actual);
+                    return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_DIAG_MISMATCH_COLLAPSE,
+                            "line", fileLineNum, "expected", expected, "actual", actual);
                 } else {
-                    return String.format("第 %d 行内容不匹配：期待「%s」，文件中是「%s」",
-                            fileLineNum, expected, actual);
+                    return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_DIAG_MISMATCH,
+                            "line", fileLineNum, "expected", expected, "actual", actual);
                 }
             }
         }
@@ -695,8 +704,15 @@ public class TerminalSupport {
      * @return null 表示校验通过；非 null 为错误消息
      */
     String validateCommandNoKill(String command) {
+        return validateCommandNoKill(command, null);
+    }
+
+    /**
+     * 统一安全校验（错误文案按指定语言；null 为默认语言）
+     */
+    String validateCommandNoKill(String command, Locale locale) {
         if (Assert.isEmpty(command)) {
-            return "错误：command 不能为空。";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_VALIDATE_EMPTY);
         }
 
         String pid = Utils.pid();
@@ -704,25 +720,25 @@ public class TerminalSupport {
 
         // 1. 自保护：禁止杀死当前 Java 进程（全模式、全配置始终生效）
         if (isUnixHostKill(lowerCmd, pid)) {
-            return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VALIDATE_KILL, "pid", pid);
         }
 
         // 1b. Windows 侧的等价形态（taskkill / Stop-Process）
         if (isWindowsRiskScope() && isWindowsHostKill(command, pid)) {
-            return "错误：检测到危险命令。严禁试图停止宿主进程 (PID: " + pid + ")。";
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VALIDATE_KILL, "pid", pid);
         }
 
         // 2. 高危自毁命令：exit / 递归强删根目录或系统目录（全模式、全配置始终生效）
         if (lowerCmd.matches("(?i)(?:^|.*[;|&])\\s*exit\\b.*") ||
                 UNIX_RM_CRITICAL.matcher(lowerCmd).find()) {
-            return "错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录/系统目录删除的操作。";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_VALIDATE_EXIT);
         }
 
         // 2b. Windows 侧的盘符根/系统目录删除
         if (isWindowsRiskScope()
                 && WINDOWS_DELETE_VERB.matcher(command).find()
                 && WINDOWS_CRITICAL_TARGET.matcher(command).find()) {
-            return "错误：检测到高危指令。禁止对盘符根目录或系统目录（Windows / Program Files / Users 等）执行删除操作。";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_VALIDATE_RM_WINDOWS);
         }
 
         return null; // null 表示校验通过
@@ -909,21 +925,20 @@ public class TerminalSupport {
             ResolvedResource resource = mountManager.resolveResource(pStr);
             Optional<Path> localPath = resource.getLocalPath();
             if (!localPath.isPresent()) {
-                throw new SecurityException("权限拒绝：该挂载来源不支持本地文件操作 " + pStr);
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_NOT_LOCAL, "path", pStr);
             }
             Path target = localPath.get();
             Mount mount = resource.getMount();
             if (mount == null && !"@workspace".equals(resource.getMountAlias())) {
-                throw new SecurityException("权限拒绝：未知的挂载点 " + pStr);
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_UNKNOWN_MOUNT, "path", pStr);
             }
             if (writeMode && (mount != null && !mount.isWritable()
                     || !resource.getSource().capabilities().isWritable())) {
-                throw new SecurityException(
-                        "权限拒绝：路径 " + pStr + " 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。");
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_READONLY_MOUNT, "path", pStr);
             }
             Optional<Path> localRoot = resource.getSource().getLocalRoot();
             if (!localRoot.isPresent()) {
-                throw new SecurityException("权限拒绝：挂载点没有本地目录 " + pStr);
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_NO_LOCAL_ROOT, "path", pStr);
             }
             Path mountRoot = localRoot.get();
 
@@ -949,7 +964,7 @@ public class TerminalSupport {
                 // mandatory deny 检查，避免因缓存位于用户目录而无法完成安全拒绝。
                 if (!(sandboxAllowUserHome && pStr.startsWith("~"))
                         && !isMaterializeCachePath(p.normalize())) {
-                    throw new SecurityException("权限拒绝：沙盒模式下禁止使用绝对路径。");
+                    throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_ABSOLUTE);
                 }
             }
             target = p.normalize();
@@ -972,12 +987,12 @@ public class TerminalSupport {
                     }
                     Path realWorkPath = workPath.toRealPath();
                     if (!realTarget.startsWith(realWorkPath)) {
-                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                        throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_OUTSIDE);
                     }
                 } catch (NoSuchFileException e) {
                     // 目标路径及其已存在祖先均不存在，回退到字符串检查。
                     if (!target.startsWith(workPath)) {
-                        throw new SecurityException("权限拒绝：路径越界（沙盒模式已开启）。");
+                        throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_OUTSIDE);
                     }
                 }
             }
@@ -994,21 +1009,21 @@ public class TerminalSupport {
      */
     private void enforceFilesystemPolicy(Path policyRoot, Path target, boolean writeMode, boolean sandboxEnabled, FilesystemConfig fs) {
         if (isMaterializeCachePath(target)) {
-            throw new SecurityException("权限拒绝：路径受保护（物化缓存）");
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_CACHE);
         }
         String rel = toPolicyRelative(policyRoot, target);
         if (isMandatoryDeny(rel)) {
-            throw new SecurityException("权限拒绝：路径受保护 " + rel);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_PROTECTED, "path", rel);
         }
         if (fs == null) {
             return;
         }
         if (matchesAny(rel, fs.getDenyRead()) && !matchesAny(rel, fs.getAllowRead())) {
-            throw new SecurityException("权限拒绝：读取拒绝 " + rel);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_READ, "path", rel);
         }
         if (writeMode && fs.getAllowWrite() != null
                 && !matchesAny(rel, fs.getAllowWrite())) {
-            throw new SecurityException("权限拒绝：可写白名单 " + rel);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_WRITE_WHITELIST, "path", rel);
         }
     }
 
@@ -1357,11 +1372,11 @@ public class TerminalSupport {
                 // 否则可能误执行工作区内同名路径，也会把真正的 IO/缓存错误伪装成路径不存在。
                 if (materializer == null) {
                     throw new MountMaterializer.MaterializationException(
-                            "物化缓存未配置，无法执行挂载 " + mount.getAlias(), null);
+                            CliI18nKeys.TERMINAL_MATERIALIZE_NO_CACHE, mount.getAlias(), null);
                 }
                 localRoot = materializer.ensureMaterialized(mount).orElseThrow(() ->
                         new MountMaterializer.MaterializationException(
-                                "挂载未生成物化目录 " + mount.getAlias(), null));
+                                CliI18nKeys.TERMINAL_MATERIALIZE_NO_DIR, mount.getAlias(), null));
             }
             if (mount.isEnabled() && localRoot != null) {
                 String alias = mount.getAlias(); // 例如 @pool1
@@ -1406,7 +1421,7 @@ public class TerminalSupport {
         // ~ 路径处理（统一所有 shell 模式）
         if (containsUserHomePath(result)) {
             if (sandboxEnabled && !sandboxAllowUserHome) {
-                throw new SecurityException("权限拒绝：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。");
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_HOME);
             }
             result = expandUserHomePaths(result);
         }
@@ -1475,7 +1490,7 @@ public class TerminalSupport {
         Path normalizedRoot = mountRoot.toAbsolutePath().normalize();
         Path normalizedTarget = target.toAbsolutePath().normalize();
         if (!normalizedTarget.startsWith(normalizedRoot)) {
-            throw new SecurityException("权限拒绝：路径超出挂载范围。");
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_MOUNT_OUTSIDE);
         }
 
         Path realMountPath;
@@ -1486,7 +1501,7 @@ public class TerminalSupport {
             Path existingRoot = resolveExistingAncestorIncludingSelf(normalizedRoot);
             Path existingTarget = resolveExistingAncestorIncludingSelf(normalizedTarget);
             if (!existingTarget.toRealPath().startsWith(existingRoot.toRealPath())) {
-                throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
+                throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_SYMLINK);
             }
             return;
         }
@@ -1498,7 +1513,7 @@ public class TerminalSupport {
             realTarget = resolveExistingAncestor(normalizedTarget).toRealPath();
         }
         if (!realTarget.startsWith(realMountPath)) {
-            throw new SecurityException("权限拒绝：符号链接越界（沙盒模式已开启）。");
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_SYMLINK);
         }
     }
 
@@ -1532,6 +1547,10 @@ public class TerminalSupport {
     }
 
     void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs) throws IOException {
+        generateTreeInternal(workPath, current, depth, maxDepth, indent, sb, showHidden, sandboxEnabled, fs, null);
+    }
+
+    void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs, Locale locale) throws IOException {
         if (depth >= maxDepth) return;
         try (Stream<Path> stream = Files.list(current)) {
             List<Path> children = stream
@@ -1554,14 +1573,18 @@ public class TerminalSupport {
                 }
                 sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
                 if (isDir)
-                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled, fs);
+                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled, fs, locale);
             }
         } catch (AccessDeniedException e) {
-            sb.append(indent).append("└── [拒绝访问]\n");
+            sb.append(indent).append("└── ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_DENIED)).append("\n");
         }
     }
 
     String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs) throws IOException {
+        return flatListLogic(workPath, policyRoot, target, inputPath, showHidden, sandboxEnabled, fs, null);
+    }
+
+    String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs, Locale locale) throws IOException {
         try (Stream<Path> stream = Files.list(target)) {
             List<String> lines = stream
                     .filter(p -> !isIgnored(workPath, p))
@@ -1572,7 +1595,7 @@ public class TerminalSupport {
                         String displayPath = formatDisplayPath(workPath, inputPath, target, p, sandboxEnabled);
                         return (isDir ? "[DIR] " : "[FILE] ") + displayPath + (isDir ? "/" : "");
                     }).sorted().collect(Collectors.toList());
-            return lines.isEmpty() ? "(目录为空)" : String.join("\n", lines);
+            return lines.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_EMPTY) : String.join("\n", lines);
         }
     }
 

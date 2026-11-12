@@ -9,6 +9,9 @@ import org.noear.solon.ai.chat.tool.AbsTool;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.ai.talents.gateway.i18n.ToolGatewayI18n;
+import org.noear.solon.ai.talents.gateway.i18n.ToolGatewayI18nKeys;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.slf4j.Logger;
@@ -116,7 +119,8 @@ public class ToolGatewayTalent extends AbsTalent {
             return this;
         }
 
-        String catName = Utils.isEmpty(category) ? "常规工具" : category;
+        //默认分组按默认语言登记，展示时再按请求语言换成对应文案（见 categoryOf）
+        String catName = Utils.isEmpty(category) ? ToolGatewayI18n.get(null, ToolGatewayI18nKeys.GATEWAY_TOOL_DEFAULT_CATEGORY) : category;
 
         categoryTools.computeIfAbsent(catName, k -> new LinkedHashMap<>())
                 .put(tool.name().toLowerCase(), tool);
@@ -127,8 +131,18 @@ public class ToolGatewayTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
-        return "业务工具网关";
+    public String description(Prompt prompt) {
+        return ToolGatewayI18n.get(AiI18n.localeOf(prompt), ToolGatewayI18nKeys.GATEWAY_TOOL_DESCRIPTION);
+    }
+
+    /**
+     * 分组的展示名（默认分组按语言显示）
+     */
+    private static String categoryOf(String category, Locale locale) {
+        if (ToolGatewayI18n.messages().textsOfAllLocales(ToolGatewayI18nKeys.GATEWAY_TOOL_DEFAULT_CATEGORY).contains(category)) {
+            return ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_DEFAULT_CATEGORY);
+        }
+        return category;
     }
 
     @Override
@@ -138,52 +152,34 @@ public class ToolGatewayTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        final Locale locale = AiI18n.localeOf(prompt);
         final int size = allTools.size();
         StringBuilder sb = new StringBuilder();
-        sb.append("## 业务工具发现规范 (共 ").append(size).append(" 个工具)\n");
+        sb.append(ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_TITLE, "count", size)).append("\n");
 
         if (size <= dynamicThreshold) {
             // --- 逻辑分支 1: FULL 模式 (全铺) ---
-            sb.append("### 运行模式: 直接调用\n");
-            sb.append("当前已加载全量业务工具定义。请直接分析需求并调用最匹配的工具，无需中转。");
+            sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_FULL));
         } else if (size <= listThreshold) {
             // --- 逻辑分支 2: SUMMARY 模式 (摘要) ---
-            sb.append("### 运行模式: 动态发现 (摘要)\n");
-            sb.append("由于工具较多，请遵循以下流程：\n");
-            sb.append("- **Step 1 (锁定)**: 从下方“可用业务工具清单”中根据功能描述选定工具名。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("#### 可用业务工具清单:\n");
+            sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_SUMMARY)).append("\n");
             categoryTools.forEach((cat, tools) -> {
-                sb.append("- **[").append(cat).append("]**:\n");
+                sb.append("- **[").append(categoryOf(cat, locale)).append("]**:\n");
                 tools.values().forEach(t ->
                         sb.append("  - `").append(t.name()).append("`: ").append(t.description()).append("\n")
                 );
             });
         } else if (size <= searchThreshold) {
             // --- 逻辑分支 3: LIST 模式 (名字) ---
-            sb.append("### 运行模式: 动态发现 (列表)\n");
-            sb.append("由于工具库规模较大，仅展示名称。请遵循以下流程：\n");
-            sb.append("- **Step 1 (预选)**: 从下方“工具列表”中根据名称推断功能，或用 `search_tools` 检索。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("#### 可用业务工具列表 (按组展示):\n");
+            sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_LIST)).append("\n");
             categoryTools.forEach((cat, tools) -> {
                 String names = String.join(", ", tools.keySet());
-                sb.append("- **").append(cat).append("**: `").append(names).append("`\n");
+                sb.append("- **").append(categoryOf(cat, locale)).append("**: `").append(names).append("`\n");
             });
-            sb.append("\n> 提示：分组名和工具名具有语义参考价值，锁定目标后务必先查详情。");
+            sb.append("\n").append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_LIST_TIP));
         } else {
             // --- 逻辑分支 4: SEARCH 模式 (搜索) ---
-            sb.append("### 运行模式: 搜索发现\n");
-            sb.append("业务工具库规模巨大，清单已折叠。请遵循以下流程：\n");
-            sb.append("- **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("> **注意**: 请勿盲目猜测工具名。建议搜索关键词，如：search_tools('财务')。");
+            sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_SEARCH));
         }
 
         return sb.toString();
@@ -198,20 +194,30 @@ public class ToolGatewayTalent extends AbsTalent {
             return allTools.values();
         }
 
-        // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
+        // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具（中转工具按请求语言本地化）
         if (size <= listThreshold) {
-            return this.getToolAry().stream()
+            return super.getTools(prompt).stream()
                     .filter(f -> !"search_tools".equals(f.name()))
                     .collect(Collectors.toList());
         }
 
         // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools）
-        return this.getToolAry();
+        return super.getTools(prompt);
     }
 
+    public Object searchTools(String keyword) {
+        return searchTools(keyword, null);
+    }
+
+    /**
+     * 搜索业务工具（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "search_tools", description = "搜索业务工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
-    public Object searchTools(@Param("keyword") String keyword) {
-        if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
+    public Object searchTools(@Param("keyword") String keyword, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(keyword)) return ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_SEARCH_BLANK);
 
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
 
@@ -230,28 +236,34 @@ public class ToolGatewayTalent extends AbsTalent {
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return "提醒：未找到完全匹配关键词 '" + keyword + "' 的业务工具。\n" +
-                    "您可以尝试：\n" +
-                    "1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。\n" +
-                    "2. 换用更通用的词汇，或减少关键词数量。\n" +
-                    "3. 如果确定无此功能，请告知用户。禁止重复尝试相似搜索。";
+            return ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_SEARCH_NONE, "keyword", keyword);
         }
 
         return results;
     }
 
+    public String getToolDetail(String name) {
+        return getToolDetail(name, null);
+    }
+
+    /**
+     * 获取业务工具详情（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "get_tool_detail", description = "获取指定业务工具的完整参数 Schema")
-    public String getToolDetail(@Param("tool_name") String name) {
-        if (Utils.isEmpty(name)) return "错误：tool_name 不能为空";
+    public String getToolDetail(@Param("tool_name") String name, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(name)) return ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_NAME_BLANK);
 
         FunctionTool tool = allTools.get(name.trim().toLowerCase());
         if (tool != null) {
-            return "### 业务工具详情: " + tool.name() + "\n" +
-                    "- 功能描述: " + tool.description() + "\n" +
-                    "- 参数架构 (JSON Schema): \n```json\n" + tool.inputSchema() + "\n```";
+            return ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_DETAIL_FOUND,
+                    "name", tool.name(), "description", tool.description()) +
+                    " \n```json\n" + tool.inputSchema() + "\n```";
         }
 
-        return "错误：未找到工具 '" + name + "'，请检查名称拼写是否正确。";
+        return ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_DETAIL_MISSING, "name", name);
     }
 
     //测试用
@@ -299,23 +311,24 @@ public class ToolGatewayTalent extends AbsTalent {
             }
 
             //-------
+            Locale locale = AiI18n.toLocale(args.get(AiI18n.ATTR_LOCALE));
 
             if (Utils.isEmpty(tool_name)) {
-                return ToolResult.success("错误：tool_name 不能为空");
+                return ToolResult.success(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_NAME_BLANK));
             }
 
             FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
 
             if (tool == null) {
-                return ToolResult.success("错误：未找到业务工具 '" + tool_name + "'");
+                return ToolResult.success(ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_CALL_MISSING, "name", tool_name));
             }
 
             try {
                 return RetryUtil.callWithRetry(gatewayTalent.maxRetries,  () -> tool.call(tool_args));
             } catch (Throwable e) {
                 LOG.error("Tool gateway execution failed: {}", tool_name, e);
-                return ToolResult.success("执行异常: " +
-                        (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+                return ToolResult.success(ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_CALL_ERROR,
+                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
             }
         }
     }

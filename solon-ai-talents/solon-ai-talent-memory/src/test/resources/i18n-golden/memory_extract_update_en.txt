@@ -1,0 +1,5 @@
+[Success] The mental model has been updated.
+[Scope: user]
+[Comparison] A record with the same Key already existed:
+- Old content: 项目使用 Solon 框架
+- Old time: <time>

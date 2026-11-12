@@ -20,6 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.talents.lsp.exception.LspBusyException;
 import org.noear.solon.ai.talents.lsp.exception.LspCommandNotFoundException;
@@ -27,6 +28,8 @@ import org.noear.solon.ai.talents.lsp.exception.LspEnvironmentException;
 import org.noear.solon.ai.talents.lsp.exception.LspNoMatchException;
 import org.noear.solon.ai.talents.lsp.exception.LspStalledException;
 import org.noear.solon.ai.talents.lsp.exception.LspStartException;
+import org.noear.solon.ai.talents.lsp.i18n.LspI18n;
+import org.noear.solon.ai.talents.lsp.i18n.LspI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
@@ -138,7 +141,21 @@ public class LspTalent extends AbsTalent {
         return lspManager.hasServers();
     }
 
-    //可以返回 Document（结果结构数据） 或 String（给 llm 的提示）
+    /**
+     * 代码导航（默认语言）
+     */
+    public Document lsp(String operation, String filePath, Integer line, Integer character,
+                        String __cwd, String __sessionId) throws Exception {
+        return lsp(operation, filePath, line, character, __cwd, __sessionId, null);
+    }
+
+    /**
+     * 代码导航（__locale 由工具上下文注入）
+     *
+     * <p>可以返回 Document（结果结构数据）或 String（给 llm 的提示）。除“文件不存在”外，其它返回文案原本就是英文。</p>
+     *
+     * @since 4.2
+     */
     @ToolMapping(
             name = "lsp",
             description = "执行 LSP 代码导航操作（跳转定义、查找引用、类型签名、符号搜索、调用层级）。\n\n" +
@@ -161,7 +178,8 @@ public class LspTalent extends AbsTalent {
             @Param(name = "line", required = false, defaultValue = "1", description = "行号（1-based，如编辑器中显示的行号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer line,
             @Param(name = "character", required = false, defaultValue = "1", description = "列号（1-based，如编辑器中显示的列号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）") Integer character,
             String __cwd,
-            String __sessionId
+            String __sessionId,
+            String __locale
     ) throws Exception {
         Path workPath = getWorkPath(__cwd);
 
@@ -183,7 +201,7 @@ public class LspTalent extends AbsTalent {
 
         File file = path.toFile();
         if (!file.exists()) {
-            throw new RuntimeException("文件不存在：" + filePath);
+            throw new RuntimeException(LspI18n.fmt(AiI18n.toLocale(__locale), LspI18nKeys.LSP_FILE_MISSING, "path", filePath));
         }
 
         String uri = path.toUri().toString();

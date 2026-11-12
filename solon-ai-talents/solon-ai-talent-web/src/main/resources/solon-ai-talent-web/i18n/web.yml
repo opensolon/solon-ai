@@ -1,0 +1,22 @@
+# solon-ai-talent-web messages (English, default fallback)
+# Convention: every value is a "|-" block scalar with body text only -- no leading/trailing newlines or spaces (separators between paragraphs are added in code); placeholders use {name}; "${" and "#{" are not allowed
+
+# ---- CodeSearchTalent ----
+codesearch.timeout: |-
+  Code search request timed out
+codesearch.error: |-
+  Code search error: {error}
+codesearch.empty: |-
+  No relevant code snippets or documentation found. Try a different query, name the specific library or programming concept, and check the spelling of framework names.
+
+# ---- WebSearchDriverTalent ----
+search.empty: |-
+  No relevant search results found.
+search.fail: |-
+  The search service is temporarily unavailable: {error}
+
+# ---- WebCrawlerDriverTalent ----
+crawl.invalid_url: |-
+  Error: invalid URL.
+crawl.fail: |-
+  Crawl failed: {error}

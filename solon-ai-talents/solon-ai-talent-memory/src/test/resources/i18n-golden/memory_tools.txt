@@ -1,0 +1,37 @@
+name: memory_consolidate
+--- description ---
+心智演进：将已召回、核验且同主题的来源记忆整合为稳定洞察。成功后尝试清理旧 Key 在方案聚合的全部作用域同名记录；不同主题、冲突或无来源时勿用，派生时保留 Imp=10 来源。
+--- inputSchema ---
+{"type":"object","properties":{"evolved_insight":{"type":"string","description":"升维后的高层洞察，概括碎片共性，完整自包含。"},"keys_to_merge":{"type":"array","items":{"type":"string"},"description":"待合并的来源 Key。写入成功后尝试跨全部作用域清理普通来源；Imp=10 来源保留，含 new_key 时原地升维且不自删。"},"new_key":{"type":"string","description":"整合后的目标 Key（英文短语+连字符），可复用 keys_to_merge 中的 Key 实现原地升维。"},"scope":{"type":"string","description":"存储作用域: workspace(工作区,默认) 或 user(用户全局)。跨项目的通用认知用 user 域。"}},"required":["keys_to_merge","new_key","evolved_insight"]}
+
+===
+
+name: memory_extract
+--- description ---
+存入或更新跨会话可复用的事实、偏好和经验，或用户明确要求保留的跨会话进度检查点。默认不存临时进度/调试信息；不得存储敏感凭据。
+--- inputSchema ---
+{"type":"object","properties":{"fact":{"type":"string","description":"完整自包含的陈述句，不依赖上下文指代，便于独立召回。"},"importance":{"type":"integer","description":"权重(1-10)：1-4 待验证（默认7天）；5-6 可信可复用（默认30天）；7-9 稳定认知（默认30天）；10 仅限用户确认的长期定论（默认永久）。TTL 可由方案覆盖"},"key":{"type":"string","description":"唯一语义标识（如 user-tech-stack）。同主题复用同一 Key 而非新建，以防碎片化。"},"scope":{"type":"string","description":"存储作用域: workspace(工作区,默认) 或 user(用户全局)。跨项目的通用认知用 user 域。"}},"required":["key","fact","importance"]}
+
+===
+
+name: memory_prune
+--- description ---
+认知修正：尝试删除错误、重复或过时的认知；按 Key 清理方案所聚合全部作用域中的同名记录。
+--- inputSchema ---
+{"type":"object","properties":{"key":{"type":"string","description":"唯一语义标识（如 user-tech-stack）。"}},"required":["key"]}
+
+===
+
+name: memory_recall
+--- description ---
+精确召回：通过 Key 获取该条目的完整细节。
+--- inputSchema ---
+{"type":"object","properties":{"key":{"type":"string","description":"唯一语义标识（如 user-tech-stack）。"}},"required":["key"]}
+
+===
+
+name: memory_search
+--- description ---
+语义检索：用自然语言找回相关记忆（含历史经验/教训）。遇到新问题时，可先检索是否有过往经验可复用。传入 '*' 列出全部条目索引（Key + 摘要），用于回答「记住了哪些」。
+--- inputSchema ---
+{"type":"object","properties":{"query":{"type":"string","description":""},"topK":{"type":"integer","description":"返回条数上限（默认 5）。需要更全面的召回可适当调高。","default":5}},"required":["query"]}

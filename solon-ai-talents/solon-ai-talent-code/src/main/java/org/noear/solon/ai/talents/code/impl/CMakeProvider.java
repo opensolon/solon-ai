@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -29,7 +32,15 @@ public class CMakeProvider implements LanguageProvider {
     private static final String[] IGNORE_FOLDERS = {"build", "CMakeFiles", ".cmake"};
 
     @Override public String id() { return "CMake"; }
-    @Override public String typeName() { return "C/C++ 项目"; }
+    @Override
+    public String typeName() {
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_CMAKE_TYPE);
+    }
     @Override public String[] markers() { return MARKERS; }
 
     @Override
@@ -58,17 +69,21 @@ public class CMakeProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (C/C++)\n")
-                .append("- 构建: `mkdir -p build && cd build && cmake .. && make`\n")
-                .append("- 全量测试: `cd build && ctest`\n")
-                .append("- 单项测试: `cd build && ctest -R <test_name_regexp>` (替换为正则过滤)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_CMAKE_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (C/C++)\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && mkdir -p build && cd build && cmake .. && make`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append("/build && ctest`\n")
-                .append("- 单项测试: `cd ").append(moduleName).append("/build && ctest -R <test_name_regexp>`\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_CMAKE_MODULE, "module", moduleName)).append("\n\n");
     }
 }

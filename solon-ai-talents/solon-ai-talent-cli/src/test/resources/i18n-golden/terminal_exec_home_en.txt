@@ -1,0 +1,1 @@
+Error: Permission denied: ~ paths are forbidden in sandbox mode (sandboxAllowUserHome is off).

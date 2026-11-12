@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * @author noear
@@ -28,7 +31,15 @@ public class PythonProvider implements LanguageProvider {
     private static final String[] IGNORE_FOLDERS = {"venv", ".venv", "__pycache__"};
 
     @Override public String id() { return "Python"; }
-    @Override public String typeName() { return "Python 项目"; }
+    @Override
+    public String typeName() {
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_PYTHON_TYPE);
+    }
     @Override public String[] markers() { return MARKERS; }
 
     @Override
@@ -63,19 +74,21 @@ public class PythonProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Python)\n")
-                .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
-                .append("- 依赖: `pip install -r requirements.txt` (或使用 poetry/pdm)\n")
-                .append("- 全量测试: `pytest` 或 `python -m unittest discover`\n")
-                .append("- 单文件测试: `pytest path/to/test_file.py` (替换为实际路径)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_PYTHON_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Python)\n")
-                .append("- 环境: 优先检查并激活 `venv` 或 `.venv`\n")
-                .append("- 依赖: `cd ").append(moduleName).append(" && pip install -r requirements.txt`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && pytest`\n")
-                .append("- 单文件测试: `cd ").append(moduleName).append(" && pytest path/to/test_file.py` (替换为实际路径)\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_PYTHON_MODULE, "module", moduleName)).append("\n\n");
     }
 }

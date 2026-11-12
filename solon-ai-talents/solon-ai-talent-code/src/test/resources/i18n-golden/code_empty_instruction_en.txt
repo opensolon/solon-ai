@@ -1,0 +1,7 @@
+
+## Core Engineering Protocol
+> Current project context: Updated the project engineering conventions (no clear tech stack detected)
+
+To ensure engineering quality, strictly follow these steps:
+1. **Read first**: Before starting any task, read `.soloncode/CODE.md` for the build and test commands.
+2. **Verify**: After changing code, run the tests as described in `.soloncode/CODE.md`; never submit unverified changes.

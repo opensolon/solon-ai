@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Maven)) (environment versions: libs/core (Maven): Java 1.8)

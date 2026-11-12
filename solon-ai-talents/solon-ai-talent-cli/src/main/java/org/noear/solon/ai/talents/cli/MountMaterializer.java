@@ -16,6 +16,8 @@
 package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.ai.mount.Mount;
+import org.noear.solon.ai.talents.cli.i18n.CliI18n;
+import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -98,13 +100,30 @@ final class MountMaterializer implements AutoCloseable {
         try {
             return Optional.of(materializeInternal(mount));
         } catch (IOException | RuntimeException e) {
-            throw new MaterializationException("无法物化挂载 " + mount.getAlias(), e);
+            throw new MaterializationException(CliI18nKeys.TERMINAL_MATERIALIZE_FAILED, mount.getAlias(), e);
         }
     }
 
-    static final class MaterializationException extends RuntimeException {
-        MaterializationException(String message, Throwable cause) {
-            super(message, cause);
+    static final class MaterializationException extends RuntimeException implements CliI18n.Localized {
+        private final CliI18n.Text text;
+
+        /**
+         * @param key   文案 key（参数名为 alias）
+         * @param alias 挂载别名
+         */
+        MaterializationException(String key, String alias, Throwable cause) {
+            super(key, cause);
+            this.text = CliI18n.Text.of(key, "alias", alias);
+        }
+
+        @Override
+        public String getMessage() {
+            return text.render(null);
+        }
+
+        @Override
+        public String getMessage(java.util.Locale locale) {
+            return text.render(locale);
         }
     }
 

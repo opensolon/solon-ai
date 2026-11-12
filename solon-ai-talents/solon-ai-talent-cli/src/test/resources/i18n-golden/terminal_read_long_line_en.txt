@@ -1,0 +1,8 @@
+--- File: long.txt (Lines: 1 - 1, Size: 3.91 KB) ---
+--------------------------------------------------
+     1 | 012345678901234…(line too long, truncated)
+
+
+--- [more content] ---
+Warning: the content was truncated because of the physical length limit of a single read (0KB).
+To continue reading, use the parameters: offset=2

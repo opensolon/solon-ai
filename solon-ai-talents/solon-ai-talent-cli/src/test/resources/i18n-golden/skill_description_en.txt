@@ -1,0 +1,1 @@
+Skill manager. Discovers and loads skills (SKILL.md) from local paths or mounts.

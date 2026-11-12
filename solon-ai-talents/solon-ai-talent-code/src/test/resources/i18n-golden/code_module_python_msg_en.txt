@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Python)) (environment versions: libs/core (Python): Python >=3.9)

@@ -1,0 +1,9 @@
+--- File: a.txt (Lines: 1 - 2, Size: 0.02 KB) ---
+--------------------------------------------------
+     1 | one
+     2 | two
+
+
+--- [more content] ---
+Warning: the content was truncated because of the physical length limit of a single read (0KB).
+To continue reading, use the parameters: offset=3

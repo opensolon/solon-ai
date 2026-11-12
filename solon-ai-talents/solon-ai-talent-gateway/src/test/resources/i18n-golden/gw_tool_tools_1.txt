@@ -1,0 +1,5 @@
+name: tool_1
+--- description ---
+工具 1
+--- inputSchema ---
+{"type":"object","properties":{"q":{"type":"string"}}}

@@ -1,0 +1,1 @@
+错误：权限拒绝：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。

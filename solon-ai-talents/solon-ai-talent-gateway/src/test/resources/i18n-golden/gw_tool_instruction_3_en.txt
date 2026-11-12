@@ -1,0 +1,12 @@
+## Business Tool Discovery (3 tools in total)
+### Mode: Dynamic discovery (list)
+The tool library is large, so only names are shown. Follow this flow:
+- **Step 1 (Shortlist)**: Infer the function from the names in the "Tool list" below, or search with `search_tools`.
+- **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+#### Available business tool list (by group):
+- **General tools**: `tool_1, tool_3`
+- **财务**: `tool_2`
+
+> Tip: group names and tool names carry semantic hints; once you pick a target, always check its details first.

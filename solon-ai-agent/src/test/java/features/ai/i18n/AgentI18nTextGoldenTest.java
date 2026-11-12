@@ -101,11 +101,13 @@ public class AgentI18nTextGoldenTest {
         out.put(p + "compress_result_llm" + s, compressResult(new LLMCompressionStrategy()::compress, l));
         out.put(p + "compress_result_keyinfo" + s, compressResult(new KeyInfoExtractionStrategy()::compress, l));
 
-        VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null).locale(l);
-        out.put(p + "vector" + s, "description: " + vs.description(null)
-                + "\n--- recall(empty) ---\n" + vs.recall("", 3, "s1")
-                + "\n--- recall(bad session) ---\n" + vs.recall("q", 3, "bad id")
-                + "\n--- tools ---\n" + dump(vs.getTools(Prompt.of("x"))));
+        //策略不保存语言：经请求（prompt）或显式参数传入
+        VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null);
+        Prompt lp = Prompt.of("x").locale(l);
+        out.put(p + "vector" + s, "description: " + vs.description(lp)
+                + "\n--- recall(empty) ---\n" + vs.recall(l, "", 3, "s1")
+                + "\n--- recall(bad session) ---\n" + vs.recall(l, "q", 3, "bad id")
+                + "\n--- tools ---\n" + dump(vs.getTools(lp)));
         return out;
     }
 

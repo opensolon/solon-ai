@@ -54,7 +54,6 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
 
     private final RepositoryStorable vectorRepository;
     private final Map<Locale, Collection<FunctionTool>> localizedTools = new ConcurrentHashMap<>();
-    private volatile Locale locale;
 
     public VectorStoreCompressionStrategy(RepositoryStorable vectorRepository) {
         this.vectorRepository = vectorRepository;
@@ -64,27 +63,6 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
         Collection<FunctionTool> defTools = buildTools(defLocale);
         defTools.forEach(this::internalAddTool);
         localizedTools.put(defLocale, defTools);
-    }
-
-    /**
-     * 设置语言（影响才能描述、指令、工具描述与工具返回文案；为 null 时使用默认语言）
-     *
-     * <p>未设置时，指令、工具描述与工具返回文案跟随请求语言（Prompt.attrs 中的 {@link AgentI18n#ATTR_LOCALE}），归档通知跟随 trace 语言。</p>
-     *
-     * @since 4.2
-     */
-    public VectorStoreCompressionStrategy locale(Locale locale) {
-        this.locale = locale;
-        return this;
-    }
-
-    /**
-     * 获取语言（未设置时为 null）
-     *
-     * @since 4.2
-     */
-    public Locale getLocale() {
-        return locale;
     }
 
     /**
@@ -119,30 +97,23 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
 
     @Override
     public String description(Prompt prompt) {
-        return AgentI18n.get(localeOf(prompt), AgentI18nKeys.COMPRESS_VECTOR_DESCRIPTION);
+        return AgentI18n.get(AgentI18n.localeOf(prompt), AgentI18nKeys.COMPRESS_VECTOR_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        Locale l = localeOf(prompt);
+        Locale l = AgentI18n.localeOf(prompt);
         return AgentI18n.fmt(l, AgentI18nKeys.COMPRESS_VECTOR_INSTRUCTION, "archivedTag", AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_ARCHIVED_TAG));
     }
 
     /**
-     * 有效语言：显式设置 > 请求语言 > 默认语言
-     */
-    private Locale localeOf(Prompt prompt) {
-        return locale != null ? locale : AgentI18n.localeOf(prompt);
-    }
-
-    /**
-     * 工具按有效语言构建并缓存：描述、参数描述与工具返回文案都绑定同一语言。
+     * 工具按请求语言构建并缓存：描述、参数描述与工具返回文案都绑定同一语言。
      *
-     * <p>策略实例会被多个请求共用，故不在字段里保存请求语言，而是每种语言一套工具（处理器闭包捕获语言）。</p>
+     * <p>策略实例会被多个请求共用，故不在字段里保存语言，而是每种语言一套工具（处理器闭包捕获语言）。</p>
      */
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        Locale l = AgentI18n.resolve(localeOf(prompt));
+        Locale l = AgentI18n.resolve(AgentI18n.localeOf(prompt));
         return localizedTools.computeIfAbsent(l, this::buildTools);
     }
 
@@ -178,10 +149,10 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
     // --- Tool 实现（负责"取"） ---
 
     /**
-     * 回溯历史（返回文案使用显式设置的语言，未设置时为默认语言）
+     * 回溯历史（返回文案使用默认语言）
      */
     public String recall(String query, int limit, String __sessionId) {
-        return recall(locale, query, limit, __sessionId);
+        return recall(null, query, limit, __sessionId);
     }
 
     /**
@@ -253,8 +224,8 @@ public class VectorStoreCompressionStrategy extends AbsTalent implements Compres
             return null;
         }
 
-        // 显式设置的语言优先，否则跟随智能体语言
-        Locale msgLocale = (locale != null ? locale : CompressionUtil.localeOf(trace));
+        // 归档按会话存：跟随本轮（trace）的语言
+        Locale msgLocale = CompressionUtil.localeOf(trace);
 
         // 使用 CompressionUtil 统一格式化消息（超长内容自动截断）
         String archivedContent = messagesToCompress.stream()

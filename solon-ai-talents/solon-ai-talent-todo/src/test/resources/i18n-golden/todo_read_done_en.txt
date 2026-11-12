@@ -1,0 +1,5 @@
+- [x] a
+- [X] b
+
+[Progress] total: 2, done: 2, in-progress: 0, pending: 0.
+[Done] All items are [x]. You can wrap up and report the result to the user.

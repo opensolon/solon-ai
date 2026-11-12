@@ -1,0 +1,5 @@
+Note: no business API fully matches the keyword '不存在'.
+You can try:
+1. Check that the keywords are separated by spaces (e.g. 'hangzhou travel').
+2. Use more general words, or search again with fewer keywords.
+3. If you are sure the system does not have this function, tell the user. Do not repeat searches with similar keywords.

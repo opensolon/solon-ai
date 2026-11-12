@@ -226,7 +226,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_notCreatedWhenAbsent(@TempDir Path root) throws Exception {
         write(root, "pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         assertFalse(Files.exists(root.resolve(".gitignore")), "未纳入版本管理的项目不应被塞入 .gitignore");
     }
@@ -235,7 +235,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_appendsEntry(@TempDir Path root) throws Exception {
         write(root, ".gitignore", "target/\n");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         assertEquals(1, countIgnoreLines(root, ".soloncode"));
     }
@@ -244,7 +244,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_appendsWhenLastLineHasNoNewline(@TempDir Path root) throws Exception {
         write(root, ".gitignore", "target/");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         List<String> lines = Files.readAllLines(root.resolve(".gitignore"), StandardCharsets.UTF_8);
         assertEquals("target/", lines.get(0), "原有内容不应被粘连破坏");
@@ -258,7 +258,7 @@ public class CodeTalentLifecycleTest {
             Files.createDirectories(dir);
             write(dir, ".gitignore", existing + "\n");
 
-            talentOf(dir).init(null);
+            talentOf(dir).init(null, null);
 
             assertEquals(1, countIgnoreLines(dir, ".soloncode"),
                     "已写作 " + existing + " 时不应重复追加");
@@ -269,7 +269,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_inlineCommentIsTolerated(@TempDir Path root) throws Exception {
         write(root, ".gitignore", ".soloncode/ # 工程规范缓存\n");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         assertEquals(1, countIgnoreLines(root, ".soloncode"));
     }
@@ -278,7 +278,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_commentedEntryDoesNotCount(@TempDir Path root) throws Exception {
         write(root, ".gitignore", "#.soloncode/\n");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         assertEquals(1, countIgnoreLines(root, ".soloncode"), "被注释掉的条目不生效，应补一条");
     }
@@ -288,9 +288,9 @@ public class CodeTalentLifecycleTest {
         write(root, ".gitignore", "target/\n");
         CodeTalent talent = talentOf(root);
 
-        talent.init(null);
-        talent.init(null);
-        talent.init(null);
+        talent.init(null, null);
+        talent.init(null, null);
+        talent.init(null, null);
 
         assertEquals(1, countIgnoreLines(root, ".soloncode"));
     }
@@ -299,7 +299,7 @@ public class CodeTalentLifecycleTest {
     public void gitignore_usesFileNameWhenCodeDirEmpty(@TempDir Path root) throws Exception {
         write(root, ".gitignore", "target/\n");
 
-        new CodeTalent(root.toString(), "").init(null);
+        new CodeTalent(root.toString(), "").init(null, null);
 
         assertEquals(1, countIgnoreLines(root, "CODE.md"));
     }

@@ -18,13 +18,20 @@ package org.noear.solon.ai.talents.todo;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.source.MountSource;
+import org.noear.solon.ai.talents.todo.i18n.TodoI18n;
+import org.noear.solon.ai.talents.todo.i18n.TodoI18nKeys;
 import org.noear.solon.annotation.Param;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -85,18 +92,13 @@ public class TodoTalent extends AbsTalent {
 
 
     @Override
-    public String description() {
-        return "提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。";
+    public String description(Prompt prompt) {
+        return TodoI18n.get(AiI18n.localeOf(prompt), TodoI18nKeys.TODO_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
-        return "## 任务规划指南 (Task Planning Guide)\n" +
-                "1. **适时启用**: 对需要多个步骤、阶段或工具协作的任务，必须使用 `todowrite` 建立清单；简单问答、单次查询无需创建计划。任务目标变化时及时更新。\n" +
-                "2. **全量更新**: `todowrite` 会覆盖原文件，更新进度时**必须提供包含所有历史任务（含已完成）的完整 Markdown**，切勿仅发送新增或修改的单行。\n" +
-                "3. **同步与状态标记**: 每个可跟踪事项统一使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成。开始处理某项标记为 `[/]`，完成后立即更新为 `[x]`。\n" +
-                "4. **严禁虚假收尾**: 输出最终回复前，确认清单全为 `[x]`；若存在 `[ ]` 或 `[/]`，严禁直接总结或假装结束，必须继续调用工具推进，或显式向用户说明阻塞原因。\n" +
-                "5. **上下文恢复**: 任务打断、继续或提示词很长时，优先调用 `todoread` 读取进度，避免凭记忆推断。";
+        return TodoI18n.get(AiI18n.localeOf(prompt), TodoI18nKeys.TODO_INSTRUCTION);
     }
 
     /** 清单存储位置：来源 + 来源内路径。 */
@@ -177,24 +179,52 @@ public class TodoTalent extends AbsTalent {
         return content;
     }
 
-    @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和执行进度。用于恢复被打断的任务、确认下一步工作，或在收尾前核对是否全完成。")
-    public String todoRead(String __cwd,
-                           String __sessionId) throws IOException {
-        String content = readTodo(__cwd, __sessionId);
-        if (content == null) {
-            return "[] (当前任务清单为空。若任务复杂，请使用 `todowrite` 初始化计划。)";
-        }
-        return content + buildProgressFooter(content);
+    /**
+     * 读取清单（默认语言）
+     */
+    public String todoRead(String __cwd, String __sessionId) throws IOException {
+        return todoRead(__cwd, __sessionId, null);
     }
 
+    /**
+     * 读取清单（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
+    @ToolMapping(name = TOOL_TODOREAD, description = "读取当前任务清单和执行进度。用于恢复被打断的任务、确认下一步工作，或在收尾前核对是否全完成。")
+    public String todoRead(String __cwd,
+                           String __sessionId,
+                           String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        String content = readTodo(__cwd, __sessionId);
+        if (content == null) {
+            return TodoI18n.get(locale, TodoI18nKeys.TODO_READ_EMPTY);
+        }
+        return content + buildProgressFooter(locale, content);
+    }
+
+    /**
+     * 写入清单（默认语言）
+     */
+    public String todoWrite(String todosMarkdown, String __cwd, String __sessionId) throws IOException {
+        return todoWrite(todosMarkdown, __cwd, __sessionId, null);
+    }
+
+    /**
+     * 写入清单（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = TOOL_TODOWRITE, description = "创建或全量覆盖更新任务清单。更新状态时必须传入包含所有任务（已完成/进行中/待办）的完整 Markdown 内容。")
     public String todoWrite(
             @Param(value = "todos", description = "完整 Markdown 任务清单。只能使用 `- [ ]` 待办、`- [/]` 进行中、`- [x]` 已完成，不要使用数字序号或无状态列表。更新时必须包含全量任务，不能只传部分。") String todosMarkdown,
             String __cwd,
-            String __sessionId
+            String __sessionId,
+            String __locale
     ) throws IOException {
         writeTodo(__cwd, __sessionId, todosMarkdown);
-        return "TODO saved." + buildProgressFooter(normalizeContent(todosMarkdown));
+        //"TODO saved." 是原本就为英文的协议性回执，各语言一致
+        return "TODO saved." + buildProgressFooter(AiI18n.toLocale(__locale), normalizeContent(todosMarkdown));
     }
 
     // 在 ^ 和 [*-] 之间增加 \s*，匹配可选的缩进
@@ -203,13 +233,13 @@ public class TodoTalent extends AbsTalent {
     /**
      * 根据清单内容构造进度页脚，并在决策点给出明确的“继续/完成”推力。
      */
-    private String buildProgressFooter(String content) {
+    private String buildProgressFooter(Locale locale, String content) {
         int total = 0, done = 0, inProgress = 0, pending = 0;
         String firstUnfinished = null;
 
         for (String line : content.split("\n")) {
             String trimmed = line.trim();
-            java.util.regex.Matcher matcher = TODO_LINE_PATTERN.matcher(trimmed);
+            Matcher matcher = TODO_LINE_PATTERN.matcher(trimmed);
 
             if (!matcher.matches()) {
                 continue;
@@ -236,9 +266,17 @@ public class TodoTalent extends AbsTalent {
             }
         }
 
+        //行分隔符沿用原实现的 %n（跟随系统），由代码补；文案只写正文
+        String nl = System.lineSeparator();
+
+        Map<String, Object> vars = new LinkedHashMap<>();
+        vars.put("total", total);
+        vars.put("done", done);
+        vars.put("inProgress", inProgress);
+        vars.put("pending", pending);
+
         StringBuilder footer = new StringBuilder();
-        footer.append(String.format("%n[进度] total: %d, done: %d, in-progress: %d, pending: %d.",
-                total, done, inProgress, pending));
+        footer.append(nl).append(TodoI18n.fmt(locale, TodoI18nKeys.TODO_FOOTER_PROGRESS, vars));
 
         int unfinished = inProgress + pending;
         if (total == 0) {
@@ -246,15 +284,15 @@ public class TodoTalent extends AbsTalent {
         }
 
         if (unfinished > 0) {
-            footer.append(String.format("%n[继续] 还有 %d 项未完成，任务尚未结束。禁止现在收尾或输出总结，请继续推进未完成事项。", unfinished));
+            footer.append(nl).append(TodoI18n.fmt(locale, TodoI18nKeys.TODO_FOOTER_CONTINUE, "count", unfinished));
             if (firstUnfinished != null && !firstUnfinished.isEmpty()) {
                 String next = firstUnfinished.length() > 80
                         ? firstUnfinished.substring(0, 80) + "..."
                         : firstUnfinished;
-                footer.append(String.format("%n[待办首项] %s", next));
+                footer.append(nl).append(TodoI18n.fmt(locale, TodoI18nKeys.TODO_FOOTER_NEXT, "item", next));
             }
         } else {
-            footer.append(String.format("%n[完成] 所有事项均已 [x]，可以收尾并向用户汇报结果。"));
+            footer.append(nl).append(TodoI18n.get(locale, TodoI18nKeys.TODO_FOOTER_DONE));
         }
 
         return footer.toString();

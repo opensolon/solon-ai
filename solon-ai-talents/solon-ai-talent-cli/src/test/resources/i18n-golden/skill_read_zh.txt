@@ -1,0 +1,4 @@
+
+<skill_content name="s1">
+正文 1
+</skill_content>

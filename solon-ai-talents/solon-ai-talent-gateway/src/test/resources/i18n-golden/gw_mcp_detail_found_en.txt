@@ -1,0 +1,6 @@
+### MCP tool details: mcp_1
+- Description: MCP 工具 1
+- Parameter schema (JSON Schema): 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```

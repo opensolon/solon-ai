@@ -1,0 +1,1 @@
+! Permission denied: symbolic link out of bounds (sandbox mode is on).

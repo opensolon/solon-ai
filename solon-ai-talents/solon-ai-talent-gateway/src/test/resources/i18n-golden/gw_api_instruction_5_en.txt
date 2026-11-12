@@ -1,0 +1,16 @@
+## Business OpenAPI Discovery (5 APIs in total)
+There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+- **Step 1 (Shortlist)**: Infer the function from the "API list" below, or search with `search_apis`.
+- **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+- **Step 3 (Execute)**: Execute it with `call_api`.
+
+### Available business API list (by group):
+- **Group: 订单** -> [api4, getorder]
+- **Group: 文件** -> [upload, api5]
+- **Group: General APIs** -> [createorder]
+
+> Tip: group names and API names carry semantic hints; once you pick a target, always check its details first.
+
+## Execution Constraints
+1. **Responses**: If the returned data carries the `[Data truncated]` mark, analyze the part you have; do not call again to get everything.
+2. **Retries**: If an API returns an error, check that the arguments match the schema from Step 2; do not retry blindly.

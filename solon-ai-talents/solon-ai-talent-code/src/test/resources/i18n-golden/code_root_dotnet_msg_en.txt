@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: C#/.NET (Root)) (environment versions: C#/.NET (Root): .NET net8.0)

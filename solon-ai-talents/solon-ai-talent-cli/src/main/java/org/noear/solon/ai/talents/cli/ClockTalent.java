@@ -17,6 +17,7 @@ package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.lang.Preview;
 
 import java.time.ZonedDateTime;
@@ -31,11 +32,21 @@ import java.util.Locale;
  */
 @Preview("3.9.1")
 public class ClockTalent extends AbsTalent {
-    @ToolMapping(name = "now", description = "获取系统当前的日期、精确时间、星期及本地时区（例如：2026-01-30 21:00:00 Friday CST）")
+    /** 当前时间（默认语言） */
     public String now() {
+        return now(null);
+    }
+
+    /**
+     * 当前时间（星期按请求语言输出；中文时与改造前一致）
+     */
+    @ToolMapping(name = "now", description = "获取系统当前的日期、精确时间、星期及本地时区（例如：2026-01-30 21:00:00 Friday CST）")
+    public String now(String __locale) {
         ZonedDateTime now = ZonedDateTime.now();
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss EEEE z", Locale.CHINESE);
+        Locale locale = AiI18n.resolve(AiI18n.toLocale(__locale));
+        Locale fmtLocale = AiI18n.isChinese(locale) ? Locale.CHINESE : locale;
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss EEEE z", fmtLocale);
         return now.format(formatter);
     }
 }

@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * @author noear
@@ -34,7 +37,12 @@ public class GoProvider implements LanguageProvider {
 
     @Override
     public String typeName() {
-        return "Go 模块";
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_GO_TYPE);
     }
 
     @Override
@@ -57,18 +65,21 @@ public class GoProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Go)\n")
-                .append("- 依赖同步: `go mod tidy`\n")
-                .append("- 构建: `go build ./...`\n")
-                .append("- 全量测试: `go test ./...`\n")
-                .append("- 单测执行: `go test -v -run TestName ./...` (替换 TestName 为实际函数名)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_GO_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Go)\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && go build`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && go test ./...`\n")
-                .append("- 单测执行: `cd ").append(moduleName).append(" && go test -v -run TestName` (替换 TestName 为实际函数名)\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_GO_MODULE, "module", moduleName)).append("\n\n");
     }
 }

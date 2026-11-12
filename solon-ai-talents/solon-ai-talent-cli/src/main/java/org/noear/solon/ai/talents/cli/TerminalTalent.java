@@ -19,8 +19,9 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.sandbox.SandboxManager;
-import org.noear.solon.ai.sandbox.SandboxLog;
 import org.noear.solon.ai.sandbox.SandboxViolationStore;
 import org.noear.solon.ai.sandbox.config.FilesystemConfig;
 import org.noear.solon.ai.sandbox.config.NetworkConfig;
@@ -30,6 +31,8 @@ import org.noear.solon.ai.mount.source.MountEntry;
 import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.mount.source.FindOptions;
 import org.noear.solon.ai.mount.source.WriteOptions;
+import org.noear.solon.ai.talents.cli.i18n.CliI18n;
+import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -662,12 +665,13 @@ public class TerminalTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
-        return "提供终端交互、文件发现、分页读取、全文搜索及精准编辑能力。";
+    public String description(Prompt prompt) {
+        return CliI18n.get(AiI18n.localeOf(prompt), CliI18nKeys.TERMINAL_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
+        Locale locale = AiI18n.localeOf(prompt);
         StringBuilder sb = new StringBuilder();
 
         // 当前 shell 是否为 Windows 系（CMD / PowerShell）。引导词中所有涉及
@@ -675,47 +679,48 @@ public class TerminalTalent extends AbsTalent {
         // 否则会向模型泄漏错误的平台先验（如在 Windows 上建议 pkill / 2>/dev/null）。
         boolean windowsShell = shellCommandFactory.isWindowsShell();
 
-        sb.append("## Terminal 环境状态\n");
-        sb.append("- **沙盒模式**: ").append((sandboxEnabled ? "开启 (受限)" : "关闭 (开放)")).append("\n");
-        sb.append("- **运行环境**: ").append(System.getProperty("os.name"))
-                .append(" (").append(System.getProperty("os.arch")).append(")\n");
-        sb.append("- **终端类型**: ").append(shellMode).append(" — ").append(shellDialectSummary()).append("\n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_TITLE)).append("\n");
+        String sandboxMode = sandboxEnabled
+                ? CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SANDBOX_ON)
+                : CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SANDBOX_OFF);
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SANDBOX, "mode", sandboxMode)).append("\n");
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_OS,
+                "os", System.getProperty("os.name"), "arch", System.getProperty("os.arch"))).append("\n");
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SHELL,
+                "mode", shellMode, "summary", shellDialectSummary(locale))).append("\n");
 
 
         // 在 getInstruction 增加以下逻辑
-        sb.append("- **自我保护机制**:\n");
-        sb.append("  - 你的所有指令都在 Java 进程 (PID: ").append(Utils.pid()).append(") 的子 shell 中运行。\n");
-        sb.append("  - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。\n");
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SELF_PROTECT, "pid", Utils.pid())).append("\n");
         if (windowsShell) {
-            sb.append("  - 严禁执行 `taskkill /IM java.exe`、`Stop-Process -Name java`。严禁用 `taskkill /PID <PID>` 或 `Stop-Process -Id <PID>` 指向任意 PID，除非你先用 `Get-Process -Id <PID>`（或 `tasklist /FI \"PID eq <PID>\"`）确认该进程与当前 Java 进程无关。\n");
-            sb.append("  - 建议：若需清理任务，只终止你自己启动的那个子进程（按其已知 PID 执行 `Stop-Process -Id <子PID>`），不要按进程名批量终止。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_KILL_WINDOWS)).append("\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_KILL_TIP_WINDOWS)).append("\n");
         } else {
-            sb.append("  - 严禁执行 `pkill java`, `killall java`。严禁执行 `kill -9` 任何数字，除非你先执行了 `ps` 明确该 PID 与当前 Java 进程无关。\n");
-            sb.append("  - 建议：若需清理任务，请使用 `pkill -P [PID]` 仅停止子进程。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_KILL_UNIX)).append("\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_KILL_TIP_UNIX)).append("\n");
         }
 
         // 这里只列「会被 validateCommandNoKill 直接拦下」的两类硬禁令：exit 与根/系统目录删除。
         // 泛化条款（如「不要改变宿主系统状态」）没有可判定边界、也无代码兜底，写了只是占 token，
         // 真正的强制隔离交给 sandboxSystemRestrict + OS 沙盒。
-        sb.append("- **严禁指令**:\n");
-        sb.append("  - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。\n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FORBIDDEN)).append("\n");
         if (windowsShell) {
-            sb.append("  - 严禁对盘符根目录（如 `C:\\`）或系统目录（如 `C:\\Windows`、`C:\\Program Files`、`C:\\Users`）执行任何删除操作。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FORBIDDEN_RM_WINDOWS)).append("\n");
         } else {
-            sb.append("  - 严禁执行任何针对根目录 `/` 或系统目录（如 `/etc`, `/usr`）的删除操作。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FORBIDDEN_RM_UNIX)).append("\n");
         }
 
-        sb.append("- **执行环境**: \n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_RUNTIME_TITLE)).append(" \n");
         String pyCmd = pythonCmd();
         String ndCmd = nodeCmd();
         if(Assert.isNotEmpty(pyCmd)) {
             // 占位符必须按 shell 方言给出：CMD 为 %PYTHON%、PowerShell 为 $env:PYTHON、Unix 为 $PYTHON
-            sb.append("  - Python 命令: `").append(pyCmd).append("` (系统已预置变量 `")
-                    .append(support.getEnvPlaceholder("PYTHON")).append("`)\n");
+            sb.append("  ").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_RUNTIME_PYTHON,
+                    "cmd", pyCmd, "env", support.getEnvPlaceholder("PYTHON"))).append("\n");
         }
         if(Assert.isNotEmpty(ndCmd)) {
-            sb.append("  - Node.js 命令: `").append(ndCmd).append("` (系统已预置变量 `")
-                    .append(support.getEnvPlaceholder("NODE")).append("`)\n");
+            sb.append("  ").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_RUNTIME_NODE,
+                    "cmd", ndCmd, "env", support.getEnvPlaceholder("NODE"))).append("\n");
         }
 
         // 动态判断是否有可写挂载点。以下三个 has* 均为展示层判定（决定引导词写法），
@@ -734,11 +739,12 @@ public class TerminalTalent extends AbsTalent {
                         && !TerminalSupport.shellLocalRoot(m.getSource()).isPresent()
                         && m.getSource().capabilities().isMaterializable());
 
-        sb.append("- **路径规则**: \n");
-        sb.append("  - **工作区（默认作用域）**").append(workspaceNameHint(prompt)).append(": 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。\n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PATH_TITLE)).append(" \n");
+        sb.append("  ").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_WORKSPACE,
+                "name", workspaceNameHint(prompt, locale))).append("\n");
 
         if (hasMount) {
-            sb.append("  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_MOUNTS)).append("\n");
         }
 
         // 挂载点清单表格。shell 属性显式声明该挂载是否可在 bash 命令中使用逻辑路径：
@@ -774,76 +780,73 @@ public class TerminalTalent extends AbsTalent {
 
         if (sandboxEnabled) {
             if (hasMount) {
-                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (`@pool1/src/app.java`)。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SECURITY_SANDBOX_MOUNTS)).append("\n");
             } else {
-                sb.append("  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SECURITY_SANDBOX)).append("\n");
             }
 
             if (sandboxAllowUserHome) {
-                sb.append("  - `~` 路径可用（如 `~/Documents`）。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_HOME_ON)).append("\n");
             } else {
-                sb.append("  - `~` 路径已禁用。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_HOME_OFF)).append("\n");
             }
         } else {
-            sb.append("  - **安全级别**: 开放模式。支持绝对路径、相对路径及逻辑路径。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_SECURITY_OPEN)).append("\n");
         }
 
-        sb.append("## 执行规约\n");
+        sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_RULES_TITLE)).append("\n");
 
         if(hasMount) {
             if (hasWriteableMount) {
-                sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable=\"true\"` 时，才允许写入操作。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_MOUNT_WRITABLE)).append("\n");
             } else {
-                sb.append("- **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_MOUNT_READONLY)).append("\n");
             }
         }
 
         if (sandboxEnabled) {
             if (hasLocalMount || hasMaterializableMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_SANDBOX_MOUNTS)).append("\n");
             } else {
-                sb.append("- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_SANDBOX)).append("\n");
             }
         } else {
             if (hasLocalMount || hasMaterializableMount) {
-                sb.append("- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell=\"true\" 或 \"materialized\"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_OPEN_MOUNTS)).append("\n");
             } else {
-                sb.append("- **命令执行**: 在 `bash` 中支持绝对路径访问。\n");
+                sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_OPEN)).append("\n");
             }
         }
 
         // 工具优先规约必须对三种 shell 都输出：`bash` 这个工具名本身就是强先验，
         // 模型会习惯性用 cat/ls/find/grep/sed -i 代劳 read/ls/glob/grep/edit，
         // 从而绕开工具层的编码处理、行号定位、忽略目录、分页截断与写入原子回滚。
-        sb.append("- **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `")
-                .append(TOOL_WRITE).append("` / `").append(TOOL_EDIT)
-                .append("` 工具，不要用 shell 命令代劳（如 ").append(fileShellCommandExamples()).append("）")
-                .append("：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。")
-                .append("`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。\n");
+        sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_TOOLS_FIRST,
+                "write", TOOL_WRITE, "edit", TOOL_EDIT, "examples", fileShellCommandExamples(locale))).append("\n");
 
         if (bashAsyncEnabled) {
-            sb.append("- **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，命令卡在分页器或等待应答时用 `bash_wait` 的 chars 参数传入应答文本，需要主动停止时调用 `bash_stop`。\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_ASYNC)).append("\n");
         }
 
         // 参数示例必须用当前 shell 真存在的命令：在 Windows 上举 `python3` / `cat` 会被模型当作可用命令而直接照拄
-        sb.append("- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `")
-                .append(Assert.isNotEmpty(pyCmd) ? pyCmd : (windowsShell ? "python" : "python3"))
-                .append(" a.py \"hello world\"`、`").append(readFileCommandExample()).append("`）。");
         // 编码说明只在 Windows 下成立：类 Unix 没有代码页概念（OutputDecoder 也不做代码页兼底），
         // 也不存在 chcp，向 Linux/macOS 上的模型描述这些只会注入错误的平台先验
+        String pyExample = Assert.isNotEmpty(pyCmd) ? pyCmd : (windowsShell ? "python" : "python3");
         if (windowsShell) {
-            sb.append("输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。\n");
+            sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_ARGS_WINDOWS,
+                    "python", pyExample, "read", readFileCommandExample())).append("\n");
         } else {
-            sb.append("输出按 UTF-8 解码，无需额外设置编码环境变量。\n");
+            sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_ARGS_UNIX,
+                    "python", pyExample, "read", readFileCommandExample())).append("\n");
         }
 
-        appendShellDialectRules(sb);
+        appendShellDialectRules(sb, locale);
 
         if (sandboxEnabled) {
             // 原本三条语义高度重叠，且「你是一个标准的底层 shell 执行器」会覆盖上层 agent 的人格设定，
             // 「禁止解释权限逻辑」又会让越界时给不出可操作反馈。此处只保留唯一意图：不向外暴露内部机制。
             sb.append("\n<SYSTEM_CONSTRAINTS>\n");
-            sb.append("- 不向用户复述“系统限制”、“沙盒”、“规约”等内部术语，也不展开讲解权限逻辑与路径映射关系；遇到越界请求直接答“无权访问”。\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CONSTRAINTS)).append("\n");
             sb.append("</SYSTEM_CONSTRAINTS>\n");
         }
 
@@ -856,15 +859,15 @@ public class TerminalTalent extends AbsTalent {
      * <p>只给出 {@code POWERSHELL} / {@code CMD} 这样的枚举名不足以纠偏：`bash` 这个工具名
      * 本身就是极强的先验，模型会默认自己在 POSIX 环境里。这里显式点明「不是 bash/sh」。</p>
      */
-    private String shellDialectSummary() {
+    private String shellDialectSummary(Locale locale) {
         if (shellMode == ShellMode.POWERSHELL) {
-            return (shellCommandFactory.isPowerShellCore() ? "PowerShell 7+ (pwsh)" : "Windows PowerShell")
-                    + "，**不是** bash/sh，POSIX 命令与语法一律不可用";
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_DIALECT_POWERSHELL,
+                    "shell", shellCommandFactory.isPowerShellCore() ? "PowerShell 7+ (pwsh)" : "Windows PowerShell");
         }
         if (shellMode == ShellMode.CMD) {
-            return "Windows cmd.exe 批处理，**不是** bash/sh，POSIX 命令与语法一律不可用";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_DIALECT_CMD);
         }
-        return shellCommandFactory.getShellCmd() + "（POSIX shell）";
+        return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_DIALECT_UNIX, "shell", shellCommandFactory.getShellCmd());
     }
 
     /**
@@ -873,14 +876,14 @@ public class TerminalTalent extends AbsTalent {
      * <p>必须按方言给出：在 CMD 下举 {@code cat} / {@code sed -i} 会被模型当作本机可用命令，
      * 反而泄漏错误的平台先验。</p>
      */
-    private String fileShellCommandExamples() {
+    private String fileShellCommandExamples(Locale locale) {
         if (shellMode == ShellMode.POWERSHELL) {
-            return "`Get-Content`、`Get-ChildItem`、`Select-String`、`Set-Content`、`>`";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FILE_CMDS_POWERSHELL);
         }
         if (shellMode == ShellMode.CMD) {
-            return "`type`、`dir`、`findstr`、`echo >`";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FILE_CMDS_CMD);
         }
-        return "`cat`、`ls`、`find`、`grep`、`sed -i`、`echo >`";
+        return CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FILE_CMDS_UNIX);
     }
 
     /**
@@ -902,42 +905,41 @@ public class TerminalTalent extends AbsTalent {
      * <p>PowerShell / CMD 分支以「负面清单 + 等价写法」成对给出：只说「不要用 Unix 语法」
      * 模型无法自行推导替代写法，仍会退回 `2>/dev/null`、`head` 这类习惯用法。</p>
      */
-    private void appendShellDialectRules(StringBuilder sb) {
+    private void appendShellDialectRules(StringBuilder sb, Locale locale) {
         if (shellMode == ShellMode.POWERSHELL) {
             boolean core = shellCommandFactory.isPowerShellCore();
-            sb.append("- **PowerShell 方言（必须遵守）**: 当前 shell 是 PowerShell，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
-            sb.append("  - 丢弃全部输出：`| Out-Null`（只丢 stderr 的写法见下方 stderr 规约）。\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_TITLE)).append("\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_DISCARD)).append("\n");
             if (core) {
-                sb.append("  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用；需要「前一步失败就停」时请用 `&&` 而不是 `;`。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_CHAIN_CORE)).append("\n");
             } else {
-                sb.append("  - 命令串联：`&&` / `||` → `;`（Windows PowerShell 5.1 不支持 `&&`、`||`）。\n");
+                sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_CHAIN_51)).append("\n");
                 // `;` 不等于 `&&`：换写后丢的是「失败即停」语义，而整条命令的退出码只反映最后一步，
                 // 前面的编译/测试失败会被后面一步的成功掩盖（模型会据此误判为构建通过）。
                 // 替代写法一律不用 `exit`：上面的「严禁指令」已禁止 exit，且 validateCommandNoKill 会
                 // 按 `(^|[;|&])\s*exit\b` 拦截，示范带 exit 的写法会让模型照抄后撞上自家护栏。
-                sb.append("    - 注意 `;` 不等于 `&&`：前一步失败不会中断后续步骤，且返回的 `[exit_code]` 只反映最后一步。")
-                        .append("多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -eq 0) { cmd2 }`（不要用 `exit`）。\n");
+                sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_CHAIN_51_NOTE)).append("\n");
             }
             // 「命令不存在」类映射（head/cat/grep/find/uname/pwd/which/export）模型看到
             // CommandNotFoundException 一轮即可自纠，故压成一行速查表而非逐条展开：既省常驻 token，
             // 又不丢信息。真正不可自纠的（别名参数陷阱、2>&1、`;` 语义）仍单独成条。
-            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`head/tail -n N` → `Select-Object -First/-Last N`；`cat` → `Get-Content`；`grep` → `Select-String`；`find` → `Get-ChildItem -Recurse -Filter`；`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`；`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`（读环境变量用 `$env:NAME`，不是 `$NAME`）。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_EQUIVALENTS)).append("\n");
             // 「无 Unix 路径」一条已由「终端类型」里的「**不是** bash/sh，POSIX 命令与语法一律不可用」覆盖，
             // `\` 分隔符与 $env:TEMP 属常识，删掉以免同一件事在一份提示里说第三遍。
-            appendPowerShellAliasTrapRule(sb, core);
-            appendMergedStderrRule(sb);
-            appendEncodingRules(sb, core);
+            appendPowerShellAliasTrapRule(sb, core, locale);
+            appendMergedStderrRule(sb, locale);
+            appendEncodingRules(sb, core, locale);
         } else if (shellMode == ShellMode.CMD) {
-            sb.append("- **CMD 方言（必须遵守）**: 当前 shell 是 cmd.exe，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：\n");
+            sb.append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_TITLE)).append("\n");
             // 同 PowerShell 分支：`2>nul` 由下方 stderr 规约给出，「无 Unix 路径」由「不是 bash/sh」覆盖，此处不再重复。
-            sb.append("  - 常用等价（一次报错即可自纠，此处仅作速查）：`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_EQUIVALENTS)).append("\n");
             // 跨盘符切目录是 CMD 特有的陷：`cd D:\x` 不报错、也不切，后续命令全在错的目录里执行
-            sb.append("  - 跨盘符切目录必须写 `cd /d D:\\proj`（或 `pushd D:\\proj`）：`cd D:\\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。\n");
-            sb.append("  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。\n");
-            appendMergedStderrRule(sb);
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_CD)).append("\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_CHAIN)).append("\n");
+            appendMergedStderrRule(sb, locale);
             // 多行命令会以批处理脚本形式执行，% 语义与单行命令不同，需向模型说明
-            sb.append("  - `%` 的语义差异：单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。\n");
-            sb.append("  - **读文件会乱码**：`type` / `findstr` 按当前代码页（非 UTF-8）解析文件，读含中文/日韩文/emoji 的 UTF-8 文件必乱码，**且无法在命令里可靠地修正**。读文件一律改用 `read` 工具，检索一律改用 `grep` 工具。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_PERCENT)).append("\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_CMD_GARBLED)).append("\n");
         }
     }
 
@@ -954,14 +956,12 @@ public class TerminalTalent extends AbsTalent {
      * {@code Invoke-WebRequest}（所以 {@code curl -s <url>} 必报错）；PowerShell 7+ 已移除这两个别名，
      * {@code curl} 直接指向系统自带的 {@code curl.exe}。</p>
      */
-    private void appendPowerShellAliasTrapRule(StringBuilder sb, boolean powerShellCore) {
-        sb.append("  - **Unix 别名是陷阱（命令存在但参数不兼容）**：`ls`、`rm`、`cp`、`mv`、`ps`、`cat` 在此都是 cmdlet 别名，")
-                .append("不接受 Unix 短参数：`ls -la`、`rm -rf dir`、`cp -r a b`、`ps aux` 全部报参数绑定错误（不是命令不存在，重试同写法也不会好）。")
-                .append("等价写法：`Get-ChildItem -Force`、`Remove-Item -Recurse -Force dir`、`Copy-Item -Recurse a b`、`Get-Process`。\n");
+    private void appendPowerShellAliasTrapRule(StringBuilder sb, boolean powerShellCore, Locale locale) {
+        sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_ALIAS_TRAP)).append("\n");
         if (powerShellCore) {
-            sb.append("    - `curl` / `wget` 在 PowerShell 7+ 已不再是别名，指向真实的 `curl.exe`，Unix 参数可用。\n");
+            sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_CURL_CORE)).append("\n");
         } else {
-            sb.append("    - `curl` / `wget` 在 Windows PowerShell 5.1 是 `Invoke-WebRequest` 的别名，`curl -s <url>` 必报错；要用真 curl 请写 `curl.exe -s <url>`。\n");
+            sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_CURL_51)).append("\n");
         }
     }
 
@@ -974,13 +974,11 @@ public class TerminalTalent extends AbsTalent {
      * 等四五行噪声），并且使整个 PowerShell 进程的退出码变成 1。实测：`mvn test` 明明 BUILD SUCCESS，
      * 只因为命令里写了 {@code 2>&1}，结果就带上了 {@code [exit_code=1]}——模型会据此误判为失败并无意义地重试。</p>
      */
-    private void appendMergedStderrRule(StringBuilder sb) {
-        sb.append("  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。");
+    private void appendMergedStderrRule(StringBuilder sb, Locale locale) {
         if (shellMode == ShellMode.POWERSHELL) {
-            sb.append("在 PowerShell 下额外写 `2>&1` 还会把原生程序的 stderr 转成错误记录，凭空多出「所在位置 行:1 字符:1 / NativeCommandError」几行噪声，")
-                    .append("并让整条命令的退出码变成 1（成功也会被报成 `[exit_code=1]`）。只想丢弃 stderr 时用 `2>$null`。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_STDERR_POWERSHELL)).append("\n");
         } else {
-            sb.append("只想丢弃 stderr 时用 `2>nul`。\n");
+            sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_STDERR_CMD)).append("\n");
         }
     }
 
@@ -992,13 +990,13 @@ public class TerminalTalent extends AbsTalent {
      * {@code chcp 65001} 或 {@code -Encoding UTF8}，反而引入新问题；更重要的是得告知它唯一的
      * 例外（真正的 GBK 文件需 {@code -Encoding Default}），否则遇到 GBK 文件时它无从下手。</p>
      */
-    private void appendEncodingRules(StringBuilder sb, boolean powerShellCore) {
-        sb.append("  - **编码（系统已前置处理，按此书写）**：本次会话的输入/输出/文件读写默认编码已统一为 UTF-8（包括 `Get-Content`、`Select-String`、`Import-Csv` 的读，以及 `Set-Content`、`Add-Content`、`Out-File` 和 `>` / `>>` 的写）。无需自行 `chcp`、设置 `$OutputEncoding` 或反复加 `-Encoding UTF8`。\n");
-        sb.append("    - 例外：若已确认某文件是 GBK/ANSI 编码，必须显式写 `-Encoding Default` 才能读对。\n");
+    private void appendEncodingRules(StringBuilder sb, boolean powerShellCore, Locale locale) {
+        sb.append("  ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_ENCODING)).append("\n");
+        sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_ENCODING_GBK)).append("\n");
         if (powerShellCore == false) {
-            sb.append("    - Windows PowerShell 5.1 的 UTF-8 写入带 BOM，本工具的 `read` / `edit` / `grep` 会自动忽略它，无需特殊处理。\n");
+            sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_ENCODING_BOM)).append("\n");
         }
-        sb.append("    - 若输出仍有乱码，几乎一定是被调用的第三方程序自己按 ANSI 输出的，不要在命令里反复调编码；读文件内容请直接用 `read` / `grep` 工具。\n");
+        sb.append("    ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_INSTRUCTION_PS_ENCODING_GARBLED)).append("\n");
     }
 
 
@@ -1029,18 +1027,31 @@ public class TerminalTalent extends AbsTalent {
     // 模型若不知道本工具自带脚本承载能力，就会退化成先用 write 在工作区生成临时脚本再执行——
     // 那些文件落在工作区（沙盒下 write 到不了系统临时目录），会污染 git 状态与后续 glob/grep，
     // 且没有任何清理保证。此处只讲能力、不设禁令，让模型基于「更省事」自行选择正确路径。
+    /** 执行命令（默认语言） */
+    public String bash(String command, Integer timeout, Integer maxOutputChars, String __cwd) {
+        return bash(command, timeout, maxOutputChars, __cwd, null).getContent();
+    }
+
+    /**
+     * 执行命令
+     *
+     * <p>非零退出码、超时、拒绝执行等都返回 {@link ToolResult#error(String)}，
+     * 让宿主侧（{@code ToolCallEndEvent#isError()}）不必解析文案就能判断成败。</p>
+     */
     @ToolMapping(
             name = "bash",
             description = "在当前终端执行非交互式命令。工具名叫 bash 仅为历史兼容，**实际 shell 未必是 bash**：请以系统提示中「Terminal 环境状态 → 终端类型」为准（可为 PowerShell / CMD / Unix shell），并按对应方言书写命令。支持逻辑路径（如 `cd @pool1/bin/tool/`）。多步逻辑可把多行脚本整段作为 command 传入，系统会按当前 shell 选择可靠的执行方案（必要时自动写入系统临时目录并在结束后删除）。含空格或特殊字符的参数请用引号包裹；输出编码由系统自动识别。"
     )
-    public String bash(@Param(value = "command", description = "要执行的指令。") String command,
-                       @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
-                       @Param(name = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留首尾片段。读取大文件请改用 read 工具。") Integer maxOutputChars,
-                       String __cwd) {
+    public ToolResult bash(@Param(value = "command", description = "要执行的指令。") String command,
+                           @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
+                           @Param(name = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留首尾片段。读取大文件请改用 read 工具。") Integer maxOutputChars,
+                           String __cwd,
+                           String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
 
         // 统一安全校验（替代原来的内联检查）
-        String violation = support.validateCommandNoKill(command);
-        if (violation != null) return violation;
+        String violation = support.validateCommandNoKill(command, locale);
+        if (violation != null) return ToolResult.error(violation);
 
         Path workPath = getWorkPath(__cwd);
         Map<String, String> envs = new HashMap<>();
@@ -1055,7 +1066,9 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", ndCmd);
         }
 
-        return runCommand(command, workPath, envs, timeout, maxOutputChars).getText();
+        // 命令正常结束且退出码为 0 才算成功；非零退出码保留输出文本，但标记为错误
+        CommandResult result = runCommand(command, workPath, envs, timeout, maxOutputChars, locale);
+        return result.isSuccess() ? ToolResult.success(result.getText()) : ToolResult.error(result.getText());
     }
 
     /**
@@ -1072,8 +1085,17 @@ public class TerminalTalent extends AbsTalent {
      * @since 4.2.0
      */
     public CommandResult exec(String command, @Nullable String cwd, int timeoutMs, int maxOutputChars) {
+        return exec(command, cwd, timeoutMs, maxOutputChars, null);
+    }
+
+    /**
+     * 程序侧执行命令（提示文案按指定语言；null 为默认语言）
+     *
+     * @since 4.2
+     */
+    public CommandResult exec(String command, @Nullable String cwd, int timeoutMs, int maxOutputChars, @Nullable Locale locale) {
         if (Assert.isEmpty(command)) {
-            return CommandResult.failed("错误：命令为空");
+            return CommandResult.failed(CliI18n.get(locale, CliI18nKeys.TERMINAL_EXEC_EMPTY));
         }
         if (timeoutMs <= 0) {
             throw new IllegalArgumentException("timeoutMs must be > 0: " + timeoutMs);
@@ -1083,21 +1105,21 @@ public class TerminalTalent extends AbsTalent {
         try {
             workPath = getWorkPath(cwd);
         } catch (SecurityException ex) {
-            return CommandResult.failed("错误：" + ex.getMessage());
+            return CommandResult.failed(errorOf(ex, locale));
         }
-        return runCommand(command, workPath, new HashMap<>(), timeoutMs, maxOutputChars);
+        return runCommand(command, workPath, new HashMap<>(), timeoutMs, maxOutputChars, locale);
     }
 
     /**
      * bash 工具与 {@link #exec} 共用的执行链：逻辑路径翻译 → OS 沙盒包装 → 按 shell 方言执行。
      */
     private CommandResult runCommand(String command, Path workPath, Map<String, String> envs,
-                                     Integer timeoutMs, Integer maxOutputChars) {
+                                     Integer timeoutMs, Integer maxOutputChars, Locale locale) {
         String finalCommand;
         try {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
         } catch (SecurityException | MountMaterializer.MaterializationException ex) {
-            return CommandResult.failed("错误：" + ex.getMessage());
+            return CommandResult.failed(errorOf(ex, locale));
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
@@ -1107,12 +1129,12 @@ public class TerminalTalent extends AbsTalent {
             ensureSandboxInitialized();
             if (sandboxEnabled && sandboxSystemRestrict) {
                 if (!SandboxManager.isSandboxingEnabled()) {
-                    return CommandResult.failed("错误：OS 沙盒未启用，拒绝执行命令");
+                    return CommandResult.failed(sandboxDisabledText(locale));
                 }
                 finalCommand = SandboxManager.wrapWithSandbox(finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
-            return CommandResult.failed("错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage());
+            return CommandResult.failed(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SANDBOX_UNAVAILABLE, "error", e.getMessage()));
         }
 
         // 与 bash_start 共用 ShellCommandFactory：Unix 直接 shell -lc 执行；Windows 改走 prepare
@@ -1122,17 +1144,40 @@ public class TerminalTalent extends AbsTalent {
             try {
                 prepared = shellCommandFactory.prepare(finalCommand);
             } catch (IOException ex) {
-                return CommandResult.failed("错误：无法准备 Windows 执行方案: " + ex.getMessage());
+                return CommandResult.failed(windowsPrepareFailedText(locale, ex));
             }
             if (prepared != null) {
                 try {
-                    return executor.executeCmdResult(workPath, prepared.argv(), envs, timeoutMs, maxOutputChars, null);
+                    return executor.executeCmdResult(workPath, prepared.argv(), envs, timeoutMs, maxOutputChars, null, locale);
                 } finally {
                     prepared.cleanup();
                 }
             }
         }
-        return executor.executeCmdResult(workPath, shellCommandFactory.build(finalCommand), envs, timeoutMs, maxOutputChars, null);
+        return executor.executeCmdResult(workPath, shellCommandFactory.build(finalCommand), envs, timeoutMs, maxOutputChars, null, locale);
+    }
+
+    /**
+     * 「错误：」+ 异常消息（带文案 key 的异常按语言渲染）
+     */
+    private static String errorOf(Exception ex, Locale locale) {
+        return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_ERROR, "message", CliI18n.messageOf(ex, locale));
+    }
+
+    /** OS 沙盒未就绪时的拒绝文案（包内可见：该分支只在初始化竞态下出现，供测试直接校验文案） */
+    static String sandboxDisabledText(Locale locale) {
+        return CliI18n.get(locale, CliI18nKeys.TERMINAL_SANDBOX_DISABLED);
+    }
+
+    /** 无法准备 Windows 执行方案时的文案（包内可见：非 Windows 环境触达不到，供测试直接校验文案） */
+    static String windowsPrepareFailedText(Locale locale, IOException ex) {
+        return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WINDOWS_PREPARE_FAILED, "error", ex.getMessage());
+    }
+
+    /** 启动命令会话（默认语言） */
+    public String bashStart(String command, String workdir, Integer yieldTimeMs, Integer maxOutputChars,
+                            Integer hardTimeoutMs, String __cwd) throws IOException {
+        return bashStart(command, workdir, yieldTimeMs, maxOutputChars, hardTimeoutMs, __cwd, null);
     }
 
     @ToolMapping(
@@ -1143,14 +1188,21 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
-                            String __cwd) throws IOException {
-        String danger = support.validateCommandNoKill(command);
+                            String __cwd,
+                            String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        String danger = support.validateCommandNoKill(command, locale);
         if (danger != null) {
             return danger;
         }
 
         Path workPath = getWorkPath(__cwd);
-        Path targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome);
+        Path targetWorkPath;
+        try {
+            targetWorkPath = support.resolveCommandWorkPath(workPath, workdir, sandboxEnabled, sandboxAllowUserHome);
+        } catch (CliSecurityException e) {
+            throw e.withLocale(locale);
+        }
         Map<String, String> envs = new HashMap<>();
 
         String pyCmd = pythonCmd();
@@ -1166,9 +1218,9 @@ public class TerminalTalent extends AbsTalent {
         try {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
         } catch (SecurityException ex) {
-            return "错误：" + ex.getMessage();
+            return errorOf(ex, locale);
         } catch (MountMaterializer.MaterializationException ex) {
-            return "错误：" + ex.getMessage();
+            return errorOf(ex, locale);
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
@@ -1178,13 +1230,13 @@ public class TerminalTalent extends AbsTalent {
             ensureSandboxInitialized();
             if (sandboxEnabled && sandboxSystemRestrict) {
                 if (!SandboxManager.isSandboxingEnabled()) {
-                    return "错误：OS 沙盒未启用，拒绝执行命令";
+                    return sandboxDisabledText(locale);
                 }
                 finalCommand = SandboxManager.wrapWithSandbox(
                         finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
-            return "错误：OS 沙盒不可用，拒绝执行命令: " + e.getMessage();
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SANDBOX_UNAVAILABLE, "error", e.getMessage());
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
@@ -1214,56 +1266,110 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 2. 发现文件 ---
+    /** 列出目录（默认语言） */
+    public String ls(String path, Boolean recursive, Boolean showHidden, String __cwd) throws IOException {
+        return ls(path, recursive, showHidden, __cwd, null);
+    }
+
     @ToolMapping(name = "ls", description = "列出目录内容。支持递归 Tree 结构展示。支持逻辑路径（如 @pool）。")
     public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                      @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
-                     String __cwd) throws IOException {
+                     String __cwd,
+                     String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> lsInternal(path, recursive, showHidden, __cwd, locale));
+    }
+
+    private String lsInternal(String path, Boolean recursive, Boolean showHidden, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
-            return lsVirtual(virtual, Boolean.TRUE.equals(recursive), Boolean.TRUE.equals(showHidden));
+            return lsVirtual(virtual, Boolean.TRUE.equals(recursive), Boolean.TRUE.equals(showHidden), locale);
         }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
         if (!Files.exists(target)) {
-            return "错误：路径不存在";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
         }
 
         if (Boolean.TRUE.equals(recursive)) {
             StringBuilder sb = new StringBuilder();
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
-            support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs());
+            support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs(), locale);
             return sb.toString();
         } else {
-            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs());
+            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs(), locale);
         }
     }
 
+    /**
+     * 文件工具的公共外壳：向上抛出的权限异常绑定请求语言
+     */
+    private static String localized(Locale locale, IoCall call) throws IOException {
+        try {
+            return call.call();
+        } catch (CliSecurityException e) {
+            throw e.withLocale(locale);
+        }
+    }
+
+    /**
+     * 同上（返回 {@link ToolResult} 的工具）
+     */
+    private static ToolResult localized(Locale locale, ResultCall call) throws IOException {
+        try {
+            return call.call();
+        } catch (CliSecurityException e) {
+            throw e.withLocale(locale);
+        }
+    }
+
+    @FunctionalInterface
+    private interface IoCall {
+        String call() throws IOException;
+    }
+
+    @FunctionalInterface
+    private interface ResultCall {
+        ToolResult call() throws IOException;
+    }
+
     // --- 3. 读取内容 ---
+    /** 读取文件（默认语言） */
+    public String read(String filePath, Integer offset, Integer limit, String __cwd) throws IOException {
+        return read(filePath, offset, limit, __cwd, null);
+    }
+
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。")
     public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "offset", required = false, description = "（可选）开始读取的行号（默认从1开始索引）") Integer offset,
                        @Param(value = "limit", required = false, description = "（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
-                       String __cwd) throws IOException {
+                       String __cwd,
+                       String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> readInternal(filePath, offset, limit, __cwd, locale));
+    }
+
+    private String readInternal(String filePath, Integer offset, Integer limit, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(filePath, false);
         if (virtual != null) {
-            return readVirtual(virtual, offset, limit);
+            return readVirtual(virtual, offset, limit, locale);
         }
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, fs());
         if (!Files.exists(target)) {
-            return "错误：文件不存在";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING);
         }
 
         if (support.isNotTextFile(target)) {
-            return "错误：该文件是二进制格式，无法作为文本读取。";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY);
         }
 
         long fileSize = Files.size(target);
         if (fileSize == 0) {
-            return "(文件内容为空)";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_EMPTY);
         }
 
         // 1. 参数预处理
@@ -1304,7 +1410,7 @@ public class TerminalTalent extends AbsTalent {
                         int slice = Math.max(0, Math.min(line.length(), support.maxCharacterLimit - prefix.length() - 16));
                         contentBuilder.append(prefix)
                                 .append(line, 0, slice)
-                                .append("…(单行过长已截断)\n");
+                                .append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_LINE_TRUNCATED)).append("\n");
                         actualEndLine++;
                     }
                     break;
@@ -1319,7 +1425,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         if (!hasData) {
-            return "错误：起始行 (" + (startLine0 + 1) + ") 已超出文件范围。";
+            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", startLine0 + 1);
         }
 
         // 3. 组装最终结果
@@ -1331,19 +1437,19 @@ public class TerminalTalent extends AbsTalent {
 
         // 4. 动态提示与分页引导
         if (isByteTruncated || (limit != null && hasMore)) {
-            sb.append("\n\n--- [内容未完] ---");
+            sb.append("\n\n").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MORE));
             if (isByteTruncated) {
-                sb.append("\n警告：因单次读取物理长度限制（" + (support.maxCharacterLimit / 1024) + "KB），内容已被截断。");
+                sb.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_CHAR_LIMIT, "kb", support.maxCharacterLimit / 1024));
             } else {
-                sb.append("\n提示：已达到你指定的 limit 行数限制。");
+                sb.append("\n").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_LINE_LIMIT));
             }
             // 给出明确的下一页指令，方便 AI 直接调用
-            sb.append("\n若需继续阅读后续内容，请使用参数：offset=").append(actualEndLine + 1);
+            sb.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_NEXT, "offset", actualEndLine + 1));
             if (limit != null) {
                 sb.append(", limit=").append(limit);
             }
         } else if (!hasMore) {
-            sb.append("\n\n--- [文件读取完毕] ---");
+            sb.append("\n\n").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DONE));
         }
 
         //读完顺手预热语言服务器（异步、不阻塞、失败无声）：模型读过的文件往往紧接着就要改
@@ -1355,39 +1461,78 @@ public class TerminalTalent extends AbsTalent {
     // --- 4. 写入与编辑 ---
     // 「不用于临时脚本」写在此处而非 bash 描述里：误用的决策点发生在调用 write 的那一刻。
     // 沙盒下本工具只能写工作区，产出的脚本会进 git 状态且无人清理；多行脚本交给 bash 更省事。
+    /** 写入文件（默认语言） */
+    public String write(String filePath, String content, String __cwd) throws IOException {
+        return write(filePath, content, __cwd, null).getContent();
+    }
+
+    /**
+     * 写入文件
+     *
+     * <p>写虚拟文件失败（越界、只读挂载等）时返回 {@link ToolResult#error(String)}，
+     * 与 {@link #edit} 的成败语义保持一致。</p>
+     */
     @ToolMapping(name = TOOL_WRITE, description = "创建新文件或覆盖现有文件。仅用于项目产物；要执行的多行脚本请直接交给 `bash`，不必先落成临时脚本文件。")
-    public String write(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                        @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
-                        String __cwd) throws IOException {
+    public ToolResult write(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
+                            @Param(value = PARAM_CONTENT, description = "完整文本内容。") String content,
+                            String __cwd,
+                            String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> writeInternal(filePath, content, __cwd, locale));
+    }
+
+    private ToolResult writeInternal(String filePath, String content, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(filePath, true);
         if (virtual != null) {
-            return writeVirtual(virtual, content);
+            return writeVirtual(virtual, content, locale);
         }
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, fs());
 
         Files.createDirectories(target.getParent());
         Files.write(target, content.getBytes(fileCharset));
-        return withDiagnostics("文件成功写入: " + filePath, target);
+        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", filePath), target));
     }
 
 
+    /** 编辑文件（默认语言；失败时以文本返回，不区分错误标记） */
+    public String edit(String filePath, List<EditOp> edits, String __cwd) throws IOException {
+        return edit(filePath, edits, __cwd, null).getContent();
+    }
+
+    /**
+     * 编辑文件
+     *
+     * <p>失败时返回 {@link ToolResult#error(String)}，让宿主侧（{@code ToolCallEndEvent#isError()}）
+     * 不必解析文案就能判断成败。</p>
+     */
     @ToolMapping(
             name = TOOL_EDIT,
             description = "对文件进行文本替换，自动忽略行首行尾空白差异。支持单次调用执行一处或多处编辑。具有原子性：所有编辑成功才会写入，否则全部回滚。"
     )
-    public String edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
-                       @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
-                       String __cwd) throws IOException {
+    public ToolResult edit(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）。'.' 表示当前根目录。") String filePath,
+                           @Param(value = PARAM_EDITS, description = "编辑操作列表") List<EditOp> edits,
+                           String __cwd,
+                           String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> editInternal(filePath, edits, __cwd, locale));
+    }
+
+    /** 编辑操作的编号（如 "#1"） */
+    private static String opNo(int index) {
+        return "#" + (index + 1);
+    }
+
+    private ToolResult editInternal(String filePath, List<EditOp> edits, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(filePath, true);
         if (virtual != null) {
-            return editVirtual(virtual, edits);
+            return editVirtual(virtual, edits, locale);
         }
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, fs());
 
         if (!Files.exists(target)) {
-            return "错误：文件不存在，无法进行编辑。";
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_EDIT_MISSING));
         }
 
         String rawContent = new String(Files.readAllBytes(target), fileCharset);
@@ -1402,7 +1547,7 @@ public class TerminalTalent extends AbsTalent {
 
             // 安全检测：防止 LLM 生成不完整的工具调用参数导致 NPE
             if (edit.oldStr == null || edit.oldStr.isEmpty()) {
-                return String.format("预检查失败（操作 #%d）: old_str 不能为空。请确保调用 edit 时传入 old_str 参数，指定要替换的原始文本块。", i + 1);
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_EMPTY_OLD, "op", opNo(i)));
             }
 
             if (edit.newStr == null) {
@@ -1413,7 +1558,7 @@ public class TerminalTalent extends AbsTalent {
 
             if (Boolean.TRUE.equals(edit.replaceAll)) {
                 if (!originalContent.contains(finalOld)) {
-                    return String.format("预检查失败（操作 #%d）: 全文替换匹配失败。请确认 old_str 的内容在文件中存在（注意缩进和空格差异会被忽略）。", i + 1);
+                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_ALL_MISSING, "op", opNo(i)));
                 }
                 continue;
             }
@@ -1426,17 +1571,18 @@ public class TerminalTalent extends AbsTalent {
             int firstIndex = originalContent.indexOf(finalOld);
             if (firstIndex == -1) {
                 // 给出精准的诊断信息
-                String diag = support.findLooseMatchDiagnostics(originalContent, finalOld, edit.oldStrStartLine);
+                // old_StrStartLine 可缺省（模型常不带）：缺省时按「无行号提示」全篇诊断
+                int hintLine = (edit.oldStrStartLine == null) ? 0 : edit.oldStrStartLine;
+                String diag = support.findLooseMatchDiagnostics(originalContent, finalOld, hintLine, locale);
                 if (diag != null) {
-                    return String.format("预检查失败（操作 #%d）: 内容匹配失败 — %s。请检查 old_str 的内容是否与文件对应。",
-                            i + 1, diag);
+                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_MISMATCH, "op", opNo(i), "diag", diag));
                 }
                 // diag 返回 null 表示宽松匹配成功（边缘情况），允许通过预检查
                 continue;
             }
 
             if (originalContent.lastIndexOf(finalOld) != firstIndex) {
-                return String.format("预检查失败（操作 #%d）: 文本块在指定 old_StrStartLine 处未精确匹配，且在文件中不唯一。请提供正确的 old_StrStartLine 或增加上下文行。", i + 1);
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_NOT_UNIQUE, "op", opNo(i)));
             }
         }
 
@@ -1448,30 +1594,41 @@ public class TerminalTalent extends AbsTalent {
             try {
                 workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, Boolean.TRUE.equals(edit.replaceAll), edit.oldStrStartLine);
             } catch (IllegalArgumentException e) {
-                return String.format("执行失败（操作 #%d）: %s。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。", editIndex + 1, e.getMessage());
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_APPLY_FAILED, "op", opNo(editIndex), "error", CliI18n.messageOf(e, locale)));
             }
         }
 
         // 原子性保存（原文件带 BOM 则保持带 BOM）
         Files.write(target, (hadBom ? TerminalSupport.UTF8_BOM + workingContent : workingContent).getBytes(fileCharset));
 
-        return withDiagnostics(String.format("文件 %s 成功完成 %d 处修改。", filePath, edits.size()), target);
+        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", filePath, "count", edits.size()), target));
     }
 
     // --- 5. 搜索工具 ---
+    /** 搜索内容（默认语言） */
+    public String grep(String pattern, String path, String include, String __cwd) throws IOException {
+        return grep(pattern, path, include, __cwd, null);
+    }
+
     @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。pattern 支持正则表达式匹配。")
     public String grep(@Param(value = "pattern", description = "搜索内容，支持正则表达式匹配") String pattern,
                        @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
-                       String __cwd) throws IOException {
+                       String __cwd,
+                       String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> grepInternal(pattern, path, include, __cwd, locale));
+    }
+
+    private String grepInternal(String pattern, String path, String include, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
-            return grepVirtual(virtual, pattern, include);
+            return grepVirtual(virtual, pattern, include, locale);
         }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
-        String pathError = checkSearchPath("grep", path, target);
+        String pathError = checkSearchPath("grep", path, target, locale);
         if (pathError != null) {
             return pathError;
         }
@@ -1550,25 +1707,36 @@ public class TerminalTalent extends AbsTalent {
         });
 
         if (sb.length() >= support.maxCharacterLimit) {
-            sb.append("\n\n--- [内容未完] ---");
-            sb.append("\n警告：搜索结果过多，已达到 " + (support.maxCharacterLimit / 1024) + "KB 限制并截断。请缩小搜索路径或关键词。");
+            sb.append("\n\n").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MORE));
+            sb.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_TRUNCATED, "kb", support.maxCharacterLimit / 1024));
         }
 
-        return sb.length() == 0 ? "未找到结果。" : sb.toString();
+        return sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString();
+    }
+
+    /** 按模式搜索文件（默认语言） */
+    public String glob(String pattern, String path, String __cwd) throws IOException {
+        return glob(pattern, path, __cwd, null);
     }
 
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
     public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
                        @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
-                       String __cwd) throws IOException {
+                       String __cwd,
+                       String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
+        return localized(locale, () -> globInternal(pattern, path, __cwd, locale));
+    }
+
+    private String globInternal(String pattern, String path, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
-            return globVirtual(virtual, pattern);
+            return globVirtual(virtual, pattern, locale);
         }
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
-        String pathError = checkSearchPath("glob", path, target);
+        String pathError = checkSearchPath("glob", path, target, locale);
         if (pathError != null) {
             return pathError;
         }
@@ -1602,7 +1770,7 @@ public class TerminalTalent extends AbsTalent {
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
         });
-        if (results.isEmpty()) return "未找到匹配文件。";
+        if (results.isEmpty()) return CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE);
         Collections.sort(results);
         return String.join("\n", results);
     }
@@ -1620,22 +1788,22 @@ public class TerminalTalent extends AbsTalent {
         }
         Mount mount = resource.getMount();
         if (mount == null || !mount.isEnabled()) {
-            throw new SecurityException("权限拒绝：挂载点不可用 " + path);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_MOUNT_UNAVAILABLE, "path", path);
         }
         MountSource source = resource.getSource();
         if (!source.capabilities().isReadable()) {
-            throw new SecurityException("权限拒绝：来源不可读 " + path);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_UNREADABLE, "path", path);
         }
         if (write && (!mount.isWritable() || !source.capabilities().isWritable())) {
-            throw new SecurityException("权限拒绝：该挂载来源为只读，禁止写入 " + path);
+            throw CliSecurityException.of(CliI18nKeys.TERMINAL_DENIED_READONLY_SOURCE, "path", path);
         }
         return resource;
     }
 
-    private String lsVirtual(ResolvedResource resource, boolean recursive, boolean showHidden) throws IOException {
+    private String lsVirtual(ResolvedResource resource, boolean recursive, boolean showHidden, Locale locale) throws IOException {
         MountSource source = resource.getSource();
         String base = resource.getSourcePath();
-        if (source.stat(base) == null) return "错误：路径不存在";
+        if (source.stat(base) == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
         List<MountEntry> entries = recursive
                 ? source.find(base, FindOptions.builder().maxDepth(3).maxEntries(500).build())
                 : source.list(base);
@@ -1647,25 +1815,25 @@ public class TerminalTalent extends AbsTalent {
             lines.add((entry.isDirectory() ? "[DIR] " : "[FILE] ") + display + (entry.isDirectory() ? "/" : ""));
         }
         Collections.sort(lines);
-        return lines.isEmpty() ? "(目录为空)" : String.join("\n", lines);
+        return lines.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_EMPTY) : String.join("\n", lines);
     }
 
-    private String readVirtual(ResolvedResource resource, Integer offset, Integer limit) throws IOException {
+    private String readVirtual(ResolvedResource resource, Integer offset, Integer limit, Locale locale) throws IOException {
         MountEntry entry = resource.getSource().stat(resource.getSourcePath());
-        if (entry == null) return "错误：文件不存在";
-        if (entry.isDirectory()) return "错误：目标是目录，无法读取";
-        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge();
+        if (entry == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING);
+        if (entry.isDirectory()) return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DIR);
+        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge(locale);
         byte[] bytes;
         try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
             bytes = readVirtualBytes(in);
         } catch (VirtualFileTooLargeException e) {
-            return virtualFileTooLarge();
+            return virtualFileTooLarge(locale);
         }
         String text = TerminalSupport.stripUtf8Bom(new String(bytes, fileCharset));
         String[] lines = text.split("\\R", -1);
         int start = offset == null || offset < 1 ? 0 : offset - 1;
         int end = limit == null || limit <= 0 ? lines.length : (int) Math.min(lines.length, (long) start + limit);
-        if (start >= lines.length) return "错误：起始行 (" + (start + 1) + ") 已超出文件范围。";
+        if (start >= lines.length) return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", start + 1);
         StringBuilder out = new StringBuilder();
         int lastLine = start;
         boolean truncated = false;
@@ -1676,7 +1844,7 @@ public class TerminalTalent extends AbsTalent {
                 if (out.length() == 0) {
                     String prefix = String.format("%6d | ", i + 1);
                     int chars = Math.max(0, Math.min(lines[i].length(), support.maxCharacterLimit - prefix.length() - 16));
-                    out.append(prefix).append(lines[i], 0, chars).append("…(单行过长已截断)\n");
+                    out.append(prefix).append(lines[i], 0, chars).append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_LINE_TRUNCATED)).append("\n");
                     lastLine = i + 1;
                 }
                 break;
@@ -1686,39 +1854,43 @@ public class TerminalTalent extends AbsTalent {
         }
         out.insert(0, String.format("--- File: %s (Lines: %d - %d, Size: %.2f KB) ---\n--------------------------------------------------\n", resource.getLogicalPath(), start + 1, lastLine, bytes.length / 1024.0));
         out.append(truncated || lastLine < lines.length
-                ? "\n\n--- [内容未完] ---\n若需继续阅读后续内容，请使用参数：offset=" + (lastLine + 1)
-                : "\n\n--- [文件读取完毕] ---");
+                ? "\n\n" + CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MORE) + "\n" + CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_NEXT, "offset", lastLine + 1)
+                : "\n\n" + CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DONE));
         return out.toString();
     }
 
-    private String writeVirtual(ResolvedResource resource, String content) throws IOException {
+    private ToolResult writeVirtual(ResolvedResource resource, String content, Locale locale) throws IOException {
         try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), WriteOptions.replace())) {
             out.write(content == null ? new byte[0] : content.getBytes(fileCharset));
+        } catch (UnsupportedOperationException | SecurityException e) {
+            // 只读挂载等情况：以结构化错误返回，便于宿主区分「写失败」与「写成功」
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_ERROR,
+                    "message", CliI18n.messageOf(e, locale)));
         }
-        return "文件成功写入: " + resource.getLogicalPath();
+        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", resource.getLogicalPath()));
     }
 
-    private String editVirtual(ResolvedResource resource, List<EditOp> edits) throws IOException {
+    private ToolResult editVirtual(ResolvedResource resource, List<EditOp> edits, Locale locale) throws IOException {
         MountEntry entry = resource.getSource().stat(resource.getSourcePath());
-        if (entry == null || entry.isDirectory()) return "错误：文件不存在，无法进行编辑。";
-        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge();
+        if (entry == null || entry.isDirectory()) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_EDIT_MISSING));
+        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return ToolResult.error(virtualFileTooLarge(locale));
         String raw;
         try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
             raw = new String(readVirtualBytes(in), fileCharset);
         } catch (VirtualFileTooLargeException e) {
-            return virtualFileTooLarge();
+            return ToolResult.error(virtualFileTooLarge(locale));
         }
         boolean bom = TerminalSupport.hasUtf8Bom(raw);
         String original = TerminalSupport.stripUtf8Bom(raw);
         for (int i = 0; i < edits.size(); i++) {
             EditOp edit = edits.get(i);
-            if (edit.oldStr == null || edit.oldStr.isEmpty()) return "预检查失败（操作 #" + (i + 1) + "): old_str 不能为空。";
+            if (edit.oldStr == null || edit.oldStr.isEmpty()) return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_EMPTY_OLD, "op", opNo(i)));
             String old = support.normalizeNewlines(original, edit.oldStr);
             if (!Boolean.TRUE.equals(edit.replaceAll) && original.indexOf(old) < 0) {
-                return "预检查失败（操作 #" + (i + 1) + "): 内容匹配失败。";
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_MISMATCH, "op", opNo(i)));
             }
             if (Boolean.TRUE.equals(edit.replaceAll) && !original.contains(old)) {
-                return "预检查失败（操作 #" + (i + 1) + "): 全文替换匹配失败。";
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_ALL_MISSING, "op", opNo(i)));
             }
         }
         String updated = original;
@@ -1733,14 +1905,14 @@ public class TerminalTalent extends AbsTalent {
         try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), options)) {
             out.write((bom ? TerminalSupport.UTF8_BOM + updated : updated).getBytes(fileCharset));
         }
-        return "文件 " + resource.getLogicalPath() + " 成功完成 " + edits.size() + " 处修改。";
+        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", resource.getLogicalPath(), "count", edits.size()));
     }
 
-    private String grepVirtual(ResolvedResource resource, String pattern, String include) throws IOException {
+    private String grepVirtual(ResolvedResource resource, String pattern, String include, Locale locale) throws IOException {
         FindOptions options = FindOptions.builder().maxDepth(20).maxEntries(500).filesOnly(true).build();
         List<MountEntry> entries;
         MountEntry requested = resource.getSource().stat(resource.getSourcePath());
-        if (requested == null) return "错误：路径不存在";
+        if (requested == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
         if (requested.isDirectory()) {
             entries = resource.getSource().find(resource.getSourcePath(), options);
         } else {
@@ -1776,13 +1948,13 @@ public class TerminalTalent extends AbsTalent {
                 }
             }
         }
-        if (skippedLarge > 0) out.append("跳过 ").append(skippedLarge).append(" 个超过单文件读取上限（10MB）的文件。\n");
-        return out.length() == 0 ? "未找到结果。" : out.toString();
+        if (skippedLarge > 0) out.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_SKIPPED_LARGE, "count", skippedLarge)).append("\n");
+        return out.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : out.toString();
     }
 
-    private String globVirtual(ResolvedResource resource, String pattern) throws IOException {
+    private String globVirtual(ResolvedResource resource, String pattern, Locale locale) throws IOException {
         MountEntry requested = resource.getSource().stat(resource.getSourcePath());
-        if (requested == null) return "错误：路径不存在";
+        if (requested == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
         List<MountEntry> entries;
         if (requested.isDirectory()) {
             entries = resource.getSource().find(resource.getSourcePath(),
@@ -1793,7 +1965,7 @@ public class TerminalTalent extends AbsTalent {
         List<String> result = new ArrayList<>();
         for (MountEntry entry : entries) result.add("[FILE] " + resource.getMountAlias() + "/" + entry.getPath());
         Collections.sort(result);
-        return result.isEmpty() ? "未找到匹配文件。" : String.join("\n", result);
+        return result.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE) : String.join("\n", result);
     }
 
     private boolean globMatches(String pattern, String value) {
@@ -1801,8 +1973,8 @@ public class TerminalTalent extends AbsTalent {
         catch (RuntimeException e) { return value.equals(pattern); }
     }
 
-    private static String virtualFileTooLarge() {
-        return "错误：虚拟文件超过单文件读取上限（10MB），请缩小文件范围。";
+    private static String virtualFileTooLarge(Locale locale) {
+        return CliI18n.get(locale, CliI18nKeys.TERMINAL_VFILE_TOO_LARGE);
     }
 
     private byte[] readVirtualBytes(InputStream input) throws IOException {
@@ -1866,7 +2038,7 @@ public class TerminalTalent extends AbsTalent {
      *
      * @return 不合法时返回提示文案；合法返回 null
      */
-    private String checkSearchPath(String toolName, String path, Path target) {
+    private String checkSearchPath(String toolName, String path, Path target, Locale locale) {
         if (Files.exists(target)) {
             return null;
         }
@@ -1875,15 +2047,13 @@ public class TerminalTalent extends AbsTalent {
             for (char ch : new char[]{';', ',', '\n', '\r', '|'}) {
                 if (path.indexOf(ch) >= 0) {
                     String chLabel = (ch == '\n' ? "\\n" : (ch == '\r' ? "\\r" : String.valueOf(ch)));
-                    return String.format("错误：%s 的 path 只支持单个目录，检测到分隔符 '%s'（当前值：%s）。" +
-                                    "请分多次调用，或改用这些目录的共同父目录并配合 pattern/include 收窄范围。",
-                            toolName, chLabel, path);
+                    return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SEARCH_SEPARATOR,
+                            "tool", toolName, "sep", chLabel, "path", path);
                 }
             }
         }
 
-        return String.format("错误：路径不存在（%s path=%s）。请先用 ls 确认目录层级；" +
-                "注意 path 只接受单个目录，且不要把通配符写进 path（通配符应写在 pattern 里）。", toolName, path);
+        return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SEARCH_MISSING, "tool", toolName, "path", path);
     }
 
     private Path getWorkPath(String __cwd) {
@@ -1932,6 +2102,10 @@ public class TerminalTalent extends AbsTalent {
      * 引导词宣称的「解析根」与文件工具/bash 实际使用的根不一致。
      */
     String workspaceNameHint(Prompt prompt) {
+        return workspaceNameHint(prompt, null);
+    }
+
+    String workspaceNameHint(Prompt prompt, Locale locale) {
         String cwd = (prompt == null) ? null : prompt.attrAs(ATTR_CWD);
         String workDir = Assert.isNotEmpty(cwd) ? cwd : mountManager.getWorkDir();
         if (workDir == null || workDir.isEmpty()) {
@@ -1945,7 +2119,7 @@ public class TerminalTalent extends AbsTalent {
         if (name.isEmpty()) {
             return "";
         }
-        return ": 目录「" + name + "」（相对路径与 \".\" 的解析根）";
+        return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_WORKSPACE_NAME, "name", name);
     }
 
 
@@ -1990,15 +2164,24 @@ public class TerminalTalent extends AbsTalent {
     }
 
     public String validateCommand(String command) {
+        return validateCommand(command, null);
+    }
+
+    /**
+     * 命令校验（错误文案按指定语言；null 为默认语言）
+     *
+     * @since 4.2
+     */
+    public String validateCommand(String command, Locale locale) {
         // 先做基础安全校验（kill 保护等）
-        String violation = support.validateCommandNoKill(command);
+        String violation = support.validateCommandNoKill(command, locale);
         if (violation != null) {
             return violation;
         }
         // sandboxAllowUserHome=false 时，阻止 ~ 路径。
         // 复用生产路径同款判定（containsUserHomePath），避免测试/生产逻辑分裂。
         if (sandboxEnabled && !sandboxAllowUserHome && support.containsUserHomePath(command)) {
-            return "错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。";
+            return CliI18n.get(locale, CliI18nKeys.TERMINAL_VALIDATE_HOME);
         }
         return null;
     }

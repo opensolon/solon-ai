@@ -18,6 +18,9 @@ package org.noear.solon.ai.talents.search;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.ai.talents.web.i18n.WebI18n;
+import org.noear.solon.ai.talents.web.i18n.WebI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
@@ -25,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -60,8 +64,22 @@ public class WebSearchDriverTalent extends AbsTalent {
         return this;
     }
 
+    /**
+     * 联网搜索（默认语言）
+     */
+    public String web_search(String query) {
+        return web_search(query, null);
+    }
+
+    /**
+     * 联网搜索（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "web_search", description = "联网搜索，返回标题、链接和摘要")
-    public String web_search(@Param("query") String query) {
+    public String web_search(@Param("query") String query, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+
         if (LOG.isTraceEnabled()) {
             LOG.trace("Web search: {}", query);
         }
@@ -79,10 +97,10 @@ public class WebSearchDriverTalent extends AbsTalent {
                         .append("- Snippet: ").append(item.snippet).append("\n\n");
             });
 
-            return sb.length() == 0 ? "未找到相关搜索结果。" : sb.toString();
+            return sb.length() == 0 ? WebI18n.get(locale, WebI18nKeys.SEARCH_EMPTY) : sb.toString();
         } catch (Exception e) {
             LOG.error("Web search failed [{}]: {}", driver, query, e);
-            return "搜索服务暂时不可用: " + e.getMessage();
+            return WebI18n.fmt(locale, WebI18nKeys.SEARCH_FAIL, "error", e.getMessage());
         }
     }
 

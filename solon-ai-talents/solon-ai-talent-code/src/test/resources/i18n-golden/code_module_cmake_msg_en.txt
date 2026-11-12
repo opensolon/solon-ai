@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (CMake)) (environment versions: libs/core (CMake): C++ 17)

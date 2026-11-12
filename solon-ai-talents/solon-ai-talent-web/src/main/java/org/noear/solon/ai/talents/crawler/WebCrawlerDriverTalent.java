@@ -18,11 +18,16 @@ package org.noear.solon.ai.talents.crawler;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.ai.talents.web.i18n.WebI18n;
+import org.noear.solon.ai.talents.web.i18n.WebI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Locale;
 
 /**
  * 网页抓取工具包：为 AI 代理提供实时互联网信息的“阅读器”。
@@ -51,9 +56,22 @@ public class WebCrawlerDriverTalent extends AbsTalent {
         this.apiKey = apiKey;
     }
 
+    /**
+     * 抓取网页（默认语言）
+     */
+    public String crawl_url(String url) {
+        return crawl_url(url, null);
+    }
+
+    /**
+     * 抓取网页（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "crawl_url", description = "读取并分析指定 URL 网页的详细内容")
-    public String crawl_url(@Param("url") String url) {
-        if (url == null || !url.startsWith("http")) return "错误：URL 无效。";
+    public String crawl_url(@Param("url") String url, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (url == null || !url.startsWith("http")) return WebI18n.get(locale, WebI18nKeys.CRAWL_INVALID_URL);
 
         if (LOG.isTraceEnabled()) {
             LOG.trace("Crawl url [{}]: {}", driver, url);
@@ -63,7 +81,7 @@ public class WebCrawlerDriverTalent extends AbsTalent {
             return driver.crawl(url, apiKey);
         } catch (Exception e) {
             LOG.error("Crawl failed [{}]: {}", driver, url, e);
-            return "抓取失败: " + e.getMessage();
+            return WebI18n.fmt(locale, WebI18nKeys.CRAWL_FAIL, "error", e.getMessage());
         }
     }
 

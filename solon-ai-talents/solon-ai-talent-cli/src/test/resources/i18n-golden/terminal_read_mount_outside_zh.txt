@@ -1,0 +1,1 @@
+! Path escapes mount root: ../proj/a.txt

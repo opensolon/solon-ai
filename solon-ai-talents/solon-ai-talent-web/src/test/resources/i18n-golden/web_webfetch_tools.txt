@@ -1,0 +1,5 @@
+name: webfetch
+--- description ---
+从 URL 获取网页内容。返回 Markdown，正文前包含 YAML Front Matter 元数据。
+--- inputSchema ---
+{"type":"object","properties":{"format":{"type":"string","description":"返回格式：'markdown', 'text', 'html'","default":"markdown"},"timeoutMs":{"type":"integer","description":"超时时间（毫秒），最大 120_000 毫秒"},"url":{"type":"string","description":"目标网页的完整 URL（必须包含 http:// 或 https://）"}},"required":["url"]}

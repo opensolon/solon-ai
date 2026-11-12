@@ -1,0 +1,33 @@
+## 业务 OpenAPI 发现规范 (共 3 个接口)
+### 运行模式: 直接调用
+当前已加载全量接口定义。请分析需求并直接调用 `call_api`。
+
+#### 接口详细定义 (OpenAPI Specs):
+---
+* **OpenAPI: upload**
+  - 业务分组: 文件
+  - 功能: 接口 upload
+  - 路径: POST /api/files
+  - Body 参数 (Multipart/Form): {"type":"object","properties":{"file":{"type":"string"}}}
+  - 返回结果: {}
+---
+* **OpenAPI: createOrder**
+  - 业务分组: 
+  - 功能: 接口 createOrder
+  - 路径: POST /api/orders
+  - Body 参数 (JSON): {"type":"object","properties":{"sku":{"type":"string"}}}
+  - 返回结果: {}
+---
+* **OpenAPI: getOrder**
+  - 业务分组: 订单, 查询
+  - 功能: 接口 getOrder
+  - 路径: GET /api/orders/{id}
+  - Header 参数: {"type":"object","properties":{"token":{"type":"string"}}}
+  - Path 参数 (填充路径 {}): {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+  - Query 参数 (URL): {"type":"object","properties":{"lang":{"type":"string"}}}
+  - 返回结果: {"type":"object"}
+
+
+## 执行约束
+1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。
+2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。

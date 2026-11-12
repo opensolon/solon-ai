@@ -21,6 +21,9 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18n;
+import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18nKeys;
 import org.noear.solon.ai.talents.gateway.openapi.*;
 import org.noear.solon.ai.talents.gateway.openapi.resolver.OpenApiResolver;
 import org.noear.solon.ai.util.RetryUtil;
@@ -227,8 +230,18 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
 
     @Override
-    public String description() {
-        return "OpenAPI 接口调用专家：自动解析 OpenAPI(Swagger) 文档，智能发现并精准调用 REST 接口。";
+    public String description(Prompt prompt) {
+        return OpenApiGatewayI18n.get(AiI18n.localeOf(prompt), OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DESCRIPTION);
+    }
+
+    /**
+     * 分组的展示名（默认分组按语言显示，见 {@link ApiTool#getCategory()}）
+     */
+    private static String categoryOf(String category, Locale locale) {
+        if (OpenApiGatewayI18n.messages().textsOfAllLocales(OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DEFAULT_CATEGORY).contains(category)) {
+            return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DEFAULT_CATEGORY);
+        }
+        return category;
     }
 
 
@@ -239,28 +252,22 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        final Locale locale = AiI18n.localeOf(prompt);
         final int size = allTools.size();
         StringBuilder sb = new StringBuilder();
-        sb.append("## 业务 OpenAPI 发现规范 (共 ").append(size).append(" 个接口)\n");
+        sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_TITLE, "count", size)).append("\n");
 
         if (size <= dynamicThreshold) {
             // --- 模式 1: FULL ---
-            sb.append("### 运行模式: 直接调用\n");
-            sb.append("当前已加载全量接口定义。请分析需求并直接调用 `call_api`。\n\n");
-            sb.append("#### 接口详细定义 (OpenAPI Specs):\n");
-            sb.append(formatApiDocs(allTools.values()));
+            sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_FULL)).append("\n");
+            sb.append(formatApiDocs(allTools.values(), locale));
 
         } else if (size <= listThreshold) {
             // --- 模式 2: SUMMARY ---
-            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
-
-            sb.append("- **Step 1 (锁定)**: 从下方“可用业务接口清单”中根据功能描述选定接口名。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
-
-            sb.append("### 可用业务接口清单 (按业务分组摘要):\n");
+            sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SUMMARY)).append("\n");
             categoryTools.forEach((cat, tools) -> {
-                sb.append("- **分组: [").append(cat).append("]**:\n");
+                sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SUMMARY_GROUP,
+                        "category", categoryOf(cat, locale))).append("\n");
                 tools.values().forEach(t ->
                         sb.append("  - `").append(t.getName()).append("`: ").append(t.getDescription())
                                 .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n")
@@ -268,32 +275,19 @@ public class OpenApiGatewayTalent extends AbsTalent {
             });
         } else if (size <= searchThreshold) {
             // --- 模式 3: LIST ---
-            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
-
-            sb.append("- **Step 1 (预选)**: 从下方“接口列表”中推断功能，或用 `search_apis` 检索。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
-
-            sb.append("### 可用业务接口列表 (按业务分组展示):\n");
+            sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST)).append("\n");
             categoryTools.forEach((cat, tools) -> {
                 String names = String.join(", ", tools.keySet());
-                sb.append("- **分组: ").append(cat).append("** -> [").append(names).append("]\n");
+                sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST_GROUP,
+                        "category", categoryOf(cat, locale), "names", names)).append("\n");
             });
-            sb.append("\n> 提示：分组名和接口名具有语义参考价值，锁定目标后务必先查详情。");
+            sb.append("\n").append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST_TIP));
         } else {
             // --- 模式 4: SEARCH ---
-            sb.append("由于业务接口库较多，已开启**动态路由**模式。请严格遵循发现流程：\n");
-
-            sb.append("- **Step 1 (搜索)**: 清单已折叠。必须先使用 `search_apis` 通过关键词寻找匹配的接口。**注意**: 搜索结果将按“业务分组”返回，请结合分组语义判断接口准确性。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_api_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 通过 `call_api` 执行。\n\n");
-
-            sb.append("> **注意**: 接口库规模巨大。建议搜索关键词，如：search_apis('订单 查询')。");
+            sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SEARCH));
         }
 
-        sb.append("\n\n## 执行约束\n")
-                .append("1. **响应处理**: 如果返回数据带 `[Data truncated]` 标记，请基于现有部分分析，不要尝试重复调用获取全量。\n")
-                .append("2. **失败重试**: 若接口报错，请检查参数是否符合 Step 2 获取的 Schema，不要盲目重试。");
+        sb.append("\n\n").append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_CONSTRAINTS));
 
         return sb.toString();
     }
@@ -302,22 +296,35 @@ public class OpenApiGatewayTalent extends AbsTalent {
     public Collection<FunctionTool> getTools(Prompt prompt) {
         int size = allTools.size();
 
+        //内置工具按请求语言本地化
+        Collection<FunctionTool> tools = super.getTools(prompt);
+
         if (size <= dynamicThreshold) {
-            return getToolAry().stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
+            return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
         }
 
         if (size <= listThreshold) {
-            return getToolAry().stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
+            return tools.stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
         }
 
-        return getToolAry();
+        return tools;
     }
 
     // --- 内置工具映射 ---
 
+    public Object searchApis(String keyword) {
+        return searchApis(keyword, null);
+    }
+
+    /**
+     * 搜索接口（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "search_apis", description = "通过关键词在 API 库中搜索匹配的接口。支持多关键词空格分隔（如：'订单 查询'），按 AND 逻辑匹配")
-    public Object searchApis(@Param("keyword") String keyword) {
-        if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
+    public Object searchApis(@Param("keyword") String keyword, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(keyword)) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_BLANK);
 
         // 按空格及常见分隔符拆分关键词
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
@@ -332,7 +339,7 @@ public class OpenApiGatewayTalent extends AbsTalent {
                 .map(t -> {
                     Map<String, String> map = new HashMap<>();
                     map.put("api_name", t.getName());
-                    map.put("category", t.getCategory());
+                    map.put("category", categoryOf(t.getCategory(), locale));
                     map.put("description", t.getDescription());
                     map.put("endpoint", t.getMethod() + " " + t.getPath());
                     return map;
@@ -340,41 +347,62 @@ public class OpenApiGatewayTalent extends AbsTalent {
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return "提醒：未找到完全匹配关键词 '" + keyword + "' 的业务接口。\n" +
-                    "您可以尝试：\n" +
-                    "1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。\n" +
-                    "2. 换用更通用的词汇，或减少关键词数量重新搜索。\n" +
-                    "3. 如果确定系统无此功能，请告知用户。禁止重复尝试相似关键词搜索。";
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_NONE, "keyword", keyword);
         }
 
         return results;
     }
 
+    public String getApiDetail(String apiName) {
+        return getApiDetail(apiName, null);
+    }
+
+    /**
+     * 获取接口详情（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "get_api_detail", description = "根据接口名称获取完整的参数定义（Header/Path/Query/Body Schema）及返回值结构")
-    public String getApiDetail(@Param("api_name") String apiName) {
-        if (Utils.isEmpty(apiName)) return "错误：api_name 不能为空";
+    public String getApiDetail(@Param("api_name") String apiName, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(apiName)) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_BLANK);
 
         ApiTool tool = allTools.get(apiName.trim().toLowerCase());
 
         if (tool != null) {
-            return formatApiDocs(Collections.singletonList(tool));
+            return formatApiDocs(Collections.singletonList(tool), locale);
         } else {
-            return "错误: 未找到 OpenAPI '" + apiName + "'。请先通过 search_apis 确认名称。";
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_MISSING, "name", apiName);
         }
     }
 
+    public String callApi(String apiName,
+                          Map<String, Object> headerParams,
+                          Map<String, Object> pathParams,
+                          Map<String, Object> queryParams,
+                          Map<String, Object> bodyParams) throws IOException {
+        return callApi(apiName, headerParams, pathParams, queryParams, bodyParams, null);
+    }
+
+    /**
+     * 调用接口（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "call_api", description = "根据接口名称执行 REST API 调用。需提供 api_name 及对应参数（path_params、query_params、body_params）")
     public String callApi(
             @Param("api_name") String apiName,
             @Param("header_params") Map<String, Object> headerParams,
             @Param("path_params") Map<String, Object> pathParams,
             @Param("query_params") Map<String, Object> queryParams,
-            @Param("body_params") Map<String, Object> bodyParams) throws IOException {
+            @Param("body_params") Map<String, Object> bodyParams,
+            String __locale) throws IOException {
+        Locale locale = AiI18n.toLocale(__locale);
 
         ApiTool tool = allTools.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
-            return "错误: 未找到名为 [" + apiName + "] 的 OpenAPI。请先通过 'search_apis' 确认正确的名称。";
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_MISSING, "name", apiName);
         }
 
         String baseUrl = tool.getBaseUrl();
@@ -382,8 +410,7 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
         // 如果 finalPath 依然包含 {xxx}，说明 AI 漏传了 pathSchema 中定义的必填路径参数
         if (finalPath.contains("{") && finalPath.contains("}")) {
-            return "执行失败: 缺少必要的路径参数。当前路径仍存在占位符: " + finalPath +
-                    "。请检查 'path_params' 是否提供了所有必需的变量。";
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_PATH, "path", finalPath);
         }
 
         // 构建请求对象
@@ -444,8 +471,9 @@ public class OpenApiGatewayTalent extends AbsTalent {
             return Utils.isEmpty(result) ? "Success: OpenAPI executed, but returned an empty response." : result;
         } catch (Exception e) {
             LOG.warn("OpenAPI Call Failed: {} - {}", tool.getName(), e.getMessage());
-            String errorMsg = e.getMessage() != null ? e.getMessage() : "远程服务未响应";
-            return "接口执行异常: " + errorMsg + " (请检查服务可用性或参数正确性)";
+            String errorMsg = e.getMessage() != null ? e.getMessage()
+                    : OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_RESPONSE);
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_ERROR, "error", errorMsg);
         }
     }
 
@@ -627,34 +655,39 @@ public class OpenApiGatewayTalent extends AbsTalent {
         }
     }
 
-    private String formatApiDocs(Collection<ApiTool> tools) {
+    private String formatApiDocs(Collection<ApiTool> tools, Locale locale) {
         StringBuilder sb = new StringBuilder();
         for (ApiTool tool : tools) {
-            sb.append("---\n").append("* **OpenAPI: ").append(tool.getName()).append("**\n")
-                    .append("  - 业务分组: ").append(String.join(", ", tool.getTags())).append("\n")
-                    .append("  - 功能: ").append(tool.getDescription()).append("\n")
-                    .append("  - 路径: ").append(tool.getMethod()).append(" ").append(tool.getPath()).append("\n");
+            sb.append("---\n").append("* **OpenAPI: ").append(tool.getName()).append("**\n");
+            docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_TAGS, "tags", String.join(", ", tool.getTags())));
+            docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_DESCRIPTION, "description", tool.getDescription()));
+            docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_PATH, "method", tool.getMethod(), "path", tool.getPath()));
 
             if (Utils.isNotEmpty(tool.getHeaderSchema())) {
-                sb.append("  - Header 参数: ").append(tool.getHeaderSchema()).append("\n");
+                docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_HEADER, "schema", tool.getHeaderSchema()));
             }
 
             if (Utils.isNotEmpty(tool.getPathSchema())) {
-                sb.append("  - Path 参数 (填充路径 {}): ").append(tool.getPathSchema()).append("\n");
+                docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_PATH_PARAMS, "schema", tool.getPathSchema()));
             }
 
             // 分开展示 Query 和 Body
             if (Utils.isNotEmpty(tool.getQuerySchema())) {
-                sb.append("  - Query 参数 (URL): ").append(tool.getQuerySchema()).append("\n");
+                docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_QUERY, "schema", tool.getQuerySchema()));
             }
 
             if (Utils.isNotEmpty(tool.getBodySchema())) {
-                String label = tool.isMultipart() ? "Body 参数 (Multipart/Form)" : "Body 参数 (JSON)";
-                sb.append("  - ").append(label).append(": ").append(tool.getBodySchema()).append("\n");
+                docLine(sb, tool.isMultipart()
+                        ? OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_BODY_MULTIPART, "schema", tool.getBodySchema())
+                        : OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_BODY_JSON, "schema", tool.getBodySchema()));
             }
 
-            sb.append("  - 返回结果: ").append(tool.getOutputSchemaOr("{}")).append("\n");
+            docLine(sb, OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DOC_OUTPUT, "schema", tool.getOutputSchemaOr("{}")));
         }
         return sb.toString();
+    }
+
+    private static void docLine(StringBuilder sb, String text) {
+        sb.append("  - ").append(text).append("\n");
     }
 }

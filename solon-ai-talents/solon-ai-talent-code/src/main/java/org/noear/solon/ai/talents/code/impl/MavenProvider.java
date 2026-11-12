@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -35,7 +38,12 @@ public class MavenProvider implements LanguageProvider {
 
     @Override
     public String typeName() {
-        return "Maven 模块";
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_MAVEN_TYPE);
     }
 
     @Override
@@ -79,17 +87,21 @@ public class MavenProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Maven)\n")
-                .append("- 构建: `mvn clean compile`\n")
-                .append("- 全量测试: `mvn test`\n")
-                .append("- 单测执行: `mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_MAVEN_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Maven)\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && mvn clean compile`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && mvn test`\n")
-                .append("- 单测执行: `cd ").append(moduleName).append(" && mvn test -Dtest=ClassName` (替换为实际类名)\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_MAVEN_MODULE, "module", moduleName)).append("\n\n");
     }
 }

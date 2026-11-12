@@ -1,0 +1,62 @@
+# solon-ai-talent-gateway 业务工具网关文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+gateway.tool.description: |-
+  业务工具网关
+gateway.tool.default_category: |-
+  常规工具
+
+# ---- 指令（四种模式） ----
+gateway.tool.instruction.title: |-
+  ## 业务工具发现规范 (共 {count} 个工具)
+gateway.tool.instruction.full: |-
+  ### 运行模式: 直接调用
+  当前已加载全量业务工具定义。请直接分析需求并调用最匹配的工具，无需中转。
+gateway.tool.instruction.summary: |-
+  ### 运行模式: 动态发现 (摘要)
+  由于工具较多，请遵循以下流程：
+  - **Step 1 (锁定)**: 从下方“可用业务工具清单”中根据功能描述选定工具名。
+  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+
+  #### 可用业务工具清单:
+gateway.tool.instruction.list: |-
+  ### 运行模式: 动态发现 (列表)
+  由于工具库规模较大，仅展示名称。请遵循以下流程：
+  - **Step 1 (预选)**: 从下方“工具列表”中根据名称推断功能，或用 `search_tools` 检索。
+  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+
+  #### 可用业务工具列表 (按组展示):
+gateway.tool.instruction.list_tip: |-
+  > 提示：分组名和工具名具有语义参考价值，锁定目标后务必先查详情。
+gateway.tool.instruction.search: |-
+  ### 运行模式: 搜索发现
+  业务工具库规模巨大，清单已折叠。请遵循以下流程：
+  - **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具。
+  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+
+  > **注意**: 请勿盲目猜测工具名。建议搜索关键词，如：search_tools('财务')。
+
+# ---- 中转工具返回值 ----
+gateway.tool.search.blank: |-
+  错误：搜索关键词不能为空。
+gateway.tool.search.none: |-
+  提醒：未找到完全匹配关键词 '{keyword}' 的业务工具。
+  您可以尝试：
+  1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。
+  2. 换用更通用的词汇，或减少关键词数量。
+  3. 如果确定无此功能，请告知用户。禁止重复尝试相似搜索。
+gateway.tool.name_blank: |-
+  错误：tool_name 不能为空
+gateway.tool.detail.found: |-
+  ### 业务工具详情: {name}
+  - 功能描述: {description}
+  - 参数架构 (JSON Schema):
+gateway.tool.detail.missing: |-
+  错误：未找到工具 '{name}'，请检查名称拼写是否正确。
+gateway.tool.call.missing: |-
+  错误：未找到业务工具 '{name}'
+gateway.tool.call.error: |-
+  执行异常: {error}

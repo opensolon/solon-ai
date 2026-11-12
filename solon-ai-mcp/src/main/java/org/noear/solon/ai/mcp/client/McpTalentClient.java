@@ -67,7 +67,7 @@ public class McpTalentClient extends AbsSwitchable implements Talent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return metadata.getDescription();
     }
 

@@ -1,0 +1,1 @@
+OpenAPI expert: automatically parses OpenAPI (Swagger) documents, discovers REST endpoints and calls them precisely.

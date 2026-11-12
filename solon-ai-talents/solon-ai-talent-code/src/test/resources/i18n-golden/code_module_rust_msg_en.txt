@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Rust)) (environment versions: libs/core (Rust): Rust 1.70)

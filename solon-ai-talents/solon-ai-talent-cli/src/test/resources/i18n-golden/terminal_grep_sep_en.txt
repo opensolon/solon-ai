@@ -1,0 +1,1 @@
+Error: the path of grep accepts only a single directory, but the separator ';' was found (current value: a;b). Call it several times, or use the common parent directory of these directories and narrow the scope with pattern/include.

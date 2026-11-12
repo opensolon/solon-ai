@@ -164,7 +164,7 @@ public class Text2SqlTalent extends AbsTalent {
     }
 
     @Override
-    public String description() { return "数据库专家：具备深厚的 " + dialect.getName() + " 方言知识，擅长多表分析。"; }
+    public String description(Prompt prompt) { return "数据库专家：具备深厚的 " + dialect.getName() + " 方言知识，擅长多表分析。"; }
 
     @Override
     public void onAttach(Prompt prompt) {

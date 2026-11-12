@@ -1,0 +1,3 @@
+[Binary output detected; the garbled body was omitted]
+About 12 bytes, detected type: JAVA_CLASS, first 12 bytes: ca fe ba be 00 00 00 34 01 02 03 04
+Hint: the command output looks like binary content (JAVA_CLASS). To view details, use a suitable tool instead (such as jar tf, unzip -l, javap, file, xxd) or decode (or decompress) it properly before printing.

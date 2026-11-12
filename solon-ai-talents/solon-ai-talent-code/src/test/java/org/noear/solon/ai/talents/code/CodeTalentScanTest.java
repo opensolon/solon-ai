@@ -57,7 +57,7 @@ public class CodeTalentScanTest {
 
         CodeTalent talent = new CodeTalent("w", ".soloncode");
         assertEquals(talent.codeMdPath(), talent.HOME_CODE_MD(), "废弃方法应与新方法等价");
-        assertTrue(talent.description().contains(".soloncode/CODE.md"));
+        assertTrue(talent.description(null).contains(".soloncode/CODE.md"));
     }
 
     // ---------- 根项目识别 ----------
@@ -66,7 +66,7 @@ public class CodeTalentScanTest {
     public void mavenRoot_generatesRootCommandsAndVersion(@TempDir Path root) throws Exception {
         write(root, "pom.xml", "<project><properties><java.version>17</java.version></properties></project>");
 
-        String msg = talentOf(root).init(null);
+        String msg = talentOf(root).init(null, null);
 
         assertTrue(msg.startsWith("已更新项目工程规范"), msg);
         assertTrue(msg.contains("检测到技术栈: Maven (Root)"), msg);
@@ -81,7 +81,7 @@ public class CodeTalentScanTest {
 
     @Test
     public void emptyDir_stillWritesGuidelines(@TempDir Path root) throws Exception {
-        String msg = talentOf(root).init(null);
+        String msg = talentOf(root).init(null, null);
 
         assertTrue(msg.contains("未检测到明确的技术栈"), msg);
 
@@ -93,7 +93,7 @@ public class CodeTalentScanTest {
 
     @Test
     public void guidelines_labelIsReadBeforeEdit(@TempDir Path root) throws Exception {
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         String md = codeMd(root);
         assertTrue(md.contains("- **改前必读**"), "规约标签应为「改前必读」");
@@ -105,8 +105,8 @@ public class CodeTalentScanTest {
         write(root, "pom.xml", "<project></project>");
         CodeTalent talent = talentOf(root);
 
-        assertTrue(talent.init(null).startsWith("已更新"));
-        assertTrue(talent.init(null).startsWith("已验证"), "内容未变时不应报告为更新");
+        assertTrue(talent.init(null, null).startsWith("已更新"));
+        assertTrue(talent.init(null, null).startsWith("已验证"), "内容未变时不应报告为更新");
     }
 
     // ---------- 同构子模块归组 ----------
@@ -118,7 +118,7 @@ public class CodeTalentScanTest {
         write(root, "mod-b/pom.xml", "<project></project>");
         write(root, "group/mod-c/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("### 子模块与子项目"));
@@ -147,7 +147,7 @@ public class CodeTalentScanTest {
         write(root, "alpha/pom.xml", "<project></project>");
         write(root, "mid/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.indexOf("- alpha") < md.indexOf("- mid"), "模块应排序输出：\n" + md);
@@ -161,7 +161,7 @@ public class CodeTalentScanTest {
             write(root, String.format("m%03d/pom.xml", i), "<project></project>");
         }
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("Maven 模块 (200 个)"), "总数应按完整数量统计：\n" + md);
@@ -176,7 +176,7 @@ public class CodeTalentScanTest {
             write(root, String.format("m%03d/pom.xml", i), "<project></project>");
         }
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("Maven 模块 (510 个)"), "总数应按完整数量统计：\n" + md);
@@ -192,7 +192,7 @@ public class CodeTalentScanTest {
         write(root, "pom.xml", "<project></project>");
         write(root, "mod-a/pom.xml", "<project><properties><java.version>21</java.version></properties></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
 
         assertTrue(codeMd(root).contains("mod-a（Java 21）"), codeMd(root));
     }
@@ -207,7 +207,7 @@ public class CodeTalentScanTest {
         write(root, "group/m1/pom.xml", "<project></project>");
         write(root, "group/m2/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("group/m1"), "聚合器不得吞掉其下真实模块：\n" + md);
@@ -222,7 +222,7 @@ public class CodeTalentScanTest {
         write(root, "leaf/pom.xml", "<project><packaging>jar</packaging></project>");
         write(root, "leaf/nested/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("leaf"));
@@ -237,7 +237,7 @@ public class CodeTalentScanTest {
         write(root, "pom.xml", "<project></project>");
         write(root, "web/package.json", "{\"engines\":{\"node\":\">=18\"}}");
 
-        String msg = talentOf(root).init(null);
+        String msg = talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(msg.contains("web (Node)"), msg);
@@ -252,7 +252,7 @@ public class CodeTalentScanTest {
         write(root, "pom.xml", "<project></project>");
         write(root, "package.json", "{}");
 
-        String msg = talentOf(root).init(null);
+        String msg = talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(msg.contains("Maven (Root)"), msg);
@@ -272,7 +272,7 @@ public class CodeTalentScanTest {
         write(root, ".hidden/pom.xml", "<project></project>");
         write(root, "real/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertFalse(md.contains("target/generated"), md);
@@ -288,7 +288,7 @@ public class CodeTalentScanTest {
         write(root, "d1/d2/d3/pom.xml", "<project></project>");
         write(root, "e1/e2/e3/e4/pom.xml", "<project></project>");
 
-        talentOf(root).init(null);
+        talentOf(root).init(null, null);
         String md = codeMd(root);
 
         assertTrue(md.contains("d1/d2/d3"), "根目录往下 3 层仍应在扫描范围内：\n" + md);
@@ -302,7 +302,7 @@ public class CodeTalentScanTest {
         write(root, "readme.md", "hi");
 
         // 目录中混有普通文件、空目录时应正常完成
-        assertTrue(talentOf(root).init(null).startsWith("已更新"));
+        assertTrue(talentOf(root).init(null, null).startsWith("已更新"));
     }
 
     // ---------- SPI 扩展 ----------
@@ -316,7 +316,7 @@ public class CodeTalentScanTest {
                 "META-INF/services 注册的 Provider 应被加载");
 
         write(root, "mytool.cfg", "version = \"1.2\"\n");
-        String msg = talent.init(null);
+        String msg = talent.init(null, null);
 
         assertTrue(msg.contains("MyLang (Root)"), msg);
         assertTrue(codeMd(root).contains("mytool build"), codeMd(root));
@@ -326,7 +326,7 @@ public class CodeTalentScanTest {
 
     @Test
     public void missingDir_reportsUnwritableWithoutThrowing(@TempDir Path root) {
-        String msg = new CodeTalent(root.resolve("not-exists").toString(), ".soloncode").init(null);
+        String msg = new CodeTalent(root.resolve("not-exists").toString(), ".soloncode").init(null, null);
 
         assertTrue(msg.startsWith("未能生成项目工程规范"), msg);
         assertTrue(msg.contains("目录不可写"), msg);
@@ -336,7 +336,7 @@ public class CodeTalentScanTest {
 
     @Test
     public void workDirNotSet_reportsFailureInsteadOfThrowing() {
-        String msg = new CodeTalent(null, ".soloncode").init(null);
+        String msg = new CodeTalent(null, ".soloncode").init(null, null);
 
         assertTrue(msg.startsWith("未能生成项目工程规范"), msg);
         assertTrue(msg.contains("初始化异常"), msg);
@@ -347,7 +347,7 @@ public class CodeTalentScanTest {
         Path file = root.resolve("a.txt");
         Files.write(file, "x".getBytes(StandardCharsets.UTF_8));
 
-        String msg = new CodeTalent(root.toString(), ".soloncode").init(file.toString());
+        String msg = new CodeTalent(root.toString(), ".soloncode").init(file.toString(), null);
 
         assertTrue(msg.startsWith("未能生成项目工程规范"), msg);
         assertTrue(msg.contains("初始化异常"), msg);
@@ -359,7 +359,7 @@ public class CodeTalentScanTest {
         Files.createDirectories(other);
         write(other, "go.mod", "module demo\n\ngo 1.22\n");
 
-        String msg = new CodeTalent(root.toString(), ".soloncode").init(other.toString());
+        String msg = new CodeTalent(root.toString(), ".soloncode").init(other.toString(), null);
 
         assertTrue(msg.contains("Go (Root)"), msg);
         assertTrue(Files.exists(other.resolve(".soloncode/CODE.md")));
@@ -404,7 +404,7 @@ public class CodeTalentScanTest {
         try {
             assertTrue(held.await(5, java.util.concurrent.TimeUnit.SECONDS));
             final Path bRoot = b;
-            String msg = pool.submit(() -> talent.init(bRoot.toString()))
+            String msg = pool.submit(() -> talent.init(bRoot.toString(), null))
                     .get(10, java.util.concurrent.TimeUnit.SECONDS);
             assertTrue(msg.contains("Go (Root)"), msg);
         } finally {
@@ -418,7 +418,7 @@ public class CodeTalentScanTest {
     public void codeDirEmpty_writesCodeMdAtRoot(@TempDir Path root) throws Exception {
         write(root, "pom.xml", "<project></project>");
 
-        new CodeTalent(root.toString(), "").init(null);
+        new CodeTalent(root.toString(), "").init(null, null);
 
         assertTrue(Files.exists(root.resolve("CODE.md")));
     }

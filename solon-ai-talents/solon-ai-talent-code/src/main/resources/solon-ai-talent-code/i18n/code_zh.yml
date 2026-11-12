@@ -1,0 +1,214 @@
+# solon-ai-talent-code 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+code.description: |-
+  代码专家。支持项目初始化、技术栈自动识别以及 `{path}` 规约生成。
+code.instruction: |-
+  ## 核心工程规约 (Core Engineering Protocol)
+  > 项目当前上下文: {context}
+
+  为了确保工程质量，要严格执行以下操作：
+  1. **动作前导**: 在开始任何任务前，先读 `{path}` 以获取构建和测试指令。
+  2. **验证驱动**: 修改代码后，参考 `{path}` 中的指令运行测试，严禁未验证提交。
+
+# ---- 初始化结论（指令中的“项目当前上下文”） ----
+code.init.updated: |-
+  已更新项目工程规范
+code.init.verified: |-
+  已验证项目工程规范
+code.init.stacks: |-
+  (检测到技术栈: {stacks})
+code.init.no_stacks: |-
+  (未检测到明确的技术栈)
+code.init.versions: |-
+  (环境版本: {versions})
+code.init.failed: |-
+  未能生成项目工程规范（{reason}），请直接阅读源码与构建配置了解项目结构
+code.init.reason.not_writable: |-
+  目录不可写，本次未生成工程规范文件
+code.init.reason.error: |-
+  初始化异常: {error}
+
+# ---- CODE.md ----
+code.md.title: |-
+  ## 构建与测试指令 (Build and Test Commands)
+code.md.modules_title: |-
+  ### 子模块与子项目 (Sub-modules & Sub-projects)
+  > 以下模块受根项目指令统一控制（构建与测试请按上文根项目指令执行）。
+code.md.modules_group: |-
+  {type} ({count} 个)
+code.md.modules_item_version: |-
+  {path}（{version}）
+code.md.modules_more: |-
+  … 及其余 {count} 个模块（未展开，完整清单请检索 {globs}）
+code.md.modules_glob_or: |-
+  或
+code.md.modules_glob_fallback: |-
+  对应构建标记文件
+code.md.versions: |-
+  ## 环境版本 (Environment Versions)
+
+  > 以下为项目配置文件中**声明**的版本（非本机安装版本），写代码时请对齐该版本的语法特性。
+code.md.guidelines: |-
+  ## 工程规约 (Guidelines)
+
+  - **改前必读**: 在进行任何修改前，务必完整阅读相关文件内容。
+  - **原子作业**: 每次仅实现一个功能或修复一个 Bug。
+  - **验证驱动**: 任务完成前必须运行测试进行验证。
+  - **路径规范**: 仅使用相对路径（例如：`src/main/java/App.java`，严禁使用 `./src/...`）。
+  - **风格对齐**: 必须遵循代码库中已有的编码风格和设计模式。
+  - **版本对齐**: 参考「环境版本」章节声明的版本，不要使用超过该版本的语法特性；若未列出版本，应从配置文件或构建工具复核后再决定。
+  - **环境感知**: 利用你对各语言默认本地仓库路径（如 Maven、Node）的知识，协助排查依赖问题或进行源码分析。
+
+# ---- 内置语言（type：模块类型名；root：根项目指令；module：子模块指令） ----
+code.lang.maven.type: |-
+  Maven 模块
+code.lang.maven.root: |-
+  ### 根项目 (Maven)
+  - 构建: `mvn clean compile`
+  - 全量测试: `mvn test`
+  - 单测执行: `mvn test -Dtest=ClassName` (替换为实际类名)
+code.lang.maven.module: |-
+  ### 模块 (Module): {module} (Maven)
+  - 构建: `cd {module} && mvn clean compile`
+  - 全量测试: `cd {module} && mvn test`
+  - 单测执行: `cd {module} && mvn test -Dtest=ClassName` (替换为实际类名)
+
+code.lang.gradle.type: |-
+  Gradle 模块
+code.lang.gradle.root: |-
+  ### 根项目 (Gradle)
+  - 构建: `./gradlew build` (或 `gradle build`)
+  - 全量测试: `./gradlew test`
+  - 单测执行: `./gradlew test --tests "ClassName"` (替换为实际类名)
+code.lang.gradle.module: |-
+  ### 模块 (Module): {module} (Gradle)
+  - 构建: `./gradlew :{project}:build`
+  - 全量测试: `./gradlew :{project}:test`
+  - 单测执行: `./gradlew :{project}:test --tests "ClassName"`
+
+code.lang.node.type: |-
+  Node 项目
+code.lang.node.root: |-
+  ### 根项目 (Node/TS)
+  - 安装: `npm install`
+  - 构建: `npm run build`
+  - 全量测试: `npm test`
+  - 单文件测试: `npm test -- path/to/file.test.ts` (替换为实际文件路径)
+code.lang.node.module: |-
+  ### 模块 (Module): {module} (Node/TS)
+  - 安装: `cd {module} && npm install`
+  - 构建: `cd {module} && npm run build`
+  - 全量测试: `cd {module} && npm test`
+  - 单文件测试: `cd {module} && npm test -- path/to/file.test.ts` (替换为实际文件路径)
+
+code.lang.go.type: |-
+  Go 模块
+code.lang.go.root: |-
+  ### 根项目 (Go)
+  - 依赖同步: `go mod tidy`
+  - 构建: `go build ./...`
+  - 全量测试: `go test ./...`
+  - 单测执行: `go test -v -run TestName ./...` (替换 TestName 为实际函数名)
+code.lang.go.module: |-
+  ### 模块 (Module): {module} (Go)
+  - 构建: `cd {module} && go build`
+  - 全量测试: `cd {module} && go test ./...`
+  - 单测执行: `cd {module} && go test -v -run TestName` (替换 TestName 为实际函数名)
+
+code.lang.python.type: |-
+  Python 项目
+code.lang.python.root: |-
+  ### 根项目 (Python)
+  - 环境: 优先检查并激活 `venv` 或 `.venv`
+  - 依赖: `pip install -r requirements.txt` (或使用 poetry/pdm)
+  - 全量测试: `pytest` 或 `python -m unittest discover`
+  - 单文件测试: `pytest path/to/test_file.py` (替换为实际路径)
+code.lang.python.module: |-
+  ### 模块 (Module): {module} (Python)
+  - 环境: 优先检查并激活 `venv` 或 `.venv`
+  - 依赖: `cd {module} && pip install -r requirements.txt`
+  - 全量测试: `cd {module} && pytest`
+  - 单文件测试: `cd {module} && pytest path/to/test_file.py` (替换为实际路径)
+
+code.lang.rust.type: |-
+  Rust 项目
+code.lang.rust.root: |-
+  ### 根项目 (Rust)
+  - 构建: `cargo build`
+  - 全量测试: `cargo test`
+  - 运行: `cargo run`
+  - 单项测试: `cargo test -- test_name` (替换为实际模块或函数名)
+code.lang.rust.module: |-
+  ### 模块 (Module): {module} (Rust)
+  - 构建: `cd {module} && cargo build`
+  - 全量测试: `cd {module} && cargo test`
+  - 单项测试: `cd {module} && cargo test -- test_name` (替换为实际模块或函数名)
+
+code.lang.cangjie.type: |-
+  仓颉项目
+code.lang.cangjie.root: |-
+  ### 根项目 (Cangjie)
+  - 构建: `cjpm build`
+  - 全量测试: `cjpm test`
+  - 运行: `cjpm run`
+  - 单项测试: `cjpm test --filter <test_case>` (替换为实际测试用例名)
+code.lang.cangjie.module: |-
+  ### 模块 (Module): {module} (Cangjie)
+  - 构建: `cd {module} && cjpm build`
+  - 全量测试: `cd {module} && cjpm test`
+  - 单项测试: `cd {module} && cjpm test --filter <test_case>`
+
+code.lang.cmake.type: |-
+  C/C++ 项目
+code.lang.cmake.root: |-
+  ### 根项目 (C/C++)
+  - 构建: `mkdir -p build && cd build && cmake .. && make`
+  - 全量测试: `cd build && ctest`
+  - 单项测试: `cd build && ctest -R <test_name_regexp>` (替换为正则过滤)
+code.lang.cmake.module: |-
+  ### 模块 (Module): {module} (C/C++)
+  - 构建: `cd {module} && mkdir -p build && cd build && cmake .. && make`
+  - 全量测试: `cd {module}/build && ctest`
+  - 单项测试: `cd {module}/build && ctest -R <test_name_regexp>`
+
+code.lang.flutter.type: |-
+  Flutter 项目
+code.lang.flutter.root: |-
+  ### 根项目 (Flutter/Dart)
+  - 依赖: `flutter pub get`
+  - 全量测试: `flutter test`
+  - 单文件测试: `flutter test path/to/test_file.dart` (替换为实际路径)
+code.lang.flutter.module: |-
+  ### 模块 (Module): {module} (Flutter/Dart)
+  - 依赖: `cd {module} && flutter pub get`
+  - 全量测试: `cd {module} && flutter test`
+  - 单文件测试: `cd {module} && flutter test path/to/test_file.dart`
+
+code.lang.php.type: |-
+  PHP 项目
+code.lang.php.root: |-
+  ### 根项目 (PHP/Composer)
+  - 依赖: `composer install`
+  - 全量测试: `./vendor/bin/phpunit`
+  - 单文件测试: `./vendor/bin/phpunit path/to/TestFile.php` (替换为实际路径)
+code.lang.php.module: |-
+  ### 模块 (Module): {module} (PHP/Composer)
+  - 依赖: `cd {module} && composer install`
+  - 全量测试: `cd {module} && ./vendor/bin/phpunit`
+  - 单文件测试: `cd {module} && ./vendor/bin/phpunit path/to/TestFile.php`
+
+code.lang.dotnet.type: |-
+  C# 项目
+code.lang.dotnet.root: |-
+  ### 根项目 (C#/.NET)
+  - 还原: `dotnet restore`
+  - 构建: `dotnet build`
+  - 全量测试: `dotnet test`
+  - 单测执行: `dotnet test --filter FullyQualifiedName=Namespace.ClassName` (替换为实际类名)
+code.lang.dotnet.module: |-
+  ### 模块 (Module): {module} (C#/.NET)
+  - 还原: `cd {module} && dotnet restore`
+  - 构建: `cd {module} && dotnet build`
+  - 全量测试: `cd {module} && dotnet test`
+  - 单测执行: `cd {module} && dotnet test --filter FullyQualifiedName=Namespace.ClassName` (替换为实际类名)

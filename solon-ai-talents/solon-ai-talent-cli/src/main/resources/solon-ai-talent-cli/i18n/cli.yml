@@ -1,0 +1,354 @@
+# solon-ai-talent-cli texts (English, the fallback language)
+# Convention: every value is a "|-" block scalar holding only the body text -- no leading/trailing newline or space
+# (line breaks and indentation between paragraphs are added by code); placeholders use {name}; "${" and "#{" are not allowed.
+# Numbering placeholders such as {op} receive a complete number like "#1" from code (avoids writing "#{" in texts).
+
+# ======== SkillTalent ========
+skill.description: |-
+  Skill manager. Discovers and loads skills (SKILL.md) from local paths or mounts.
+skill.instruction.head: |-
+  Prefer an appropriate skill to solve the problem (if unsure which one, search with skillsearch). **Note: while executing a task, always read or review the skill's rules with `skillread`.**
+skill.instruction.preloaded_title: |-
+  ### Selected skills (body preloaded, no need to skillread again)
+skill.instruction.title: |-
+  ## Skill Library Rules (available skills: {total})
+skill.instruction.summary: |-
+  ### Mode: summary discovery
+  Review the skill list below. If a skill matches the current need, call `skillread` to get its detailed rules and tool parameters:
+skill.instruction.list: |-
+  ### Mode: path navigation
+  There are many skills, so only the path index is shown (no descriptions). Infer the function and call `skillread`. If unsure, search with `skillsearch`:
+skill.instruction.search: |-
+  ### Mode: dynamic discovery
+  The skill library is large. **Do not guess paths.** You must first search keywords with `skillsearch`, confirm the name, then read it with `skillread`.
+skill.list.empty: |-
+  No skills are currently available.
+skill.list.too_many: |-
+  Error: the skill library is large ({count}); listing all skills is not allowed. Use `skillsearch` with keywords to locate skills.
+skill.list.title: |-
+  Available skills:
+skill.search.none: |-
+  No matching skills found.
+skill.read.invalid: |-
+  Error: {name} is not a valid skill directory (SKILL.md is missing)
+skill.refresh.ok: |-
+  Skill library refreshed. Available skills: {count}
+
+# ======== TerminalTalent: description and instruction ========
+terminal.description: |-
+  Provides terminal interaction, file discovery, paged reading, full-text search and precise editing.
+terminal.instruction.title: |-
+  ## Terminal Environment
+terminal.instruction.sandbox: |-
+  - **Sandbox mode**: {mode}
+terminal.instruction.sandbox_on: |-
+  on (restricted)
+terminal.instruction.sandbox_off: |-
+  off (open)
+terminal.instruction.os: |-
+  - **Runtime**: {os} ({arch})
+terminal.instruction.shell: |-
+  - **Shell type**: {mode} — {summary}
+terminal.instruction.dialect_powershell: |-
+  {shell}, **not** bash/sh; POSIX commands and syntax are unavailable
+terminal.instruction.dialect_cmd: |-
+  Windows cmd.exe batch, **not** bash/sh; POSIX commands and syntax are unavailable
+terminal.instruction.dialect_unix: |-
+  {shell} (POSIX shell)
+terminal.instruction.self_protect: |-
+  - **Self-protection**:
+    - All your commands run in a child shell of the Java process (PID: {pid}).
+    - Killing this PID or its parent stops you immediately and loses all context.
+terminal.instruction.kill_windows: |-
+  - Never run `taskkill /IM java.exe` or `Stop-Process -Name java`. Never point `taskkill /PID <PID>` or `Stop-Process -Id <PID>` at any PID unless you have first confirmed with `Get-Process -Id <PID>` (or `tasklist /FI "PID eq <PID>"`) that the process is unrelated to the current Java process.
+terminal.instruction.kill_tip_windows: |-
+  - Tip: to clean up, terminate only the child process you started yourself (run `Stop-Process -Id <child PID>` with its known PID); do not terminate processes in bulk by name.
+terminal.instruction.kill_unix: |-
+  - Never run `pkill java` or `killall java`. Never run `kill -9` on any number unless you have first run `ps` to confirm that PID is unrelated to the current Java process.
+terminal.instruction.kill_tip_unix: |-
+  - Tip: to clean up, use `pkill -P [PID]` to stop only child processes.
+terminal.instruction.forbidden: |-
+  - **Forbidden commands**:
+    - Never run `exit` (it is blocked by the security policy). To end a script, let it finish naturally.
+terminal.instruction.forbidden_rm_windows: |-
+  - Never delete a drive root (such as `C:\`) or system directories (such as `C:\Windows`, `C:\Program Files`, `C:\Users`).
+terminal.instruction.forbidden_rm_unix: |-
+  - Never delete the root directory `/` or system directories (such as `/etc`, `/usr`).
+terminal.instruction.runtime_title: |-
+  - **Runtimes**:
+terminal.instruction.runtime_python: |-
+  - Python command: `{cmd}` (preset variable `{env}`)
+terminal.instruction.runtime_node: |-
+  - Node.js command: `{cmd}` (preset variable `{env}`)
+terminal.instruction.path_title: |-
+  - **Path rules**:
+terminal.instruction.workspace: |-
+  - **Workspace (default scope)**{name}: your home directory, readable and writable. All file lookups (ls/glob/grep/read) and path resolution are rooted at the workspace by default; use relative paths (such as `src/app.java`).
+terminal.instruction.workspace_name: |-
+  : directory "{name}" (the root for relative paths and ".")
+terminal.instruction.mounts: |-
+  - **Mounts (access only when needed)**: access sources through logical paths starting with `@` (such as `@pool1/bin/tool/`). See the mount list below. **Only look under a mount when the user's prompt explicitly mentions that mount name** (such as `@global-skills`, `@workspace-agents`).
+terminal.instruction.security_sandbox_mounts: |-
+  - **Security level**: sandbox mode is on. Absolute paths are forbidden. Only relative paths (such as `src/app.java`) or logical paths (`@pool1/src/app.java`) are allowed.
+terminal.instruction.security_sandbox: |-
+  - **Security level**: sandbox mode is on. Absolute paths are forbidden. Only relative paths (such as `src/app.java`) are allowed.
+terminal.instruction.home_on: |-
+  - `~` paths are available (such as `~/Documents`).
+terminal.instruction.home_off: |-
+  - `~` paths are disabled.
+terminal.instruction.security_open: |-
+  - **Security level**: open mode. Absolute, relative and logical paths are supported.
+terminal.instruction.rules_title: |-
+  ## Execution Rules
+terminal.instruction.mount_writable: |-
+  - **Mount isolation**: logical paths (starting with @) are read-only by default. Writes are allowed only when the mount list shows `writeable="true"`.
+terminal.instruction.mount_readonly: |-
+  - **Mount isolation**: logical paths (starting with @) are all read-only; use relative paths for every write.
+terminal.instruction.cmd_sandbox_mounts: |-
+  - **Command execution**: in `bash`, local mounts and materializable mounts (shell="true" or "materialized") can use logical paths (such as `cd @pool1/bin/tool/`), which the system converts automatically (a materializable mount is copied into a user-level cache on first use and reused by later commands); other virtual sources can only be used through file tools. In sandbox mode, **never** use absolute paths in bash commands (such as `ls /users/`).
+terminal.instruction.cmd_sandbox: |-
+  - **Command execution**: in sandbox mode, **never** use absolute paths in bash commands (such as: ls /users/).
+terminal.instruction.cmd_open_mounts: |-
+  - **Command execution**: in `bash`, local mounts and materializable mounts (shell="true" or "materialized") can use logical paths (such as `cd @pool1/bin/tool/`), which the system converts automatically (a materializable mount is copied into a user-level cache on first use and reused by later commands); other virtual sources can only be used through file tools. Absolute paths are also supported.
+terminal.instruction.cmd_open: |-
+  - **Command execution**: absolute paths are supported in `bash`.
+terminal.instruction.tools_first: |-
+  - **Tools first (choose a tool before a command)**: to read files, list directories, find files, search text, write files and edit files, always use the `read` / `ls` / `glob` / `grep` / `{write}` / `{edit}` tools instead of shell commands (such as {examples}): the tool layer already handles encodings and BOM, line-number positioning, ignored directories (node_modules/target/.git, etc.), paged truncation of large files and atomic rollback of writes, which the command line cannot do. Use `bash` for what really needs executing: builds, tests, git, package management, running scripts, and pipelines or statistics the tools cannot cover.
+terminal.instruction.file_cmds_powershell: |-
+  `Get-Content`, `Get-ChildItem`, `Select-String`, `Set-Content`, `>`
+terminal.instruction.file_cmds_cmd: |-
+  `type`, `dir`, `findstr`, `echo >`
+terminal.instruction.file_cmds_unix: |-
+  `cat`, `ls`, `find`, `grep`, `sed -i`, `echo >`
+terminal.instruction.async: |-
+  - **Long-running commands**: for commands that may take long, stream output, wait for input or need to be watched, prefer `bash_start`. If the result contains `Process running with session ID`, the command is still running: call `bash_wait` to keep watching, pass the reply text through the chars parameter of `bash_wait` when the command is stuck in a pager or waiting for an answer, and call `bash_stop` to stop it.
+terminal.instruction.args_windows: |-
+  - **Arguments and encoding**: always quote arguments containing spaces, quotes or other special characters (such as `{python} a.py "hello world"`, `{read}`). Output encoding is detected automatically (UTF-8 first, legacy Windows code pages as fallback); no need to add chcp or set encoding environment variables.
+terminal.instruction.args_unix: |-
+  - **Arguments and encoding**: always quote arguments containing spaces, quotes or other special characters (such as `{python} a.py "hello world"`, `{read}`). Output is decoded as UTF-8; no need to set encoding environment variables.
+terminal.instruction.ps_title: |-
+  - **PowerShell dialect (mandatory)**: the current shell is PowerShell. The Unix forms below **do not exist** here and will fail; rewrite them as shown on the right:
+terminal.instruction.ps_discard: |-
+  - Discard all output: `| Out-Null` (for discarding only stderr, see the stderr rule below).
+terminal.instruction.ps_chain_core: |-
+  - Command chaining: `&&` / `||` are available (PowerShell 7+), and so is `;`; use `&&` instead of `;` when you need "stop if the previous step fails".
+terminal.instruction.ps_chain_51: |-
+  - Command chaining: `&&` / `||` → `;` (Windows PowerShell 5.1 does not support `&&` or `||`).
+terminal.instruction.ps_chain_51_note: |-
+  - Note that `;` is not `&&`: a failed step does not stop the following steps, and the returned `[exit_code]` reflects only the last step. Split multi-step builds/tests into separate `bash` calls, or write `cmd1; if ($LASTEXITCODE -eq 0) { cmd2 }` (do not use `exit`).
+terminal.instruction.ps_equivalents: |-
+  - Common equivalents (one error is enough to self-correct; quick reference only): `head/tail -n N` → `Select-Object -First/-Last N`; `cat` → `Get-Content`; `grep` → `Select-String`; `find` → `Get-ChildItem -Recurse -Filter`; `uname -a`, `cat /etc/os-release` → `Get-ComputerInfo`, `$PSVersionTable`; `pwd` → `Get-Location`; `which x` → `Get-Command x`; `export A=B` → `$env:A='B'` (read environment variables with `$env:NAME`, not `$NAME`).
+terminal.instruction.ps_alias_trap: |-
+  - **Unix aliases are traps (the command exists but its arguments are incompatible)**: `ls`, `rm`, `cp`, `mv`, `ps` and `cat` are cmdlet aliases here and do not accept Unix short options: `ls -la`, `rm -rf dir`, `cp -r a b` and `ps aux` all fail with parameter binding errors (the command is not missing, so retrying the same form will not help). Equivalents: `Get-ChildItem -Force`, `Remove-Item -Recurse -Force dir`, `Copy-Item -Recurse a b`, `Get-Process`.
+terminal.instruction.ps_curl_core: |-
+  - In PowerShell 7+, `curl` / `wget` are no longer aliases; they point to the real `curl.exe`, so Unix options work.
+terminal.instruction.ps_curl_51: |-
+  - In Windows PowerShell 5.1, `curl` / `wget` are aliases of `Invoke-WebRequest`, so `curl -s <url>` fails; to use the real curl, write `curl.exe -s <url>`.
+terminal.instruction.stderr_powershell: |-
+  - **Do not write `2>&1` in commands**: stderr is already merged into the output by the system; no redirection is needed. In PowerShell an extra `2>&1` also turns the stderr of native programs into error records, adding noise lines such as "At line:1 char:1 / NativeCommandError", and makes the whole command exit with 1 (even a success is reported as `[exit_code=1]`). To discard only stderr, use `2>$null`.
+terminal.instruction.stderr_cmd: |-
+  - **Do not write `2>&1` in commands**: stderr is already merged into the output by the system; no redirection is needed. To discard only stderr, use `2>nul`.
+terminal.instruction.ps_encoding: |-
+  - **Encoding (already handled by the system; write commands accordingly)**: the default encoding for input, output and file reads/writes in this session is unified as UTF-8 (including reads by `Get-Content`, `Select-String` and `Import-Csv`, and writes by `Set-Content`, `Add-Content`, `Out-File` and `>` / `>>`). No need to run `chcp`, set `$OutputEncoding` or keep adding `-Encoding UTF8`.
+terminal.instruction.ps_encoding_gbk: |-
+  - Exception: if a file is confirmed to be GBK/ANSI encoded, you must write `-Encoding Default` explicitly to read it correctly.
+terminal.instruction.ps_encoding_bom: |-
+  - Windows PowerShell 5.1 writes UTF-8 with a BOM; this tool's `read` / `edit` / `grep` ignore it automatically, so no special handling is needed.
+terminal.instruction.ps_encoding_garbled: |-
+  - If the output is still garbled, the invoked third-party program almost certainly writes ANSI itself; do not keep adjusting encodings in the command. To read file content, use the `read` / `grep` tools directly.
+terminal.instruction.cmd_title: |-
+  - **CMD dialect (mandatory)**: the current shell is cmd.exe. The Unix forms below **do not exist** here and will fail; rewrite them as shown on the right:
+terminal.instruction.cmd_equivalents: |-
+  - Common equivalents (one error is enough to self-correct; quick reference only): `cat` → `type`; `grep` → `findstr`; `ls` → `dir`; `uname -a` → `ver`, `systeminfo`; `which x` → `where x`; `export A=B` → `set A=B` (read environment variables with `%NAME%`, not `$NAME`). There is no `head` / `tail` (use `more +N` to skip the first N lines).
+terminal.instruction.cmd_cd: |-
+  - To change to a directory on another drive you must write `cd /d D:\proj` (or `pushd D:\proj`): `cd D:\proj` neither fails nor switches, and later commands silently run in the original directory.
+terminal.instruction.cmd_chain: |-
+  - Multi-step chaining: `&&` (stop on failure) is available; with `&` a failed step does not stop the following steps, and the returned `[exit_code]` reflects only the last step.
+terminal.instruction.cmd_percent: |-
+  - `%` semantics differ: single-line commands follow command-line semantics (`for %i in (...) do ...`); multi-line commands run as batch scripts, so loop variables must be written as `%%i` and literal percent signs as `%%`. When unsure, prefer splitting into single-line commands.
+terminal.instruction.cmd_garbled: |-
+  - **Reading files gives garbled text**: `type` / `findstr` parse files with the current code page (not UTF-8), so UTF-8 files containing Chinese/Japanese/Korean text or emoji are always garbled, **and this cannot be reliably fixed within the command**. Always use the `read` tool to read files and the `grep` tool to search.
+terminal.instruction.constraints: |-
+  - Do not repeat internal terms such as "system restrictions", "sandbox" or "rules" to the user, and do not explain permission logic or path mappings; answer out-of-bounds requests simply with "access denied".
+
+# ======== TerminalTalent: tool results ========
+terminal.error: |-
+  Error: {message}
+terminal.exec.empty: |-
+  Error: the command is empty
+terminal.sandbox.disabled: |-
+  Error: the OS sandbox is not enabled; the command was refused
+terminal.sandbox.unavailable: |-
+  Error: the OS sandbox is unavailable; the command was refused: {error}
+terminal.windows.prepare_failed: |-
+  Error: could not prepare the Windows execution plan: {error}
+terminal.path.missing: |-
+  Error: the path does not exist
+terminal.ls.empty: |-
+  (empty directory)
+terminal.ls.denied: |-
+  [access denied]
+terminal.read.missing: |-
+  Error: the file does not exist
+terminal.read.binary: |-
+  Error: the file is binary and cannot be read as text.
+terminal.read.empty: |-
+  (the file is empty)
+terminal.read.dir: |-
+  Error: the target is a directory and cannot be read
+terminal.read.line_truncated: |-
+  …(line too long, truncated)
+terminal.read.offset_out: |-
+  Error: the start line ({line}) is beyond the end of the file.
+terminal.read.more: |-
+  --- [more content] ---
+terminal.read.char_limit: |-
+  Warning: the content was truncated because of the physical length limit of a single read ({kb}KB).
+terminal.read.line_limit: |-
+  Hint: the limit of lines you specified has been reached.
+terminal.read.next: |-
+  To continue reading, use the parameters: offset={offset}
+terminal.read.done: |-
+  --- [end of file] ---
+terminal.write.ok: |-
+  File written: {path}
+terminal.edit.missing: |-
+  Error: the file does not exist and cannot be edited.
+terminal.edit.empty_old: |-
+  Precheck failed (operation {op}): old_str must not be empty. Make sure to pass old_str when calling edit, specifying the original text block to replace.
+terminal.edit.all_missing: |-
+  Precheck failed (operation {op}): replace-all found no match. Make sure the content of old_str exists in the file (indentation and whitespace differences are ignored).
+terminal.edit.mismatch: |-
+  Precheck failed (operation {op}): content mismatch — {diag}. Check whether old_str matches the file.
+terminal.edit.not_unique: |-
+  Precheck failed (operation {op}): the text block does not match exactly at the given old_StrStartLine and is not unique in the file. Provide the correct old_StrStartLine or add context lines.
+terminal.edit.apply_failed: |-
+  Execution failed (operation {op}): {error}. An earlier edit may have broken the matching context here; try calling edit several times instead.
+terminal.edit.ok: |-
+  File {path}: {count} edit(s) applied.
+terminal.vedit.empty_old: |-
+  Precheck failed (operation {op}): old_str must not be empty.
+terminal.vedit.mismatch: |-
+  Precheck failed (operation {op}): content mismatch.
+terminal.vedit.all_missing: |-
+  Precheck failed (operation {op}): replace-all found no match.
+terminal.grep.none: |-
+  No results found.
+terminal.grep.truncated: |-
+  Warning: too many search results; truncated at the {kb}KB limit. Narrow the search path or keywords.
+terminal.grep.skipped_large: |-
+  Skipped {count} file(s) exceeding the per-file read limit (10MB).
+terminal.glob.none: |-
+  No matching files found.
+terminal.vfile.too_large: |-
+  Error: the virtual file exceeds the per-file read limit (10MB); narrow the file scope.
+terminal.search.separator: |-
+  Error: the path of {tool} accepts only a single directory, but the separator '{sep}' was found (current value: {path}). Call it several times, or use the common parent directory of these directories and narrow the scope with pattern/include.
+terminal.search.missing: |-
+  Error: the path does not exist ({tool} path={path}). Check the directory levels with ls first; note that path accepts only a single directory and must not contain wildcards (wildcards belong in pattern).
+terminal.validate.home: |-
+  Error: sandboxAllowUserHome is disabled; ~ paths are not allowed.
+terminal.validate.empty: |-
+  Error: command must not be empty.
+terminal.validate.kill: |-
+  Error: dangerous command detected. Never try to stop the host process (PID: {pid}).
+terminal.validate.exit: |-
+  Error: high-risk command detected. By security policy, exit, system restarts and deletion of the root or system directories are forbidden.
+terminal.validate.rm_windows: |-
+  Error: high-risk command detected. Deleting a drive root or system directories (Windows / Program Files / Users, etc.) is forbidden.
+
+# ---- Permission denied (exception messages) ----
+terminal.denied.not_local: |-
+  Permission denied: this mount source does not support local file operations {path}
+terminal.denied.unknown_mount: |-
+  Permission denied: unknown mount {path}
+terminal.denied.readonly_mount: |-
+  Permission denied: path {path} belongs to a read-only mount and cannot be written. Write results to a relative path in the workspace.
+terminal.denied.no_local_root: |-
+  Permission denied: the mount has no local directory {path}
+terminal.denied.absolute: |-
+  Permission denied: absolute paths are forbidden in sandbox mode.
+terminal.denied.outside: |-
+  Permission denied: path out of bounds (sandbox mode is on).
+terminal.denied.cache: |-
+  Permission denied: protected path (materialization cache)
+terminal.denied.protected: |-
+  Permission denied: protected path {path}
+terminal.denied.read: |-
+  Permission denied: read denied {path}
+terminal.denied.write_whitelist: |-
+  Permission denied: not in the writable allowlist {path}
+terminal.denied.home: |-
+  Permission denied: ~ paths are forbidden in sandbox mode (sandboxAllowUserHome is off).
+terminal.denied.mount_outside: |-
+  Permission denied: path outside the mount.
+terminal.denied.symlink: |-
+  Permission denied: symbolic link out of bounds (sandbox mode is on).
+terminal.denied.mount_unavailable: |-
+  Permission denied: mount unavailable {path}
+terminal.denied.unreadable: |-
+  Permission denied: source not readable {path}
+terminal.denied.readonly_source: |-
+  Permission denied: this mount source is read-only and cannot be written {path}
+terminal.materialize.no_cache: |-
+  The materialization cache is not configured; cannot run mount {alias}
+terminal.materialize.no_dir: |-
+  The mount produced no materialized directory {alias}
+terminal.materialize.failed: |-
+  Could not materialize mount {alias}
+
+# ---- Edit matching (exception messages and diagnostics) ----
+terminal.apply.empty_old: |-
+  old_str must not be empty
+terminal.apply.all_missing: |-
+  The text block to replace was not found
+terminal.apply.missing: |-
+  The text block was not found. This usually happens because an earlier edit changed the character offsets or content of the file; apply the edits step by step
+terminal.apply.not_unique: |-
+  The text block is not unique in the current state
+terminal.diag.no_content: |-
+  The file has no content at the given line number
+terminal.diag.blank: |-
+  old_str consists only of blank lines
+terminal.diag.lines: |-
+  Line count mismatch: old_str has {expected} lines, but only {actual} lines remain in the file from the start line
+terminal.diag.mismatch: |-
+  Line {line} does not match: expected "{expected}", the file has "{actual}"
+terminal.diag.mismatch_collapse: |-
+  Line {line} does not match (after collapsing whitespace): expected "{expected}", the file has "{actual}"
+
+# ======== ProcessExecutor ========
+executor.no_cmd: |-
+  Execution failed: no runnable command found (Command not found)
+executor.code_failed: |-
+  Code execution failed: {error}
+executor.timeout: |-
+  Execution timed out: running time exceeded {ms} ms (process tree terminated).
+executor.timeout_output: |-
+  --- output produced before the timeout ---
+executor.size_capped: |-
+  ... [output exceeded the physical limit of {bytes} bytes; the command was terminated. Narrow the output (for example, add filters or paging), or redirect it to a file and view it in parts]
+executor.ok: |-
+  Executed successfully
+executor.interrupted: |-
+  Execution interrupted (process tree terminated)
+executor.system_failed: |-
+  System failure: {error}
+executor.omitted: |-
+  ... [{count} characters omitted in the middle] ...
+executor.binary_readable: |-
+  [Note: binary traits were detected in the output, but most of it is readable, so it was decoded for display]
+executor.binary_size: |-
+  (original size: {bytes} bytes)
+executor.binary_title: |-
+  [Binary output detected; the garbled body was omitted]
+executor.binary_summary: |-
+  About {bytes} bytes, first {count} bytes: {hex}
+executor.binary_summary_typed: |-
+  About {bytes} bytes, detected type: {type}, first {count} bytes: {hex}
+executor.binary_hint: |-
+  Hint: the command output looks like binary content. To view details, use a suitable tool instead (such as jar tf, unzip -l, javap, file, xxd) or decode (or decompress) it properly before printing.
+executor.binary_hint_typed: |-
+  Hint: the command output looks like binary content ({type}). To view details, use a suitable tool instead (such as jar tf, unzip -l, javap, file, xxd) or decode (or decompress) it properly before printing.
+executor.truncated: |-
+  ... [output too large, truncated: {total} characters in total, {omitted} characters omitted in the middle, only the head and tail kept. For the full content, read it page by page with the read tool, or redirect the output to a file and process it there] ...

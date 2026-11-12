@@ -15,12 +15,15 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Set;
 
 
@@ -32,7 +35,15 @@ public class DotNetProvider implements LanguageProvider {
     private static final String[] IGNORE_FOLDERS = {"obj", "bin"};
 
     @Override public String id() { return "C#/.NET"; }
-    @Override public String typeName() { return "C# 项目"; }
+    @Override
+    public String typeName() {
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_DOTNET_TYPE);
+    }
 
     /**
      * C# 按扩展名（*.sln / *.csproj）识别，无法用精确文件名表达，故返回空数组，判定逻辑见 {@link #isMatch(Path, Set)}
@@ -83,19 +94,21 @@ public class DotNetProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (C#/.NET)\n")
-                .append("- 还原: `dotnet restore`\n")
-                .append("- 构建: `dotnet build`\n")
-                .append("- 全量测试: `dotnet test`\n")
-                .append("- 单测执行: `dotnet test --filter FullyQualifiedName=Namespace.ClassName` (替换为实际类名)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_DOTNET_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (C#/.NET)\n")
-                .append("- 还原: `cd ").append(moduleName).append(" && dotnet restore`\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && dotnet build`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && dotnet test`\n")
-                .append("- 单测执行: `cd ").append(moduleName).append(" && dotnet test --filter FullyQualifiedName=Namespace.ClassName` (替换为实际类名)\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_DOTNET_MODULE, "module", moduleName)).append("\n\n");
     }
 }

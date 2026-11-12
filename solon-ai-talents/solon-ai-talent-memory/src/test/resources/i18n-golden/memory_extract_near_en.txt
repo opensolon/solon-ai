@@ -1,0 +1,3 @@
+[Success] The mental model has been updated.
+[Scope: workspace]
+[Key governance] Semantically similar entries already exist: [user-stack]. If they are on the same topic, update the existing Key instead of creating a new one to avoid fragmented memories.

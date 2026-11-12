@@ -7,9 +7,12 @@ import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.AbsTool;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpClientProviders;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.talents.gateway.i18n.McpGatewayI18n;
+import org.noear.solon.ai.talents.gateway.i18n.McpGatewayI18nKeys;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.ai.annotation.ToolMapping;
@@ -421,8 +424,9 @@ public class McpGatewayTalent extends AbsTalent {
     // ========== Talent 接口实现（四阶段路由） ==========
 
     @Override
-    public String description() {
-        return "MCP工具网关（共 " + providerMap.size() + " 个服务，" + allTools.size() + " 个工具）";
+    public String description(Prompt prompt) {
+        return McpGatewayI18n.fmt(AiI18n.localeOf(prompt), McpGatewayI18nKeys.GATEWAY_MCP_DESCRIPTION,
+                "servers", providerMap.size(), "tools", allTools.size());
     }
 
     @Override
@@ -432,24 +436,18 @@ public class McpGatewayTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        final Locale locale = AiI18n.localeOf(prompt);
         final Map<String, Map<String, FunctionTool>> view = viewCategories(prompt);
         final int size = viewTools(prompt).size();
         StringBuilder sb = new StringBuilder();
-        sb.append("## MCP工具发现规范 (共 ").append(size).append(" 个工具)\n");
+        sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_TITLE, "count", size)).append("\n");
 
         if (size <= dynamicThreshold) {
             // --- FULL 模式 (全铺) ---
-            sb.append("### 运行模式: 直接调用\n");
-            sb.append("当前已加载全量MCP工具定义。请直接分析需求并调用最匹配的工具，无需中转。");
+            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_FULL));
         } else if (size <= listThreshold) {
             // --- SUMMARY 模式 (摘要) ---
-            sb.append("### 运行模式: 动态发现 (摘要)\n");
-            sb.append("由于工具较多，请遵循以下流程：\n");
-            sb.append("- **Step 1 (锁定)**: 从下方\"可用MCP工具清单\"中根据功能描述选定工具名。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("#### 可用MCP工具清单:\n");
+            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SUMMARY)).append("\n");
             view.forEach((serverName, tools) -> {
                 sb.append("- **[").append(serverName).append("]**:\n");
                 tools.values().forEach(t ->
@@ -458,27 +456,15 @@ public class McpGatewayTalent extends AbsTalent {
             });
         } else if (size <= searchThreshold) {
             // --- LIST 模式 (名字) ---
-            sb.append("### 运行模式: 动态发现 (列表)\n");
-            sb.append("由于工具库规模较大，仅展示名称。请遵循以下流程：\n");
-            sb.append("- **Step 1 (预选)**: 从下方\"工具列表\"中根据名称推断功能，或用 `search_tools` 检索。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("#### 可用MCP工具列表 (按服务展示):\n");
+            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST)).append("\n");
             view.forEach((serverName, tools) -> {
                 String names = String.join(", ", tools.keySet());
                 sb.append("- **").append(serverName).append("**: `").append(names).append("`\n");
             });
-            sb.append("\n> 提示：服务名和工具名具有语义参考价值，锁定目标后务必先查详情。");
+            sb.append("\n").append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST_TIP));
         } else {
             // --- SEARCH 模式 (搜索) ---
-            sb.append("### 运行模式: 搜索发现\n");
-            sb.append("MCP工具库规模巨大，清单已折叠。请遵循以下流程：\n");
-            sb.append("- **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具。\n");
-            sb.append("- **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。\n");
-            sb.append("- **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。\n\n");
-
-            sb.append("> **注意**: 请勿盲目猜测工具名。建议搜索关键词，如：search_tools('天气')");
+            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SEARCH));
         }
 
         return sb.toString();
@@ -496,13 +482,13 @@ public class McpGatewayTalent extends AbsTalent {
 
         // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
         if (size <= listThreshold) {
-            return this.getToolAry().stream()
+            return super.getTools(prompt).stream()
                     .filter(f -> !"search_tools".equals(f.name()))
                     .collect(Collectors.toList());
         }
 
-        // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools）
-        return this.getToolAry();
+        // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools；中转工具按请求语言本地化）
+        return super.getTools(prompt);
     }
 
     // ========== 视野（per-request 选择） ==========
@@ -549,12 +535,22 @@ public class McpGatewayTalent extends AbsTalent {
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
     public Object searchTools(String keyword) {
-        return searchTools(keyword, null);
+        return searchTools(keyword, null, null);
     }
 
+    public Object searchTools(String keyword, List<String> _mcps_allowed) {
+        return searchTools(keyword, _mcps_allowed, null);
+    }
+
+    /**
+     * 搜索 MCP 工具（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "search_tools", description = "搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
-    public Object searchTools(@Param("keyword") String keyword, List<String> _mcps_allowed) {
-        if (Utils.isEmpty(keyword)) return "错误：搜索关键词不能为空。";
+    public Object searchTools(@Param("keyword") String keyword, List<String> _mcps_allowed, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(keyword)) return McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_SEARCH_BLANK);
 
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
 
@@ -574,32 +570,38 @@ public class McpGatewayTalent extends AbsTalent {
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return "提醒：未找到完全匹配关键词 '" + keyword + "' 的MCP工具。\n" +
-                    "您可以尝试：\n" +
-                    "1. 检查关键词是否使用了空格分隔（如：'杭州 旅游'）。\n" +
-                    "2. 换用更通用的词汇，或减少关键词数量。\n" +
-                    "3. 如果确定无此功能，请告知用户。禁止重复尝试相似搜索。";
+            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_SEARCH_NONE, "keyword", keyword);
         }
 
         return results;
     }
 
     public String getToolDetail(String name) {
-        return getToolDetail(name, null);
+        return getToolDetail(name, null, null);
     }
 
+    public String getToolDetail(String name, List<String> _mcps_allowed) {
+        return getToolDetail(name, _mcps_allowed, null);
+    }
+
+    /**
+     * 获取 MCP 工具详情（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "get_tool_detail", description = "获取指定MCP工具的完整参数 Schema")
-    public String getToolDetail(@Param("tool_name") String name, List<String> _mcps_allowed) {
-        if (Utils.isEmpty(name)) return "错误：tool_name 不能为空";
+    public String getToolDetail(@Param("tool_name") String name, List<String> _mcps_allowed, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isEmpty(name)) return McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_NAME_BLANK);
 
         FunctionTool tool = allTools.get(name.trim().toLowerCase());
         if (tool != null && isToolAllowed(tool.name(), _mcps_allowed)) {
-            return "### MCP工具详情: " + tool.name() + "\n" +
-                    "- 功能描述: " + tool.description() + "\n" +
-                    "- 参数架构 (JSON Schema): \n```json\n" + tool.inputSchema() + "\n```";
+            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_FOUND,
+                    "name", tool.name(), "description", tool.description()) +
+                    " \n```json\n" + tool.inputSchema() + "\n```";
         }
 
-        return "错误：未找到MCP工具 '" + name + "'，请检查名称拼写是否正确。";
+        return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_MISSING, "name", name);
     }
 
     //测试用
@@ -655,9 +657,10 @@ public class McpGatewayTalent extends AbsTalent {
             final Map<String, Object> finalToolArgs = tool_args;
 
             //-------
+            Locale locale = AiI18n.toLocale(args.get(AiI18n.ATTR_LOCALE));
 
             if (Utils.isEmpty(tool_name)) {
-                return ToolResult.success("错误：tool_name 不能为空");
+                return ToolResult.success(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_NAME_BLANK));
             }
 
             FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
@@ -665,7 +668,7 @@ public class McpGatewayTalent extends AbsTalent {
             // selected 是视野不是权限：call_tool 是点名调用，不按视野硬控；
             // 但 _mcps_allowed 是强制边界，越界按「不存在」处理（不泄露其它租户服务是否存在）。
             if (tool == null || gatewayTalent.isToolAllowed(tool.name(), getAllowed(args)) == false) {
-                return ToolResult.success("错误：未找到MCP工具 '" + tool_name + "'");
+                return ToolResult.success(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CALL_MISSING, "name", tool_name));
             }
 
             // 边界与视野等框架键不转发给 MCP 服务
@@ -675,8 +678,8 @@ public class McpGatewayTalent extends AbsTalent {
                 return RetryUtil.callWithRetry(gatewayTalent.maxRetries, gatewayTalent.retryDelayMs, gatewayTalent.retryDelayMs * 4, () -> tool.call(finalToolArgs));
             } catch (Throwable e) {
                 LOG.error("McpTool gateway execution failed: {}", tool_name, e);
-                return ToolResult.success("执行异常: " +
-                        (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+                return ToolResult.success(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CALL_ERROR,
+                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
             }
         }
     }

@@ -1,0 +1,1 @@
+已更新项目工程规范 (检测到技术栈: libs/core (Maven)) (环境版本: libs/core (Maven): Java 1.8)

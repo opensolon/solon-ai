@@ -17,10 +17,14 @@ package org.noear.solon.ai.talents.code;
 
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.impl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -99,7 +103,7 @@ public class CodeTalent extends AbsTalent {
     private final String codeDir;
     private final String codeMdPath;
     private final List<LanguageProvider> providers;
-    private final Map<String, Cached<String>> initCache = new ConcurrentHashMap<>();
+    private final Map<String, Cached<InitResult>> initCache = new ConcurrentHashMap<>();
     private final Map<String, Cached<Boolean>> supportCache = new ConcurrentHashMap<>();
     /**
      * 按根目录分段的扫描锁（固定 64 段，内存有界）。
@@ -180,10 +184,9 @@ public class CodeTalent extends AbsTalent {
         return codeMdPath();
     }
 
-
     @Override
-    public String description() {
-        return "代码专家。支持项目初始化、技术栈自动识别以及 `" + codeMdPath + "` 规约生成。";
+    public String description(Prompt prompt) {
+        return CodeI18n.fmt(AiI18n.localeOf(prompt), CodeI18nKeys.CODE_DESCRIPTION, "path", codeMdPath);
     }
 
     @Override
@@ -235,26 +238,18 @@ public class CodeTalent extends AbsTalent {
      */
     @Override
     public void onAttach(Prompt prompt) {
-        initCached(prompt == null ? null : prompt.attrAs(ATTR_CWD));
+        initCached(prompt == null ? null : prompt.attrAs(ATTR_CWD), AiI18n.localeOf(prompt));
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         String __cwd = prompt == null ? null : prompt.attrAs(ATTR_CWD);
-
-        StringBuilder buf = new StringBuilder();
+        Locale requestLocale = AiI18n.localeOf(prompt);
 
         // 正常流程下 onAttach 已完成初始化，此处只是读缓存
-        String msg = initCached(__cwd);
+        String msg = initCached(__cwd, requestLocale).message(requestLocale);
 
-        buf.append("\n## 核心工程规约 (Core Engineering Protocol)\n");
-        buf.append("> 项目当前上下文: ").append(msg).append("\n\n");
-
-        buf.append("为了确保工程质量，要严格执行以下操作：\n")
-                .append("1. **动作前导**: 在开始任何任务前，先读 `" + codeMdPath + "` 以获取构建和测试指令。\n")
-                .append("2. **验证驱动**: 修改代码后，参考 `" + codeMdPath + "` 中的指令运行测试，严禁未验证提交。\n");
-
-        return buf.toString();
+        return "\n" + CodeI18n.fmt(requestLocale, CodeI18nKeys.CODE_INSTRUCTION, "context", msg, "path", codeMdPath) + "\n";
     }
 
     private static String normalizeDir(String dir) {
@@ -276,9 +271,11 @@ public class CodeTalent extends AbsTalent {
     }
 
     /**
-     * 带 TTL 缓存的初始化（供每轮提示词调用；显式 {@link #init(String)} 仍会强制重扫）
+     * 带 TTL 缓存的初始化（供每轮提示词调用；显式 {@link #init(String, Locale)} 仍会强制重扫）
+     *
+     * @param locale 请求语言（只在新建 CODE.md 时决定文件语言，见 {@link #fileLocaleOf(Path, Locale)}）
      */
-    private String initCached(String __cwd) {
+    private InitResult initCached(String __cwd, Locale locale) {
         String key;
         String sign;
         try {
@@ -286,10 +283,10 @@ public class CodeTalent extends AbsTalent {
             key = rootPath.toString();
             sign = rootSignature(rootPath);
         } catch (RuntimeException e) {
-            return init(__cwd);
+            return initResult(__cwd, locale);
         }
 
-        Cached<String> cached = initCache.get(key);
+        Cached<InitResult> cached = initCache.get(key);
         if (cached != null && cached.isFresh(sign)) {
             return cached.value;
         }
@@ -303,7 +300,7 @@ public class CodeTalent extends AbsTalent {
                 return cached.value;
             }
 
-            return init(__cwd);
+            return initResult(__cwd, locale);
         } finally {
             lock.unlock();
         }
@@ -333,20 +330,70 @@ public class CodeTalent extends AbsTalent {
         }
     }
 
-    public String init(String __cwd) {
+
+    /**
+     * 强制重扫并生成 CODE.md
+     *
+     * <p>CODE.md 是各会话共用的文件：已存在时沿用它的语言（按标题识别），新建时才用 locale，
+     * 避免不同语言的会话来回改写同一个文件。</p>
+     *
+     * @param __cwd  工作目录（null 为才能的工作目录）
+     * @param locale 请求语言：结论的语言，也是新建 CODE.md 的语言（null 为默认语言）
+     * @since 4.2
+     */
+    public String init(String __cwd, Locale locale) {
+        return initResult(__cwd, locale).message(locale);
+    }
+
+    private InitResult initResult(String __cwd, Locale locale) {
         final Path lockPath;
         try {
             lockPath = getRootPath(__cwd);
         } catch (RuntimeException e) {
-            return doInit(__cwd); // 根目录都解析不了：交给 doInit 报告失败
+            return doInit(__cwd, locale); // 根目录都解析不了：交给 doInit 报告失败
         }
         ReentrantLock lock = lockOf(lockPath.toString());
         lock.lock();
         try {
-            return doInit(__cwd);
+            return doInit(__cwd, locale);
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * CODE.md 的语言：已有文件的语言优先（首行与各语言的标题逐字比对），否则用请求语言
+     *
+     * <p>请求语言排在最前面比对：兜底到同一份文案的语言（如未翻译的语言落回英文）不会被误判成别的语言。
+     * 首行对不上任何语言（文件被手工改过）时按请求语言重新生成。</p>
+     */
+    private static Locale fileLocaleOf(Path targetPath, Locale requestLocale) {
+        Locale resolved = AiI18n.resolve(requestLocale);
+        if (Files.isRegularFile(targetPath) == false) {
+            return resolved;
+        }
+
+        String firstLine;
+        try (BufferedReader reader = Files.newBufferedReader(targetPath, StandardCharsets.UTF_8)) {
+            firstLine = reader.readLine();
+        } catch (IOException | RuntimeException e) {
+            return resolved;
+        }
+
+        if (firstLine == null) {
+            return resolved;
+        }
+
+        Set<Locale> candidates = new LinkedHashSet<>();
+        candidates.add(resolved);
+        candidates.addAll(AiI18n.knownLocales());
+        for (Locale l : candidates) {
+            if (firstLine.equals(CodeI18n.get(l, CodeI18nKeys.CODE_MD_TITLE))) {
+                return l;
+            }
+        }
+
+        return resolved;
     }
 
     private static ReentrantLock[] newLocks(int n) {
@@ -361,18 +408,22 @@ public class CodeTalent extends AbsTalent {
         return rootLocks[(rootKey.hashCode() & 0x7fffffff) % rootLocks.length];
     }
 
-    private String doInit(String __cwd) {
+    private InitResult doInit(String __cwd, Locale requestLocale) {
         Path failPath = null;
         try {
             final Path rootPath = getRootPath(__cwd);
             failPath = rootPath;
 
             if (!Files.isWritable(rootPath)) {
-                return failed(rootPath, "目录不可写，本次未生成工程规范文件");
+                return failed(rootPath, CodeI18nKeys.CODE_INIT_REASON_NOT_WRITABLE, null);
             }
 
+            final Path targetPath = rootPath.resolve(codeMdPath);
+            // CODE.md 是共用文件：已有文件的语言优先，新建时用请求语言
+            final Locale fileLocale = fileLocaleOf(targetPath, requestLocale);
+
             StringBuilder newContent = new StringBuilder();
-            newContent.append("## 构建与测试指令 (Build and Test Commands)\n\n");
+            newContent.append(CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_TITLE)).append("\n\n");
 
             List<String> detectedStacks = new ArrayList<>();
             Set<LanguageProvider> rootMatched = new HashSet<>();
@@ -384,7 +435,7 @@ public class CodeTalent extends AbsTalent {
                 if (provider.isMatch(rootPath, rootNames)) {
                     rootMatched.add(provider);
                     detectedStacks.add(provider.id() + " (Root)");
-                    provider.appendRootCommands(newContent);
+                    provider.appendRootCommands(newContent, fileLocale);
 
                     String ver = provider.detectVersion(rootPath);
                     if (ver != null) {
@@ -434,12 +485,13 @@ public class CodeTalent extends AbsTalent {
 
                         if (isHeterogeneous) {
                             detectedStacks.add(relativePath + " (" + provider.id() + ")");
-                            provider.appendModuleCommands(newContent, relativePath);
+                            provider.appendModuleCommands(newContent, relativePath, fileLocale);
                             if (ver != null) {
                                 detectedVersions.put(relativePath + " (" + provider.id() + ")", ver);
                             }
                         } else {
-                            String item = (ver == null) ? relativePath : relativePath + "（" + ver + "）";
+                            String item = (ver == null) ? relativePath
+                                    : CodeI18n.fmt(fileLocale, CodeI18nKeys.CODE_MD_MODULES_ITEM_VERSION, "path", relativePath, "version", ver);
                             homogeneous.computeIfAbsent(provider, k -> new ArrayList<>()).add(item);
                         }
                         break; // 一个目录识别为一个主语言即可
@@ -447,13 +499,12 @@ public class CodeTalent extends AbsTalent {
                 }
             }
 
-            appendHomogeneousModules(newContent, homogeneous);
+            appendHomogeneousModules(newContent, homogeneous, fileLocale);
 
-            appendVersions(newContent, detectedVersions);
+            appendVersions(newContent, detectedVersions, fileLocale);
 
-            appendGuidelines(newContent);
+            appendGuidelines(newContent, fileLocale);
 
-            Path targetPath = rootPath.resolve(codeMdPath);
             String finalContent = newContent.toString();
             boolean updated = true;
             if (Files.exists(targetPath)) {
@@ -469,22 +520,13 @@ public class CodeTalent extends AbsTalent {
 
             ensureInGitignore(rootPath, codeDir.isEmpty() ? NAME_CODE_MD : codeDir);
 
-            StringBuilder resultMsg = new StringBuilder();
-            resultMsg.append(updated ? "已更新" : "已验证").append("项目工程规范");
-            if (!detectedStacks.isEmpty()) {
-                resultMsg.append(" (检测到技术栈: ").append(String.join(", ", detectedStacks)).append(")");
-            } else {
-                resultMsg.append(" (未检测到明确的技术栈)");
-            }
-            if (!detectedVersions.isEmpty()) {
-                List<String> pairs = new ArrayList<>();
-                for (Map.Entry<String, String> e : detectedVersions.entrySet()) {
-                    pairs.add(e.getKey() + ": " + e.getValue());
-                }
-                resultMsg.append(" (环境版本: ").append(String.join(", ", pairs)).append(")");
+            List<String> pairs = new ArrayList<>();
+            for (Map.Entry<String, String> e : detectedVersions.entrySet()) {
+                pairs.add(e.getKey() + ": " + e.getValue());
             }
 
-            String msg = resultMsg.toString();
+            // 结论只存结构，按调用方语言渲染（同一份缓存服务不同语言的请求）
+            InitResult msg = InitResult.success(updated, detectedStacks, pairs);
             // 指纹必须在写入 CODE.md 之后采集：创建 .soloncode/ 本身会改变根目录条目与 mtime，
             // 否则缓存会在下一轮被自己的副作用失效
             // 未识别到技术栈是弱结论（项目可能正在搭建），只短暂缓存
@@ -493,15 +535,18 @@ public class CodeTalent extends AbsTalent {
             return msg;
         } catch (Throwable e) {
             LOG.error("Init failed", e);
-            return failed(failPath, "初始化异常: " + e.getMessage());
+            return failed(failPath, CodeI18nKeys.CODE_INIT_REASON_ERROR, e.getMessage());
         }
     }
 
     /**
      * 失败信息也进缓存（短 TTL），避免每轮对话都重复失败的全树扫描
+     *
+     * @param reasonKey 原因文案 key
+     * @param error     异常信息（原因文案带 {error} 占位符时非 null）
      */
-    private String failed(Path rootPath, String reason) {
-        String msg = "未能生成项目工程规范（" + reason + "），请直接阅读源码与构建配置了解项目结构";
+    private InitResult failed(Path rootPath, String reasonKey, String error) {
+        InitResult msg = InitResult.failure(reasonKey, error);
         if (rootPath != null) {
             putCache(initCache, rootPath.toString(), new Cached<>(msg, FAIL_CACHE_TTL_MS, rootSignature(rootPath)));
         }
@@ -529,13 +574,12 @@ public class CodeTalent extends AbsTalent {
      * 仅在病态规模下才截断，且必须附带该类型的检索方式：清单不完整时若不给补全手段，
      * 读者会把“清单里没有”误当成“模块不存在”。
      */
-    private void appendHomogeneousModules(StringBuilder buf, Map<LanguageProvider, List<String>> homogeneous) {
+    private void appendHomogeneousModules(StringBuilder buf, Map<LanguageProvider, List<String>> homogeneous, Locale fileLocale) {
         if (homogeneous.isEmpty()) {
             return;
         }
 
-        buf.append("### 子模块与子项目 (Sub-modules & Sub-projects)\n")
-                .append("> 以下模块受根项目指令统一控制（构建与测试请按上文根项目指令执行）。\n");
+        buf.append(CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_MODULES_TITLE)).append("\n");
 
         for (Map.Entry<LanguageProvider, List<String>> e : homogeneous.entrySet()) {
             LanguageProvider provider = e.getKey();
@@ -543,17 +587,16 @@ public class CodeTalent extends AbsTalent {
             // 排序使同一父目录下的模块相邻，便于人工核对
             Collections.sort(items);
 
-            buf.append("- ").append(provider.typeName()).append(" (").append(items.size()).append(" 个)\n");
+            buf.append("- ").append(CodeI18n.fmt(fileLocale, CodeI18nKeys.CODE_MD_MODULES_GROUP,
+                    "type", provider.typeName(fileLocale), "count", items.size())).append("\n");
 
             int shown = Math.min(items.size(), MAX_MODULE_LIST_ITEMS);
             for (int i = 0; i < shown; i++) {
                 buf.append("  - ").append(items.get(i)).append("\n");
             }
             if (items.size() > shown) {
-                buf.append("  - … 及其余 ").append(items.size() - shown)
-                        .append(" 个模块（未展开，完整清单请检索 ")
-                        .append(markerGlobs(provider))
-                        .append("）\n");
+                buf.append("  - ").append(CodeI18n.fmt(fileLocale, CodeI18nKeys.CODE_MD_MODULES_MORE,
+                        "count", items.size() - shown, "globs", markerGlobs(provider, fileLocale))).append("\n");
             }
         }
 
@@ -563,15 +606,15 @@ public class CodeTalent extends AbsTalent {
     /**
      * 该类型的构建标记检索式，供清单被截断时自行补全（如 `**&#47;pom.xml`）
      */
-    private static String markerGlobs(LanguageProvider provider) {
+    private static String markerGlobs(LanguageProvider provider, Locale fileLocale) {
         StringBuilder sb = new StringBuilder();
         for (String marker : provider.markers()) {
             if (sb.length() > 0) {
-                sb.append(" 或 ");
+                sb.append(" ").append(CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_MODULES_GLOB_OR)).append(" ");
             }
             sb.append("`**/").append(marker).append("`");
         }
-        return sb.length() == 0 ? "对应构建标记文件" : sb.toString();
+        return sb.length() == 0 ? CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_MODULES_GLOB_FALLBACK) : sb.toString();
     }
 
     /**
@@ -630,29 +673,20 @@ public class CodeTalent extends AbsTalent {
         });
     }
 
-    private void appendVersions(StringBuilder buf, Map<String, String> versions) {
+    private void appendVersions(StringBuilder buf, Map<String, String> versions, Locale fileLocale) {
         if (versions.isEmpty()) {
             return;
         }
 
-        buf.append("## 环境版本 (Environment Versions)\n\n")
-                .append("> 以下为项目配置文件中**声明**的版本（非本机安装版本），写代码时请对齐该版本的语法特性。\n\n");
+        buf.append(CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_VERSIONS)).append("\n\n");
         for (Map.Entry<String, String> e : versions.entrySet()) {
             buf.append("- ").append(e.getKey()).append(": ").append(e.getValue()).append("\n");
         }
         buf.append("\n");
     }
 
-    private void appendGuidelines(StringBuilder buf) {
-        buf.append("## 工程规约 (Guidelines)\n\n")
-                .append("- **改前必读**: 在进行任何修改前，务必完整阅读相关文件内容。\n")
-                .append("- **原子作业**: 每次仅实现一个功能或修复一个 Bug。\n")
-                .append("- **验证驱动**: 任务完成前必须运行测试进行验证。\n")
-                .append("- **路径规范**: 仅使用相对路径（例如：`src/main/java/App.java`，严禁使用 `./src/...`）。\n")
-                .append("- **风格对齐**: 必须遵循代码库中已有的编码风格和设计模式。\n")
-                .append("- **版本对齐**: 参考「环境版本」章节声明的版本，不要使用超过该版本的语法特性；若未列出版本，应从配置文件或构建工具复核后再决定。\n")
-                .append("- **环境感知**: 利用你对各语言默认本地仓库路径（如 Maven、Node）的知识，协助排查依赖问题或进行源码分析。\n\n");
-
+    private void appendGuidelines(StringBuilder buf, Locale fileLocale) {
+        buf.append(CodeI18n.get(fileLocale, CodeI18nKeys.CODE_MD_GUIDELINES)).append("\n\n");
     }
 
     /**
@@ -759,6 +793,59 @@ public class CodeTalent extends AbsTalent {
          * @return true 继续遍历；false 终止遍历
          */
         boolean visit(Path dir, Set<String> entryNames);
+    }
+
+    /**
+     * 初始化结论（只存结构，按语言渲染）
+     */
+    private static final class InitResult {
+        final boolean failed;
+        final boolean updated;
+        final List<String> stacks;
+        final List<String> versions;
+        final String reasonKey;
+        final String error;
+
+        private InitResult(boolean failed, boolean updated, List<String> stacks, List<String> versions,
+                           String reasonKey, String error) {
+            this.failed = failed;
+            this.updated = updated;
+            this.stacks = stacks;
+            this.versions = versions;
+            this.reasonKey = reasonKey;
+            this.error = error;
+        }
+
+        static InitResult success(boolean updated, List<String> stacks, List<String> versions) {
+            return new InitResult(false, updated, Collections.unmodifiableList(new ArrayList<>(stacks)),
+                    Collections.unmodifiableList(new ArrayList<>(versions)), null, null);
+        }
+
+        static InitResult failure(String reasonKey, String error) {
+            return new InitResult(true, false, Collections.emptyList(), Collections.emptyList(), reasonKey, error);
+        }
+
+        String message(Locale locale) {
+            if (failed) {
+                String reason = CodeI18nKeys.CODE_INIT_REASON_ERROR.equals(reasonKey)
+                        ? CodeI18n.fmt(locale, CodeI18nKeys.CODE_INIT_REASON_ERROR, "error", error)
+                        : CodeI18n.get(locale, CodeI18nKeys.CODE_INIT_REASON_NOT_WRITABLE);
+                return CodeI18n.fmt(locale, CodeI18nKeys.CODE_INIT_FAILED, "reason", reason);
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append(updated ? CodeI18n.get(locale, CodeI18nKeys.CODE_INIT_UPDATED) : CodeI18n.get(locale, CodeI18nKeys.CODE_INIT_VERIFIED));
+            sb.append(" ");
+            if (stacks.isEmpty()) {
+                sb.append(CodeI18n.get(locale, CodeI18nKeys.CODE_INIT_NO_STACKS));
+            } else {
+                sb.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_INIT_STACKS, "stacks", String.join(", ", stacks)));
+            }
+            if (versions.isEmpty() == false) {
+                sb.append(" ").append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_INIT_VERSIONS, "versions", String.join(", ", versions)));
+            }
+            return sb.toString();
+        }
     }
 
     /**

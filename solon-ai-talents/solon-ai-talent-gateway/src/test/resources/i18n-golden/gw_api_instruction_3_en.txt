@@ -1,0 +1,33 @@
+## Business OpenAPI Discovery (3 APIs in total)
+### Mode: Direct call
+All API definitions are loaded. Analyze the request and call `call_api` directly.
+
+#### API definitions (OpenAPI Specs):
+---
+* **OpenAPI: upload**
+  - Business groups: 文件
+  - Function: 接口 upload
+  - Path: POST /api/files
+  - Body params (Multipart/Form): {"type":"object","properties":{"file":{"type":"string"}}}
+  - Returns: {}
+---
+* **OpenAPI: createOrder**
+  - Business groups: 
+  - Function: 接口 createOrder
+  - Path: POST /api/orders
+  - Body params (JSON): {"type":"object","properties":{"sku":{"type":"string"}}}
+  - Returns: {}
+---
+* **OpenAPI: getOrder**
+  - Business groups: 订单, 查询
+  - Function: 接口 getOrder
+  - Path: GET /api/orders/{id}
+  - Header params: {"type":"object","properties":{"token":{"type":"string"}}}
+  - Path params (fill the path {}): {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+  - Query params (URL): {"type":"object","properties":{"lang":{"type":"string"}}}
+  - Returns: {"type":"object"}
+
+
+## Execution Constraints
+1. **Responses**: If the returned data carries the `[Data truncated]` mark, analyze the part you have; do not call again to get everything.
+2. **Retries**: If an API returns an error, check that the arguments match the schema from Step 2; do not retry blindly.

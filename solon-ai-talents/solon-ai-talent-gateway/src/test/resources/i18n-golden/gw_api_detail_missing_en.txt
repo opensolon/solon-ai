@@ -1,0 +1,1 @@
+Error: OpenAPI 'nope' was not found. Confirm the name with search_apis first.

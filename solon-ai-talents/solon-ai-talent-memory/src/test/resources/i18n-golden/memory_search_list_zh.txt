@@ -1,0 +1,14 @@
+当前共记录以下认知条目（如需完整细节，请用 memory_recall 按 Key 召回）：
+- [<time>] [workspace] (Key: frag-1) Imp:2: 碎片 1
+- [<time>] [workspace] (Key: frag-10) Imp:2: 碎片 10
+- [<time>] [workspace] (Key: frag-2) Imp:2: 碎片 2
+- [<time>] [workspace] (Key: frag-3) Imp:2: 碎片 3
+- [<time>] [workspace] (Key: frag-4) Imp:2: 碎片 4
+- [<time>] [workspace] (Key: frag-5) Imp:2: 碎片 5
+- [<time>] [workspace] (Key: frag-6) Imp:2: 碎片 6
+- [<time>] [workspace] (Key: frag-7) Imp:2: 碎片 7
+- [<time>] [workspace] (Key: frag-8) Imp:2: 碎片 8
+- [<time>] [workspace] (Key: frag-9) Imp:2: 碎片 9
+- [未知时间] (Key: no-time) Imp:3: 没有时间的记忆 Solon
+- [<time>] [workspace] (Key: stack-note) Imp:6: 项目使用 Solon 4 框架，Java 8
+- [<time>] [user] (Key: user-stack) Imp:8: 项目使用 Solon 4 框架

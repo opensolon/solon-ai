@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: libs/core (Go)) (environment versions: libs/core (Go): Go 1.21)

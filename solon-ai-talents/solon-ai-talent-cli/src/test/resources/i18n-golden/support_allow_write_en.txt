@@ -1,0 +1,1 @@
+! Permission denied: not in the writable allowlist a.txt

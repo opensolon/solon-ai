@@ -1,0 +1,1 @@
+! Symbolic link escapes mount root: link/a.txt

@@ -1,0 +1,353 @@
+# solon-ai-talent-cli 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、缩进由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+# 编号类占位 {op} 由代码传入 "#1" 这样的完整编号（避免在文案里写 "#{"）
+
+# ======== SkillTalent ========
+skill.description: |-
+  技能管理器。支持从本地或挂载点发现并加载技能 (SKILL.md)。
+skill.instruction.head: |-
+  优先使用合适的技能解决问题（不确定用什么技能时，可通过 skillsearch 搜索）。**注意：在执行任务中，请务必通过 `skillread` 读取或回顾规约。**
+skill.instruction.preloaded_title: |-
+  ### 已选技能（正文已预加载，无需再次 skillread）
+skill.instruction.title: |-
+  ## 技能库执行规约 (当前可用技能: {total})
+skill.instruction.summary: |-
+  ### 运行模式: 摘要发现
+  请审阅下方技能清单。若某个技能匹配当前需求，请调用 `skillread` 获取具体执行规约与工具参数：
+skill.instruction.list: |-
+  ### 运行模式: 路径导航
+  当前技能较多，仅展示路径索引（没有描述）。请推断功能并调用 `skillread`。如果不确定，请使用 `skillsearch` 检索：
+skill.instruction.search: |-
+  ### 运行模式: 动态发现
+  由于技能库规模较大。**禁止猜测路径**。你必须先通过 `skillsearch` 检索关键字，确认 name 后再调用 `skillread` 读取。
+skill.list.empty: |-
+  当前没有可用的技能。
+skill.list.too_many: |-
+  Error: 当前技能库规模较大 ({count})，禁止全量列出。请使用 `skillsearch` 配合关键字定位。
+skill.list.title: |-
+  可用技能列表：
+skill.search.none: |-
+  未找到匹配技能。
+skill.read.invalid: |-
+  Error: {name} 不是有效的技能目录 (缺少 SKILL.md)
+skill.refresh.ok: |-
+  技能库已刷新，当前可用技能数：{count}
+
+# ======== TerminalTalent：描述与指令 ========
+terminal.description: |-
+  提供终端交互、文件发现、分页读取、全文搜索及精准编辑能力。
+terminal.instruction.title: |-
+  ## Terminal 环境状态
+terminal.instruction.sandbox: |-
+  - **沙盒模式**: {mode}
+terminal.instruction.sandbox_on: |-
+  开启 (受限)
+terminal.instruction.sandbox_off: |-
+  关闭 (开放)
+terminal.instruction.os: |-
+  - **运行环境**: {os} ({arch})
+terminal.instruction.shell: |-
+  - **终端类型**: {mode} — {summary}
+terminal.instruction.dialect_powershell: |-
+  {shell}，**不是** bash/sh，POSIX 命令与语法一律不可用
+terminal.instruction.dialect_cmd: |-
+  Windows cmd.exe 批处理，**不是** bash/sh，POSIX 命令与语法一律不可用
+terminal.instruction.dialect_unix: |-
+  {shell}（POSIX shell）
+terminal.instruction.self_protect: |-
+  - **自我保护机制**:
+    - 你的所有指令都在 Java 进程 (PID: {pid}) 的子 shell 中运行。
+    - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。
+terminal.instruction.kill_windows: |-
+  - 严禁执行 `taskkill /IM java.exe`、`Stop-Process -Name java`。严禁用 `taskkill /PID <PID>` 或 `Stop-Process -Id <PID>` 指向任意 PID，除非你先用 `Get-Process -Id <PID>`（或 `tasklist /FI "PID eq <PID>"`）确认该进程与当前 Java 进程无关。
+terminal.instruction.kill_tip_windows: |-
+  - 建议：若需清理任务，只终止你自己启动的那个子进程（按其已知 PID 执行 `Stop-Process -Id <子PID>`），不要按进程名批量终止。
+terminal.instruction.kill_unix: |-
+  - 严禁执行 `pkill java`, `killall java`。严禁执行 `kill -9` 任何数字，除非你先执行了 `ps` 明确该 PID 与当前 Java 进程无关。
+terminal.instruction.kill_tip_unix: |-
+  - 建议：若需清理任务，请使用 `pkill -P [PID]` 仅停止子进程。
+terminal.instruction.forbidden: |-
+  - **严禁指令**:
+    - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。
+terminal.instruction.forbidden_rm_windows: |-
+  - 严禁对盘符根目录（如 `C:\`）或系统目录（如 `C:\Windows`、`C:\Program Files`、`C:\Users`）执行任何删除操作。
+terminal.instruction.forbidden_rm_unix: |-
+  - 严禁执行任何针对根目录 `/` 或系统目录（如 `/etc`, `/usr`）的删除操作。
+terminal.instruction.runtime_title: |-
+  - **执行环境**:
+terminal.instruction.runtime_python: |-
+  - Python 命令: `{cmd}` (系统已预置变量 `{env}`)
+terminal.instruction.runtime_node: |-
+  - Node.js 命令: `{cmd}` (系统已预置变量 `{env}`)
+terminal.instruction.path_title: |-
+  - **路径规则**:
+terminal.instruction.workspace: |-
+  - **工作区（默认作用域）**{name}: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。
+terminal.instruction.workspace_name: |-
+  : 目录「{name}」（相对路径与 "." 的解析根）
+terminal.instruction.mounts: |-
+  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。
+terminal.instruction.security_sandbox_mounts: |-
+  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`) 或逻辑路径 (`@pool1/src/app.java`)。
+terminal.instruction.security_sandbox: |-
+  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。
+terminal.instruction.home_on: |-
+  - `~` 路径可用（如 `~/Documents`）。
+terminal.instruction.home_off: |-
+  - `~` 路径已禁用。
+terminal.instruction.security_open: |-
+  - **安全级别**: 开放模式。支持绝对路径、相对路径及逻辑路径。
+terminal.instruction.rules_title: |-
+  ## 执行规约
+terminal.instruction.mount_writable: |-
+  - **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable="true"` 时，才允许写入操作。
+terminal.instruction.mount_readonly: |-
+  - **挂载隔离**: 逻辑路径（以 @ 开头）均为只读，所有写入操作使用相对路径。
+terminal.instruction.cmd_sandbox_mounts: |-
+  - **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell="true" 或 "materialized"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：`ls /users/`）。
+terminal.instruction.cmd_sandbox: |-
+  - **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。
+terminal.instruction.cmd_open_mounts: |-
+  - **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell="true" 或 "materialized"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。
+terminal.instruction.cmd_open: |-
+  - **命令执行**: 在 `bash` 中支持绝对路径访问。
+terminal.instruction.tools_first: |-
+  - **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `{write}` / `{edit}` 工具，不要用 shell 命令代劳（如 {examples}）：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。
+terminal.instruction.file_cmds_powershell: |-
+  `Get-Content`、`Get-ChildItem`、`Select-String`、`Set-Content`、`>`
+terminal.instruction.file_cmds_cmd: |-
+  `type`、`dir`、`findstr`、`echo >`
+terminal.instruction.file_cmds_unix: |-
+  `cat`、`ls`、`find`、`grep`、`sed -i`、`echo >`
+terminal.instruction.async: |-
+  - **长命令执行**: 对可能耗时较长、持续输出、等待输入或需要观察状态的命令，优先使用 `bash_start`。如果结果包含 `Process running with session ID`，表示命令仍在运行；需要继续观察时调用 `bash_wait`，命令卡在分页器或等待应答时用 `bash_wait` 的 chars 参数传入应答文本，需要主动停止时调用 `bash_stop`。
+terminal.instruction.args_windows: |-
+  - **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `{python} a.py "hello world"`、`{read}`）。输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。
+terminal.instruction.args_unix: |-
+  - **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `{python} a.py "hello world"`、`{read}`）。输出按 UTF-8 解码，无需额外设置编码环境变量。
+terminal.instruction.ps_title: |-
+  - **PowerShell 方言（必须遵守）**: 当前 shell 是 PowerShell，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：
+terminal.instruction.ps_discard: |-
+  - 丢弃全部输出：`| Out-Null`（只丢 stderr 的写法见下方 stderr 规约）。
+terminal.instruction.ps_chain_core: |-
+  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用；需要「前一步失败就停」时请用 `&&` 而不是 `;`。
+terminal.instruction.ps_chain_51: |-
+  - 命令串联：`&&` / `||` → `;`（Windows PowerShell 5.1 不支持 `&&`、`||`）。
+terminal.instruction.ps_chain_51_note: |-
+  - 注意 `;` 不等于 `&&`：前一步失败不会中断后续步骤，且返回的 `[exit_code]` 只反映最后一步。多步骤构建/测试请拆成多次 `bash` 调用，或写 `cmd1; if ($LASTEXITCODE -eq 0) { cmd2 }`（不要用 `exit`）。
+terminal.instruction.ps_equivalents: |-
+  - 常用等价（一次报错即可自纠，此处仅作速查）：`head/tail -n N` → `Select-Object -First/-Last N`；`cat` → `Get-Content`；`grep` → `Select-String`；`find` → `Get-ChildItem -Recurse -Filter`；`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`；`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`（读环境变量用 `$env:NAME`，不是 `$NAME`）。
+terminal.instruction.ps_alias_trap: |-
+  - **Unix 别名是陷阱（命令存在但参数不兼容）**：`ls`、`rm`、`cp`、`mv`、`ps`、`cat` 在此都是 cmdlet 别名，不接受 Unix 短参数：`ls -la`、`rm -rf dir`、`cp -r a b`、`ps aux` 全部报参数绑定错误（不是命令不存在，重试同写法也不会好）。等价写法：`Get-ChildItem -Force`、`Remove-Item -Recurse -Force dir`、`Copy-Item -Recurse a b`、`Get-Process`。
+terminal.instruction.ps_curl_core: |-
+  - `curl` / `wget` 在 PowerShell 7+ 已不再是别名，指向真实的 `curl.exe`，Unix 参数可用。
+terminal.instruction.ps_curl_51: |-
+  - `curl` / `wget` 在 Windows PowerShell 5.1 是 `Invoke-WebRequest` 的别名，`curl -s <url>` 必报错；要用真 curl 请写 `curl.exe -s <url>`。
+terminal.instruction.stderr_powershell: |-
+  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。在 PowerShell 下额外写 `2>&1` 还会把原生程序的 stderr 转成错误记录，凭空多出「所在位置 行:1 字符:1 / NativeCommandError」几行噪声，并让整条命令的退出码变成 1（成功也会被报成 `[exit_code=1]`）。只想丢弃 stderr 时用 `2>$null`。
+terminal.instruction.stderr_cmd: |-
+  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。只想丢弃 stderr 时用 `2>nul`。
+terminal.instruction.ps_encoding: |-
+  - **编码（系统已前置处理，按此书写）**：本次会话的输入/输出/文件读写默认编码已统一为 UTF-8（包括 `Get-Content`、`Select-String`、`Import-Csv` 的读，以及 `Set-Content`、`Add-Content`、`Out-File` 和 `>` / `>>` 的写）。无需自行 `chcp`、设置 `$OutputEncoding` 或反复加 `-Encoding UTF8`。
+terminal.instruction.ps_encoding_gbk: |-
+  - 例外：若已确认某文件是 GBK/ANSI 编码，必须显式写 `-Encoding Default` 才能读对。
+terminal.instruction.ps_encoding_bom: |-
+  - Windows PowerShell 5.1 的 UTF-8 写入带 BOM，本工具的 `read` / `edit` / `grep` 会自动忽略它，无需特殊处理。
+terminal.instruction.ps_encoding_garbled: |-
+  - 若输出仍有乱码，几乎一定是被调用的第三方程序自己按 ANSI 输出的，不要在命令里反复调编码；读文件内容请直接用 `read` / `grep` 工具。
+terminal.instruction.cmd_title: |-
+  - **CMD 方言（必须遵守）**: 当前 shell 是 cmd.exe，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：
+terminal.instruction.cmd_equivalents: |-
+  - 常用等价（一次报错即可自纠，此处仅作速查）：`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。
+terminal.instruction.cmd_cd: |-
+  - 跨盘符切目录必须写 `cd /d D:\proj`（或 `pushd D:\proj`）：`cd D:\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。
+terminal.instruction.cmd_chain: |-
+  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。
+terminal.instruction.cmd_percent: |-
+  - `%` 的语义差异：单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。
+terminal.instruction.cmd_garbled: |-
+  - **读文件会乱码**：`type` / `findstr` 按当前代码页（非 UTF-8）解析文件，读含中文/日韩文/emoji 的 UTF-8 文件必乱码，**且无法在命令里可靠地修正**。读文件一律改用 `read` 工具，检索一律改用 `grep` 工具。
+terminal.instruction.constraints: |-
+  - 不向用户复述“系统限制”、“沙盒”、“规约”等内部术语，也不展开讲解权限逻辑与路径映射关系；遇到越界请求直接答“无权访问”。
+
+# ======== TerminalTalent：工具返回 ========
+terminal.error: |-
+  错误：{message}
+terminal.exec.empty: |-
+  错误：命令为空
+terminal.sandbox.disabled: |-
+  错误：OS 沙盒未启用，拒绝执行命令
+terminal.sandbox.unavailable: |-
+  错误：OS 沙盒不可用，拒绝执行命令: {error}
+terminal.windows.prepare_failed: |-
+  错误：无法准备 Windows 执行方案: {error}
+terminal.path.missing: |-
+  错误：路径不存在
+terminal.ls.empty: |-
+  (目录为空)
+terminal.ls.denied: |-
+  [拒绝访问]
+terminal.read.missing: |-
+  错误：文件不存在
+terminal.read.binary: |-
+  错误：该文件是二进制格式，无法作为文本读取。
+terminal.read.empty: |-
+  (文件内容为空)
+terminal.read.dir: |-
+  错误：目标是目录，无法读取
+terminal.read.line_truncated: |-
+  …(单行过长已截断)
+terminal.read.offset_out: |-
+  错误：起始行 ({line}) 已超出文件范围。
+terminal.read.more: |-
+  --- [内容未完] ---
+terminal.read.char_limit: |-
+  警告：因单次读取物理长度限制（{kb}KB），内容已被截断。
+terminal.read.line_limit: |-
+  提示：已达到你指定的 limit 行数限制。
+terminal.read.next: |-
+  若需继续阅读后续内容，请使用参数：offset={offset}
+terminal.read.done: |-
+  --- [文件读取完毕] ---
+terminal.write.ok: |-
+  文件成功写入: {path}
+terminal.edit.missing: |-
+  错误：文件不存在，无法进行编辑。
+terminal.edit.empty_old: |-
+  预检查失败（操作 {op}）: old_str 不能为空。请确保调用 edit 时传入 old_str 参数，指定要替换的原始文本块。
+terminal.edit.all_missing: |-
+  预检查失败（操作 {op}）: 全文替换匹配失败。请确认 old_str 的内容在文件中存在（注意缩进和空格差异会被忽略）。
+terminal.edit.mismatch: |-
+  预检查失败（操作 {op}）: 内容匹配失败 — {diag}。请检查 old_str 的内容是否与文件对应。
+terminal.edit.not_unique: |-
+  预检查失败（操作 {op}）: 文本块在指定 old_StrStartLine 处未精确匹配，且在文件中不唯一。请提供正确的 old_StrStartLine 或增加上下文行。
+terminal.edit.apply_failed: |-
+  执行失败（操作 {op}）: {error}。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。
+terminal.edit.ok: |-
+  文件 {path} 成功完成 {count} 处修改。
+terminal.vedit.empty_old: |-
+  预检查失败（操作 {op}): old_str 不能为空。
+terminal.vedit.mismatch: |-
+  预检查失败（操作 {op}): 内容匹配失败。
+terminal.vedit.all_missing: |-
+  预检查失败（操作 {op}): 全文替换匹配失败。
+terminal.grep.none: |-
+  未找到结果。
+terminal.grep.truncated: |-
+  警告：搜索结果过多，已达到 {kb}KB 限制并截断。请缩小搜索路径或关键词。
+terminal.grep.skipped_large: |-
+  跳过 {count} 个超过单文件读取上限（10MB）的文件。
+terminal.glob.none: |-
+  未找到匹配文件。
+terminal.vfile.too_large: |-
+  错误：虚拟文件超过单文件读取上限（10MB），请缩小文件范围。
+terminal.search.separator: |-
+  错误：{tool} 的 path 只支持单个目录，检测到分隔符 '{sep}'（当前值：{path}）。请分多次调用，或改用这些目录的共同父目录并配合 pattern/include 收窄范围。
+terminal.search.missing: |-
+  错误：路径不存在（{tool} path={path}）。请先用 ls 确认目录层级；注意 path 只接受单个目录，且不要把通配符写进 path（通配符应写在 pattern 里）。
+terminal.validate.home: |-
+  错误：sandboxAllowUserHome 已禁用，不允许使用 ~ 路径。
+terminal.validate.empty: |-
+  错误：command 不能为空。
+terminal.validate.kill: |-
+  错误：检测到危险命令。严禁试图停止宿主进程 (PID: {pid})。
+terminal.validate.exit: |-
+  错误：检测到高危指令。出于安全策略，禁止执行 exit、系统重启或根目录/系统目录删除的操作。
+terminal.validate.rm_windows: |-
+  错误：检测到高危指令。禁止对盘符根目录或系统目录（Windows / Program Files / Users 等）执行删除操作。
+
+# ---- 权限拒绝（异常消息） ----
+terminal.denied.not_local: |-
+  权限拒绝：该挂载来源不支持本地文件操作 {path}
+terminal.denied.unknown_mount: |-
+  权限拒绝：未知的挂载点 {path}
+terminal.denied.readonly_mount: |-
+  权限拒绝：路径 {path} 属于只读挂载点，禁止写入。请将结果写入工作区的相对路径。
+terminal.denied.no_local_root: |-
+  权限拒绝：挂载点没有本地目录 {path}
+terminal.denied.absolute: |-
+  权限拒绝：沙盒模式下禁止使用绝对路径。
+terminal.denied.outside: |-
+  权限拒绝：路径越界（沙盒模式已开启）。
+terminal.denied.cache: |-
+  权限拒绝：路径受保护（物化缓存）
+terminal.denied.protected: |-
+  权限拒绝：路径受保护 {path}
+terminal.denied.read: |-
+  权限拒绝：读取拒绝 {path}
+terminal.denied.write_whitelist: |-
+  权限拒绝：可写白名单 {path}
+terminal.denied.home: |-
+  权限拒绝：沙盒模式下禁止使用 ~ 路径（sandboxAllowUserHome 已关闭）。
+terminal.denied.mount_outside: |-
+  权限拒绝：路径超出挂载范围。
+terminal.denied.symlink: |-
+  权限拒绝：符号链接越界（沙盒模式已开启）。
+terminal.denied.mount_unavailable: |-
+  权限拒绝：挂载点不可用 {path}
+terminal.denied.unreadable: |-
+  权限拒绝：来源不可读 {path}
+terminal.denied.readonly_source: |-
+  权限拒绝：该挂载来源为只读，禁止写入 {path}
+terminal.materialize.no_cache: |-
+  物化缓存未配置，无法执行挂载 {alias}
+terminal.materialize.no_dir: |-
+  挂载未生成物化目录 {alias}
+terminal.materialize.failed: |-
+  无法物化挂载 {alias}
+
+# ---- 编辑匹配（异常消息与诊断） ----
+terminal.apply.empty_old: |-
+  old_str 不能为空
+terminal.apply.all_missing: |-
+  找不到待替换的文本块
+terminal.apply.missing: |-
+  找不到文本块。这通常是由于前面的修改改变了文件的字符偏移或内容，建议分步执行。
+terminal.apply.not_unique: |-
+  文本块在当前状态下不唯一
+terminal.diag.no_content: |-
+  文件在指定行号处无内容
+terminal.diag.blank: |-
+  old_str 全为空行
+terminal.diag.lines: |-
+  行数不匹配：old_str 有 {expected} 行，但文件中从起始行开始只剩 {actual} 行
+terminal.diag.mismatch: |-
+  第 {line} 行内容不匹配：期待「{expected}」，文件中是「{actual}」
+terminal.diag.mismatch_collapse: |-
+  第 {line} 行内容不匹配（折叠空白后）：期待「{expected}」，文件中是「{actual}」
+
+# ======== ProcessExecutor ========
+executor.no_cmd: |-
+  执行失败: 未找到可用的运行命令（Command not found）
+executor.code_failed: |-
+  代码执行失败: {error}
+executor.timeout: |-
+  执行超时：运行时间超过 {ms} 毫秒（已终止进程树）。
+executor.timeout_output: |-
+  --- 超时前已产生的输出 ---
+executor.size_capped: |-
+  ... [输出超过 {bytes} 字节的物理上限，命令已被终止。请缩小输出范围（如加过滤/分页），或重定向到文件后再分段查看]
+executor.ok: |-
+  执行成功
+executor.interrupted: |-
+  执行被中断（已终止进程树）
+executor.system_failed: |-
+  系统失败: {error}
+executor.omitted: |-
+  ... [中间省略 {count} 字符] ...
+executor.binary_readable: |-
+  [注意：输出中检测到二进制特征，但大部分内容可读，已尝试解码显示]
+executor.binary_size: |-
+  (原始大小: {bytes} 字节)
+executor.binary_title: |-
+  [检测到二进制输出，已省略乱码正文]
+executor.binary_summary: |-
+  约 {bytes} 字节，前 {count} 字节: {hex}
+executor.binary_summary_typed: |-
+  约 {bytes} 字节，识别类型: {type}，前 {count} 字节: {hex}
+executor.binary_hint: |-
+  提示：该命令的输出疑似二进制内容。若需查看详细内容，请改用对应的工具（如 jar tf、unzip -l、javap、file、xxd 等）或先做合适的解码（或解压）再输出。
+executor.binary_hint_typed: |-
+  提示：该命令的输出疑似二进制内容（{type}）。若需查看详细内容，请改用对应的工具（如 jar tf、unzip -l、javap、file、xxd 等）或先做合适的解码（或解压）再输出。
+executor.truncated: |-
+  ... [输出过大已截断：总计 {total} 字符，省略中间 {omitted} 字符，仅保留首尾。如需完整内容，请用 read 工具分页读取，或将输出重定向到文件后再处理] ...

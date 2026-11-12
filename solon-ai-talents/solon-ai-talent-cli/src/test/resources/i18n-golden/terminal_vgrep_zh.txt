@@ -1,0 +1,2 @@
+@mem/a.txt:2: beta
+@mem/dir/b.md:1: # beta

@@ -1,0 +1,12 @@
+## Business Tool Discovery (2 tools in total)
+### Mode: Dynamic discovery (summary)
+There are many tools, so follow this flow:
+- **Step 1 (Pick)**: Choose the tool name from the "Available business tools" below by its description.
+- **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+#### Available business tools:
+- **[General tools]**:
+  - `tool_1`: 工具 1
+- **[财务]**:
+  - `tool_2`: 工具 2

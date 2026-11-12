@@ -1,0 +1,17 @@
+Prefer an appropriate skill to solve the problem (if unsure which one, search with skillsearch). **Note: while executing a task, always read or review the skill's rules with `skillread`.**
+
+### Selected skills (body preloaded, no need to skillread again)
+<preloaded_skill name="@m/s1">
+<skill_content name="s1">
+正文 1
+</skill_content>
+</preloaded_skill>
+<preloaded_skill name="@m/s2" skipped="over_budget" />
+
+## Skill Library Rules (available skills: 2)
+### Mode: summary discovery
+Review the skill list below. If a skill matches the current need, call `skillread` to get its detailed rules and tool parameters:
+<skill_list>
+  <skill name="@m/s1">技能 1</skill>
+  <skill name="@m/s2">技能 2</skill>
+</skill_list>

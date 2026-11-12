@@ -37,8 +37,8 @@ public class TerminalTalentProxy implements Talent {
     }
 
     @Override
-    public String description() {
-        return terminalTalent.description();
+    public String description(Prompt prompt) {
+        return terminalTalent.description(prompt);
     }
 
     @Override

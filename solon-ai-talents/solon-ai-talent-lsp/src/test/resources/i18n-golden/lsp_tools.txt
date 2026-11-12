@@ -1,0 +1,18 @@
+name: lsp
+--- description ---
+执行 LSP 代码导航操作（跳转定义、查找引用、类型签名、符号搜索、调用层级）。
+
+操作说明：
+  - goToDefinition：跳转到光标处符号的定义位置
+  - findReferences：查找光标处符号的所有引用
+  - hover：获取光标处符号的类型签名/文档注释
+  - goToImplementation：跳转到光标处接口/抽象方法的实现
+  - prepareCallHierarchy：查看光标处方法的调用层级
+  - incomingCalls：谁调用了光标处的方法
+  - outgoingCalls：光标处的方法调用了谁
+  - documentSymbol：列出当前文件中的所有符号（类/方法/字段），不需光标位置
+  - workspaceSymbol：在整个工作区中搜索符号，不需光标位置
+
+使用建议：需要理解代码结构、查找定义或搜索符号时优先使用此工具。编译/语法错误无需在此查询——写入文件后会自动附带该文件的 LSP 错误。
+--- inputSchema ---
+{"type":"object","properties":{"character":{"type":"integer","description":"列号（1-based，如编辑器中显示的列号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）","default":1},"filePath":{"type":"string","description":"目标文件路径，相对于工作区根目录。例如：src/main/java/App.java"},"line":{"type":"integer","description":"行号（1-based，如编辑器中显示的行号）。仅 goToDefinition/findReferences/hover/goToImplementation/prepareCallHierarchy/incomingCalls/outgoingCalls 需要）","default":1},"operation":{"type":"string","description":"LSP 操作类型。可选值：goToDefinition（跳转到定义）、findReferences（查找引用）、hover（悬停类型/文档）、documentSymbol（当前文件符号）、workspaceSymbol（工作区符号搜索）、goToImplementation（跳转实现）、prepareCallHierarchy（准备调用层次）、incomingCalls（谁调用了当前方法）、outgoingCalls（当前方法调用了谁）"}},"required":["operation","filePath"]}

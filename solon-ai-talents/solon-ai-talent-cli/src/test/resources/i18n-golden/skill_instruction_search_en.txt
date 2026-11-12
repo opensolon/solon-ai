@@ -1,0 +1,5 @@
+Prefer an appropriate skill to solve the problem (if unsure which one, search with skillsearch). **Note: while executing a task, always read or review the skill's rules with `skillread`.**
+
+## Skill Library Rules (available skills: 3)
+### Mode: dynamic discovery
+The skill library is large. **Do not guess paths.** You must first search keywords with `skillsearch`, confirm the name, then read it with `skillread`.

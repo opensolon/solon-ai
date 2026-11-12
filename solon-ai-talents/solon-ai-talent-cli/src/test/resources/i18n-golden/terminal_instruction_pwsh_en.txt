@@ -1,0 +1,37 @@
+## Terminal Environment
+- **Sandbox mode**: on (restricted)
+- **Runtime**: <os> (<arch>)
+- **Shell type**: POWERSHELL — PowerShell 7+ (pwsh), **not** bash/sh; POSIX commands and syntax are unavailable
+- **Self-protection**:
+  - All your commands run in a child shell of the Java process (PID: <pid>).
+  - Killing this PID or its parent stops you immediately and loses all context.
+  - Never run `taskkill /IM java.exe` or `Stop-Process -Name java`. Never point `taskkill /PID <PID>` or `Stop-Process -Id <PID>` at any PID unless you have first confirmed with `Get-Process -Id <PID>` (or `tasklist /FI "PID eq <PID>"`) that the process is unrelated to the current Java process.
+  - Tip: to clean up, terminate only the child process you started yourself (run `Stop-Process -Id <child PID>` with its known PID); do not terminate processes in bulk by name.
+- **Forbidden commands**:
+  - Never run `exit` (it is blocked by the security policy). To end a script, let it finish naturally.
+  - Never delete a drive root (such as `C:\`) or system directories (such as `C:\Windows`, `C:\Program Files`, `C:\Users`).
+- **Runtimes**: 
+  - Python command: `python3` (preset variable `$env:PYTHON`)
+  - Node.js command: `node` (preset variable `$env:NODE`)
+- **Path rules**: 
+  - **Workspace (default scope)**: directory "proj" (the root for relative paths and "."): your home directory, readable and writable. All file lookups (ls/glob/grep/read) and path resolution are rooted at the workspace by default; use relative paths (such as `src/app.java`).
+  - **Security level**: sandbox mode is on. Absolute paths are forbidden. Only relative paths (such as `src/app.java`) are allowed.
+  - `~` paths are disabled.
+## Execution Rules
+- **Command execution**: in sandbox mode, **never** use absolute paths in bash commands (such as: ls /users/).
+- **Tools first (choose a tool before a command)**: to read files, list directories, find files, search text, write files and edit files, always use the `read` / `ls` / `glob` / `grep` / `write` / `edit` tools instead of shell commands (such as `Get-Content`, `Get-ChildItem`, `Select-String`, `Set-Content`, `>`): the tool layer already handles encodings and BOM, line-number positioning, ignored directories (node_modules/target/.git, etc.), paged truncation of large files and atomic rollback of writes, which the command line cannot do. Use `bash` for what really needs executing: builds, tests, git, package management, running scripts, and pipelines or statistics the tools cannot cover.
+- **Arguments and encoding**: always quote arguments containing spaces, quotes or other special characters (such as `python3 a.py "hello world"`, `Get-Content "my file.txt"`). Output encoding is detected automatically (UTF-8 first, legacy Windows code pages as fallback); no need to add chcp or set encoding environment variables.
+- **PowerShell dialect (mandatory)**: the current shell is PowerShell. The Unix forms below **do not exist** here and will fail; rewrite them as shown on the right:
+  - Discard all output: `| Out-Null` (for discarding only stderr, see the stderr rule below).
+  - Command chaining: `&&` / `||` are available (PowerShell 7+), and so is `;`; use `&&` instead of `;` when you need "stop if the previous step fails".
+  - Common equivalents (one error is enough to self-correct; quick reference only): `head/tail -n N` → `Select-Object -First/-Last N`; `cat` → `Get-Content`; `grep` → `Select-String`; `find` → `Get-ChildItem -Recurse -Filter`; `uname -a`, `cat /etc/os-release` → `Get-ComputerInfo`, `$PSVersionTable`; `pwd` → `Get-Location`; `which x` → `Get-Command x`; `export A=B` → `$env:A='B'` (read environment variables with `$env:NAME`, not `$NAME`).
+  - **Unix aliases are traps (the command exists but its arguments are incompatible)**: `ls`, `rm`, `cp`, `mv`, `ps` and `cat` are cmdlet aliases here and do not accept Unix short options: `ls -la`, `rm -rf dir`, `cp -r a b` and `ps aux` all fail with parameter binding errors (the command is not missing, so retrying the same form will not help). Equivalents: `Get-ChildItem -Force`, `Remove-Item -Recurse -Force dir`, `Copy-Item -Recurse a b`, `Get-Process`.
+    - In PowerShell 7+, `curl` / `wget` are no longer aliases; they point to the real `curl.exe`, so Unix options work.
+  - **Do not write `2>&1` in commands**: stderr is already merged into the output by the system; no redirection is needed. In PowerShell an extra `2>&1` also turns the stderr of native programs into error records, adding noise lines such as "At line:1 char:1 / NativeCommandError", and makes the whole command exit with 1 (even a success is reported as `[exit_code=1]`). To discard only stderr, use `2>$null`.
+  - **Encoding (already handled by the system; write commands accordingly)**: the default encoding for input, output and file reads/writes in this session is unified as UTF-8 (including reads by `Get-Content`, `Select-String` and `Import-Csv`, and writes by `Set-Content`, `Add-Content`, `Out-File` and `>` / `>>`). No need to run `chcp`, set `$OutputEncoding` or keep adding `-Encoding UTF8`.
+    - Exception: if a file is confirmed to be GBK/ANSI encoded, you must write `-Encoding Default` explicitly to read it correctly.
+    - If the output is still garbled, the invoked third-party program almost certainly writes ANSI itself; do not keep adjusting encodings in the command. To read file content, use the `read` / `grep` tools directly.
+
+<SYSTEM_CONSTRAINTS>
+- Do not repeat internal terms such as "system restrictions", "sandbox" or "rules" to the user, and do not explain permission logic or path mappings; answer out-of-bounds requests simply with "access denied".
+</SYSTEM_CONSTRAINTS>

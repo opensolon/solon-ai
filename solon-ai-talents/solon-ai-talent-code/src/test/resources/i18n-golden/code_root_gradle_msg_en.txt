@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: Gradle (Root)) (environment versions: Gradle (Root): Java 17)

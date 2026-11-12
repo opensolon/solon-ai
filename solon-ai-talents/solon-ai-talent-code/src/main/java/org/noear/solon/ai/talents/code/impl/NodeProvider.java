@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -35,7 +38,12 @@ public class NodeProvider implements LanguageProvider {
 
     @Override
     public String typeName() {
-        return "Node 项目";
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_NODE_TYPE);
     }
 
     @Override
@@ -75,19 +83,21 @@ public class NodeProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Node/TS)\n")
-                .append("- 安装: `npm install`\n")
-                .append("- 构建: `npm run build`\n")
-                .append("- 全量测试: `npm test`\n")
-                .append("- 单文件测试: `npm test -- path/to/file.test.ts` (替换为实际文件路径)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_NODE_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Node/TS)\n")
-                .append("- 安装: `cd ").append(moduleName).append(" && npm install`\n")
-                .append("- 构建: `cd ").append(moduleName).append(" && npm run build`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && npm test`\n")
-                .append("- 单文件测试: `cd ").append(moduleName).append(" && npm test -- path/to/file.test.ts` (替换为实际文件路径)\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_NODE_MODULE, "module", moduleName)).append("\n\n");
     }
 }

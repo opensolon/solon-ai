@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: Flutter (Root)) (environment versions: Flutter (Root): Flutter >=3.10.0)

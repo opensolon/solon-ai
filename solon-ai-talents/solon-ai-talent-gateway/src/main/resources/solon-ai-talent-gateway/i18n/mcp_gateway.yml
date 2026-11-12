@@ -1,0 +1,60 @@
+# solon-ai-talent-gateway MCP tool gateway messages (English, also the fallback)
+# Convention: every value is a "|-" block scalar with body text only - no leading/trailing newlines or spaces (separators are added by code); placeholders use {name}; never use ${ or #{
+
+gateway.mcp.description: |-
+  MCP tool gateway ({servers} servers, {tools} tools in total)
+
+# ---- instruction (four modes) ----
+gateway.mcp.instruction.title: |-
+  ## MCP Tool Discovery ({count} tools in total)
+gateway.mcp.instruction.full: |-
+  ### Mode: Direct call
+  All MCP tool definitions are loaded. Analyze the request and call the best-matching tool directly; no relay is needed.
+gateway.mcp.instruction.summary: |-
+  ### Mode: Dynamic discovery (summary)
+  There are many tools, so follow this flow:
+  - **Step 1 (Pick)**: Choose the tool name from the "Available MCP tools" below by its description.
+  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+  #### Available MCP tools:
+gateway.mcp.instruction.list: |-
+  ### Mode: Dynamic discovery (list)
+  The tool library is large, so only names are shown. Follow this flow:
+  - **Step 1 (Shortlist)**: Infer the function from the names in the "Tool list" below, or search with `search_tools`.
+  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+  #### Available MCP tool list (by server):
+gateway.mcp.instruction.list_tip: |-
+  > Tip: server names and tool names carry semantic hints; once you pick a target, always check its details first.
+gateway.mcp.instruction.search: |-
+  ### Mode: Search discovery
+  The MCP tool library is huge and the list is collapsed. Follow this flow:
+  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords.
+  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+  > **Note**: Do not guess tool names. Search by keywords, e.g. search_tools('weather')
+
+# ---- relay tool results ----
+gateway.mcp.search.blank: |-
+  Error: the search keyword must not be empty.
+gateway.mcp.search.none: |-
+  Note: no MCP tool fully matches the keyword '{keyword}'.
+  You can try:
+  1. Check that the keywords are separated by spaces (e.g. 'hangzhou travel').
+  2. Use more general words, or fewer keywords.
+  3. If you are sure the function does not exist, tell the user. Do not repeat similar searches.
+gateway.mcp.name_blank: |-
+  Error: tool_name must not be empty
+gateway.mcp.detail.found: |-
+  ### MCP tool details: {name}
+  - Description: {description}
+  - Parameter schema (JSON Schema):
+gateway.mcp.detail.missing: |-
+  Error: MCP tool '{name}' was not found; check the spelling of the name.
+gateway.mcp.call.missing: |-
+  Error: MCP tool '{name}' was not found
+gateway.mcp.call.error: |-
+  Execution error: {error}

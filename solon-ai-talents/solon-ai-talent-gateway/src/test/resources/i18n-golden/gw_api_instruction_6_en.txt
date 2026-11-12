@@ -1,0 +1,11 @@
+## Business OpenAPI Discovery (6 APIs in total)
+There are many business APIs, so **dynamic routing** is enabled. Strictly follow this discovery flow:
+- **Step 1 (Search)**: The list is collapsed. First use `search_apis` to find matching APIs by keywords. **Note**: results are returned by "business group"; use the group semantics to judge whether an API is the right one.
+- **Step 2 (Details)**: Call `get_api_detail` to get the parameter schema.
+- **Step 3 (Execute)**: Execute it with `call_api`.
+
+> **Note**: The API library is huge. Search by keywords, e.g. search_apis('order query').
+
+## Execution Constraints
+1. **Responses**: If the returned data carries the `[Data truncated]` mark, analyze the part you have; do not call again to get everything.
+2. **Retries**: If an API returns an error, check that the arguments match the schema from Step 2; do not retry blindly.

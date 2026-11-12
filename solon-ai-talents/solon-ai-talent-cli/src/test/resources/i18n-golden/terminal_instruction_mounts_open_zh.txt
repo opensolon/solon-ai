@@ -1,0 +1,31 @@
+## Terminal 环境状态
+- **沙盒模式**: 关闭 (开放)
+- **运行环境**: <os> (<arch>)
+- **终端类型**: UNIX_SHELL — bash（POSIX shell）
+- **自我保护机制**:
+  - 你的所有指令都在 Java 进程 (PID: <pid>) 的子 shell 中运行。
+  - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。
+  - 严禁执行 `pkill java`, `killall java`。严禁执行 `kill -9` 任何数字，除非你先执行了 `ps` 明确该 PID 与当前 Java 进程无关。
+  - 建议：若需清理任务，请使用 `pkill -P [PID]` 仅停止子进程。
+- **严禁指令**:
+  - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。
+  - 严禁执行任何针对根目录 `/` 或系统目录（如 `/etc`, `/usr`）的删除操作。
+- **执行环境**: 
+  - Python 命令: `python3` (系统已预置变量 `$PYTHON`)
+  - Node.js 命令: `node` (系统已预置变量 `$NODE`)
+- **路径规则**: 
+  - **工作区（默认作用域）**: 目录「proj」（相对路径与 "." 的解析根）: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。
+  - **挂载点（仅按需访问）**: 以 `@` 开头的逻辑路径（如 `@pool1/bin/tool/`）访问来源。见下方挂载点清单。**仅当用户的提示词中明确提及了具体的挂载点名时**（如 `@global-skills`、`@workspace-agents`），才去对应挂载点下查找。
+
+<mount_list>
+  <mount alias="@pool" description="公共池" type="FILES" writeable="true" shell="true" env="$POOL" />
+  <mount alias="@ro" type="FILES" writeable="false" shell="true" env="$RO" />
+  <mount alias="@cp" type="SKILLS" writeable="false" shell="materialized" scheme="classpath" env="$CP" />
+  <mount alias="@mem" type="FILES" writeable="true" shell="false" scheme="mem" />
+</mount_list>
+  - **安全级别**: 开放模式。支持绝对路径、相对路径及逻辑路径。
+## 执行规约
+- **挂载隔离**: 逻辑路径（以 @ 开头）默认只读。仅当挂载点清单中 `writeable="true"` 时，才允许写入操作。
+- **命令执行**: 在 `bash` 中，本地挂载与可物化挂载（shell="true" 或 "materialized"）均可使用逻辑路径（如 `cd @pool1/bin/tool/`），系统会自动转换（物化挂载首次引用时会落地到用户级缓存，后续命令可复用）；其余虚拟来源只能使用文件工具。也支持绝对路径访问。
+- **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `write` / `edit` 工具，不要用 shell 命令代劳（如 `cat`、`ls`、`find`、`grep`、`sed -i`、`echo >`）：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。
+- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `python3 a.py "hello world"`、`cat "my file.txt"`）。输出按 UTF-8 解码，无需额外设置编码环境变量。

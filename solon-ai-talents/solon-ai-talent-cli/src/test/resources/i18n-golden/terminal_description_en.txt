@@ -1,0 +1,1 @@
+Provides terminal interaction, file discovery, paged reading, full-text search and precise editing.

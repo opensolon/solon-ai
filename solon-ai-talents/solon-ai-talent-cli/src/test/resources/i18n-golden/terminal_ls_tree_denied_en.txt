@@ -1,0 +1,4 @@
+tree
+├── locked
+│   └── [access denied]
+└── x.txt

@@ -1,0 +1,1 @@
+[Evolved] The fragments were consolidated into a stable insight, and 1 redundant sources were cleaned up; to keep derived insights from replacing permanent conclusions, the Imp=10 sources were kept: [rule].

@@ -1,0 +1,1 @@
+[Merge error] evolved_insight is empty, so nothing can be consolidated; the old fragments are kept.

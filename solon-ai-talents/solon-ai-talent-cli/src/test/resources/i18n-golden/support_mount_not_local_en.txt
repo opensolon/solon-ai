@@ -1,0 +1,1 @@
+! Permission denied: this mount source does not support local file operations @mem/a.txt

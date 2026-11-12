@@ -1,0 +1,1 @@
+Code expert. Supports project initialization, automatic tech stack detection, and generation of the `.soloncode/CODE.md` conventions.

@@ -14,7 +14,7 @@ import java.util.List;
 @McpServerEndpoint(channel = McpChannel.STREAMABLE_STATELESS, mcpEndpoint = "/talent/order")
 public class OrderManagerTalentServer extends McpTalentServer {
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "订单处理专家";
     }
 

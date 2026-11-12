@@ -1,0 +1,5 @@
+name: websearch
+--- description ---
+执行实时web搜索
+--- inputSchema ---
+{"type":"object","properties":{"numResults":{"type":"integer","description":"返回的结果数量","default":8},"query":{"type":"string","description":"查询关键字"}},"required":["query"]}

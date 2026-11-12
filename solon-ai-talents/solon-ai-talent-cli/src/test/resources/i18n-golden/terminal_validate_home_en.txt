@@ -1,0 +1,1 @@
+Error: sandboxAllowUserHome is disabled; ~ paths are not allowed.

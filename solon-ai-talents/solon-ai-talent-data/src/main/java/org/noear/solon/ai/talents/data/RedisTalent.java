@@ -59,7 +59,7 @@ public class RedisTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "长期记忆专家：可以将重要信息持久化存储，以便在之后的对话中找回。";
     }
 

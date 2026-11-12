@@ -1,0 +1,1 @@
+错误：路径不存在（grep path=nope）。请先用 ls 确认目录层级；注意 path 只接受单个目录，且不要把通配符写进 path（通配符应写在 pattern 里）。

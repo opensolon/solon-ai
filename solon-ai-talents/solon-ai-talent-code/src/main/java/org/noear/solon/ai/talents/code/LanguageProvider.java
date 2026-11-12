@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,6 +45,16 @@ public interface LanguageProvider {
      * 模块类型描述 (如 "Maven 模块", "Go 模块")
      */
     String typeName();
+
+    /**
+     * 模块类型描述（按语言；默认同 {@link #typeName()}，内置实现按语言取文案）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    default String typeName(Locale locale) {
+        return typeName();
+    }
 
     /**
      * 静态标志文件列表（精确文件名，非扩展名）。用于默认的匹配判定。
@@ -110,9 +121,29 @@ public interface LanguageProvider {
     void appendRootCommands(StringBuilder buf);
 
     /**
+     * 根项目指令生成（按语言；默认同 {@link #appendRootCommands(StringBuilder)}，内置实现按语言取文案）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    default void appendRootCommands(StringBuilder buf, Locale locale) {
+        appendRootCommands(buf);
+    }
+
+    /**
      * 子模块指令生成
      */
     void appendModuleCommands(StringBuilder buf, String moduleName);
+
+    /**
+     * 子模块指令生成（按语言；默认同 {@link #appendModuleCommands(StringBuilder, String)}，内置实现按语言取文案）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    default void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        appendModuleCommands(buf, moduleName);
+    }
 
     /**
      * 探测该目录下配置文件中“声明”的环境/语言版本（注意：是项目配置声明的版本，而非本机安装版本）。

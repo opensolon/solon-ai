@@ -1,0 +1,1 @@
+[Partially evolved] The stable insight was written (1 cleaned up), but these sources failed to be cleaned up: [frag-2]; to keep derived insights from replacing permanent conclusions, the Imp=10 sources were kept: [rule]. You can call memory_prune again to clean them up.

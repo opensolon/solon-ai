@@ -89,7 +89,7 @@ public class ShellTalent extends AbsProcessTalent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "Shell 专家：执行系统命令";
     }
 

@@ -1,0 +1,24 @@
+# solon-ai-talent-todo messages (English, default fallback)
+# Convention: every value is a "|-" block scalar with body text only -- no leading/trailing newlines or spaces (separators between paragraphs are added in code); placeholders use {name}; "${" and "#{" are not allowed
+
+todo.description: |-
+  Breaks down complex tasks, tracks progress and revises plans. For long-running tasks that need multi-step collaboration.
+todo.instruction: |-
+  ## Task Planning Guide
+  1. **Use it when needed**: For tasks that need multiple steps, phases or tools, you must create a list with `todowrite`; simple Q&A or single lookups need no plan. Update it promptly when the goal changes.
+  2. **Full updates**: `todowrite` overwrites the file. When updating progress you **must provide the complete Markdown with all tasks (including completed ones)**; never send only the new or changed lines.
+  3. **Status markers**: Every trackable item uses `- [ ]` pending, `- [/]` in progress, `- [x]` done. Mark an item `[/]` when you start it and update it to `[x]` as soon as it is done.
+  4. **No false finish**: Before the final reply, confirm every item is `[x]`. If any `[ ]` or `[/]` remains, do not summarize or pretend to be done; keep calling tools to make progress, or tell the user explicitly what is blocking.
+  5. **Context recovery**: When a task is interrupted or resumed, or the prompt is very long, call `todoread` first to read the progress instead of relying on memory.
+
+# ---- Tool results ----
+todo.read.empty: |-
+  [] (The task list is empty. If the task is complex, use `todowrite` to initialize a plan.)
+todo.footer.progress: |-
+  [Progress] total: {total}, done: {done}, in-progress: {inProgress}, pending: {pending}.
+todo.footer.continue: |-
+  [Continue] Unfinished items: {count}. The task is not over. Do not wrap up or summarize now; keep working on the unfinished items.
+todo.footer.next: |-
+  [Next] {item}
+todo.footer.done: |-
+  [Done] All items are [x]. You can wrap up and report the result to the user.

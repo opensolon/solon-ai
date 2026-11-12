@@ -1,0 +1,13 @@
+name: skillread
+--- description ---
+读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。
+--- inputSchema ---
+{"type":"object","properties":{"name":{"type":"string","description":"技能的唯一路径标识（例如：'deep-research'）"}},"required":["name"]}
+
+===
+
+name: skillrefresh
+--- description ---
+重新扫描所有挂载点，更新技能列表。
+--- inputSchema ---
+{"type":"object","properties":{},"required":[]}

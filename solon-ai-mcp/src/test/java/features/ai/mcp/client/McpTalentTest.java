@@ -33,7 +33,7 @@ public class McpTalentTest {
 
         McpTalentClient talentClient = new McpTalentClient(mcpClient);
 
-        String description = talentClient.description();
+        String description = talentClient.description(prompt);
         boolean isSupported = talentClient.isSupported(prompt);
         talentClient.onAttach(prompt);
         String instruction = talentClient.getInstruction(prompt);

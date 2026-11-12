@@ -1,0 +1,3 @@
+## MCP Tool Discovery (1 tools in total)
+### Mode: Direct call
+All MCP tool definitions are loaded. Analyze the request and call the best-matching tool directly; no relay is needed.

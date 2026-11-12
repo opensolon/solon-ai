@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -29,7 +32,15 @@ public class GradleProvider implements LanguageProvider {
     private static final String[] IGNORE_FOLDERS = {"build", ".gradle"};
 
     @Override public String id() { return "Gradle"; }
-    @Override public String typeName() { return "Gradle 模块"; }
+    @Override
+    public String typeName() {
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_GRADLE_TYPE);
+    }
     @Override public String[] markers() { return MARKERS; }
 
     @Override
@@ -66,17 +77,21 @@ public class GradleProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Gradle)\n")
-                .append("- 构建: `./gradlew build` (或 `gradle build`)\n")
-                .append("- 全量测试: `./gradlew test`\n")
-                .append("- 单测执行: `./gradlew test --tests \"ClassName\"` (替换为实际类名)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_GRADLE_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Gradle)\n")
-                .append("- 构建: `./gradlew :").append(moduleName.replace("/", ":")).append(":build`\n")
-                .append("- 全量测试: `./gradlew :").append(moduleName.replace("/", ":")).append(":test`\n")
-                .append("- 单测执行: `./gradlew :").append(moduleName.replace("/", ":")).append(":test --tests \"ClassName\"`\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_GRADLE_MODULE, "module", moduleName, "project", moduleName.replace("/", ":"))).append("\n\n");
     }
 }

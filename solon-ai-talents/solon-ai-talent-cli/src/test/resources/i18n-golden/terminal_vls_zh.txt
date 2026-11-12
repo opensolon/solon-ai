@@ -1,0 +1,2 @@
+[DIR] @mem/dir/
+[FILE] @mem/a.txt

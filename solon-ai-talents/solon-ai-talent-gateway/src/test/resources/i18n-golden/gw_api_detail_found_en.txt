@@ -1,0 +1,9 @@
+---
+* **OpenAPI: getOrder**
+  - Business groups: 订单, 查询
+  - Function: 接口 getOrder
+  - Path: GET /api/orders/{id}
+  - Header params: {"type":"object","properties":{"token":{"type":"string"}}}
+  - Path params (fill the path {}): {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+  - Query params (URL): {"type":"object","properties":{"lang":{"type":"string"}}}
+  - Returns: {"type":"object"}

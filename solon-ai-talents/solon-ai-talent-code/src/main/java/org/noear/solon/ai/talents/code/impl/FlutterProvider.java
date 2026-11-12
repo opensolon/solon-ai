@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.talents.code.impl;
 
+import org.noear.solon.ai.talents.code.i18n.CodeI18n;
+import org.noear.solon.ai.talents.code.i18n.CodeI18nKeys;
 import org.noear.solon.ai.talents.code.LanguageProvider;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * @author noear
@@ -28,7 +31,15 @@ public class FlutterProvider implements LanguageProvider {
     private static final String[] IGNORE_FOLDERS = {".dart_tool", ".packages", "build"};
 
     @Override public String id() { return "Flutter"; }
-    @Override public String typeName() { return "Flutter 项目"; }
+    @Override
+    public String typeName() {
+        return typeName(null);
+    }
+
+    @Override
+    public String typeName(Locale locale) {
+        return CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_FLUTTER_TYPE);
+    }
     @Override public String[] markers() { return MARKERS; }
 
     @Override
@@ -51,17 +62,21 @@ public class FlutterProvider implements LanguageProvider {
 
     @Override
     public void appendRootCommands(StringBuilder buf) {
-        buf.append("### 根项目 (Flutter/Dart)\n")
-                .append("- 依赖: `flutter pub get`\n")
-                .append("- 全量测试: `flutter test`\n")
-                .append("- 单文件测试: `flutter test path/to/test_file.dart` (替换为实际路径)\n\n");
+        appendRootCommands(buf, null);
+    }
+
+    @Override
+    public void appendRootCommands(StringBuilder buf, Locale locale) {
+        buf.append(CodeI18n.get(locale, CodeI18nKeys.CODE_LANG_FLUTTER_ROOT)).append("\n\n");
     }
 
     @Override
     public void appendModuleCommands(StringBuilder buf, String moduleName) {
-        buf.append("### 模块 (Module): ").append(moduleName).append(" (Flutter/Dart)\n")
-                .append("- 依赖: `cd ").append(moduleName).append(" && flutter pub get`\n")
-                .append("- 全量测试: `cd ").append(moduleName).append(" && flutter test`\n")
-                .append("- 单文件测试: `cd ").append(moduleName).append(" && flutter test path/to/test_file.dart`\n\n");
+        appendModuleCommands(buf, moduleName, null);
+    }
+
+    @Override
+    public void appendModuleCommands(StringBuilder buf, String moduleName, Locale locale) {
+        buf.append(CodeI18n.fmt(locale, CodeI18nKeys.CODE_LANG_FLUTTER_MODULE, "module", moduleName)).append("\n\n");
     }
 }

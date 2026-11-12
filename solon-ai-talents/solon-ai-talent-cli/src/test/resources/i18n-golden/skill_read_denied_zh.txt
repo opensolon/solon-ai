@@ -1,0 +1,1 @@
+Error: @m/s1 不是有效的技能目录 (缺少 SKILL.md)

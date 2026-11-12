@@ -1,0 +1,9 @@
+---
+* **OpenAPI: getOrder**
+  - 业务分组: 订单, 查询
+  - 功能: 接口 getOrder
+  - 路径: GET /api/orders/{id}
+  - Header 参数: {"type":"object","properties":{"token":{"type":"string"}}}
+  - Path 参数 (填充路径 {}): {"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}
+  - Query 参数 (URL): {"type":"object","properties":{"lang":{"type":"string"}}}
+  - 返回结果: {"type":"object"}

@@ -1,0 +1,6 @@
+### 业务工具详情: tool_1
+- 功能描述: 工具 1
+- 参数架构 (JSON Schema): 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```

@@ -1,0 +1,28 @@
+## Build and Test Commands
+
+### Root Project (C/C++)
+- Build: `mkdir -p build && cd build && cmake .. && make`
+- Full test: `cd build && ctest`
+- Single test: `cd build && ctest -R <test_name_regexp>` (replace with a regex filter)
+
+### Sub-modules & Sub-projects
+> The following modules are governed by the root project commands (build and test them with the root project commands above).
+- C/C++ project (1)
+  - sub (C++ 17)
+
+## Environment Versions
+
+> The versions below are **declared** in the project configuration files (not the versions installed on this machine). Match the syntax features of these versions when writing code.
+
+- CMake (Root): C++ 17
+
+## Guidelines
+
+- **Read before editing**: Always read the relevant files in full before making any change.
+- **Atomic work**: Implement only one feature or fix only one bug at a time.
+- **Verification-driven**: Run tests to verify before finishing a task.
+- **Path convention**: Use relative paths only (e.g. `src/main/java/App.java`; never use `./src/...`).
+- **Style alignment**: Follow the coding style and design patterns already used in the codebase.
+- **Version alignment**: Follow the versions declared in the "Environment Versions" section and do not use syntax features beyond them; if no version is listed, check the configuration files or build tool before deciding.
+- **Environment awareness**: Use your knowledge of each language's default local repository paths (e.g. Maven, Node) to help troubleshoot dependency issues or analyze source code.
+

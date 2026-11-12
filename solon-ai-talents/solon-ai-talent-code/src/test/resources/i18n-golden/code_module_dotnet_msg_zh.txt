@@ -1,0 +1,1 @@
+已更新项目工程规范 (检测到技术栈: libs/core (C#/.NET)) (环境版本: libs/core (C#/.NET): .NET net8.0)

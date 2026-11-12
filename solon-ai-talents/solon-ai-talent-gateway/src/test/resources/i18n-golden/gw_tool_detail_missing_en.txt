@@ -1,0 +1,1 @@
+Error: tool 'nope' was not found; check the spelling of the name.

@@ -19,13 +19,17 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.talents.web.i18n.WebI18n;
+import org.noear.solon.ai.talents.web.i18n.WebI18nKeys;
 import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -73,6 +77,18 @@ public class CodeSearchTalent extends AbsTalent {
         return this;
     }
 
+    /**
+     * 代码搜索（默认语言）
+     */
+    public String codesearch(String query, Integer numResultsObj) throws Throwable {
+        return codesearch(query, numResultsObj, null);
+    }
+
+    /**
+     * 代码搜索（__locale 由工具上下文注入）
+     *
+     * @since 4.2
+     */
     @ToolMapping(name = "codesearch", description =
             "搜索并获取任何编程任务的相关上下文\n" +
                     "- 为库、SDK 和 API 提供最高质量且最实时的上下文信息\n" +
@@ -86,11 +102,11 @@ public class CodeSearchTalent extends AbsTalent {
                     "- 示例：'React 状态管理'、'Spring Boot 响应式编程'、'Solon 插件开发'")
     public String codesearch(@Param(name = "query", description = "搜索查询词，用于查找 API、库和 SDK 的相关上下文。 " +
                                      "例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、" +
-                                     "'Express.js 中间件'、'Next.js 局部预渲染配置'")
-                             String query,
+                                     "'Express.js 中间件'、'Next.js 局部预渲染配置'") String query,
                              @Param(name = "numResults", required = false, defaultValue = "8", description = "返回的结果数量 (1-20)。默认为 8。 " +
-                                     "根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。")
-                             Integer numResultsObj) throws Throwable {
+                                     "根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。") Integer numResultsObj,
+                             String __locale) throws Throwable {
+        Locale locale = AiI18n.toLocale(__locale);
         Integer numResults = null;
         if (numResultsObj instanceof Number) {
             numResults = ((Number) numResultsObj).intValue();
@@ -109,22 +125,21 @@ public class CodeSearchTalent extends AbsTalent {
                     getMcpClient().callTool("get_code_context_exa", toolArgs));
         } catch (Throwable e) {
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
-                throw new RuntimeException("代码搜索请求超时");
+                throw new RuntimeException(WebI18n.get(locale, WebI18nKeys.CODESEARCH_TIMEOUT));
             }
             throw e;
         }
 
         if (result.isError()) {
             String errorText = Utils.isNotEmpty(result.getContent()) ? result.getContent() : "Unknown error";
-            throw new RuntimeException("代码搜索出错: " + errorText);
+            throw new RuntimeException(WebI18n.fmt(locale, WebI18nKeys.CODESEARCH_ERROR, "error", errorText));
         }
 
         String output;
         if (Utils.isNotEmpty(result.getContent())) {
             output = result.getContent();
         } else {
-            output = "未找到相关的代码片段或文档。请尝试更换查询词，" +
-                    "明确具体的库或编程概念，并检查框架名称拼写是否正确。";
+            output = WebI18n.get(locale, WebI18nKeys.CODESEARCH_EMPTY);
         }
 
         return output;

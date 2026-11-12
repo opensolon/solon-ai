@@ -1,0 +1,1 @@
+[Merge error] keys_to_merge is empty, so nothing can be consolidated; no new insight was written.

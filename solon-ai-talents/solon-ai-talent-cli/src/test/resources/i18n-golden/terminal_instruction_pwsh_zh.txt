@@ -1,0 +1,37 @@
+## Terminal 环境状态
+- **沙盒模式**: 开启 (受限)
+- **运行环境**: <os> (<arch>)
+- **终端类型**: POWERSHELL — PowerShell 7+ (pwsh)，**不是** bash/sh，POSIX 命令与语法一律不可用
+- **自我保护机制**:
+  - 你的所有指令都在 Java 进程 (PID: <pid>) 的子 shell 中运行。
+  - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。
+  - 严禁执行 `taskkill /IM java.exe`、`Stop-Process -Name java`。严禁用 `taskkill /PID <PID>` 或 `Stop-Process -Id <PID>` 指向任意 PID，除非你先用 `Get-Process -Id <PID>`（或 `tasklist /FI "PID eq <PID>"`）确认该进程与当前 Java 进程无关。
+  - 建议：若需清理任务，只终止你自己启动的那个子进程（按其已知 PID 执行 `Stop-Process -Id <子PID>`），不要按进程名批量终止。
+- **严禁指令**:
+  - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。
+  - 严禁对盘符根目录（如 `C:\`）或系统目录（如 `C:\Windows`、`C:\Program Files`、`C:\Users`）执行任何删除操作。
+- **执行环境**: 
+  - Python 命令: `python3` (系统已预置变量 `$env:PYTHON`)
+  - Node.js 命令: `node` (系统已预置变量 `$env:NODE`)
+- **路径规则**: 
+  - **工作区（默认作用域）**: 目录「proj」（相对路径与 "." 的解析根）: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。
+  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。
+  - `~` 路径已禁用。
+## 执行规约
+- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。
+- **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `write` / `edit` 工具，不要用 shell 命令代劳（如 `Get-Content`、`Get-ChildItem`、`Select-String`、`Set-Content`、`>`）：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。
+- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `python3 a.py "hello world"`、`Get-Content "my file.txt"`）。输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。
+- **PowerShell 方言（必须遵守）**: 当前 shell 是 PowerShell，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：
+  - 丢弃全部输出：`| Out-Null`（只丢 stderr 的写法见下方 stderr 规约）。
+  - 命令串联：`&&` / `||` 可用（PowerShell 7+），`;` 也可用；需要「前一步失败就停」时请用 `&&` 而不是 `;`。
+  - 常用等价（一次报错即可自纠，此处仅作速查）：`head/tail -n N` → `Select-Object -First/-Last N`；`cat` → `Get-Content`；`grep` → `Select-String`；`find` → `Get-ChildItem -Recurse -Filter`；`uname -a`、`cat /etc/os-release` → `Get-ComputerInfo`、`$PSVersionTable`；`pwd` → `Get-Location`；`which x` → `Get-Command x`；`export A=B` → `$env:A='B'`（读环境变量用 `$env:NAME`，不是 `$NAME`）。
+  - **Unix 别名是陷阱（命令存在但参数不兼容）**：`ls`、`rm`、`cp`、`mv`、`ps`、`cat` 在此都是 cmdlet 别名，不接受 Unix 短参数：`ls -la`、`rm -rf dir`、`cp -r a b`、`ps aux` 全部报参数绑定错误（不是命令不存在，重试同写法也不会好）。等价写法：`Get-ChildItem -Force`、`Remove-Item -Recurse -Force dir`、`Copy-Item -Recurse a b`、`Get-Process`。
+    - `curl` / `wget` 在 PowerShell 7+ 已不再是别名，指向真实的 `curl.exe`，Unix 参数可用。
+  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。在 PowerShell 下额外写 `2>&1` 还会把原生程序的 stderr 转成错误记录，凭空多出「所在位置 行:1 字符:1 / NativeCommandError」几行噪声，并让整条命令的退出码变成 1（成功也会被报成 `[exit_code=1]`）。只想丢弃 stderr 时用 `2>$null`。
+  - **编码（系统已前置处理，按此书写）**：本次会话的输入/输出/文件读写默认编码已统一为 UTF-8（包括 `Get-Content`、`Select-String`、`Import-Csv` 的读，以及 `Set-Content`、`Add-Content`、`Out-File` 和 `>` / `>>` 的写）。无需自行 `chcp`、设置 `$OutputEncoding` 或反复加 `-Encoding UTF8`。
+    - 例外：若已确认某文件是 GBK/ANSI 编码，必须显式写 `-Encoding Default` 才能读对。
+    - 若输出仍有乱码，几乎一定是被调用的第三方程序自己按 ANSI 输出的，不要在命令里反复调编码；读文件内容请直接用 `read` / `grep` 工具。
+
+<SYSTEM_CONSTRAINTS>
+- 不向用户复述“系统限制”、“沙盒”、“规约”等内部术语，也不展开讲解权限逻辑与路径映射关系；遇到越界请求直接答“无权访问”。
+</SYSTEM_CONSTRAINTS>

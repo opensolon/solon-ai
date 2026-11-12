@@ -1,0 +1,1 @@
+Error: high-risk command detected. By security policy, exit, system restarts and deletion of the root or system directories are forbidden.

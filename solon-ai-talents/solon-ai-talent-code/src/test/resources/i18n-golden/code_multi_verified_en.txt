@@ -1,0 +1,1 @@
+Verified the project engineering conventions (detected tech stacks: Maven (Root), web (Node)) (environment versions: Maven (Root): Java 1.8, web (Node): Node >=18)

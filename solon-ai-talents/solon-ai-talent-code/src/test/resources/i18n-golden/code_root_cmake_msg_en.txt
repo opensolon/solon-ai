@@ -1,0 +1,1 @@
+Updated the project engineering conventions (detected tech stacks: CMake (Root)) (environment versions: CMake (Root): C++ 17)

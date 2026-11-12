@@ -1,0 +1,5 @@
+g/o.txt:1: foo
+
+
+--- [more content] ---
+Warning: too many search results; truncated at the 0KB limit. Narrow the search path or keywords.

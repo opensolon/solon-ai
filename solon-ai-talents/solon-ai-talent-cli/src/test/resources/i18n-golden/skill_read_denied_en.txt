@@ -1,0 +1,1 @@
+Error: @m/s1 is not a valid skill directory (SKILL.md is missing)

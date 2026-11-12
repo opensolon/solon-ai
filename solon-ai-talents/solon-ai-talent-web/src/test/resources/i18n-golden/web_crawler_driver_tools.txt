@@ -1,0 +1,5 @@
+name: crawl_url
+--- description ---
+读取并分析指定 URL 网页的详细内容
+--- inputSchema ---
+{"type":"object","properties":{"url":{"type":"string","description":""}},"required":["url"]}

@@ -1,0 +1,7 @@
+
+## Core Engineering Protocol
+> Current project context: Could not generate the project engineering conventions (the directory is not writable, so no conventions file was generated this time); read the source code and build configuration directly to understand the project structure
+
+To ensure engineering quality, strictly follow these steps:
+1. **Read first**: Before starting any task, read `.soloncode/CODE.md` for the build and test commands.
+2. **Verify**: After changing code, run the tests as described in `.soloncode/CODE.md`; never submit unverified changes.

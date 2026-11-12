@@ -1,0 +1,2 @@
+[Success] The mental model has been updated.
+[Scope: workspace]

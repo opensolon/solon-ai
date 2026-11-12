@@ -1,0 +1,5 @@
+name: mcp_1
+--- description ---
+MCP 工具 1
+--- inputSchema ---
+{"type":"object","properties":{"q":{"type":"string"}}}

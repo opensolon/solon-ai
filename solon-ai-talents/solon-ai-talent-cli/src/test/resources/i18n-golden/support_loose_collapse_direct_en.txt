@@ -1,0 +1,1 @@
+Line 1 does not match (after collapsing whitespace): expected "a b x", the file has "a b"

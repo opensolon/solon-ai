@@ -1,0 +1,1 @@
+! 权限拒绝：路径受保护 .soloncode/commands/x.md

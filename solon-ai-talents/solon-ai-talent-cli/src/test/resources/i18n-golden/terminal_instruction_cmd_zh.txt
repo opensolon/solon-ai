@@ -1,0 +1,34 @@
+## Terminal 环境状态
+- **沙盒模式**: 开启 (受限)
+- **运行环境**: <os> (<arch>)
+- **终端类型**: CMD — Windows cmd.exe 批处理，**不是** bash/sh，POSIX 命令与语法一律不可用
+- **自我保护机制**:
+  - 你的所有指令都在 Java 进程 (PID: <pid>) 的子 shell 中运行。
+  - 杀死该 PID 或其父进程会导致你立即停止工作并丢失所有上下文。
+  - 严禁执行 `taskkill /IM java.exe`、`Stop-Process -Name java`。严禁用 `taskkill /PID <PID>` 或 `Stop-Process -Id <PID>` 指向任意 PID，除非你先用 `Get-Process -Id <PID>`（或 `tasklist /FI "PID eq <PID>"`）确认该进程与当前 Java 进程无关。
+  - 建议：若需清理任务，只终止你自己启动的那个子进程（按其已知 PID 执行 `Stop-Process -Id <子PID>`），不要按进程名批量终止。
+- **严禁指令**:
+  - 严禁执行 `exit`（会被安全策略拦截）。如果你需要结束脚本，请让脚本自然执行完毕。
+  - 严禁对盘符根目录（如 `C:\`）或系统目录（如 `C:\Windows`、`C:\Program Files`、`C:\Users`）执行任何删除操作。
+- **执行环境**: 
+  - Python 命令: `python3` (系统已预置变量 `%PYTHON%`)
+  - Node.js 命令: `node` (系统已预置变量 `%NODE%`)
+- **路径规则**: 
+  - **工作区（默认作用域）**: 目录「proj」（相对路径与 "." 的解析根）: 你的主目录，支持读写。所有文件查找（ls/glob/grep/read）与路径解析默认都以工作区为根，使用相对路径访问（如 `src/app.java`）。
+  - **安全级别**: 沙盒模式已开启。严禁使用绝对路径。仅限相对路径 (如 `src/app.java`)。
+  - `~` 路径已禁用。
+## 执行规约
+- **命令执行**: 在沙盒模式下，**严禁**在 bash 命令中使用绝对路径（如：ls /users/）。
+- **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `write` / `edit` 工具，不要用 shell 命令代劳（如 `type`、`dir`、`findstr`、`echo >`）：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。
+- **参数与编码**: 含空格/引号等特殊字符的参数务必用引号包裹（如 `python3 a.py "hello world"`、`type "my file.txt"`）。输出编码由系统自动识别（UTF-8 优先，Windows 遗留代码页兜底），无需自行加 chcp 或设置编码环境变量。
+- **CMD 方言（必须遵守）**: 当前 shell 是 cmd.exe，以下 Unix 写法在此**不存在**，用后必报错，须按右侧改写：
+  - 常用等价（一次报错即可自纠，此处仅作速查）：`cat` → `type`；`grep` → `findstr`；`ls` → `dir`；`uname -a` → `ver`、`systeminfo`；`which x` → `where x`；`export A=B` → `set A=B`（读环境变量用 `%NAME%`，不是 `$NAME`）。没有 `head` / `tail`（取前 N 行用 `more +N`）。
+  - 跨盘符切目录必须写 `cd /d D:\proj`（或 `pushd D:\proj`）：`cd D:\proj` 既不报错也不会切过去，后续命令会静默地在原目录执行。
+  - 多步骤串联：`&&`（失败即停）可用；用 `&` 串联则前一步失败不会中断，且返回的 `[exit_code]` 只反映最后一步。
+  - **不要在命令里写 `2>&1`**：stderr 已由系统自动合并到输出里，无需任何重定向。只想丢弃 stderr 时用 `2>nul`。
+  - `%` 的语义差异：单行命令按命令行语义（`for %i in (...) do ...`）；多行命令按批处理脚本语义执行，循环变量需写成 `%%i`，字面百分号需写成 `%%`。不确定时优先拆成单行命令执行。
+  - **读文件会乱码**：`type` / `findstr` 按当前代码页（非 UTF-8）解析文件，读含中文/日韩文/emoji 的 UTF-8 文件必乱码，**且无法在命令里可靠地修正**。读文件一律改用 `read` 工具，检索一律改用 `grep` 工具。
+
+<SYSTEM_CONSTRAINTS>
+- 不向用户复述“系统限制”、“沙盒”、“规约”等内部术语，也不展开讲解权限逻辑与路径映射关系；遇到越界请求直接答“无权访问”。
+</SYSTEM_CONSTRAINTS>

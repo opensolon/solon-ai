@@ -1,0 +1,15 @@
+name: codesearch
+--- description ---
+搜索并获取任何编程任务的相关上下文
+- 为库、SDK 和 API 提供最高质量且最实时的上下文信息
+- 适用于任何与编程相关的疑问或任务
+- 返回详尽的代码示例、技术文档和 API 参考
+- 针对寻找特定编程模式和解决方案进行了优化
+
+使用说明：
+- 可调节返回的结果数量 (1-20) 以获得精确或详尽的结果
+- 默认 8 条结果为大多数查询提供均衡的上下文
+- 支持关于框架、库、API 以及编程概念的查询
+- 示例：'React 状态管理'、'Spring Boot 响应式编程'、'Solon 插件开发'
+--- inputSchema ---
+{"type":"object","properties":{"numResults":{"type":"integer","description":"返回的结果数量 (1-20)。默认为 8。 根据需要的上下文量进行调整：针对特定问题使用较低值，针对全面文档使用较高值。","default":8},"query":{"type":"string","description":"搜索查询词，用于查找 API、库和 SDK 的相关上下文。 例如：'React useState 钩子示例'、'Python pandas 数据框过滤'、'Express.js 中间件'、'Next.js 局部预渲染配置'"}},"required":["query"]}

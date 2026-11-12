@@ -1,0 +1,8 @@
+## MCP Tool Discovery (4 tools in total)
+### Mode: Search discovery
+The MCP tool library is huge and the list is collapsed. Follow this flow:
+- **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords.
+- **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
+- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+
+> **Note**: Do not guess tool names. Search by keywords, e.g. search_tools('weather')

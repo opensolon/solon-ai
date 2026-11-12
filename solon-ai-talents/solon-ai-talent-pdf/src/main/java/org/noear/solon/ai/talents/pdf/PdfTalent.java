@@ -90,7 +90,7 @@ public class PdfTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "PDF 专家：解析 PDF 内容，或将 Markdown/HTML 转换成 PDF。支持富文本和基础排版。";
     }
 

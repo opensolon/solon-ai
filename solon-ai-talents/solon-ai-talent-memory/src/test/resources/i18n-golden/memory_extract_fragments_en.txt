@@ -1,0 +1,4 @@
+[Success] The mental model has been updated.
+[Scope: workspace]
+[Key governance] Semantically similar entries already exist: [frag-1]. If they are on the same topic, update the existing Key instead of creating a new one to avoid fragmented memories.
+[Maintenance] The current index sample contains at least 10 short-term fragments (Imp<5): [frag-1, frag-2, frag-3, frag-4, frag-5, frag-6, frag-7, frag-8] (2 more). If some of them are verified sources on the same topic, you can consolidate them with memory_consolidate; if the topics differ, no action is needed.

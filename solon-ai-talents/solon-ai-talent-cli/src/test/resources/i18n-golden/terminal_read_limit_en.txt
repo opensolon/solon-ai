@@ -1,0 +1,9 @@
+--- File: a.txt (Lines: 2 - 3, Size: 0.02 KB) ---
+--------------------------------------------------
+     2 | two
+     3 | three
+
+
+--- [more content] ---
+Hint: the limit of lines you specified has been reached.
+To continue reading, use the parameters: offset=4, limit=2
