@@ -21,7 +21,7 @@ public class TechnicalSupportTalent extends AbsTalent implements Talent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "多级技术支持与知识库检索";
     }
 

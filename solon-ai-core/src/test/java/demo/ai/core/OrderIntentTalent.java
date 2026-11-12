@@ -22,7 +22,7 @@ public class OrderIntentTalent extends AbsTalent implements Talent {
     }
 
     @Override
-    public String description() {
+    public String description(Prompt prompt) {
         return "处理所有与订单、物流相关的业务请求";
     }
 

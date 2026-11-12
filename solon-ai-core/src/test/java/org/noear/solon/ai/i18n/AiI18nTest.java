@@ -70,18 +70,43 @@ public class AiI18nTest {
     // ==================== 语言 ====================
 
     @Test
-    public void testPutLocale() {
-        AiI18n.putLocale(null, Locale.ENGLISH);
-
+    public void testPromptLocale() {
         Prompt prompt = Prompt.of("hi");
-        AiI18n.putLocale(prompt, Locale.ENGLISH);
+        Assertions.assertSame(prompt, prompt.locale(Locale.ENGLISH));
         Assertions.assertEquals("en", prompt.attrs().get(AiI18n.ATTR_LOCALE));
+        Assertions.assertEquals(Locale.ENGLISH, prompt.locale());
         Assertions.assertEquals(Locale.ENGLISH, AiI18n.localeOf(prompt));
 
-        Prompt prompt2 = Prompt.of("hi");
-        AiI18n.putLocale(prompt2, null);
-        Assertions.assertEquals("zh", prompt2.attrs().get(AiI18n.ATTR_LOCALE));
+        prompt.locale(Locale.CHINA);
+        Assertions.assertEquals("zh-CN", prompt.attrs().get(AiI18n.ATTR_LOCALE));
+        Assertions.assertEquals(Locale.CHINA, prompt.locale());
+
+        //null 表示移除
+        prompt.locale(null);
+        Assertions.assertFalse(prompt.attrs().containsKey(AiI18n.ATTR_LOCALE));
+        Assertions.assertNull(prompt.locale());
+
+        //语言值的各种形态（prompt.locale() 与工具参数 __locale 都按此规则解析）
+        Assertions.assertEquals(Locale.ENGLISH, AiI18n.toLocale(Locale.ENGLISH));
+        Assertions.assertEquals(Locale.ENGLISH, AiI18n.toLocale("en"));
+        Assertions.assertEquals(Locale.SIMPLIFIED_CHINESE, AiI18n.toLocale("zh_CN"));
+        Assertions.assertEquals(Locale.SIMPLIFIED_CHINESE, AiI18n.toLocale("zh-CN"));
+        Assertions.assertEquals(Locale.ENGLISH, AiI18n.toLocale("  en  "));
+        for (Object val : new Object[]{null, "", "   ", "!!!", 123}) {
+            Assertions.assertNull(AiI18n.toLocale(val), String.valueOf(val));
+        }
+
         Assertions.assertEquals("zh-CN", AiI18n.toTag(Locale.CHINA));
+    }
+
+    @Test
+    public void testPromptLocaleCopy() {
+        Prompt prompt = Prompt.of("hi").locale(Locale.ENGLISH);
+        Prompt copy = prompt.copy();
+        Assertions.assertEquals(Locale.ENGLISH, copy.locale());
+
+        copy.locale(Locale.CHINESE);
+        Assertions.assertEquals(Locale.ENGLISH, prompt.locale(), "副本独立");
     }
 
     @Test
@@ -109,7 +134,7 @@ public class AiI18nTest {
         Assertions.assertFalse(AiI18n.knownLocales().contains(unique));
 
         Prompt prompt = Prompt.of("hi");
-        AiI18n.putLocale(prompt, unique);
+        prompt.locale(unique);
         AiI18n.registerLocaleOf(prompt);
         Assertions.assertTrue(AiI18n.knownLocales().contains(unique));
 

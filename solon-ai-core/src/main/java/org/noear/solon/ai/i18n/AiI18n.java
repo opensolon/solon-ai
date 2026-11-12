@@ -36,11 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>默认语言、覆盖工厂、已知语言、请求语言的传递方式在这里统一设置，智能体、harness 与各 talent 一致；
  * 文案本身由各模块的 {@link I18nMessages} 实例加载。</p>
  *
- * <p>请求语言的传递：智能体把语言标签写入 {@code Prompt.attrs} 与工具上下文，键为 {@link #ATTR_LOCALE}。
- * Talent 在 {@code getInstruction(prompt)} / {@code getTools(prompt)} 中用 {@link #localeOf(Prompt)} 读取；
- * 工具方法声明 {@code String __locale} 参数即可拿到（与 {@code __cwd} 一样由工具上下文注入），
- * 再用 {@link #toLocale(Object)} 转换。</p>
- *
  * @author noear
  * @since 4.2
  */
@@ -153,17 +148,6 @@ public final class AiI18n {
     }
 
     /**
-     * 将请求语言写入 Prompt.attrs（存为语言标签字符串，保证会话快照可序列化与还原；不要直接存 Locale 对象）
-     */
-    public static void putLocale(Prompt prompt, Locale locale) {
-        if (prompt == null) {
-            return;
-        }
-
-        prompt.attrs().put(ATTR_LOCALE, toTag(locale));
-    }
-
-    /**
      * 语言标签（null 时为默认语言的标签）
      */
     public static String toTag(Locale locale) {
@@ -171,23 +155,19 @@ public final class AiI18n {
     }
 
     /**
-     * 从 Prompt.attrs 取请求语言（取不到时返回 null）
+     * 取请求语言（prompt 为 null 或未设置时返回 null）；等同于 null 安全的 {@link Prompt#locale()}
      *
      * <p>无副作用：识别旧会话消息中的标记请用 {@link #registerLocaleOf(Prompt)}。</p>
      */
     public static Locale localeOf(Prompt prompt) {
-        if (prompt == null) {
-            return null;
-        }
-
-        return toLocale(prompt.attrs().get(ATTR_LOCALE));
+        return prompt == null ? null : prompt.locale();
     }
 
     /**
      * 把语言值转为 Locale（取不到时返回 null）
      *
-     * <p>支持 Locale 对象与语言标签字符串（会话持久化后会还原为字符串，如 "en"、"zh_CN"、"zh-CN"）；
-     * 工具方法的 {@code __locale} 参数也用它转换。</p>
+     * <p>支持 Locale 对象与语言标签字符串（如 "en"、"zh_CN"、"zh-CN"），规则与 {@link Prompt#locale()} 一致；
+     * 用于工具方法的 {@code __locale} 参数。</p>
      */
     public static Locale toLocale(Object val) {
         if (val instanceof Locale) {

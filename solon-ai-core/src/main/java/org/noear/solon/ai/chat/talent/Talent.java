@@ -44,16 +44,32 @@ public interface Talent extends AiSwitchable {
 
     /**
      * 获取才能描述
+     *
+     * @deprecated 4.2.0 {@link #description(Prompt)}
      */
+    @Deprecated
     default String description() {
         return null;
     }
 
     /**
-     * 获取才能元信息
+     * 获取才能元信息（描述取 {@code description(null)}，即默认语言）
      */
     default TalentMetadata metadata() {
-        return new TalentMetadata(this.name(), this.description());
+        return new TalentMetadata(this.name(), this.description(null));
+    }
+
+    /**
+     * 按请求上下文获取才能描述（写入系统提示中的才能标题行）
+     *
+     * <p>实现方重写本方法即可；描述随请求语言变化时用 {@link Prompt#locale()} 取语言。
+     * prompt 可能为 null（如构建 {@link #metadata()} 时），此时返回默认语言的描述。</p>
+     *
+     * @param prompt 当前提示词上下文（可能为 null）
+     * @since 4.2
+     */
+    default String description(Prompt prompt) {
+        return description();
     }
 
     /**
@@ -76,6 +92,8 @@ public interface Talent extends AiSwitchable {
     /**
      * 动态指令注入：生成并注入到 System Message 的描述性文本（如果使用 MD 层级，建议从第2级开始）
      * 用于约束 AI 如何使用该才能下的工具
+     *
+     * <p>请求语言用 {@link Prompt#locale()} 获取（可能为 null，表示用默认语言）。</p>
      */
     default String getInstruction(Prompt prompt) {
         return null;

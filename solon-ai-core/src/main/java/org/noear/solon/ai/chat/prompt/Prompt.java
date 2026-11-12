@@ -17,12 +17,14 @@ package org.noear.solon.ai.chat.prompt;
 
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -81,6 +83,35 @@ public interface Prompt extends Serializable {
     default Prompt attrPut(Map<String, Object> map) {
         if (Assert.isNotEmpty(map)) {
             attrs().putAll(map);
+        }
+
+        return this;
+    }
+
+    /**
+     * 获取请求语言（未设置时为 null，由使用方按默认语言处理）
+     *
+     * <p>语言存放在 attrs 的 {@link AiI18n#ATTR_LOCALE} 中，随 attrs 一起复制与序列化（JDK 序列化、会话快照、MCP 远程才能）。</p>
+     *
+     * <p>每次都从 attrs 现读、不做缓存：attrs 是对外可改的 Map（如 {@code attrs().putAll(toolContext)}），
+     * 缓存无法感知这类修改；解析规则与 {@link AiI18n#toLocale(Object)} 相同。</p>
+     *
+     * @since 4.2
+     */
+    default Locale locale() {
+        return AiI18n.toLocale(attrs().get(AiI18n.ATTR_LOCALE));
+    }
+
+    /**
+     * 设置请求语言（存为语言标签字符串，保证可序列化；null 表示移除）
+     *
+     * @since 4.2
+     */
+    default Prompt locale(Locale locale) {
+        if (locale == null) {
+            attrs().remove(AiI18n.ATTR_LOCALE);
+        } else {
+            attrs().put(AiI18n.ATTR_LOCALE, locale.toLanguageTag());
         }
 
         return this;

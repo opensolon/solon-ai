@@ -99,8 +99,9 @@ public class TalentUtil {
 
             // 工具包标题行：# [Talent: Name] Description
             combinedInstruction.append("# [Talent: ").append(talent.name()).append("]");
-            if (Utils.isNotEmpty(talent.description())) {
-                combinedInstruction.append(" - ").append(talent.description());
+            String description = talent.description(prompt);
+            if (Utils.isNotEmpty(description)) {
+                combinedInstruction.append(" - ").append(description);
             }
             combinedInstruction.append("\n<Talent:").append(talent.name()).append(">\n\n");
 

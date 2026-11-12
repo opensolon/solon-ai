@@ -92,7 +92,7 @@ public abstract class AbsTalent extends AbsSwitchable implements Talent {
     @Override
     public TalentMetadata metadata() {
         if (this.metadata == null) {
-            this.metadata = new TalentMetadata(this.name(), this.description());
+            this.metadata = new TalentMetadata(this.name(), this.description(null));
         }
 
         return this.metadata;
