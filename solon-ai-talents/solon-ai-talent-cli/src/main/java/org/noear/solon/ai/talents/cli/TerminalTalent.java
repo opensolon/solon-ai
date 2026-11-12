@@ -1183,13 +1183,19 @@ public class TerminalTalent extends AbsTalent {
     /** 启动命令会话（默认语言） */
     public String bashStart(String command, String workdir, Integer yieldTimeMs, Integer maxOutputChars,
                             Integer hardTimeoutMs, String __cwd) throws IOException {
-        return bashStart(command, workdir, yieldTimeMs, maxOutputChars, hardTimeoutMs, __cwd, null);
+        return bashStart(command, workdir, yieldTimeMs, maxOutputChars, hardTimeoutMs, __cwd, null).getContent();
     }
 
+    /**
+     * 启动命令会话
+     *
+     * <p>拒绝执行、沙盒不可用、被硬超时终止返回 {@link ToolResult#error(String)}；
+     * 仍在运行或正常结束（不论退出码）为成功，与 {@link #bash} 同口径。</p>
+     */
     @ToolMapping(
             name = "bash_start",
             description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待或输入（chars 参数）、bash_stop 终止。")
-    public String bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
+    public ToolResult bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
                             @Param(value = "workdir", required = false, description = "工作目录。默认使用当前工作区。") String workdir,
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
@@ -1199,7 +1205,7 @@ public class TerminalTalent extends AbsTalent {
         Locale locale = AiI18n.toLocale(__locale);
         String danger = support.validateCommandNoKill(command, locale);
         if (danger != null) {
-            return danger;
+            return ToolResult.error(danger);
         }
 
         Path workPath = getWorkPath(__cwd);
@@ -1223,10 +1229,8 @@ public class TerminalTalent extends AbsTalent {
         String finalCommand;
         try {
             finalCommand = support.translateCommandToEnv(command, envs, sandboxEnabled, sandboxAllowUserHome);
-        } catch (SecurityException ex) {
-            return errorOf(ex, locale);
-        } catch (MountMaterializer.MaterializationException ex) {
-            return errorOf(ex, locale);
+        } catch (SecurityException | MountMaterializer.MaterializationException ex) {
+            return ToolResult.error(errorOf(ex, locale));
         }
 
         // OS 级沙盒包装（内核级强制隔离：Seatbelt / bwrap）
@@ -1236,32 +1240,58 @@ public class TerminalTalent extends AbsTalent {
             ensureSandboxInitialized();
             if (sandboxEnabled && sandboxSystemRestrict) {
                 if (!SandboxManager.isSandboxingEnabled()) {
-                    return sandboxDisabledText(locale);
+                    return ToolResult.error(sandboxDisabledText(locale));
                 }
                 finalCommand = SandboxManager.wrapWithSandbox(
                         finalCommand, null, buildDynamicCustomConfig(workPath));
             }
         } catch (Exception e) {
-            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SANDBOX_UNAVAILABLE, "error", e.getMessage());
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_SANDBOX_UNAVAILABLE, "error", e.getMessage()));
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
-        return formatCommandSnapshot(snapshot);
+        return snapshotResult(snapshot);
     }
 
+    /** 继续等待命令会话（4.1 签名） */
+    public String bashWait(String sessionId, String chars, Integer yieldTimeMs, Integer maxOutputChars) throws IOException {
+        return bashWait(sessionId, chars, yieldTimeMs, maxOutputChars, null).getContent();
+    }
+
+    /**
+     * 继续等待命令会话
+     *
+     * <p>被硬超时终止返回 {@link ToolResult#error(String)}；会话不存在等情况直接抛异常（框架按失败处理）。
+     * 输出是固定格式的会话快照，暂不随语言变化；末尾的 {@code __locale} 用于与 4.1 的 String 签名区分，
+     * 并与其它工具方法保持一致。</p>
+     */
     @ToolMapping(
             name = "bash_wait",
             description = "继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态；也可通过 chars 向进程写入 stdin（应答确认、退出分页器等），不传时仅等待。")
-    public String bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
-                           @Param(value = "chars", required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
-                           @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
-                           @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
+    public ToolResult bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
+                               @Param(value = "chars", required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
+                               @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
+                               @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars,
+                               String __locale) throws IOException {
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.writeStdin(sessionId, chars, yieldTimeMs, maxOutputChars);
-        return formatCommandSnapshot(snapshot);
+        return snapshotResult(snapshot);
     }
 
+    /**
+     * 会话快照转工具结果：被硬超时终止算失败（与 bash 的超时同口径）；仍在运行、正常结束（不论退出码）算成功。
+     */
+    private ToolResult snapshotResult(TerminalSessionManager.CommandSnapshot snapshot) {
+        String text = formatCommandSnapshot(snapshot);
+        return snapshot.timedOut() ? ToolResult.error(text) : ToolResult.success(text);
+    }
+
+    /**
+     * 终止命令会话
+     *
+     * <p>保持返回 String：终止正是本工具要做的事，结果恒为成功；会话不存在时直接抛异常（框架按失败处理）。</p>
+     */
     @ToolMapping(name = "bash_stop", description = "终止仍在运行的命令会话及其子进程树。")
     public String bashStop(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
                            @Param(value = "reason", required = false, description = "终止原因，便于日志诊断。") String reason,
@@ -1274,11 +1304,16 @@ public class TerminalTalent extends AbsTalent {
     // --- 2. 发现文件 ---
     /** 列出目录（默认语言） */
     public String ls(String path, Boolean recursive, Boolean showHidden, String __cwd) throws IOException {
-        return ls(path, recursive, showHidden, __cwd, null);
+        return ls(path, recursive, showHidden, __cwd, null).getContent();
     }
 
+    /**
+     * 列出目录
+     *
+     * <p>路径不存在返回 {@link ToolResult#error(String)}；空目录算成功。越界等权限拒绝以异常抛出（框架按失败处理）。</p>
+     */
     @ToolMapping(name = "ls", description = "列出目录内容。支持递归 Tree 结构展示。支持逻辑路径（如 @pool）。")
-    public String ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
+    public ToolResult ls(@Param(value = "path", description = "目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                      @Param(value = "recursive", required = false, description = "是否递归展示") Boolean recursive,
                      @Param(value = "show_hidden", required = false, description = "是否显示隐藏文件") Boolean showHidden,
                      String __cwd,
@@ -1287,7 +1322,7 @@ public class TerminalTalent extends AbsTalent {
         return localized(locale, () -> lsInternal(path, recursive, showHidden, __cwd, locale));
     }
 
-    private String lsInternal(String path, Boolean recursive, Boolean showHidden, String __cwd, Locale locale) throws IOException {
+    private ToolResult lsInternal(String path, Boolean recursive, Boolean showHidden, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
@@ -1296,7 +1331,7 @@ public class TerminalTalent extends AbsTalent {
         Path target = support.resolveSafePath(workPath, path, false, sandboxEnabled, sandboxAllowUserHome, fs());
 
         if (!Files.exists(target)) {
-            return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING));
         }
 
         if (Boolean.TRUE.equals(recursive)) {
@@ -1304,25 +1339,14 @@ public class TerminalTalent extends AbsTalent {
             String displayName = (path == null || ".".equals(path)) ? "." : path;
             sb.append(displayName).append("\n");
             support.generateTreeInternal(support.getSandboxPolicyRoot(workPath, path), target, 0, 3, "", sb, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs(), locale);
-            return sb.toString();
+            return ToolResult.success(sb.toString());
         } else {
-            return support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs(), locale);
+            return ToolResult.success(support.flatListLogic(workPath, support.getSandboxPolicyRoot(workPath, path), target, path, Boolean.TRUE.equals(showHidden), sandboxEnabled, fs(), locale));
         }
     }
 
     /**
      * 文件工具的公共外壳：向上抛出的权限异常绑定请求语言
-     */
-    private static String localized(Locale locale, IoCall call) throws IOException {
-        try {
-            return call.call();
-        } catch (CliSecurityException e) {
-            throw e.withLocale(locale);
-        }
-    }
-
-    /**
-     * 同上（返回 {@link ToolResult} 的工具）
      */
     private static ToolResult localized(Locale locale, ResultCall call) throws IOException {
         try {
@@ -1333,11 +1357,6 @@ public class TerminalTalent extends AbsTalent {
     }
 
     @FunctionalInterface
-    private interface IoCall {
-        String call() throws IOException;
-    }
-
-    @FunctionalInterface
     private interface ResultCall {
         ToolResult call() throws IOException;
     }
@@ -1345,11 +1364,17 @@ public class TerminalTalent extends AbsTalent {
     // --- 3. 读取内容 ---
     /** 读取文件（默认语言） */
     public String read(String filePath, Integer offset, Integer limit, String __cwd) throws IOException {
-        return read(filePath, offset, limit, __cwd, null);
+        return read(filePath, offset, limit, __cwd, null).getContent();
     }
 
+    /**
+     * 读取文件
+     *
+     * <p>文件不存在、是目录、是二进制、超过虚拟文件上限、起始行越界返回 {@link ToolResult#error(String)}；
+     * 空文件算成功。</p>
+     */
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。")
-    public String read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
+    public ToolResult read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "offset", required = false, description = "（可选）开始读取的行号（默认从1开始索引）") Integer offset,
                        @Param(value = "limit", required = false, description = "（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
                        String __cwd,
@@ -1358,7 +1383,7 @@ public class TerminalTalent extends AbsTalent {
         return localized(locale, () -> readInternal(filePath, offset, limit, __cwd, locale));
     }
 
-    private String readInternal(String filePath, Integer offset, Integer limit, String __cwd, Locale locale) throws IOException {
+    private ToolResult readInternal(String filePath, Integer offset, Integer limit, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(filePath, false);
         if (virtual != null) {
@@ -1366,16 +1391,16 @@ public class TerminalTalent extends AbsTalent {
         }
         Path target = support.resolveSafePath(workPath, filePath, false, sandboxEnabled, sandboxAllowUserHome, fs());
         if (!Files.exists(target)) {
-            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING);
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING));
         }
 
         if (support.isNotTextFile(target)) {
-            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY);
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY));
         }
 
         long fileSize = Files.size(target);
         if (fileSize == 0) {
-            return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_EMPTY);
+            return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_EMPTY));
         }
 
         // 1. 参数预处理
@@ -1431,7 +1456,7 @@ public class TerminalTalent extends AbsTalent {
         }
 
         if (!hasData) {
-            return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", startLine0 + 1);
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", startLine0 + 1));
         }
 
         // 3. 组装最终结果
@@ -1461,7 +1486,7 @@ public class TerminalTalent extends AbsTalent {
         //读完顺手预热语言服务器（异步、不阻塞、失败无声）：模型读过的文件往往紧接着就要改
         warmupFile(target);
 
-        return sb.toString();
+        return ToolResult.success(sb.toString());
     }
 
     // --- 4. 写入与编辑 ---
@@ -1613,11 +1638,16 @@ public class TerminalTalent extends AbsTalent {
     // --- 5. 搜索工具 ---
     /** 搜索内容（默认语言） */
     public String grep(String pattern, String path, String include, String __cwd) throws IOException {
-        return grep(pattern, path, include, __cwd, null);
+        return grep(pattern, path, include, __cwd, null).getContent();
     }
 
+    /**
+     * 搜索内容
+     *
+     * <p>搜索路径不存在或传了多个路径返回 {@link ToolResult#error(String)}；未找到结果算成功。</p>
+     */
     @ToolMapping(name = "grep", description = "递归搜索内容。返回 '路径:行号:内容'。在不确定文件位置时先执行搜索。支持逻辑路径（如 @pool）。pattern 支持正则表达式匹配。")
-    public String grep(@Param(value = "pattern", description = "搜索内容，支持正则表达式匹配") String pattern,
+    public ToolResult grep(@Param(value = "pattern", description = "搜索内容，支持正则表达式匹配") String pattern,
                        @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        @Param(value = "include", required = false, description = "要包含的文件模式（如 \"*.js\"、\"*.{ts,tsx}\"）") String include,
                        String __cwd,
@@ -1626,7 +1656,7 @@ public class TerminalTalent extends AbsTalent {
         return localized(locale, () -> grepInternal(pattern, path, include, __cwd, locale));
     }
 
-    private String grepInternal(String pattern, String path, String include, String __cwd, Locale locale) throws IOException {
+    private ToolResult grepInternal(String pattern, String path, String include, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
@@ -1636,7 +1666,7 @@ public class TerminalTalent extends AbsTalent {
 
         String pathError = checkSearchPath("grep", path, target, locale);
         if (pathError != null) {
-            return pathError;
+            return ToolResult.error(pathError);
         }
 
         // 预编译正则，若语法无效则回退到 contains 匹配
@@ -1717,16 +1747,21 @@ public class TerminalTalent extends AbsTalent {
             sb.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_TRUNCATED, "kb", support.maxCharacterLimit / 1024));
         }
 
-        return sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString();
+        return ToolResult.success(sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString());
     }
 
     /** 按模式搜索文件（默认语言） */
     public String glob(String pattern, String path, String __cwd) throws IOException {
-        return glob(pattern, path, __cwd, null);
+        return glob(pattern, path, __cwd, null).getContent();
     }
 
+    /**
+     * 按模式搜索文件
+     *
+     * <p>搜索路径不存在或传了多个路径返回 {@link ToolResult#error(String)}；未找到匹配文件算成功。</p>
+     */
     @ToolMapping(name = "glob", description = "按通配符模式（如 **/*.java）搜索文件。确定文件范围的最高效工具。支持逻辑路径（如 @pool）。")
-    public String glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
+    public ToolResult glob(@Param(value = "pattern", description = "glob 模式。") String pattern,
                        @Param(value = "path", description = "（单个）目录相对路径（如 'src'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String path,
                        String __cwd,
                        String __locale) throws IOException {
@@ -1734,7 +1769,7 @@ public class TerminalTalent extends AbsTalent {
         return localized(locale, () -> globInternal(pattern, path, __cwd, locale));
     }
 
-    private String globInternal(String pattern, String path, String __cwd, Locale locale) throws IOException {
+    private ToolResult globInternal(String pattern, String path, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(path, false);
         if (virtual != null) {
@@ -1744,7 +1779,7 @@ public class TerminalTalent extends AbsTalent {
 
         String pathError = checkSearchPath("glob", path, target, locale);
         if (pathError != null) {
-            return pathError;
+            return ToolResult.error(pathError);
         }
 
         String fixedPattern = pattern.replace("\\", "/");
@@ -1776,9 +1811,9 @@ public class TerminalTalent extends AbsTalent {
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
             }
         });
-        if (results.isEmpty()) return CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE);
+        if (results.isEmpty()) return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE));
         Collections.sort(results);
-        return String.join("\n", results);
+        return ToolResult.success(String.join("\n", results));
     }
 
     /** 解析仅能通过 MountSource 访问的虚拟来源；本地来源继续走既有 Path 安全路径。 */
@@ -1806,10 +1841,10 @@ public class TerminalTalent extends AbsTalent {
         return resource;
     }
 
-    private String lsVirtual(ResolvedResource resource, boolean recursive, boolean showHidden, Locale locale) throws IOException {
+    private ToolResult lsVirtual(ResolvedResource resource, boolean recursive, boolean showHidden, Locale locale) throws IOException {
         MountSource source = resource.getSource();
         String base = resource.getSourcePath();
-        if (source.stat(base) == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
+        if (source.stat(base) == null) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING));
         List<MountEntry> entries = recursive
                 ? source.find(base, FindOptions.builder().maxDepth(3).maxEntries(500).build())
                 : source.list(base);
@@ -1821,25 +1856,25 @@ public class TerminalTalent extends AbsTalent {
             lines.add((entry.isDirectory() ? "[DIR] " : "[FILE] ") + display + (entry.isDirectory() ? "/" : ""));
         }
         Collections.sort(lines);
-        return lines.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_EMPTY) : String.join("\n", lines);
+        return ToolResult.success(lines.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_EMPTY) : String.join("\n", lines));
     }
 
-    private String readVirtual(ResolvedResource resource, Integer offset, Integer limit, Locale locale) throws IOException {
+    private ToolResult readVirtual(ResolvedResource resource, Integer offset, Integer limit, Locale locale) throws IOException {
         MountEntry entry = resource.getSource().stat(resource.getSourcePath());
-        if (entry == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING);
-        if (entry.isDirectory()) return CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DIR);
-        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return virtualFileTooLarge(locale);
+        if (entry == null) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING));
+        if (entry.isDirectory()) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DIR));
+        if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return ToolResult.error(virtualFileTooLarge(locale));
         byte[] bytes;
         try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
             bytes = readVirtualBytes(in);
         } catch (VirtualFileTooLargeException e) {
-            return virtualFileTooLarge(locale);
+            return ToolResult.error(virtualFileTooLarge(locale));
         }
         String text = TerminalSupport.stripUtf8Bom(new String(bytes, fileCharset));
         String[] lines = text.split("\\R", -1);
         int start = offset == null || offset < 1 ? 0 : offset - 1;
         int end = limit == null || limit <= 0 ? lines.length : (int) Math.min(lines.length, (long) start + limit);
-        if (start >= lines.length) return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", start + 1);
+        if (start >= lines.length) return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_OFFSET_OUT, "line", start + 1));
         StringBuilder out = new StringBuilder();
         int lastLine = start;
         boolean truncated = false;
@@ -1862,7 +1897,7 @@ public class TerminalTalent extends AbsTalent {
         out.append(truncated || lastLine < lines.length
                 ? "\n\n" + CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MORE) + "\n" + CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_NEXT, "offset", lastLine + 1)
                 : "\n\n" + CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_DONE));
-        return out.toString();
+        return ToolResult.success(out.toString());
     }
 
     private ToolResult writeVirtual(ResolvedResource resource, String content, Locale locale) throws IOException {
@@ -1914,11 +1949,11 @@ public class TerminalTalent extends AbsTalent {
         return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", resource.getLogicalPath(), "count", edits.size()));
     }
 
-    private String grepVirtual(ResolvedResource resource, String pattern, String include, Locale locale) throws IOException {
+    private ToolResult grepVirtual(ResolvedResource resource, String pattern, String include, Locale locale) throws IOException {
         FindOptions options = FindOptions.builder().maxDepth(20).maxEntries(500).filesOnly(true).build();
         List<MountEntry> entries;
         MountEntry requested = resource.getSource().stat(resource.getSourcePath());
-        if (requested == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
+        if (requested == null) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING));
         if (requested.isDirectory()) {
             entries = resource.getSource().find(resource.getSourcePath(), options);
         } else {
@@ -1949,18 +1984,18 @@ public class TerminalTalent extends AbsTalent {
                     if (regex != null ? regex.matcher(line).find() : line.contains(pattern)) {
                         String display = resource.getMountAlias() + "/" + entry.getPath();
                         out.append(display).append(":").append(lineNo).append(": ").append(line.trim()).append('\n');
-                        if (out.length() >= support.maxCharacterLimit) return out.substring(0, support.maxCharacterLimit);
+                        if (out.length() >= support.maxCharacterLimit) return ToolResult.success(out.substring(0, support.maxCharacterLimit));
                     }
                 }
             }
         }
         if (skippedLarge > 0) out.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_SKIPPED_LARGE, "count", skippedLarge)).append("\n");
-        return out.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : out.toString();
+        return ToolResult.success(out.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : out.toString());
     }
 
-    private String globVirtual(ResolvedResource resource, String pattern, Locale locale) throws IOException {
+    private ToolResult globVirtual(ResolvedResource resource, String pattern, Locale locale) throws IOException {
         MountEntry requested = resource.getSource().stat(resource.getSourcePath());
-        if (requested == null) return CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING);
+        if (requested == null) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_PATH_MISSING));
         List<MountEntry> entries;
         if (requested.isDirectory()) {
             entries = resource.getSource().find(resource.getSourcePath(),
@@ -1971,7 +2006,7 @@ public class TerminalTalent extends AbsTalent {
         List<String> result = new ArrayList<>();
         for (MountEntry entry : entries) result.add("[FILE] " + resource.getMountAlias() + "/" + entry.getPath());
         Collections.sort(result);
-        return result.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE) : String.join("\n", result);
+        return ToolResult.success(result.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE) : String.join("\n", result));
     }
 
     private boolean globMatches(String pattern, String value) {

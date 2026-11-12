@@ -27,7 +27,6 @@
 
 ## 不在本次范围
 
-- Terminal 的 `read`/`ls`/`grep`/`glob`/`bash_*` 失败标记（以后单独做）
 - 用 `metas` 带退出码或"3/5 成功"给前端
 - 统一 `ERROR: ` 与"错误："两种前缀
 - 改 `goal_get` 的文本
@@ -39,3 +38,12 @@
 - [x] `LoopTalent.doPauseResume` 去掉多余括号
 - [x] `TaskTalentErrorFlagTest` 移到 `features.ai.harness`；`taskOp` / `multitaskContext` / `aggregate` 移入 `HarnessFixtures`（改为 public），不再依赖 `HarnessRenderGoldenTest`
 - [x] `LoopTalentErrorFlagTest` 解析 JSON 断言 `total`，不依赖输出空格
+
+## 第 4 批：Terminal 剩余工具（2026-11-12）
+
+- [x] `read` / `ls` / `grep` / `glob` / `bash_start`（带 `__locale`，4.2 新增）改返回 `ToolResult`，默认语言旧签名转 `.getContent()`
+- [x] `bash_wait`：4.1 的 4 参 `String` 签名保留，新增带 `__locale` 的 `ToolResult` 重载作为工具方法
+- [x] `bash_stop` 不改（终止即成功；会话不存在本就抛异常，框架按失败处理）
+- 算失败：路径/文件不存在、二进制、读目录、虚拟文件超限、起始行越界、搜索路径不存在或多路径、bash_start 拒绝/沙盒不可用、会话被硬超时终止
+- 算成功：空目录、空文件、未找到结果、会话仍在运行或正常结束（不论退出码）
+- 验证：`TerminalTalentFileToolErrorFlagTest` 6 例（故障注入验证）；快照未变；cli 全量仅 2 例既有时序不稳；依赖 cli 的模块与 soloncode-cli 测试编译通过

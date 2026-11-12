@@ -60,7 +60,7 @@ final class CliI18nRender {
     }
 
     static String bashStart(TerminalTalent t, String tag, String cmd) throws Exception {
-        return t.bashStart(cmd, null, 1000, 64000, 120000, null, tag);
+        return t.bashStart(cmd, null, 1000, 64000, 120000, null, tag).getContent();
     }
 
     static String exec(TerminalTalent t, String tag, String cmd, String cwd, int timeoutMs, int max) {
@@ -72,11 +72,11 @@ final class CliI18nRender {
     }
 
     static String ls(TerminalTalent t, String tag, String path, boolean recursive) throws Exception {
-        return t.ls(path, recursive, false, null, tag);
+        return t.ls(path, recursive, false, null, tag).getContent();
     }
 
     static String read(TerminalTalent t, String tag, String path, Integer offset, Integer limit) throws Exception {
-        return t.read(path, offset, limit, null, tag);
+        return t.read(path, offset, limit, null, tag).getContent();
     }
 
     static String write(TerminalTalent t, String tag, String path, String content) throws Exception {
@@ -88,11 +88,11 @@ final class CliI18nRender {
     }
 
     static String grep(TerminalTalent t, String tag, String pattern, String path) throws Exception {
-        return t.grep(pattern, path, null, null, tag);
+        return t.grep(pattern, path, null, null, tag).getContent();
     }
 
     static String glob(TerminalTalent t, String tag, String pattern, String path) throws Exception {
-        return t.glob(pattern, path, null, tag);
+        return t.glob(pattern, path, null, tag).getContent();
     }
 
     static String loose(TerminalSupport s, String tag, String content, String old, Integer line) {
