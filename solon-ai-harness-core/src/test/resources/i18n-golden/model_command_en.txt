@@ -1,0 +1,23 @@
+$ /model 
+Models:
+  fake (active)
+
+Usage: /model <name>
+
+
+$ /model help
+/model - Model management
+  /model          List all available models
+  /model ls       List all available models
+  /model <name>   Switch to the specified model
+
+
+$ /model nope
+Model not found: nope
+Use '/model' to see available models.
+
+
+$ /model fake
+Model switched to: fake
+
+

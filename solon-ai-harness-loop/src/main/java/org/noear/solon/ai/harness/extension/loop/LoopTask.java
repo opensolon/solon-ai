@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.solon.ai.harness.util.HarnessIds;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.lang.Nullable;
 import org.noear.snack4.ONode;
 
 import java.time.Instant;
@@ -23,6 +25,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -44,6 +47,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p><b>运行锁随任务身份</b>：修改产出的新版本与旧版本共享同一把运行锁与错误计数——
  * 修改正在执行的任务时，新版本不会与在途那一轮并发执行。</p>
  *
+ * <p><b>语言</b>：任务记下创建时的语言（{@link #getLocale()}，随任务持久化，修改不变）。定时轮次由后台调度发起，
+ * 没有用户输入可取语言，每一轮都按它交给执行器；没有记下语言（升级前的数据、宿主未指定）时跟随引擎实例的语言。</p>
+ *
  * @author noear
  * @since 3.9.1
  */
@@ -56,7 +62,7 @@ public class LoopTask {
     static final Set<String> RESERVED_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "id", "prompt", "intervalMinutes", "cron", "createdAt", "autoInterval",
             "cancelled", "enabled", "lastResult", "lastExecutedAt", "currentIteration",
-            "runNow", "oneShot", "sessionId")));
+            "runNow", "oneShot", "locale", "sessionId")));
 
     // ---- 核心调度字段 ----
     private final String id;
@@ -66,6 +72,7 @@ public class LoopTask {
     private final Instant createdAt;
     private final boolean autoInterval;
     private final boolean runNow;            // 注册后立即执行首次（initialDelay=0）
+    private final Locale locale;             // 任务的语言（null = 跟随引擎实例的语言）
 
     // ---- 运行时状态 ----
     /** 运行锁（瞬态；同一 id 的各版本共享，见 copyWithUpdate）。 */
@@ -83,8 +90,13 @@ public class LoopTask {
     /** 宿主扩展字段（保持插入顺序，保证往返序列化稳定）。 */
     private final Map<String, ONode> extras = Collections.synchronizedMap(new LinkedHashMap<>());
 
-    /** 包内构造（宿主新建任务用 {@link LoopSpec}）；间隔静默收敛到合法区间。 */
+    /** 包内构造（宿主新建任务用 {@link LoopSpec}）；间隔静默收敛到合法区间；不记语言（跟随引擎）。 */
     LoopTask(String prompt, int intervalMinutes, String cron, boolean runNow) {
+        this(prompt, intervalMinutes, cron, runNow, null);
+    }
+
+    /** 包内构造：同上，并记下任务的语言（null = 跟随引擎实例的语言）。 */
+    LoopTask(String prompt, int intervalMinutes, String cron, boolean runNow, @Nullable Locale locale) {
         this.id = HarnessIds.newId(); // 完整 128 bit：截断 ID 落共享存储/共享 JobManager 会撞号
         this.prompt = prompt;
         // 间隔收敛在 [MIN_INTERVAL, MAX_INTERVAL]，不存在 0 间隔（cron 模式忽略该值）
@@ -93,6 +105,7 @@ public class LoopTask {
         this.createdAt = Instant.now();
         this.autoInterval = false;
         this.runNow = runNow;
+        this.locale = locale;
         this.currentIteration = 0;
         this.enabled = true;
         this.running = new AtomicBoolean();
@@ -100,7 +113,7 @@ public class LoopTask {
     }
 
     private LoopTask(String id, String prompt, int intervalMinutes, String cron,
-                     Instant createdAt, boolean autoInterval, boolean enabled, boolean runNow,
+                     Instant createdAt, boolean autoInterval, boolean enabled, boolean runNow, Locale locale,
                      boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration,
                      AtomicBoolean running, AtomicInteger errorStreak) {
         this.running = running;
@@ -113,6 +126,7 @@ public class LoopTask {
         this.autoInterval = autoInterval;
         this.enabled = enabled;
         this.runNow = runNow;
+        this.locale = locale;
         this.cancelled = cancelled;
         this.lastResult = lastResult;
         this.lastExecutedAt = lastExecutedAt;
@@ -127,8 +141,10 @@ public class LoopTask {
      * 基于当前任务复制出一份更新后的任务定义，保留任务身份、运行时状态（含启停）与扩展字段（宿主用 {@link LoopPatch}）。
      *
      * <p>新旧版本共享运行锁与错误计数：在途那一轮结束时释放的是同一把锁。</p>
+     *
+     * @param locale 新版本的任务语言（null = 跟随引擎实例的语言）
      */
-    LoopTask copyWithUpdate(String prompt, int intervalMinutes, String cron, Boolean runNow) {
+    LoopTask copyWithUpdate(String prompt, int intervalMinutes, String cron, Boolean runNow, @Nullable Locale locale) {
         LoopTask task = new LoopTask(
                 this.id,
                 prompt,
@@ -138,6 +154,7 @@ public class LoopTask {
                 this.autoInterval,
                 this.enabled,
                 runNow != null ? runNow : this.runNow,
+                locale,
                 this.cancelled,
                 this.lastResult,
                 this.lastExecutedAt,
@@ -167,6 +184,13 @@ public class LoopTask {
     public int getCurrentIteration() { return currentIteration; }
     public boolean isEnabled() { return enabled; }
     public boolean isOneShot() { return oneShot; }
+
+    /**
+     * 任务的语言（创建时记下；null = 跟随引擎实例的语言，升级前保存的任务即如此）。
+     *
+     * @since 4.2.0
+     */
+    public @Nullable Locale getLocale() { return locale; }
 
     /** 是否为 cron 模式 */
     public boolean isCronMode() {
@@ -239,7 +263,7 @@ public class LoopTask {
      * 标准展示视图（不含扩展字段），宿主列表/详情接口直接用，再按需追加自己的字段（如 type、sessionId）。
      *
      * <p>字段：id、prompt、intervalMinutes、cron（仅 cron 模式）、oneShot、runNow、enabled、cancelled、running、
-     * currentIteration、lastResult（有则出）、lastExecutedAt（ISO-8601，有则出）。</p>
+     * currentIteration、locale（仅指定了语言时出）、lastResult（有则出）、lastExecutedAt（ISO-8601，有则出）。</p>
      */
     public Map<String, Object> toMap() {
         Map<String, Object> item = new LinkedHashMap<>();
@@ -253,6 +277,7 @@ public class LoopTask {
         item.put("cancelled", cancelled);
         item.put("running", running.get());
         item.put("currentIteration", currentIteration);
+        if (locale != null) item.put("locale", locale.toLanguageTag());
         if (lastResult != null) item.put("lastResult", lastResult);
         if (lastExecutedAt != null) item.put("lastExecutedAt", lastExecutedAt.toString());
         return item;
@@ -285,6 +310,7 @@ public class LoopTask {
 
         if (runNow) node.set("runNow", true);
         if (oneShot) node.set("oneShot", true);   // 缺省 false，旧 JSON 兼容
+        if (locale != null) node.set("locale", locale.toLanguageTag());   // 缺失 = 跟随引擎，旧 JSON 兼容
 
         // 宿主扩展字段原样写回（不认识也不丢）
         synchronized (extras) {
@@ -310,6 +336,8 @@ public class LoopTask {
         boolean oneShotVal = node.getOrNull("oneShot") != null && node.get("oneShot").getBoolean();
         boolean cancelledVal = node.getOrNull("cancelled") != null && node.get("cancelled").getBoolean();
         boolean autoIntervalVal = node.getOrNull("autoInterval") != null && node.get("autoInterval").getBoolean();
+        Locale localeVal = node.getOrNull("locale") != null
+                ? AiI18n.toLocale(node.get("locale").getString()) : null;
 
         LoopTask task = new LoopTask(
                 node.get("id").getString(),
@@ -320,6 +348,7 @@ public class LoopTask {
                 autoIntervalVal,
                 enabledVal,
                 runNowVal,
+                localeVal,
                 cancelledVal,
                 lastResultVal,
                 lastExecutedAtVal,

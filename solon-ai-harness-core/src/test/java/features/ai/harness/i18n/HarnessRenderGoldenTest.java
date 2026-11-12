@@ -20,6 +20,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandInput;
 import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.command.CommandDispatcher;
+import org.noear.solon.ai.harness.command.MarkdownCommand;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.command.builtin.ClearCommand;
 import org.noear.solon.ai.harness.command.builtin.ContinueCommand;
@@ -354,6 +355,18 @@ public class HarnessRenderGoldenTest {
         ctx = HarnessFixtures.ctx(locale, engine.getSession("c3"), "/rewind 2", "rewind", "2");
         new RewindCommand().execute(engine, ctx.in, ctx.out);
         out.put("rewind_ok" + suffix, ctx.text());
+
+        //模型命令：列表（当前模型标记 + 用法）、帮助、找不到、切换
+        StringBuilder model = new StringBuilder();
+        for (String[] args : new String[][]{{}, {"help"}, {"nope"}, {"fake"}}) {
+            ctx = HarnessFixtures.ctx(locale, engine.getSession("c4"), "/model", "model", args);
+            new ModelCommand().execute(engine, ctx.in, ctx.out);
+            model.append("$ /model ").append(String.join(" ", args)).append('\n').append(ctx.text()).append("\n\n");
+        }
+        out.put("model_command" + suffix, model.toString());
+
+        //Markdown 自定义命令：没写 description 时的兜底描述
+        out.put("custom_description" + suffix, new MarkdownCommand("deploy", "tpl", null, null).description(locale));
 
         //分发器：渠道不可用 / 已停用
         HarnessEngine engine2 = HarnessFixtures.builder(ws.resolve("cmd2"))

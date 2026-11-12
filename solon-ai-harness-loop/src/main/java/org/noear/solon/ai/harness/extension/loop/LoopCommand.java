@@ -52,6 +52,9 @@ import java.util.Locale;
  * <p>停止任务只在该任务<b>正在执行</b>时才停流，且用程序级取消（{@code InterruptMode.CANCEL_STREAM}）：
  * 定时轮次是程序发起的，不应清空用户的排队，也不应在历史里留下「用户已取消」。</p>
  *
+ * <p><b>语言</b>：回执按命令上下文的语言输出；新建的任务记下这个语言，之后每一轮都用它（见 {@link LoopTask#getLocale()}）。
+ * 列表里的 {@code [heartbeat]}、{@code [now]}、{@code cron:} 是终端标记（机器可读的形态），不随语言翻译。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
@@ -97,11 +100,12 @@ final class LoopCommand extends AbsCommand {
     @Override
     public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
         String sessionId = input.getSession().getSessionId();
+        Locale locale = input.getLocale();
         int argc = input.argCount();
         String sub = input.argAt(0);
 
         if (argc == 0 || (argc == 1 && ("list".equals(sub) || "ls".equals(sub)))) {
-            doList(input, output, sessionId);
+            doList(locale, output, sessionId);
         } else if (argc == 2 && ("remove".equals(sub) || "stop".equals(sub))) {
             doRemove(engine, input, output, sessionId, input.argAt(1));
         } else if (argc == 1 && ("clear".equals(sub) || "stop-all".equals(sub))) {
@@ -114,7 +118,7 @@ final class LoopCommand extends AbsCommand {
                 // 程序级取消：不清用户的排队、不写「用户已取消」消息
                 engine.interrupt(input.getSession(), InterruptMode.CANCEL_STREAM);
             }
-            output.println(output.color(GREEN + "All loop tasks removed." + RESET));
+            output.println(output.color(GREEN + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_CLEARED) + RESET));
         } else if (argc == 2 && ("pause".equals(sub) || "resume".equals(sub))) {
             doPauseResume(input, output, sessionId, "resume".equals(sub));
         } else {
@@ -123,9 +127,10 @@ final class LoopCommand extends AbsCommand {
     }
 
     private void doRemove(HarnessEngine engine, CommandInput input, CommandOutput output, String sessionId, String taskId) {
+        Locale locale = input.getLocale();
         LoopTask task = tasks.get(sessionId, taskId);
         if (task == null) {
-            output.println(output.color(RED + "Loop task '" + taskId + "' not found." + RESET));
+            output.println(output.color(RED + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_NOT_FOUND, "id", taskId) + RESET));
             return;
         }
         boolean wasRunning = task.isRunning();
@@ -134,25 +139,30 @@ final class LoopCommand extends AbsCommand {
             // 只停正在执行的那一轮（程序级取消：不清用户的排队、不写「用户已取消」消息）
             engine.interrupt(input.getSession(), InterruptMode.CANCEL_STREAM);
         }
-        output.println(output.color(GREEN + "Loop task '" + taskId + "' removed." + RESET));
+        output.println(output.color(GREEN + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_REMOVED, "id", taskId) + RESET));
     }
 
     private void doPauseResume(CommandInput input, CommandOutput output, String sessionId, boolean resume) {
-        String verb = resume ? "resume" : "pause";
+        Locale locale = input.getLocale();
         String taskId = input.argAt(1);
         if (taskId == null || taskId.isEmpty()) {
-            output.println(output.color(RED + "Usage: /loop " + verb + " <id>" + RESET));
+            output.println(output.color(RED + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_ID_USAGE,
+                    "action", resume ? "resume" : "pause") + RESET));
             return;
         }
         if (!tasks.setEnabled(sessionId, taskId, resume)) {
-            output.println(output.color(RED + "Loop task '" + taskId + "' not found." + RESET));
+            output.println(output.color(RED + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_NOT_FOUND, "id", taskId) + RESET));
             return;
         }
-        output.println(output.color(GREEN + "Loop task '" + taskId + "' " + (resume ? "resumed." : "paused.") + RESET));
+        String done = resume
+                ? LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_RESUMED, "id", taskId)
+                : LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_PAUSED, "id", taskId);
+        output.println(output.color(GREEN + done + RESET));
     }
 
     /** 解析并创建新的 loop 任务 */
     private void doSchedule(CommandInput input, CommandOutput output, String sessionId) {
+        Locale locale = input.getLocale();
         int intervalMinutes = 5; // default
         String cronExpr = null;
         boolean runNow = false;
@@ -173,26 +183,28 @@ final class LoopCommand extends AbsCommand {
                 if ("--every".equals(arg)) {
                     Integer parsed = parseInterval(value);
                     if (parsed == null) {
-                        output.println(output.color(RED + "Invalid interval: " + value + " (e.g. 30s, 5m, 2h)" + RESET));
+                        output.println(output.color(RED + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_BAD_INTERVAL,
+                                "value", value) + RESET));
                         return;
                     }
                     intervalMinutes = parsed;
                 } else {
                     cronExpr = unquote(value);
                     if (cronExpr == null || cronExpr.isEmpty()) {
-                        printUsage(input, output);
+                        printUsage(locale, output);
                         return;
                     }
                 }
             } else if ("--now".equals(arg)) {
                 runNow = true;
             } else if (arg.startsWith("--")) {
-                output.println(output.color(YELLOW + "Unknown flag: " + arg + RESET));
+                output.println(output.color(YELLOW + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_UNKNOWN_FLAG,
+                        "flag", arg) + RESET));
             } else if (i == 0 && arg.startsWith("cron:")) {
                 // 旧写法：cron:"expr"
                 cronExpr = unquote(arg.substring(5).trim());
                 if (cronExpr.isEmpty()) {
-                    printUsage(input, output);
+                    printUsage(locale, output);
                     return;
                 }
             } else if (i == 0 && parseInterval(arg) != null) {
@@ -205,32 +217,42 @@ final class LoopCommand extends AbsCommand {
 
         String prompt = promptBuilder.toString().trim();
         if (prompt.isEmpty()) {
-            printUsage(input, output);
+            printUsage(locale, output);
             return;
         }
 
-        LoopTask task = new LoopTask(prompt, intervalMinutes, cronExpr, runNow);
+        // 任务记下命令上下文的语言：之后的定时轮次由后台调度发起，没有输入可取语言
+        LoopTask task = new LoopTask(prompt, intervalMinutes, cronExpr, runNow, locale);
         try {
             tasks.schedule(sessionId, task);
         } catch (IllegalArgumentException | IllegalStateException e) {
-            output.println(output.color(RED + "Failed: " + LoopArgumentException.messageOf(e, input.getLocale()) + RESET));
+            output.println(output.color(RED + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_FAILED,
+                    "reason", LoopArgumentException.messageOf(e, locale)) + RESET));
             return;
         }
 
-        output.println(output.color(GREEN + "Loop task registered:" + RESET));
-        output.println(output.color("  " + BOLD + "ID:" + RESET + " " + task.getId()));
+        output.println(output.color(GREEN + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_REGISTERED) + RESET));
+        output.println(output.color(field(BOLD, "ID:", task.getId())));
         if (task.isCronMode()) {
-            output.println(output.color("  " + BOLD + "Cron:" + RESET + " " + task.getCron()));
+            output.println(output.color(field(BOLD, "Cron:", task.getCron())));
         } else {
-            output.println(output.color("  " + BOLD + "Interval:" + RESET + " " + formatInterval(task.getIntervalMinutes())));
+            output.println(output.color(field(BOLD, LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_FIELD_INTERVAL),
+                    formatInterval(task.getIntervalMinutes(), locale))));
         }
-        output.println(output.color("  " + BOLD + "Prompt:" + RESET + " " + prompt));
+        output.println(output.color(field(BOLD, LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_FIELD_PROMPT), prompt)));
         if (runNow) {
-            output.println(output.color("  " + MAGENTA + "Run Now:" + RESET + " first execution immediately"));
+            output.println(output.color(field(MAGENTA, LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_FIELD_RUN_NOW),
+                    LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_RUN_NOW_FIRST))));
         }
         if (tasks.isPersistent()) {
-            output.println(output.color("  " + DIM + "State:" + RESET + " persisted"));
+            output.println(output.color(field(DIM, LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_FIELD_STATE),
+                    LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_STATE_PERSISTED))));
         }
+    }
+
+    /** 详情行：两格缩进 + 着色的字段名 + 值 */
+    private static String field(String labelColor, String label, String value) {
+        return "  " + labelColor + label + RESET + " " + value;
     }
 
     private static void appendWord(StringBuilder buf, String word) {
@@ -247,39 +269,53 @@ final class LoopCommand extends AbsCommand {
         return v;
     }
 
-    private void doList(CommandInput input, CommandOutput output, String sessionId) {
+    private void doList(@Nullable Locale locale, CommandOutput output, String sessionId) {
         List<LoopTask> list = tasks.list(sessionId);
         if (list.isEmpty()) {
-            output.println(output.color(DIM + "No active loop tasks." + RESET));
-            output.println(output.color(DIM + "Usage: /loop [--every 5m | --cron <expr>] [--now] <prompt>" + RESET));
+            output.println(output.color(DIM + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_LIST_EMPTY) + RESET));
+            output.println(output.color(DIM + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_USAGE) + RESET));
             return;
         }
-        output.println(output.color(BOLD + "Active Loop Tasks:" + RESET));
+        output.println(output.color(BOLD + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_LIST_TITLE) + RESET));
         for (LoopTask t : list) {
-            String status = !t.isEnabled() ? DIM + "paused" + RESET
-                    : (t.isRunning() ? YELLOW + "running" + RESET : GREEN + "idle" + RESET);
-            String scheduleInfo = t.isCronMode()
-                    ? CYAN + "cron:" + t.getCron() + RESET
-                    : formatInterval(t.getIntervalMinutes());
-            String lastInfo = t.getLastExecutedAt() != null
-                    ? DIM + " (last: " + formatAgo(t.getLastExecutedAt()) + ": "
-                    + (t.getLastResult() != null ? t.getLastResult() : "-") + ")" + RESET
-                    : "";
-
-            StringBuilder line = new StringBuilder();
-            line.append("  ").append(CYAN).append(t.getId()).append(RESET);
-            line.append(" ").append(CYAN).append("[heartbeat]").append(RESET);
-            line.append(" ").append(scheduleInfo);
-            line.append(" ").append(status);
-            if (t.isRunNow()) {
-                line.append(" ").append(MAGENTA).append("[now]").append(RESET);
-            }
-            line.append(" ").append(DIM).append("iter:").append(t.getCurrentIteration()).append(RESET);
-            line.append(" ").append(DIM).append(t.getPrompt()).append(RESET);
-            line.append(lastInfo);
-            output.println(output.color(line.toString()));
+            output.println(output.color(formatTaskLine(t, locale)));
         }
-        output.println(output.color(DIM + "\nUsage: /loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear" + RESET));
+        output.println(output.color(DIM + "\n" + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_LIST_FOOTER) + RESET));
+    }
+
+    /** 列表行 */
+    private static String formatTaskLine(LoopTask t, @Nullable Locale locale) {
+        String status;
+        if (!t.isEnabled()) {
+            status = DIM + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_STATUS_PAUSED) + RESET;
+        } else if (t.isRunning()) {
+            status = YELLOW + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_STATUS_RUNNING) + RESET;
+        } else {
+            status = GREEN + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_STATUS_IDLE) + RESET;
+        }
+        String scheduleInfo = t.isCronMode()
+                ? CYAN + "cron:" + t.getCron() + RESET
+                : formatInterval(t.getIntervalMinutes(), locale);
+        String lastInfo = t.getLastExecutedAt() != null
+                ? DIM + " " + LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_LIST_LAST,
+                "ago", formatAgo(t.getLastExecutedAt(), locale),
+                "result", t.getLastResult() != null ? t.getLastResult() : "-") + RESET
+                : "";
+
+        StringBuilder line = new StringBuilder();
+        line.append("  ").append(CYAN).append(t.getId()).append(RESET);
+        line.append(" ").append(CYAN).append("[heartbeat]").append(RESET);
+        line.append(" ").append(scheduleInfo);
+        line.append(" ").append(status);
+        if (t.isRunNow()) {
+            line.append(" ").append(MAGENTA).append("[now]").append(RESET);
+        }
+        line.append(" ").append(DIM)
+                .append(LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_LIST_ITERATIONS, "count", t.getCurrentIteration()))
+                .append(RESET);
+        line.append(" ").append(DIM).append(t.getPrompt()).append(RESET);
+        line.append(lastInfo);
+        return line.toString();
     }
 
     /**
@@ -327,26 +363,31 @@ final class LoopCommand extends AbsCommand {
         return Math.max(1, Math.min(1440, minutes));
     }
 
-    private void printUsage(CommandInput input, CommandOutput output) {
-        output.println(output.color(RED + "Usage: /loop [--every <interval> | --cron <expr>] [--now] <prompt>" + RESET));
-        output.println(output.color(DIM + "Basic:" + RESET));
-        output.println(output.color(DIM + "  /loop --every 5m check deployment" + RESET));
-        output.println(output.color(DIM + "  /loop --every 30s check CI status" + RESET));
-        output.println(output.color(DIM + "  /loop check CI status   (auto 5m)" + RESET));
-        output.println(output.color(DIM + "  /loop --cron \"0 */5 * * * ? *\" check status" + RESET));
-    }
-
-    private static String formatInterval(int minutes) {
-        if (minutes >= 60 && minutes % 60 == 0) {
-            return "every " + (minutes / 60) + "h";
+    private static void printUsage(@Nullable Locale locale, CommandOutput output) {
+        output.println(output.color(RED + LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_USAGE) + RESET));
+        // 示例多行：逐行着色（终端里每行各自生效，不依赖跨行的转义序列）
+        for (String line : LoopI18n.get(locale, LoopI18nKeys.COMMAND_LOOP_USAGE_EXAMPLES).split("\n")) {
+            output.println(output.color(DIM + line + RESET));
         }
-        return "every " + minutes + "m";
     }
 
-    private static String formatAgo(Instant instant) {
+    /** 间隔展示 */
+    private static String formatInterval(int minutes, @Nullable Locale locale) {
+        if (minutes >= 60 && minutes % 60 == 0) {
+            return LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_EVERY_HOURS, "n", minutes / 60);
+        }
+        return LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_EVERY_MINUTES, "n", minutes);
+    }
+
+    /** 距今时长 */
+    private static String formatAgo(Instant instant, @Nullable Locale locale) {
         long seconds = Duration.between(instant, Instant.now()).getSeconds();
-        if (seconds < 60) return seconds + "s ago";
-        if (seconds < 3600) return (seconds / 60) + "m ago";
-        return (seconds / 3600) + "h ago";
+        if (seconds < 60) {
+            return LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_AGO_SECONDS, "n", seconds);
+        }
+        if (seconds < 3600) {
+            return LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_AGO_MINUTES, "n", seconds / 60);
+        }
+        return LoopI18n.fmt(locale, LoopI18nKeys.COMMAND_LOOP_AGO_HOURS, "n", seconds / 3600);
     }
 }

@@ -71,3 +71,69 @@ loop.tool.triggered: |-
 # ---- /loop command ----
 command.loop.description: |-
   Scheduled tasks (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)
+command.loop.usage: |-
+  Usage: /loop [--every <interval> | --cron <expr>] [--now] <prompt>
+command.loop.usage_examples: |-
+  Basic:
+    /loop --every 5m check deployment
+    /loop --every 30s check CI status
+    /loop check CI status   (auto 5m)
+    /loop --cron "0 */5 * * * ? *" check status
+command.loop.id_usage: |-
+  Usage: /loop {action} <id>
+command.loop.bad_interval: |-
+  Invalid interval: {value} (e.g. 30s, 5m, 2h)
+command.loop.unknown_flag: |-
+  Unknown flag: {flag}
+command.loop.failed: |-
+  Failed: {reason}
+command.loop.registered: |-
+  Loop task registered:
+command.loop.field.interval: |-
+  Interval:
+command.loop.field.prompt: |-
+  Prompt:
+command.loop.field.run_now: |-
+  Run Now:
+command.loop.field.state: |-
+  State:
+command.loop.run_now_first: |-
+  first execution immediately
+command.loop.state_persisted: |-
+  persisted
+command.loop.not_found: |-
+  Loop task '{id}' not found.
+command.loop.removed: |-
+  Loop task '{id}' removed.
+command.loop.paused: |-
+  Loop task '{id}' paused.
+command.loop.resumed: |-
+  Loop task '{id}' resumed.
+command.loop.cleared: |-
+  All loop tasks removed.
+command.loop.list.empty: |-
+  No active loop tasks.
+command.loop.list.title: |-
+  Active Loop Tasks:
+command.loop.list.iterations: |-
+  iter:{count}
+command.loop.list.last: |-
+  (last: {ago}: {result})
+command.loop.list.footer: |-
+  Usage: /loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear
+command.loop.status.paused: |-
+  paused
+command.loop.status.running: |-
+  running
+command.loop.status.idle: |-
+  idle
+command.loop.every_minutes: |-
+  every {n}m
+command.loop.every_hours: |-
+  every {n}h
+command.loop.ago_seconds: |-
+  {n}s ago
+command.loop.ago_minutes: |-
+  {n}m ago
+command.loop.ago_hours: |-
+  {n}h ago

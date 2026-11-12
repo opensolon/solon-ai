@@ -1,0 +1,6 @@
+定时任务：
+  <id> [heartbeat] 每 5 分钟 等待中 已执行 0 轮 check ci （上次 30 秒前：ok）
+  <id> [heartbeat] 每 2 小时 等待中 已执行 0 轮 check deploy （上次 5 分钟前：ok）
+  <id> [heartbeat] cron:0 0 0 1 1 ? 2099 等待中 已执行 0 轮 yearly report （上次 2 小时前：ok）
+
+用法：/loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear

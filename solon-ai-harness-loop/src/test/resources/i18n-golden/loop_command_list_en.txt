@@ -1,0 +1,6 @@
+Active Loop Tasks:
+  <id> [heartbeat] every 5m idle iter:0 check ci (last: 30s ago: ok)
+  <id> [heartbeat] every 2h idle iter:0 check deploy (last: 5m ago: ok)
+  <id> [heartbeat] cron:0 0 0 1 1 ? 2099 idle iter:0 yearly report (last: 2h ago: ok)
+
+Usage: /loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear

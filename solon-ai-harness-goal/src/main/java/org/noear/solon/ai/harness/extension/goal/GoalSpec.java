@@ -15,7 +15,10 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.lang.Nullable;
+
 import java.time.Duration;
+import java.util.Locale;
 
 /**
  * Goal 参数对象 —— 命令行 flag 与编程调用的共同载荷。
@@ -43,6 +46,9 @@ import java.time.Duration;
  *
  * // 首轮由宿主自己的流驱动（只挂调度、等下一轮），执行正文含附件、展示正文为用户原句
  * goal.create(sessionId, GoalSpec.of(promptWithAttachments).displayObjective(userText).runNow(false));
+ *
+ * // 目标的语言（用户界面语言）：之后每一轮的提示词与这一轮的智能体都用它
+ * goal.create(sessionId, GoalSpec.of(prompt).locale(Locale.ENGLISH));
  * }</pre>
  *
  * @author noear
@@ -55,6 +61,7 @@ public final class GoalSpec {
     private int maxIterations;   // 0 = 不限制
     private String displayObjective; // null = 与执行正文相同
     private boolean runNow = true;
+    private Locale locale;       // null = 跟随引擎实例的语言
 
     private GoalSpec(String objective) {
         this.objective = objective;
@@ -115,6 +122,25 @@ public final class GoalSpec {
         return this;
     }
 
+    /**
+     * 目标的语言（缺省 null = 跟随引擎实例的语言 {@code HarnessEngine#getLocale}）。
+     *
+     * <p>goal 的轮次由后台调度发起，没有用户输入可取语言，所以创建时把用户的语言记在目标上（随会话快照持久化）：
+     * 之后每一轮的提示词、写入「上一轮结果」的系统说明都按它输出，交给执行器的输入也带上它
+     * （协议指令、工具文案、工具参数 {@code __locale} 随之一致）。{@code /goal} 命令取命令上下文的语言。</p>
+     *
+     * @since 4.2.0
+     */
+    public GoalSpec locale(@Nullable Locale locale) {
+        this.locale = locale;
+        return this;
+    }
+
+    /** 目标的语言（未设置为 null）。 */
+    public @Nullable Locale getLocale() {
+        return locale;
+    }
+
     public String getDisplayObjective() {
         return displayObjective;
     }
@@ -142,6 +168,7 @@ public final class GoalSpec {
     @Override
     public String toString() {
         return "GoalSpec{objective=" + objective + ", maxTokens=" + maxTokens
-                + ", maxDurationMs=" + maxDurationMs + ", maxIterations=" + maxIterations + "}";
+                + ", maxDurationMs=" + maxDurationMs + ", maxIterations=" + maxIterations
+                + ", locale=" + locale + "}";
     }
 }

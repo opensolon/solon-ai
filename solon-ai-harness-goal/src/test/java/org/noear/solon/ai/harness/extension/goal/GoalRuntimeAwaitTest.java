@@ -33,7 +33,7 @@ class GoalRuntimeAwaitTest {
     private static GoalRuntime engine(CountDownLatch inRound, CountDownLatch release) {
         GoalRuntime e = new GoalRuntime((HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 3, false);
-        e.addExecutor("test", null, (sessionId, prompt) -> {
+        e.addExecutor("test", null, (sessionId, prompt, locale) -> {
             inRound.countDown();
             try {
                 release.await(10, TimeUnit.SECONDS);

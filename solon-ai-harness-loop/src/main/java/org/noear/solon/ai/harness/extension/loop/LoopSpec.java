@@ -6,9 +6,11 @@ package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
+import org.noear.solon.lang.Nullable;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -18,6 +20,7 @@ import java.util.Map;
  * loop.schedule(sessionId, LoopSpec.of("check ci").everyMinutes(10).runNow(true));
  * loop.schedule(sessionId, LoopSpec.of("daily report").cron("0 0 22 * * ?"));
  * loop.schedule(sessionId, LoopSpec.of("remind me").at(LocalDateTime.of(2026, 9, 5, 18, 0))); // 一次性
+ * loop.schedule(sessionId, LoopSpec.of("check ci").locale(Locale.ENGLISH)); // 任务的语言（用户界面语言）
  * }</pre>
  *
  * <p><b>null 即未设置</b>：所有可选项都接受 null（和空串），宿主可以把请求参数原样传入，
@@ -40,6 +43,7 @@ public final class LoopSpec {
     private LocalDateTime at;
     private boolean oneShot;
     private boolean runNow;
+    private Locale locale;       // null = 跟随引擎实例的语言
     private final Map<String, ONode> extras = new LinkedHashMap<>();
 
     private LoopSpec(String prompt) {
@@ -79,6 +83,26 @@ public final class LoopSpec {
     public LoopSpec runNow(Boolean runNow) {
         this.runNow = Boolean.TRUE.equals(runNow);
         return this;
+    }
+
+    /**
+     * 任务的语言（缺省 null = 跟随引擎实例的语言 {@code HarnessEngine#getLocale}）。
+     *
+     * <p>定时轮次由后台调度发起，没有用户输入可取语言，所以创建时把用户的语言记在任务上（随任务持久化）：
+     * 每一轮都把它交给执行器，写进本轮输入（协议指令、工具文案、工具参数 {@code __locale} 随之一致）；
+     * 校验失败的说明也按它输出。{@code /loop} 命令取命令上下文的语言，{@code loop_add} 取工具参数 {@code __locale}。</p>
+     *
+     * @since 4.2.0
+     */
+    public LoopSpec locale(@Nullable Locale locale) {
+        this.locale = locale;
+        return this;
+    }
+
+    /** 任务的语言（未设置为 null）。 */
+    @Nullable
+    public Locale getLocale() {
+        return locale;
     }
 
     /** 宿主扩展字段（插件不认识也原样持久化）；value 为 null 表示不写。 */
@@ -125,7 +149,7 @@ public final class LoopSpec {
             }
         }
 
-        LoopTask task = new LoopTask(prompt.trim(), interval, cronVal, runNow);
+        LoopTask task = new LoopTask(prompt.trim(), interval, cronVal, runNow, locale);
         task.setOneShot(oneShotVal);
         for (Map.Entry<String, ONode> e : extras.entrySet()) {
             task.putExtra(e.getKey(), e.getValue());

@@ -41,7 +41,7 @@ import java.util.function.Consumer;
  *
  * <p>中文快照由改造前的代码生成，国际化后必须逐字不变；英文快照经人工审校后生成。</p>
  *
- * <p>语言来源：轮次提示词、轮次结果记录、门面结果说明跟随引擎语言（{@code HarnessEngine.Builder.locale}）；
+ * <p>语言来源：轮次提示词、轮次结果记录、门面结果说明跟随目标的语言，本类的目标创建时都不指定语言，所以跟随引擎语言（{@code HarnessEngine.Builder.locale}）；
  * 工具描述跟随请求，工具返回值跟随工具参数 {@code __locale}；命令输出跟随命令上下文；验证说明跟随调用方传入的语言。</p>
  */
 public class GoalRenderGoldenTest {
@@ -82,7 +82,7 @@ public class GoalRenderGoldenTest {
         HarnessEngine engine = engine(ws, sessions, locale, null);
         List<String> prompts = new ArrayList<>();
         GoalRuntime rt = new GoalRuntime(engine, BudgetThresholds.defaults(), 3, 3, false);
-        rt.addExecutor("t", null, (sid, p) -> {
+        rt.addExecutor("t", null, (sid, p, roundLocale) -> {
             prompts.add(p);
             return GoalOutcome.done("ok", true, 0);
         });
@@ -117,7 +117,7 @@ public class GoalRenderGoldenTest {
 
         // 完整模式下的「紧急」提示：只有紧急阈值低于 70% 时才会出现（默认 85% 时已进入精简模式）
         GoalRuntime urgentRt = new GoalRuntime(engine, new BudgetThresholds(50, 60), 3, 3, false);
-        urgentRt.addExecutor("t", null, (sid, p) -> {
+        urgentRt.addExecutor("t", null, (sid, p, roundLocale) -> {
             prompts.add(p);
             return GoalOutcome.done("ok", true, 0);
         });
@@ -179,7 +179,7 @@ public class GoalRenderGoldenTest {
 
         // 有执行器但都不认领
         GoalRuntime unclaimed = new GoalRuntime(engine, BudgetThresholds.defaults(), 3, 3, false);
-        unclaimed.addExecutor("t", sid -> false, (sid, p) -> GoalOutcome.done("ok", true, 0));
+        unclaimed.addExecutor("t", sid -> false, (sid, p, roundLocale) -> GoalOutcome.done("ok", true, 0));
         AgentSession s1 = sessions.computeIfAbsent("r1", InMemoryAgentSession::of);
         unclaimed.attach(s1, "修复登录缺陷", 0, 0, 0);
         unclaimed.runRound(s1);
@@ -189,7 +189,7 @@ public class GoalRenderGoldenTest {
         GoalRuntime[] holder = new GoalRuntime[1];
         AgentSession s2 = sessions.computeIfAbsent("r2", InMemoryAgentSession::of);
         holder[0] = new GoalRuntime(engine, BudgetThresholds.defaults(), 3, 3, false);
-        holder[0].addExecutor("t", null, (sid, p) -> {
+        holder[0].addExecutor("t", null, (sid, p, roundLocale) -> {
             Goal gs = holder[0].state(s2);
             gs.achieve();
             holder[0].commit(s2, gs);

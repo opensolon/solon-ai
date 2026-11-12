@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.lang.Nullable;
 
 import java.util.List;
@@ -40,13 +42,14 @@ import java.util.Locale;
 public class MarkdownCommand extends AbsCommand implements Command {
     private final String name;
     private final String template;
+    /** md 里写的描述（可空：空时按语言给兜底描述） */
     private final String description;
     private final String model;
 
     public MarkdownCommand(String name, String template, String description, String model) {
         this.name = name;
         this.template = template;
-        this.description = description != null ? description : "Custom command: " + name;
+        this.description = description;
         this.model = model;
     }
 
@@ -55,9 +58,11 @@ public class MarkdownCommand extends AbsCommand implements Command {
         return name;
     }
 
+    /** md 里写的描述原样返回（用户内容，不翻译）；没写时按语言给兜底描述 */
     @Override
     public String description(@Nullable Locale locale) {
-        return description;
+        return description != null ? description
+                : HarnessI18n.fmt(locale, HarnessI18nKeys.COMMAND_CUSTOM_DESCRIPTION, "name", name);
     }
 
     @Override

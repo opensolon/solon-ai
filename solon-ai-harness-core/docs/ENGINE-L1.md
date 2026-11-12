@@ -679,9 +679,10 @@ LoopExtension loop = engine.addExtensionIfAbsent(LoopExtension.builder()  // /lo
         .maxErrors(() -> 3)                              // 任务级连续失败阈值（实时读）
         .build());
 // 执行器只有这一种注册方式；返回三态结论（不注册则走缺省执行器 engine.handle(...).call()）
-loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
-        runtimeReady() ? LoopOutcome.done(run(sid, prompt))      // 抛异常 = 失败（计错误、退避、达阈值停用）
-                       : LoopOutcome.skip("runtime not ready")); // 跳过：不计错误
+loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt, locale) ->
+        runtimeReady() ? LoopOutcome.done(run(sid, prompt, locale)) // 抛异常 = 失败（计错误、退避、达阈值停用）
+                       : LoopOutcome.skip("runtime not ready"));    // 跳过：不计错误
+// locale 是本轮的语言（任务创建时记下的；没有时为引擎语言），交本轮输入：HarnessInput.ofProgram(...).locale(locale)
 
 // 宿主增删改查：请求参数原样传入（null = 未设置 / 保持原值），校验由插件统一完成（不合法返回 INVALID）
 LoopTask t = loop.schedule(sid, LoopSpec.of(prompt).everyMinutes(interval).cron(cron).runNow(runNow)).getValue(); // OK 时有值

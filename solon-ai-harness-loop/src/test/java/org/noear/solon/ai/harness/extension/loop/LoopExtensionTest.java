@@ -228,7 +228,7 @@ class LoopExtensionTest {
         assertTrue(a.isEnabled() && b.isEnabled(), "两个任务各失败一次都不应被停用（旧实现共用计数会停掉 B）");
 
         // A 成功一轮 → 清零
-        loop.addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
+        loop.addExecutor("any", null, (sid, p, locale) -> LoopOutcome.done("ok"));
         loop.scheduler().doTrigger("s1", a, false);
         assertEquals(0, a.getErrorStreak(), "成功一轮必须清零");
 
@@ -248,7 +248,7 @@ class LoopExtensionTest {
         HarnessEngine engine = engine(loop);
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        loop.addExecutor("any", null, (sid, p) -> {
+        loop.addExecutor("any", null, (sid, p, locale) -> {
             entered.countDown();
             await(release);
             return LoopOutcome.done("done");
@@ -293,7 +293,7 @@ class LoopExtensionTest {
         AtomicInteger executions = new AtomicInteger();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        loop.addExecutor("any", null, (sid, p) -> {
+        loop.addExecutor("any", null, (sid, p, locale) -> {
             executions.incrementAndGet();
             entered.countDown();
             await(release);
@@ -325,7 +325,7 @@ class LoopExtensionTest {
         LoopExtension loop = builder(new FakeJobManager()).build();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        loop.addExecutor("any", null, (sid, p) -> {
+        loop.addExecutor("any", null, (sid, p, locale) -> {
             entered.countDown();
             await(release);
             return LoopOutcome.done("ok");
@@ -349,7 +349,7 @@ class LoopExtensionTest {
     void supersededVersionNeverRunsAgain() {
         LoopExtension loop = builder(new FakeJobManager()).build();
         AtomicInteger executions = new AtomicInteger();
-        loop.addExecutor("any", null, (sid, p) -> {
+        loop.addExecutor("any", null, (sid, p, locale) -> {
             executions.incrementAndGet();
             return LoopOutcome.done("ok");
         });
@@ -381,14 +381,15 @@ class LoopExtensionTest {
         StubContext ctx = new StubContext(s, "pause", t.getId());
         run(loop, engine, ctx);
         assertFalse(loop.get("s1", t.getId()).isEnabled(), "/loop pause 必须真的暂停");
-        assertTrue(ctx.output().contains("paused"), ctx.output());
+        // 未指定语言：回执按默认语言（中文）输出
+        assertTrue(ctx.output().contains("已暂停"), ctx.output());
 
         run(loop, engine, new StubContext(s, "resume", t.getId()));
         assertTrue(loop.get("s1", t.getId()).isEnabled(), "/loop resume 必须真的恢复");
 
         StubContext missing = new StubContext(s, "pause", "nope");
         run(loop, engine, missing);
-        assertTrue(missing.output().contains("not found"), missing.output());
+        assertTrue(missing.output().contains("不存在"), missing.output());
     }
 
     @Test
@@ -445,7 +446,7 @@ class LoopExtensionTest {
 
         StubContext bad = new StubContext(s, "cron:\"every day\"", "x");
         run(loop, engine, bad);
-        assertTrue(bad.output().contains("Failed"), bad.output());
+        assertTrue(bad.output().contains("创建失败"), bad.output());
         assertEquals(1, loop.list("s1").size());
 
         assertEquals(Integer.valueOf(1), LoopCommand.parseInterval("30s"));

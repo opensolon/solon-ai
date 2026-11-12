@@ -21,6 +21,7 @@ import org.noear.solon.ai.harness.command.builtin.ModelCommand;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -40,7 +41,7 @@ class ModelCommandTest {
                 model("gpt-4o", "GPT-4o 多模态", true),
                 model("glm-4", null, true),
                 model("disabled-one", "被禁用的模型", false)
-        ), "glm-4");
+        ), "glm-4", Locale.ENGLISH);
 
         assertEquals(3, lines.size());
         assertTrue(lines.get(0).contains("Models:"));
@@ -55,11 +56,18 @@ class ModelCommandTest {
     }
 
     @Test
+    void listFollowsTheLocale() {
+        List<String> lines = ModelCommand.formatModels(Arrays.asList(model("glm-4", null, true)), "glm-4", null);
+        assertTrue(lines.get(0).contains("模型"), "未指定语言：默认语言（中文）");
+        assertTrue(lines.get(1).contains("（当前）"));
+    }
+
+    @Test
     void listSkipsNullEntriesSafely() {
         List<String> lines = ModelCommand.formatModels(Arrays.asList(
                 null,
                 model("only-one", null, true)
-        ), null);
+        ), null, Locale.ENGLISH);
 
         assertEquals(2, lines.size());
         assertTrue(lines.get(1).contains("only-one"));

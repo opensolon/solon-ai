@@ -148,6 +148,26 @@ command.interrupt.idle: |-
   当前没有正在执行的任务
 command.model.description: |-
   模型管理 (ls, help, <name>)
+command.model.title: |-
+  模型：
+command.model.active: |-
+  （当前）
+command.model.usage: |-
+  用法：/model <模型名>
+command.model.help.title: |-
+  模型管理
+command.model.help.list: |-
+  列出全部可用模型
+command.model.help.switch: |-
+  切换到指定模型
+command.model.not_found: |-
+  模型不存在：{name}
+command.model.see_list: |-
+  发送 /model 查看可用模型。
+command.model.switched: |-
+  已切换模型：{name}
+command.custom.description: |-
+  自定义命令：{name}
 command.rerun.description: |-
   重新运行最后一个任务
 command.rewind.description: |-

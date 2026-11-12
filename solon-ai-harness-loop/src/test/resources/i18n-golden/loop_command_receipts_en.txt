@@ -1,0 +1,67 @@
+$ /loop 
+No active loop tasks.
+Usage: /loop [--every <interval> | --cron <expr>] [--now] <prompt>
+
+$ /loop --every 2h --now check ci
+Loop task registered:
+  ID: <id>
+  Interval: every 2h
+  Prompt: check ci
+  Run Now: first execution immediately
+  State: persisted
+
+$ /loop --cron 0 0 0 1 1 ? 2099 yearly report
+Loop task registered:
+  ID: <id>
+  Cron: 0 0 0 1 1 ? 2099
+  Prompt: yearly report
+  State: persisted
+
+$ /loop --every abc x
+Invalid interval: abc (e.g. 30s, 5m, 2h)
+
+$ /loop --foo hello
+Unknown flag: --foo
+Loop task registered:
+  ID: <id>
+  Interval: every 5m
+  Prompt: hello
+  State: persisted
+
+$ /loop --cron
+Usage: /loop [--every <interval> | --cron <expr>] [--now] <prompt>
+Basic:
+  /loop --every 5m check deployment
+  /loop --every 30s check CI status
+  /loop check CI status   (auto 5m)
+  /loop --cron "0 */5 * * * ? *" check status
+
+$ /loop pause <id>
+Loop task '<id>' paused.
+
+$ /loop list
+Active Loop Tasks:
+  <id> [heartbeat] every 2h idle [now] iter:0 check ci
+  <id> [heartbeat] cron:0 0 0 1 1 ? 2099 paused iter:0 yearly report
+  <id> [heartbeat] every 5m running iter:0 hello
+
+Usage: /loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear
+
+$ /loop resume <id>
+Loop task '<id>' resumed.
+
+$ /loop pause nope
+Loop task 'nope' not found.
+
+$ /loop resume 
+Usage: /loop resume <id>
+
+$ /loop remove <id>
+Loop task '<id>' removed.
+
+$ /loop remove nope
+Loop task 'nope' not found.
+
+$ /loop clear
+All loop tasks removed.
+

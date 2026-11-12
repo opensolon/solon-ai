@@ -64,6 +64,38 @@ public final class LoopI18nKeys {
     public static final String LOOP_TOOL_TRIGGER_PAUSED = "loop.tool.trigger_paused";
     public static final String LOOP_TOOL_TRIGGERED = "loop.tool.triggered";
 
-    // ---- /loop 命令 ----
+    // ---- /loop 命令（描述与回执）----
     public static final String COMMAND_LOOP_DESCRIPTION = "command.loop.description";
+    public static final String COMMAND_LOOP_USAGE = "command.loop.usage";
+    /** 用法示例（多行，逐行输出） */
+    public static final String COMMAND_LOOP_USAGE_EXAMPLES = "command.loop.usage_examples";
+    public static final String COMMAND_LOOP_ID_USAGE = "command.loop.id_usage";
+    public static final String COMMAND_LOOP_BAD_INTERVAL = "command.loop.bad_interval";
+    public static final String COMMAND_LOOP_UNKNOWN_FLAG = "command.loop.unknown_flag";
+    public static final String COMMAND_LOOP_FAILED = "command.loop.failed";
+    public static final String COMMAND_LOOP_REGISTERED = "command.loop.registered";
+    public static final String COMMAND_LOOP_FIELD_INTERVAL = "command.loop.field.interval";
+    public static final String COMMAND_LOOP_FIELD_PROMPT = "command.loop.field.prompt";
+    public static final String COMMAND_LOOP_FIELD_RUN_NOW = "command.loop.field.run_now";
+    public static final String COMMAND_LOOP_FIELD_STATE = "command.loop.field.state";
+    public static final String COMMAND_LOOP_RUN_NOW_FIRST = "command.loop.run_now_first";
+    public static final String COMMAND_LOOP_STATE_PERSISTED = "command.loop.state_persisted";
+    public static final String COMMAND_LOOP_NOT_FOUND = "command.loop.not_found";
+    public static final String COMMAND_LOOP_REMOVED = "command.loop.removed";
+    public static final String COMMAND_LOOP_PAUSED = "command.loop.paused";
+    public static final String COMMAND_LOOP_RESUMED = "command.loop.resumed";
+    public static final String COMMAND_LOOP_CLEARED = "command.loop.cleared";
+    public static final String COMMAND_LOOP_LIST_EMPTY = "command.loop.list.empty";
+    public static final String COMMAND_LOOP_LIST_TITLE = "command.loop.list.title";
+    public static final String COMMAND_LOOP_LIST_ITERATIONS = "command.loop.list.iterations";
+    public static final String COMMAND_LOOP_LIST_LAST = "command.loop.list.last";
+    public static final String COMMAND_LOOP_LIST_FOOTER = "command.loop.list.footer";
+    public static final String COMMAND_LOOP_STATUS_PAUSED = "command.loop.status.paused";
+    public static final String COMMAND_LOOP_STATUS_RUNNING = "command.loop.status.running";
+    public static final String COMMAND_LOOP_STATUS_IDLE = "command.loop.status.idle";
+    public static final String COMMAND_LOOP_EVERY_MINUTES = "command.loop.every_minutes";
+    public static final String COMMAND_LOOP_EVERY_HOURS = "command.loop.every_hours";
+    public static final String COMMAND_LOOP_AGO_SECONDS = "command.loop.ago_seconds";
+    public static final String COMMAND_LOOP_AGO_MINUTES = "command.loop.ago_minutes";
+    public static final String COMMAND_LOOP_AGO_HOURS = "command.loop.ago_hours";
 }

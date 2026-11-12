@@ -48,6 +48,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -1000,12 +1001,13 @@ public final class HarnessHost {
             return;
         }
         try {
+            // goal / loop 把本轮的语言一并交来（目标或任务创建时记下的语言，没有时为引擎语言），写进本轮输入
             engine.getExtension(GoalExtension.class).ifPresent(goal ->
-                    goal.addExecutor(EXECUTOR_CHANNEL, programFilter, (GoalExecutor) (sid, prompt) ->
-                            runProgram(tenant, engine, sid, prompt, "goal").toGoalOutcome()));
+                    goal.addExecutor(EXECUTOR_CHANNEL, programFilter, (GoalExecutor) (sid, prompt, locale) ->
+                            runProgram(tenant, engine, sid, prompt, locale, "goal").toGoalOutcome()));
             engine.getExtension(LoopExtension.class).ifPresent(loop ->
-                    loop.addExecutor(EXECUTOR_CHANNEL, programFilter, (LoopExecutor) (sid, prompt) ->
-                            runProgram(tenant, engine, sid, prompt, "loop").toLoopOutcome()));
+                    loop.addExecutor(EXECUTOR_CHANNEL, programFilter, (LoopExecutor) (sid, prompt, locale) ->
+                            runProgram(tenant, engine, sid, prompt, locale, "loop").toLoopOutcome()));
         } catch (Throwable e) {
             // 插件未挂接等：保留插件自带的缺省执行器
             LOG.warn("[HarnessHost] bind program runs failed: {}", tenant, e);
@@ -1054,14 +1056,17 @@ public final class HarnessHost {
     /**
      * 跑一轮后台任务：与用户轮次同一条链（open → prepare → event → finished，可被停止），
      * 在调度线程上阻塞到本轮结束。
+     *
+     * @param locale 本轮语言（提示词所用的语言；null = 引擎实例的语言）
      */
-    private ProgramResult runProgram(String tenant, HarnessEngine engine, String sessionId, String prompt, String channel)
+    private ProgramResult runProgram(String tenant, HarnessEngine engine, String sessionId, String prompt,
+                                     @Nullable Locale locale, String channel)
             throws InterruptedException {
         AgentSession session = engine.getSessionOrNull(sessionId);
         if (session == null) {
             return ProgramResult.skip("session not found");
         }
-        HarnessInput in = HarnessInput.ofProgram(session, prompt, channel);
+        HarnessInput in = HarnessInput.ofProgram(session, prompt, channel).locale(locale);
         decorate(tenant, in);
         InputOutcome outcome = engine.handle(in);
         if (outcome.getKind() != InputOutcome.Kind.TASK) {

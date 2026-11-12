@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,33 +28,33 @@ class LoopExecutorTest {
 
     @Test
     void executeSkipsWhenNoExecutorRegistered() throws Exception {
-        LoopOutcome outcome = scheduler().execute("cli", "prompt");
+        LoopOutcome outcome = scheduler().execute("cli", "prompt", null);
         assertTrue(outcome.isSkipped(), "无执行器必须是 skip（调用方据此不记成功、不计迭代），不得伪造成功");
     }
 
     @Test
     void firstClaimingExecutorWins() throws Exception {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor(null, null, (sessionId, prompt) -> LoopOutcome.done("web:" + prompt));
-        scheduler.addExecutor(null, null, (sessionId, prompt) -> LoopOutcome.done("cli:" + prompt));
-        assertEquals("web:prompt", scheduler.execute("web-1", "prompt").getText(), "按注册顺序取首个认领者");
+        scheduler.addExecutor(null, null, (sessionId, prompt, locale) -> LoopOutcome.done("web:" + prompt));
+        scheduler.addExecutor(null, null, (sessionId, prompt, locale) -> LoopOutcome.done("cli:" + prompt));
+        assertEquals("web:prompt", scheduler.execute("web-1", "prompt", null).getText(), "按注册顺序取首个认领者");
     }
 
     @Test
     void claimPredicateDecidesOwnership() throws Exception {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor("web", id -> id.startsWith("web-"), (sessionId, prompt) -> LoopOutcome.done("web:" + prompt));
-        scheduler.addExecutor("cli", null, (sessionId, prompt) -> LoopOutcome.done("cli:" + prompt));
-        assertEquals("cli:prompt", scheduler.execute("cli", "prompt").getText(), "谓词不命中时由下一个认领者执行");
-        assertEquals("web:prompt", scheduler.execute("web-1", "prompt").getText());
+        scheduler.addExecutor("web", id -> id.startsWith("web-"), (sessionId, prompt, locale) -> LoopOutcome.done("web:" + prompt));
+        scheduler.addExecutor("cli", null, (sessionId, prompt, locale) -> LoopOutcome.done("cli:" + prompt));
+        assertEquals("cli:prompt", scheduler.execute("cli", "prompt", null).getText(), "谓词不命中时由下一个认领者执行");
+        assertEquals("web:prompt", scheduler.execute("web-1", "prompt", null).getText());
     }
 
     @Test
     void skipIsClaimedAndDoesNotFallThrough() throws Exception {
         LoopExtension ext = ext()
-                .addExecutor("cli", null, (sid, p) -> LoopOutcome.skip("terminal busy"))
-                .addExecutor("any", null, (sid, p) -> LoopOutcome.done("other"));
-        LoopOutcome outcome = ext.scheduler().execute("cli", "x");
+                .addExecutor("cli", null, (sid, p, locale) -> LoopOutcome.skip("terminal busy"))
+                .addExecutor("any", null, (sid, p, locale) -> LoopOutcome.done("other"));
+        LoopOutcome outcome = ext.scheduler().execute("cli", "x", null);
         assertTrue(outcome.isSkipped(), "skip = 本通道认领但此刻不宜执行，不得交给别的通道抢跑");
         assertEquals("terminal busy", outcome.getText());
     }
@@ -61,28 +62,28 @@ class LoopExecutorTest {
     @Test
     void channelPredicateFiltersBeforeHandler() throws Exception {
         LoopExtension ext = ext()
-                .addExecutor("web", id -> id.startsWith("web-"), (sid, p) -> LoopOutcome.done("web:" + p));
-        ext.addExecutor("cli", "cli"::equals, (sid, p) -> LoopOutcome.done("cli:" + p));
+                .addExecutor("web", id -> id.startsWith("web-"), (sid, p, locale) -> LoopOutcome.done("web:" + p));
+        ext.addExecutor("cli", "cli"::equals, (sid, p, locale) -> LoopOutcome.done("cli:" + p));
 
-        assertEquals("web:x", ext.scheduler().execute("web-1", "x").getText());
-        assertEquals("cli:x", ext.scheduler().execute("cli", "x").getText());
-        assertTrue(ext.scheduler().execute("desktop-1", "x").isSkipped(), "谓词都不命中 = 无认领");
+        assertEquals("web:x", ext.scheduler().execute("web-1", "x", null).getText());
+        assertEquals("cli:x", ext.scheduler().execute("cli", "x", null).getText());
+        assertTrue(ext.scheduler().execute("desktop-1", "x", null).isSkipped(), "谓词都不命中 = 无认领");
     }
 
     @Test
     void throwingPredicateCountsAsMiss() throws Exception {
         LoopExtension ext = ext()
-                .addExecutor("bad", id -> { throw new IllegalStateException("boom"); }, (sid, p) -> LoopOutcome.done("bad"))
-                .addExecutor("ok", id -> true, (sid, p) -> LoopOutcome.done("ok"));
-        assertEquals("ok", ext.scheduler().execute("s", "x").getText());
+                .addExecutor("bad", id -> { throw new IllegalStateException("boom"); }, (sid, p, locale) -> LoopOutcome.done("bad"))
+                .addExecutor("ok", id -> true, (sid, p, locale) -> LoopOutcome.done("ok"));
+        assertEquals("ok", ext.scheduler().execute("s", "x", null).getText());
     }
 
     /** 执行器签名不得再有 agentName 参数（子代理归属是会话属性），且返回三态结论。 */
     @Test
     void executorSignature() throws Exception {
-        Method handle = LoopExecutor.class.getMethod("handle", String.class, String.class);
+        Method handle = LoopExecutor.class.getMethod("handle", String.class, String.class, Locale.class);
         Parameter[] params = handle.getParameters();
-        assertEquals(2, params.length, "执行器只接收 sessionId 与 prompt");
+        assertEquals(3, params.length, "执行器只接收 sessionId、prompt 与本轮语言");
         assertEquals(LoopOutcome.class, handle.getReturnType(), "执行器必须返回 LoopOutcome（单个 String 区分不了跳过与失败）");
     }
 
@@ -102,7 +103,7 @@ class LoopExecutorTest {
     @Test
     void doneRecordsResultAndCountsIteration() {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor(null, null, (sessionId, prompt) -> LoopOutcome.done("done:" + prompt));
+        scheduler.addExecutor(null, null, (sessionId, prompt, locale) -> LoopOutcome.done("done:" + prompt));
         LoopTask task = scheduler.schedule("cli", every5("p"));
 
         scheduler.doTrigger("cli", task, false);
@@ -114,7 +115,7 @@ class LoopExecutorTest {
     @Test
     void skipDoesNotCountAsErrorOrIteration() {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor("cli", null, (sid, p) -> LoopOutcome.skip("terminal busy"));
+        scheduler.addExecutor("cli", null, (sid, p, locale) -> LoopOutcome.skip("terminal busy"));
         LoopTask task = scheduler.schedule("cli", every5("p"));
 
         scheduler.doTrigger("cli", task, false);
@@ -129,7 +130,7 @@ class LoopExecutorTest {
     @Test
     void thrownExceptionCountsAsFailure() {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor("cli", null, (sid, p) -> { throw new java.io.IOException("model down"); });
+        scheduler.addExecutor("cli", null, (sid, p, locale) -> { throw new java.io.IOException("model down"); });
         LoopTask task = scheduler.schedule("cli", every5("p"));
 
         scheduler.doTrigger("cli", task, false);
@@ -142,7 +143,7 @@ class LoopExecutorTest {
     @Test
     void failedOutcomeCountsAsFailure() {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor("web", null, (sid, p) -> LoopOutcome.failed("stream error"));
+        scheduler.addExecutor("web", null, (sid, p, locale) -> LoopOutcome.failed("stream error"));
         LoopTask task = scheduler.schedule("web-1", every5("p"));
 
         scheduler.doTrigger("web-1", task, false);
@@ -154,7 +155,7 @@ class LoopExecutorTest {
     @Test
     void nullOutcomeIsTreatedAsFailureNotSilentSkip() {
         LoopScheduler scheduler = scheduler();
-        scheduler.addExecutor("buggy", null, (sid, p) -> null);
+        scheduler.addExecutor("buggy", null, (sid, p, locale) -> null);
         LoopTask task = scheduler.schedule("s", every5("p"));
 
         scheduler.doTrigger("s", task, false);
@@ -167,7 +168,7 @@ class LoopExecutorTest {
     void failuresReachThresholdDisableTask() {
         LoopScheduler scheduler = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .maxErrors(() -> 1).build().scheduler();
-        scheduler.addExecutor("cli", null, (sid, p) -> { throw new IllegalStateException("boom"); });
+        scheduler.addExecutor("cli", null, (sid, p, locale) -> { throw new IllegalStateException("boom"); });
         LoopTask task = scheduler.schedule("cli", every5("p"));
 
         scheduler.doTrigger("cli", task, false);
@@ -181,7 +182,7 @@ class LoopExecutorTest {
         LoopExtension ext = LoopExtension.builder().jobManager(null).defaultExecutor(false)
                 .triggerWrapper(r -> () -> { wrapped.incrementAndGet(); r.run(); })
                 .build()
-                .addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
+                .addExecutor("any", null, (sid, p, locale) -> LoopOutcome.done("ok"));
         LoopTask task = ext.schedule("s1", every5("p")).getValue();
 
         assertTrue(ext.trigger("s1", task.getId()).isOk());
@@ -196,7 +197,7 @@ class LoopExecutorTest {
     /** oneShot：调度触发执行一轮后自动注销；手动触发不消耗配额。 */
     @Test
     void oneShotUnregistersOnlyOnScheduledRound() {
-        LoopExtension ext = ext().addExecutor("any", null, (sid, p) -> LoopOutcome.done("ok"));
+        LoopExtension ext = ext().addExecutor("any", null, (sid, p, locale) -> LoopOutcome.done("ok"));
         LoopTask task = ext.schedule("s1", LoopSpec.of("p").cron("0 0 18 * * ?").oneShot(true)).getValue();
 
         ext.scheduler().doTrigger("s1", task, false);

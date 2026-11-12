@@ -144,6 +144,7 @@ stateDiagram-v2
 | 执行器 | 首次取到引擎时为 goal 登记执行器（通道名 `host`），只认领 `Builder.programRuns(...)` 命中的会话；宿主不用 `addExecutor` |
 | 重启恢复 | 随后调 `goal.recover(programRuns 的谓词)`：按状态来源的 `goal/active/` 索引只恢复命中的会话（只挂调度、不立即跑） |
 | 每一轮怎么跑 | 与用户轮次走同一条链：`HostSink#open` → `prepare` → `event*` → `finished`，`run.isProgram()` 为 true，`run.getProgramChannel()` 为 `goal`，来源为 `InputOrigin.channel("goal")` |
+| 每一轮的语言 | 本轮输入带上目标的语言（创建时记下，没有时为引擎语言），协议指令、工具文案与提示词一致；`/goal` 通过 `host.submit` 提交时，给输入带上用户的语言（`HarnessInput.locale`）即可。解析链始终是「目标的语言 > 引擎语言 > 全局默认语言」；已有目标要换语言，给 `GoalPatch.locale` 传新值即可（不调或传 null = 保持） |
 | 每一轮的结论 | 出错 → 抛给插件参与熔断；被中断 → `skip("cancelled")`；没有最终回答 → `skip("no final answer")`；会话不存在 → `skip("session not found")`；未受理（忙、待审批）→ `skip`，不计失败；其余按 `done(结果文本, 有无证据工具调用, token)` |
 | 完成证据 | 只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`） |
 | 停止 | `host.interrupt` / `admin.interrupt` 同样能停 goal 的那一轮 |
@@ -368,7 +369,7 @@ flowchart LR
 `addExecutor` 必须在扩展挂接到引擎之后调用（之前调用抛 `IllegalStateException`）。认领谓词应互斥；多个同时命中时取首个并告警（每个命中组合一次）。谓词抛异常按不命中处理；`claim` 传 null 表示认领全部。
 
 ```java
-goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
+goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt, locale) -> {
     if (webRuntimeReady(sid) == false) {
         return GoalOutcome.skip("runtime not ready");   // 本轮放弃，不计错误
     }
@@ -376,7 +377,8 @@ goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
     if (session == null) {
         return GoalOutcome.skip("session not found");
     }
-    InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "web"));
+    // locale：本轮提示词的语言（目标创建时记下），交给本轮输入
+    InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "web").locale(locale));
     if (outcome.getKind() != InputOutcome.Kind.TASK) {
         return GoalOutcome.skip("not runnable: " + outcome.getKind()); // 如忙时 REJECTED("busy")，不计失败
     }
@@ -389,7 +391,7 @@ goal.addExecutor("web", sid -> sid.startsWith("web-"), (sid, prompt) -> {
 // 抛异常、返回 GoalOutcome.failed(...) 或 null 都按失败处理，参与熔断
 ```
 
-`webRuntimeReady`、`pushToClient` 为宿主自有逻辑。会话忙由插件在调用执行器前统一判定（`engine.isIdle`），执行器无需再判。统计工具证据时可用 `GoalTalent.isGoalTool(toolName)` 排除 `goal_*` 自身工具。执行器结束后要续发队列，见 5.3。
+`webRuntimeReady`、`pushToClient` 为宿主自有逻辑。会话忙由插件在调用执行器前统一判定（`engine.isIdle`），执行器无需再判。第三个参数 `locale` 是本轮提示词的语言（目标的语言，没有时为引擎语言，可为 null）：后台轮次没有用户输入可取语言，不传给本轮输入的话，协议指令与工具文案会回落到引擎语言（未配置时为中文），与提示词不是同一种语言。统计工具证据时可用 `GoalTalent.isGoalTool(toolName)` 排除 `goal_*` 自身工具。执行器结束后要续发队列，见 5.3。
 
 ### 4.5 自定义验证器
 
@@ -497,14 +499,14 @@ public class ImGoalHost {
                 .orElseThrow(() -> new IllegalStateException("goal extension not attached"));
 
         // 执行器：挂接后注册；谓词应与其它通道互斥
-        goal.addExecutor("im", sid -> sid.startsWith("im-"), (sid, prompt) -> {
+        goal.addExecutor("im", sid -> sid.startsWith("im-"), (sid, prompt, locale) -> {
             AgentSession session = engine.getSessionOrNull(sid);
             InputOrigin route = routes.get(sid);
             if (session == null || route == null) {
                 return GoalOutcome.skip("no session or reply route");   // 本轮放弃，不计错误
             }
             try {
-                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal"));
+                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal").locale(locale));
                 if (outcome.getKind() != InputOutcome.Kind.TASK) {
                     return GoalOutcome.skip("not runnable: " + outcome.getRejectReason()); // 程序轮次忙时不进积压
                 }
@@ -853,6 +855,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `maxIterations(int)` | `int` | `0` | 轮次预算，0 = 不限制，负数按 0 |
 | `displayObjective(String)` | `String` | `null` | 展示正文；null、空白或与正文相同时不区分（见注意事项） |
 | `runNow(boolean)` | `boolean` | `true` | true = 首轮立即跑；false = 只挂调度，等一个间隔（5 秒） |
+| `locale(Locale)` | `Locale` | `null` | 目标的语言（用户界面语言）：每轮提示词、写入“上一轮结果”的说明、交给执行器的语言都用它；null = 跟随引擎语言。`/goal` 命令自动取命令上下文的语言 |
 
 ### 7.3 GoalPatch（修改补丁）
 
@@ -864,6 +867,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `maxTokens(Long)` | `Long` | 保持 | 0 = 不限制，负数按 0 |
 | `maxDurationMs(Long)` | `Long` | 保持 | 0 = 不限制，负数按 0 |
 | `maxIterations(Integer)` | `Integer` | 保持 | 0 = 不限制，负数按 0 |
+| `locale(Locale)` | `Locale` | 保持 | 目标的语言：之后每轮提示词、写入“上一轮结果”的说明、交给执行器的语言都按它走；不调用或传 null 都表示保持现有语言（语言只增不改，回到跟随引擎只能重建） |
 
 ### 7.4 GoalStatus
 
@@ -965,7 +969,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `session.attrs()` | `session.goal.running`（`GoalAttrs.GOAL_RUNNING`） | 轮次防重入标记（可观测镜像） | 否 |
 | `session.attrs()` | `session.goal.round.guard`（`GoalAttrs.GOAL_ROUND_GUARD`） | 轮次守护对象（显式锁 + 停等 Condition） | 否 |
 
-投影字段（由 `GoalProjection` 唯一定义）：`goalId`、`objective` 与 `condition`（双写，读取时 `condition` 优先）、`status`、`consumedTokens`、`maxTokens`、`maxIterations`、`startEpochMs`、`maxDurationMs`、`currentIteration`、`lastResult`、`lastExecutedAt`、`stagnationCount`、`consecutiveErrors`（后四项仅非零/非空时写入）。上一轮指纹、错误类型/摘要、连续同类错误数与工具证据不持久化，重启后从零计。
+投影字段（由 `GoalProjection` 唯一定义）：`goalId`、`objective` 与 `condition`（双写，读取时 `condition` 优先）、`status`、`consumedTokens`、`maxTokens`、`maxIterations`、`startEpochMs`、`maxDurationMs`、`currentIteration`、`lastResult`、`lastExecutedAt`、`stagnationCount`、`consecutiveErrors`（后四项仅非零/非空时写入）、`locale`（目标的语言，语言标签如 `en`、`zh-CN`；仅指定了语言时写入，缺失即跟随引擎）。上一轮指纹、错误类型/摘要、连续同类错误数与工具证据不持久化，重启后从零计。
 
 `GoalAttrs` 包内可见，宿主不应直接读写这些键：投影走 `GoalProjection`，运行态走 `GoalExtension` 门面，状态事实走 `engine.status(session).get(GoalExtension.STATUS_GOAL)`。`GoalAttrs.GOAL` 的值不可改，改值会丢失存量 goal。
 

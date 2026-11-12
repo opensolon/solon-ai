@@ -271,7 +271,7 @@ class GoalExtensionTest {
         java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
 
         GoalRuntime engine = new GoalRuntime((HarnessEngine) null, BudgetThresholds.defaults(), 3, 3, false);
-        engine.addExecutor("test", null, (sid, prompt) -> {
+        engine.addExecutor("test", null, (sid, prompt, locale) -> {
             entered.countDown();
             release.await(5, java.util.concurrent.TimeUnit.SECONDS);
             return TestOutcomes.ofText("done");

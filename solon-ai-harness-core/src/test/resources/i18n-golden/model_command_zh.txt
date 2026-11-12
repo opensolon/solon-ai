@@ -1,0 +1,23 @@
+$ /model 
+模型：
+  fake （当前）
+
+用法：/model <模型名>
+
+
+$ /model help
+/model - 模型管理
+  /model          列出全部可用模型
+  /model ls       列出全部可用模型
+  /model <name>   切换到指定模型
+
+
+$ /model nope
+模型不存在：nope
+发送 /model 查看可用模型。
+
+
+$ /model fake
+已切换模型：fake
+
+

@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -51,7 +52,7 @@ import java.util.function.Predicate;
  * GoalExtension goal = engine.addExtensionIfAbsent(GoalExtension.builder()
  *         .budget(70, 85)             // 预算提示阈值（验证器在本轮会话工作目录下执行）
  *         .build());                  // onAttach 内注册 /goal 命令
- * goal.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) -> runRound(sid, prompt));
+ * goal.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt, locale) -> runRound(sid, prompt, locale));
  *
  * // SERVER 模式（runtimeMutable=false）下 build 之后不能再挂扩展，改在构建期挂：
  * GoalExtension goal = GoalExtension.builder().build();
@@ -68,8 +69,11 @@ import java.util.function.Predicate;
  * 状态以投影存放于会话快照，随对话持久化；对外只交只读快照 {@link GoalSnapshot}。</p>
  *
  * <p><b>执行器</b>：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器
- * （{@code engine.handle(HarnessInput.ofProgram(..., "goal")).call()}）。结论语义见 {@link GoalOutcome}。
+ * （{@code engine.handle(HarnessInput.ofProgram(..., "goal").locale(locale)).call()}）。结论语义见 {@link GoalOutcome}。
  * 会话忙由插件在调用执行器之前统一判定（{@code engine.isIdle}），宿主不提供忙判定。</p>
+ *
+ * <p><b>语言</b>：目标创建时记下用户的语言（{@link GoalSpec#locale}；{@code /goal} 命令取命令上下文的语言），
+ * 随会话快照持久化。每轮提示词按它输出，并交给执行器写进本轮输入；没有时用引擎实例的语言。</p>
  *
  * <p><b>开关语义</b>：{@link #setEnabled} 关闭时同时关闭模型工具与 /goal 命令，并停止全部调度
  * （goal 依赖 {@code goal_update} 声明完成，工具关了还继续跑只会空耗预算直到熔断）。</p>
@@ -256,15 +260,17 @@ public class GoalExtension extends AbsHarnessExtension {
     /**
      * 缺省执行器：经唯一输入入口同步跑一轮（程序生成的 prompt 不解析命令与 @提及）。
      *
+     * <p>本轮输入带上提示词的语言：协议指令、工具文案与提示词一致。</p>
+     *
      * <p>token 与工具证据直接取自本次响应；失败抛给 goal（参与错误分级熔断），不吞掉。</p>
      */
     private static GoalExecutor defaultExecutor(HarnessEngine engine) {
-        return (sessionId, prompt) -> {
+        return (sessionId, prompt, locale) -> {
             AgentSession session = engine.getSessionOrNull(sessionId);
             if (session == null) {
                 return GoalOutcome.skip("session not found");
             }
-            InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal"));
+            InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "goal").locale(locale));
             if (outcome.getKind() != InputOutcome.Kind.TASK) {
                 // 忙 / 待审批（REJECTED）等未受理结局：本轮跳过，不计失败（goal 自己有重试节奏）
                 return GoalOutcome.skip(outcome.getRejectReason() != null
@@ -352,6 +358,9 @@ public class GoalExtension extends AbsHarnessExtension {
      * <p>goal 活跃时按固定时序完成：暂停并摘调度 → 停流 → 等旧轮次停稳 → 改写 → 恢复并立即跑一轮；
      * 非活跃（PAUSED/BLOCKED）时只改写、不改状态。</p>
      *
+     * <p>语言：补丁没带语言时保持目标现有的语言（之后每轮的提示词与这一轮的输入都用它）；
+     * 带了则改为指定语言。</p>
+     *
      * @param stopper 停掉在跑轮次的动作（渠道侧可能还要推终态帧）；null = {@code InterruptMode.CANCEL_STREAM}。
      *                不要用 {@code InterruptMode.INTERRUPT_ALL}：那会清空用户的排队
      * @return OK 时值为修改后的快照；NOT_FOUND（无 goal）/ INVALID（补丁不合法）/ CONFLICT（已是终态，或旧轮次未能及时停稳——此时 goal 保持暂停，可重试）
@@ -367,7 +376,8 @@ public class GoalExtension extends AbsHarnessExtension {
             return HarnessResult.notFound("goal not found");
         }
         if (gs.getStatus().isTerminal()) {
-            return HarnessResult.conflict(GoalI18n.get(engine == null ? null : engine.getLocale(), GoalI18nKeys.GOAL_ERROR_TERMINAL_EDIT));
+            Locale msgLocale = patch != null && patch.getLocale() != null ? patch.getLocale() : goalRuntime.localeOf(gs);
+            return HarnessResult.conflict(GoalI18n.get(goalRuntime.localeOrEngine(msgLocale), GoalI18nKeys.GOAL_ERROR_TERMINAL_EDIT));
         }
         if (patch == null || patch.isEmpty()) {
             return HarnessResult.ok(goalRuntime.snapshot(session));

@@ -15,9 +15,12 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Nullable;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -52,6 +55,8 @@ public final class GoalProjection {
     static final String K_LAST_EXECUTED_AT = "lastExecutedAt";
     static final String K_STAGNATION_COUNT = "stagnationCount";
     static final String K_CONSECUTIVE_ERRORS = "consecutiveErrors";
+    /** 目标的语言（语言标签，如 {@code en}、{@code zh-CN}；缺失 = 跟随引擎，旧数据即如此） */
+    static final String K_LOCALE = "locale";
 
     private final String goalId;
     private final String objective;
@@ -66,6 +71,7 @@ public final class GoalProjection {
     private final long lastExecutedAt;
     private final int stagnationCount;
     private final int consecutiveErrors;
+    private final Locale locale;
 
     private GoalProjection(Builder b) {
         this.goalId = b.goalId;
@@ -81,6 +87,7 @@ public final class GoalProjection {
         this.lastExecutedAt = b.lastExecutedAt;
         this.stagnationCount = b.stagnationCount;
         this.consecutiveErrors = b.consecutiveErrors;
+        this.locale = b.locale;
     }
 
     // ===== 类型化读取（宿主侧唯一合法手段） =====
@@ -111,6 +118,13 @@ public final class GoalProjection {
     public long getLastExecutedAt() { return lastExecutedAt; }
     public int getStagnationCount() { return stagnationCount; }
     public int getConsecutiveErrors() { return consecutiveErrors; }
+
+    /**
+     * 目标的语言（null = 跟随引擎；升级前保存的投影没有这个字段）。
+     *
+     * @since 4.2.0
+     */
+    public @Nullable Locale getLocale() { return locale; }
 
     // ===== 读写会话上下文 =====
 
@@ -156,6 +170,7 @@ public final class GoalProjection {
                 .lastExecutedAt(lng(map.get(K_LAST_EXECUTED_AT)))
                 .stagnationCount((int) lng(map.get(K_STAGNATION_COUNT)))
                 .consecutiveErrors((int) lng(map.get(K_CONSECUTIVE_ERRORS)))
+                .locale(AiI18n.toLocale(map.get(K_LOCALE)))
                 .build();
     }
 
@@ -192,6 +207,7 @@ public final class GoalProjection {
         if (lastExecutedAt > 0) map.put(K_LAST_EXECUTED_AT, lastExecutedAt);
         if (stagnationCount > 0) map.put(K_STAGNATION_COUNT, stagnationCount);
         if (consecutiveErrors > 0) map.put(K_CONSECUTIVE_ERRORS, consecutiveErrors);
+        if (locale != null) map.put(K_LOCALE, locale.toLanguageTag());
         return map;
     }
 
@@ -212,6 +228,7 @@ public final class GoalProjection {
                 .lastExecutedAt(gs.getLastExecutedAt())
                 .stagnationCount(gs.getStagnationCount())
                 .consecutiveErrors(gs.getConsecutiveErrors())
+                .locale(gs.getLocale())
                 .build();
     }
 
@@ -248,6 +265,7 @@ public final class GoalProjection {
         private long lastExecutedAt;
         private int stagnationCount;
         private int consecutiveErrors;
+        private Locale locale;
 
         public Builder goalId(String goalId) { this.goalId = goalId; return this; }
         public Builder objective(String objective) { this.objective = objective; return this; }
@@ -272,6 +290,8 @@ public final class GoalProjection {
         public Builder lastExecutedAt(long lastExecutedAt) { this.lastExecutedAt = lastExecutedAt; return this; }
         public Builder stagnationCount(int stagnationCount) { this.stagnationCount = stagnationCount; return this; }
         public Builder consecutiveErrors(int consecutiveErrors) { this.consecutiveErrors = consecutiveErrors; return this; }
+        /** 目标的语言（null = 跟随引擎）。@since 4.2.0 */
+        public Builder locale(@Nullable Locale locale) { this.locale = locale; return this; }
 
         public GoalProjection build() {
             return new GoalProjection(this);

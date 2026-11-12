@@ -28,8 +28,10 @@ import java.util.Set;
  *
  * <p>默认语言、覆盖工厂等全局设置见 {@link AiI18n}。key 常量见 {@link GoalI18nKeys}。</p>
  *
- * <p>语言来源：轮次提示词、轮次结果记录、门面结果说明跟随引擎实例的语言（{@code HarnessEngine#getLocale}，
- * goal 轮次由后台调度发起、不带输入语言）；工具描述跟随请求，工具返回值跟随工具参数 {@code __locale}；
+ * <p>语言来源：轮次提示词、轮次结果记录、关于某个目标的门面结果说明跟随目标的语言
+ * （创建时记下，见 {@code GoalSpec#locale}；{@code /goal} 命令取命令上下文的语言），目标没有时用引擎实例的语言
+ * （{@code HarnessEngine#getLocale}，goal 轮次由后台调度发起、不带输入语言）；同一个语言会交给执行器写进本轮输入，
+ * 所以这一轮的工具描述（跟随请求）与工具返回值（跟随工具参数 {@code __locale}）与提示词一致；
  * 命令输出跟随命令上下文；验证说明跟随调用方传入的语言。都没有时用默认语言。</p>
  *
  * @author noear

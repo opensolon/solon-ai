@@ -15,8 +15,11 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.lang.Nullable;
+
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -44,6 +47,7 @@ public final class GoalSnapshot {
     private final long startEpochMs;
     private final String lastResult;
     private final long lastExecutedAt;
+    private final Locale locale;
     private final boolean running;
 
     private GoalSnapshot(Goal gs, boolean running) {
@@ -58,6 +62,7 @@ public final class GoalSnapshot {
         this.startEpochMs = gs.getStartEpochMs();
         this.lastResult = gs.getLastResult();
         this.lastExecutedAt = gs.getLastExecutedAt();
+        this.locale = gs.getLocale();
         this.running = running;
     }
 
@@ -116,6 +121,15 @@ public final class GoalSnapshot {
     /** 最近一轮执行时间（epoch ms，0 = 未执行）。 */
     public long getLastExecutedAt() {
         return lastExecutedAt;
+    }
+
+    /**
+     * 目标的语言（创建时记下；null = 跟随引擎实例的语言）。每一轮的提示词与智能体都用它。
+     *
+     * @since 4.2.0
+     */
+    public @Nullable Locale getLocale() {
+        return locale;
     }
 
     /** 快照时刻是否有一轮正在执行。 */

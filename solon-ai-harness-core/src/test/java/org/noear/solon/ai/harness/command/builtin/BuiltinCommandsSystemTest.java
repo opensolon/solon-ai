@@ -112,9 +112,9 @@ class BuiltinCommandsSystemTest {
         InputOutcome outcome = handle(engine, session, "/model");
 
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
-        // getNameOrModel()：配置未设 name 时返回 model 名；当前模型带 active 标记
+        // getNameOrModel()：配置未设 name 时返回 model 名；当前模型带 active 标记（未指定语言：默认中文）
         assertTrue(outcome.getCommandOutput().contains(realModel().getModel()));
-        assertTrue(outcome.getCommandOutput().contains("(active)"));
+        assertTrue(outcome.getCommandOutput().contains("（当前）"), outcome.getCommandOutput());
         // 会话级选择未被写入
         assertNull(SessionSelections.modelOf(session));
     }
@@ -130,7 +130,11 @@ class BuiltinCommandsSystemTest {
         assertEquals(modelName, SessionSelections.modelOf(session));
 
         InputOutcome bad = handle(engine, session, "/model no-such-model");
-        assertTrue(bad.getCommandOutput().contains("Model not found"));
+        assertTrue(bad.getCommandOutput().contains("模型不存在"), bad.getCommandOutput());
+
+        // 输入带语言：回执按输入的语言
+        InputOutcome badEn = engine.handle(HarnessInput.of(session, "/model no-such-model").locale(Locale.ENGLISH));
+        assertTrue(badEn.getCommandOutput().contains("Model not found"), badEn.getCommandOutput());
         // 未被改写
         assertEquals(modelName, SessionSelections.modelOf(session));
     }

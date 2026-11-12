@@ -1,0 +1,67 @@
+$ /loop 
+本会话没有定时任务。
+用法：/loop [--every <间隔> | --cron <表达式>] [--now] <提示词>
+
+$ /loop --every 2h --now check ci
+定时任务已创建：
+  ID: <id>
+  间隔: 每 2 小时
+  提示词: check ci
+  立即执行: 创建后立即执行首轮
+  存储: 已持久化
+
+$ /loop --cron 0 0 0 1 1 ? 2099 yearly report
+定时任务已创建：
+  ID: <id>
+  Cron: 0 0 0 1 1 ? 2099
+  提示词: yearly report
+  存储: 已持久化
+
+$ /loop --every abc x
+间隔格式不对: abc（例如 30s、5m、2h）
+
+$ /loop --foo hello
+未知参数: --foo
+定时任务已创建：
+  ID: <id>
+  间隔: 每 5 分钟
+  提示词: hello
+  存储: 已持久化
+
+$ /loop --cron
+用法：/loop [--every <间隔> | --cron <表达式>] [--now] <提示词>
+示例：
+  /loop --every 5m 检查部署状态
+  /loop --every 30s 检查 CI 状态
+  /loop 检查 CI 状态   （缺省每 5 分钟）
+  /loop --cron "0 */5 * * * ? *" 检查状态
+
+$ /loop pause <id>
+定时任务 '<id>' 已暂停。
+
+$ /loop list
+定时任务：
+  <id> [heartbeat] 每 2 小时 等待中 [now] 已执行 0 轮 check ci
+  <id> [heartbeat] cron:0 0 0 1 1 ? 2099 已暂停 已执行 0 轮 yearly report
+  <id> [heartbeat] 每 5 分钟 执行中 已执行 0 轮 hello
+
+用法：/loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear
+
+$ /loop resume <id>
+定时任务 '<id>' 已恢复。
+
+$ /loop pause nope
+定时任务 'nope' 不存在。
+
+$ /loop resume 
+用法：/loop resume <id>
+
+$ /loop remove <id>
+定时任务 '<id>' 已删除。
+
+$ /loop remove nope
+定时任务 'nope' 不存在。
+
+$ /loop clear
+已删除本会话的全部定时任务。
+

@@ -147,6 +147,19 @@ public final class HarnessI18nKeys {
     public static final String COMMAND_INTERRUPT_DONE = "command.interrupt.done";
     public static final String COMMAND_INTERRUPT_IDLE = "command.interrupt.idle";
     public static final String COMMAND_MODEL_DESCRIPTION = "command.model.description";
+    public static final String COMMAND_MODEL_TITLE = "command.model.title";
+    public static final String COMMAND_MODEL_ACTIVE = "command.model.active";
+    public static final String COMMAND_MODEL_USAGE = "command.model.usage";
+    public static final String COMMAND_MODEL_HELP_TITLE = "command.model.help.title";
+    public static final String COMMAND_MODEL_HELP_LIST = "command.model.help.list";
+    public static final String COMMAND_MODEL_HELP_SWITCH = "command.model.help.switch";
+    /** 模型不存在（标签，模型名由代码加粗追加） */
+    public static final String COMMAND_MODEL_NOT_FOUND = "command.model.not_found";
+    public static final String COMMAND_MODEL_SEE_LIST = "command.model.see_list";
+    /** 已切换模型（标签，模型名由代码加粗追加） */
+    public static final String COMMAND_MODEL_SWITCHED = "command.model.switched";
+    /** Markdown 自定义命令没写 description 时的兜底描述 */
+    public static final String COMMAND_CUSTOM_DESCRIPTION = "command.custom.description";
     public static final String COMMAND_RERUN_DESCRIPTION = "command.rerun.description";
     public static final String COMMAND_REWIND_DESCRIPTION = "command.rewind.description";
     public static final String COMMAND_REWIND_INVALID = "command.rewind.invalid";

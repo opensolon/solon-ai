@@ -20,6 +20,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
 import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.core.util.RunUtil;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -532,7 +534,7 @@ final class LoopScheduler {
         }
 
         try {
-            LoopOutcome outcome = execute(sessionId, task.getPrompt());
+            LoopOutcome outcome = execute(sessionId, task.getPrompt(), localeOf(task));
             // 执行期间任务可能被修改成新版本：结果与错误计数记到最新版本上
             LoopTask target = latestOf(sessionId, task);
             switch (outcome.kind()) {
@@ -567,6 +569,18 @@ final class LoopScheduler {
             }
             task.finish();
         }
+    }
+
+    /**
+     * 本轮的语言：任务创建时记下的语言优先，没有（升级前的数据、宿主未指定）时用引擎实例的语言
+     * （未挂接或未配置为 null，即全局默认语言）。
+     */
+    @Nullable Locale localeOf(LoopTask task) {
+        if (task.getLocale() != null) {
+            return task.getLocale();
+        }
+        HarnessEngine e = engine;
+        return e == null ? null : e.getLocale();
     }
 
     /** 同 id 的当前版本；已被删除则返回它自己。 */
@@ -641,10 +655,11 @@ final class LoopScheduler {
     /**
      * 执行一轮：按注册顺序取首个认领者（谓词命中即认领，结论不穿透）；全部不认领时走缺省执行器。
      *
+     * @param locale 本轮的语言（见 {@link #localeOf}），原样交给执行器
      * @return 本轮结论（不为 null）；无人认领时为 skip
      * @throws Exception 执行器失败
      */
-    LoopOutcome execute(String sessionId, String prompt) throws Exception {
+    LoopOutcome execute(String sessionId, String prompt, @Nullable Locale locale) throws Exception {
         for (ExecutorEntry entry : executors) {
             if (entry.claim != null) {
                 boolean hit;
@@ -657,7 +672,7 @@ final class LoopScheduler {
                     continue;
                 }
             }
-            LoopOutcome outcome = invoke(entry.channel, entry.handler, sessionId, prompt);
+            LoopOutcome outcome = invoke(entry.channel, entry.handler, sessionId, prompt, locale);
             if (entry.channel != null) {
                 LOG.debug("[Loop] session '{}' claimed by channel '{}': {}", sessionId, entry.channel, outcome);
             }
@@ -665,15 +680,16 @@ final class LoopScheduler {
         }
         LoopExecutor fallback = defaultExecutor;
         if (fallback != null) {
-            return invoke("default", fallback, sessionId, prompt);
+            return invoke("default", fallback, sessionId, prompt, locale);
         }
         LOG.warn("[Loop] no executor claimed session '{}', round skipped", sessionId);
         return LoopOutcome.skip("no executor claimed");
     }
 
     /** 返回 null 是执行器的编程错误：按失败计，让它在 lastResult 与自动停用上可见，而不是静默跳过。 */
-    private static LoopOutcome invoke(String channel, LoopExecutor handler, String sessionId, String prompt) throws Exception {
-        LoopOutcome outcome = handler.handle(sessionId, prompt);
+    private static LoopOutcome invoke(String channel, LoopExecutor handler, String sessionId, String prompt,
+                                      @Nullable Locale locale) throws Exception {
+        LoopOutcome outcome = handler.handle(sessionId, prompt, locale);
         if (outcome == null) {
             return LoopOutcome.failed("loop executor '" + channel + "' returned null (must return LoopOutcome)");
         }

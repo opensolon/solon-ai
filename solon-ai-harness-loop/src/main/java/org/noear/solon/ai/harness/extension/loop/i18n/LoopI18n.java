@@ -28,8 +28,9 @@ import java.util.Locale;
  *
  * <p>默认语言、覆盖工厂等全局设置见 {@link AiI18n}。key 常量见 {@link LoopI18nKeys}。</p>
  *
- * <p>语言来源：工具描述跟随请求，工具返回值跟随工具参数 {@code __locale}，命令输出跟随命令上下文；
- * 规格校验异常（{@link LoopArgumentException}）在出口处按语言渲染；都没有时用默认语言。</p>
+ * <p>语言来源：工具描述跟随请求，工具返回值跟随工具参数 {@code __locale}，命令输出（含回执）跟随命令上下文；
+ * 规格校验异常（{@link LoopArgumentException}）在出口处按语言渲染；都没有时用默认语言。
+ * 定时轮次没有输入，用任务创建时记下的语言（{@code LoopTask#getLocale}）。</p>
  *
  * @author noear
  * @since 4.2
@@ -51,5 +52,9 @@ public final class LoopI18n {
 
     public static String fmt(@Nullable Locale locale, String key, String name, Object value) {
         return MESSAGES.fmt(locale, key, name, value);
+    }
+
+    public static String fmt(@Nullable Locale locale, String key, String name1, Object value1, String name2, Object value2) {
+        return MESSAGES.fmt(locale, key, name1, value1, name2, value2);
     }
 }

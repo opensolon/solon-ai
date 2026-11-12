@@ -16,7 +16,11 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.noear.solon.ai.harness.util.HarnessIds;
+import org.noear.solon.ai.i18n.AiI18n;
+import org.noear.solon.lang.Nullable;
 import org.noear.snack4.ONode;
+
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -70,6 +74,12 @@ class Goal {
     private volatile String lastErrorSummary;
     /** 连续同类型错误计数。 */
     private volatile int consecutiveSameTypeErrors;
+    /**
+     * 目标的语言（创建时从用户输入记下，随快照持久化；null = 跟随引擎实例的语言）。
+     *
+     * <p>轮次由后台调度发起、不带输入语言，提示词与这一轮的智能体语言只能从这里取。</p>
+     */
+    private volatile Locale locale;
 
     /** 预算提示阈值（实例级，避免多工作区互相覆盖）。 */
     private BudgetThresholds thresholds = BudgetThresholds.defaults();
@@ -189,6 +199,8 @@ class Goal {
     public int getMaxIterations() { return maxIterations; }
     public void setMaxIterations(int maxIterations) { this.maxIterations = Math.max(0, maxIterations); }
     public long getStartEpochMs() { return startEpochMs; }
+    public @Nullable Locale getLocale() { return locale; }
+    public void setLocale(@Nullable Locale locale) { this.locale = locale; }
 
 
     // ===== Goal 实体运行时字段访问 =====
@@ -277,6 +289,7 @@ class Goal {
         if (lastExecutedAt > 0) node.set("lastExecutedAt", lastExecutedAt);
         if (stagnationCount > 0) node.set("stagnationCount", stagnationCount);
         if (consecutiveErrors > 0) node.set("consecutiveErrors", consecutiveErrors);
+        if (locale != null) node.set("locale", locale.toLanguageTag());
         return node;
     }
 
@@ -313,6 +326,8 @@ class Goal {
                 ? node.get("stagnationCount").getInt() : 0;
         gs.consecutiveErrors = node.getOrNull("consecutiveErrors") != null
                 ? node.get("consecutiveErrors").getInt() : 0;
+        gs.locale = node.getOrNull("locale") != null
+                ? AiI18n.toLocale(node.get("locale").getString()) : null;
         return gs;
     }
 
@@ -342,6 +357,7 @@ class Goal {
         gs.lastExecutedAt = projection.getLastExecutedAt();
         gs.stagnationCount = projection.getStagnationCount();
         gs.consecutiveErrors = projection.getConsecutiveErrors();
+        gs.locale = projection.getLocale();
         return gs;
     }
 }

@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * agent      → permission, scope, session
  * scope      → agent                   只用 agent.ToolName（4.0.4 起已发布在 agent 包）
  * util       → session
+ * i18n       → util                    文案查表（HarnessI18n 取轨迹语言用 util.TraceUtil）
  * session    → hitl                    只放会话事实与归属（SessionOwnership / OwnerCheck / NotOwnerException）
  * hitl       → permission
  * permission → （无）
@@ -78,6 +79,7 @@ class HarnessPackageBoundaryTest {
         ALLOWED.put("agent", set("permission", "scope", "session"));
         ALLOWED.put("scope", set("agent"));
         ALLOWED.put("util", set("session"));
+        ALLOWED.put("i18n", set("util"));
         ALLOWED.put("session", set("hitl"));
         ALLOWED.put("hitl", set("permission"));
         ALLOWED.put("permission", set());

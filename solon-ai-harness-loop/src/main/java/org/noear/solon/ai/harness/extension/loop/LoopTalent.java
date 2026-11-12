@@ -138,14 +138,16 @@ public class LoopTalent extends AbsTalent {
             }
         }
 
-        // 与宿主同一套规格校验（上面的前置检查只为给模型更具体的纠正指引）
+        // 与宿主同一套规格校验（上面的前置检查只为给模型更具体的纠正指引）。
+        // 任务记下本轮的语言：之后的定时轮次由后台调度发起，没有输入可取语言
         LoopTask task;
         try {
             task = loopTasks.schedule(__sessionId, LoopSpec.of(prompt)
                     .everyMinutes(interval)
                     .cron(cronVal)
                     .oneShot(oneShotVal)
-                    .runNow(runNow));
+                    .runNow(runNow)
+                    .locale(locale));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_ADD_FAILED,
                     "reason", LoopArgumentException.messageOf(e, locale)));

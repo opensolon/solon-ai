@@ -136,7 +136,7 @@ class GoalCommand extends AbsCommand {
             printCreated(input, output, task);
         } catch (IllegalStateException e) {
             GoalSnapshot existing = goal.snapshot(session);
-            // 「已有进行中的 goal」按命令上下文的语言输出（异常自带的说明是引擎语言）
+            // 「已有进行中的 goal」按命令上下文的语言输出（按类型重渲染，不依赖异常自带说明的语言）
             String message = e instanceof GoalActiveException
                     ? GoalI18n.get(input.getLocale(), GoalI18nKeys.GOAL_ERROR_ACTIVE_EXISTS)
                     : e.getMessage();
@@ -224,6 +224,8 @@ class GoalCommand extends AbsCommand {
         if (maxTokens != null) spec.maxTokens(maxTokens);
         if (maxDurationMs != null) spec.maxDurationMs(maxDurationMs);
         if (maxIterations != null) spec.maxIterations(maxIterations);
+        // 目标记下命令上下文的语言：后续轮次由后台调度发起，没有输入可取语言
+        spec.locale(input.getLocale());
         return spec;
     }
 

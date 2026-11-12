@@ -15,6 +15,10 @@
  */
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
+
 /**
  * goal 修改补丁（与 loop 的 {@code LoopPatch} 对称）：null = 保持原值。
  *
@@ -25,6 +29,9 @@ package org.noear.solon.ai.harness.extension.goal;
  *
  * <p>空白正文视为未设置；预算负数按 0（不限制）处理。</p>
  *
+ * <p>语言：不调用 {@link #locale}（或传 null）表示保持目标现有的语言。
+ * 目标最终用哪种语言始终是「目标的语言 &gt; {@code engine.getLocale()} &gt; 全局默认语言」。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
@@ -33,6 +40,7 @@ public final class GoalPatch {
     private Long maxTokens;
     private Long maxDurationMs;
     private Integer maxIterations;
+    private Locale locale;
 
     private GoalPatch() {
     }
@@ -65,6 +73,19 @@ public final class GoalPatch {
         return this;
     }
 
+    /**
+     * 目标的语言（界面语言）。
+     *
+     * <p>之后每一轮的提示词、写入“上一轮结果”的系统说明、交给执行器的语言都按它走；
+     * 不调用本方法（或传 null）= 保持目标现有的语言。</p>
+     *
+     * @since 4.2.0
+     */
+    public GoalPatch locale(@Nullable Locale locale) {
+        this.locale = locale;
+        return this;
+    }
+
     String getObjective() {
         return objective;
     }
@@ -81,14 +102,21 @@ public final class GoalPatch {
         return maxIterations;
     }
 
+    @Nullable
+    Locale getLocale() {
+        return locale;
+    }
+
     /** 是否没有任何字段需要修改。 */
     boolean isEmpty() {
-        return objective == null && maxTokens == null && maxDurationMs == null && maxIterations == null;
+        return objective == null && maxTokens == null && maxDurationMs == null && maxIterations == null
+                && locale == null;
     }
 
     @Override
     public String toString() {
         return "GoalPatch{objective=" + objective + ", maxTokens=" + maxTokens
-                + ", maxDurationMs=" + maxDurationMs + ", maxIterations=" + maxIterations + "}";
+                + ", maxDurationMs=" + maxDurationMs + ", maxIterations=" + maxIterations
+                + ", locale=" + locale + "}";
     }
 }

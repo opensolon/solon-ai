@@ -127,7 +127,9 @@ class CommandRegistryAndLoaderTest {
     @Test
     void markdownCommandDefaultsDescriptionAndEmptyExamples() {
         MarkdownCommand command = new MarkdownCommand("x", "tpl", null, null);
-        assertEquals("Custom command: x", command.description(null));
+        assertEquals("自定义命令：x", command.description(null));
+        assertEquals("Custom command: x", command.description(Locale.ENGLISH));
+        assertEquals("部署", new MarkdownCommand("x", "tpl", "部署", null).description(Locale.ENGLISH), "md 里写的描述原样返回");
         assertEquals(0, command.examples(null).length);
     }
 

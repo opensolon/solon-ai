@@ -31,6 +31,7 @@ solon-ai harness 引擎插件：**会话定时任务**（`/loop` 命令、`loop_
 | 驱动方式 | 按时间表独立触发（间隔 / cron / 一次性） | 由目标状态驱动续轮 |
 | 记录内容 | 只记最终文本（`lastResult`）与轮次 | 有预算与完成判定 |
 | 执行器签名 | `LoopExecutor`（返回 `LoopOutcome`） | 另有签名，不与 loop 共用 |
+| 语言 | 任务记下创建时的语言（`task.getLocale()`），每轮交给执行器；解析链是「任务的语言 > 引擎语言 > 全局默认语言」，已有任务可用 `LoopPatch.locale` 换语言（不调 = 保持） | 目标记下创建时的语言 |
 
 ### 1.2 调度与执行流程
 
@@ -311,16 +312,18 @@ flowchart LR
 
 ```java
 // 按注册顺序认领，先于缺省执行器；谓词为 null 表示认领全部
-loop.addExecutor("cli", "cli"::equals, (sid, prompt) -> {
+loop.addExecutor("cli", "cli"::equals, (sid, prompt, locale) -> {
     if (!terminalIdle()) {
-        return LoopOutcome.skip("terminal busy");      // 本轮跳过，不计错误
+        return LoopOutcome.skip("terminal busy");            // 本轮跳过，不计错误
     }
-    return LoopOutcome.done(runRound(sid, prompt));    // 抛异常 = 失败（计错误、退避、达阈值停用）
+    return LoopOutcome.done(runRound(sid, prompt, locale));  // 抛异常 = 失败（计错误、退避、达阈值停用）
 });
 
-loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
-        runtimeReady() ? LoopOutcome.done(runWeb(sid, prompt))
+loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt, locale) ->
+        runtimeReady() ? LoopOutcome.done(runWeb(sid, prompt, locale))
                        : LoopOutcome.failed("runtime not ready")); // 与抛异常等价
+// locale 是本轮的语言（任务创建时记下的，没有时为引擎语言）：交给本轮输入，如
+// engine.handle(HarnessInput.ofProgram(session, prompt, "loop").locale(locale))
 ```
 
 执行器不得返回 `null`，否则按失败计（`lastResult` 中可见）。缺省执行器只把结果写进 `lastResult`，不推给任何渠道；需要让用户看到每一轮的宿主必须注册自己的执行器（完整写法见 5.4），或改用 L0 骨架在 `HostSink` 里拿到每一轮（第 3 章）。
@@ -429,7 +432,7 @@ public class ImLoopHost {
                 .orElseThrow(() -> new IllegalStateException("loop extension not attached"));
 
         // 执行器：认领 IM 会话（谓词应互斥），把到点的一轮跑完并送回渠道
-        loop.addExecutor("im", id -> id.startsWith("im-"), (sid, prompt) -> {
+        loop.addExecutor("im", id -> id.startsWith("im-"), (sid, prompt, locale) -> {
             AgentSession session = engine.getSessionOrNull(sid);
             InputOrigin route = routes.get(sid);
             if (session == null || route == null) {
@@ -437,7 +440,7 @@ public class ImLoopHost {
             }
             try {
                 // 程序输入：不识别命令与 @提及，来源标记为 loop；忙时 REJECTED("busy")，不进积压
-                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "loop"));
+                InputOutcome outcome = engine.handle(HarnessInput.ofProgram(session, prompt, "loop").locale(locale));
                 if (outcome.getKind() != InputOutcome.Kind.TASK) {
                     return LoopOutcome.skip("not runnable: " + outcome.getRejectReason());  // 不计错误
                 }
@@ -696,6 +699,9 @@ loop.schedule(sid, LoopSpec.of("check deploy").everyMinutes(15));
 // 每 10 分钟，并在创建后立即跑首轮
 loop.schedule(sid, LoopSpec.of("检查 CI 是否通过").everyMinutes(10).runNow(true));
 
+// 记下任务的语言（用户界面语言）：之后每一轮都按它执行
+loop.schedule(sid, LoopSpec.of("check the build").everyMinutes(10).locale(Locale.ENGLISH));
+
 // cron：6 或 7 位（秒 分 时 日 月 周 [年]），日与周必须有一个为 ?
 loop.schedule(sid, LoopSpec.of("daily report").cron("0 0 22 * * ?"));
 
@@ -794,6 +800,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `at(at)` | `LocalDateTime` | 不用 | 服务器本地时间，须为未来时刻；转为 `0 分 时 日 月 ? 年`，自动 oneShot |
 | `oneShot(oneShot)` | `Boolean` | false | 为 true 时必须有 at 或 cron |
 | `runNow(runNow)` | `Boolean` | false | 创建后立即执行首轮（仅固定间隔生效）；与一次性互斥 |
+| `locale(locale)` | `Locale` | 不用（跟随引擎） | 任务的语言：之后每一轮都按它执行（见 4.4）；随任务持久化，`update` 不改变 |
 | `extra(key, value)` | `String`, `ONode` | 无 | 宿主扩展字段；value 为 null 表示不写；键非法抛异常 |
 
 `schedule` 时统一校验，失败返回 `INVALID`（`getDetail()` 为原因）：prompt 为空、间隔越界、at 不是未来时刻、一次性却没有 at/cron、一次性又要求 runNow、cron 无法解析或已无未来触发时刻、sessionId 为空。扩展字段键非法在调用 `extra` 时即抛出。
@@ -809,6 +816,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `cron(cron)` | `String` | 保持 | 空串 = 清除 cron、回到固定间隔；新 cron 无法解析或不可触发时 `update` 返回 `INVALID` |
 | `runNow(runNow)` | `Boolean` | 保持 | 只更新记录上的标志；修改不会触发立即执行（立即首轮只在创建时生效） |
 | `extra(key, value)` | `String`, `ONode` | value 为 null = 删除该键 | 只改列出的键；键非法抛异常 |
+| `locale(locale)` | `Locale` | 保持 | 任务的语言：之后每轮提示词与交给执行器的语言都按它走；不调用或传 null 都表示保持现有语言（语言只增不改，回到跟随引擎只能重建任务） |
 
 保留不变：任务 ID、创建时间、启停状态、迭代数、最近结果、一次性属性、未列出的扩展字段。修改后若任务为启用状态，会以新定义重新注册 job；cron 在注册时已不可触发则任务被自动停用并记 WARN。
 
@@ -846,6 +854,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | `cron` | 仅 cron 模式 | cron 表达式 |
 | `oneShot` / `runNow` / `enabled` / `cancelled` / `running` | 总是 | boolean |
 | `currentIteration` | 总是 | int |
+| `locale` | 指定了语言时 | 语言标签（如 `en`、`zh-CN`）；缺失 = 跟随引擎 |
 | `lastResult` | 有值时 | 最近结果 |
 | `lastExecutedAt` | 有值时 | ISO-8601 字符串 |
 
@@ -859,7 +868,9 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 
 `getText()`：done 时为最终文本，skip/failed 时为原因。无执行器认领时等同 skip（`no executor claimed`），绝不记成成功。
 
-`LoopExecutor` 签名：`LoopOutcome handle(String sessionId, String prompt) throws Exception`。
+`LoopExecutor` 签名：`LoopOutcome handle(String sessionId, String prompt, @Nullable Locale locale) throws Exception`。
+
+`locale` 是本轮的语言：任务创建时记下的（`LoopSpec.locale`；`/loop` 取命令上下文的语言，`loop_add` 取工具参数 `__locale`），没有时为 `engine.getLocale()`。后台轮次没有输入可取语言，执行器应把它写进本轮输入，否则协议指令与工具文案会和用户创建任务时的语言不一致。
 
 ### 7.6 状态键
 
@@ -924,7 +935,7 @@ boolean active = loop.hasActiveTasks();                             // 是否有
 | 规则 | 说明 |
 |---|---|
 | 写入时机 | 每次变更（创建、修改、启停、删除、一轮结束、出错）按内存快照落盘，只重写内容有变化的会话文件（每个文件整体写入）；写入串行化；扩展摘除后不再写盘 |
-| 可选字段 | `cron`、`lastResult`、`lastExecutedAt` 有值才写；`runNow`、`oneShot` 仅为 true 时写 |
+| 可选字段 | `cron`、`lastResult`、`lastExecutedAt`、`locale` 有值才写；`runNow`、`oneShot` 仅为 true 时写 |
 | 不持久化 | 运行锁 `running`、连续错误计数 |
 | 读取缺省 | 缺 `enabled` 视为 true；缺 `currentIteration` 为 0；缺 `runNow` / `oneShot` / `cancelled` / `autoInterval` 为 false |
 | 必填字段 | `id`、`prompt`、`intervalMinutes`、`createdAt`；缺失则解析失败，按外来条目处理 |

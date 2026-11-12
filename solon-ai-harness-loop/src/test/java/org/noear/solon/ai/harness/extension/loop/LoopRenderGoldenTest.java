@@ -1,6 +1,10 @@
 package org.noear.solon.ai.harness.extension.loop;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.noear.snack4.ONode;
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.harness.command.Command;
@@ -8,14 +12,18 @@ import org.noear.solon.ai.harness.command.builtin.Fakes;
 import org.noear.solon.ai.harness.command.builtin.HelpCommand;
 import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.i18n.testkit.GoldenFiles;
+import org.noear.solon.ai.mount.source.FileMountSource;
 
 import java.lang.reflect.Method;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -26,22 +34,25 @@ import java.util.Map;
  * 时间（serverNow、nextFireTime、错误里的服务器当前时间）、时区与随机 taskId 归一化后再比对。</p>
  */
 public class LoopRenderGoldenTest {
+    @TempDir
+    Path dir;
+
     @Test
     public void testZh() throws Throwable {
-        GoldenFiles.verify(renderOf(null, "_zh"));
+        GoldenFiles.verify(renderOf(null, "_zh", dir));
     }
 
     @Test
     public void testZhExplicit() throws Throwable {
-        GoldenFiles.verify(renderOf(Locale.CHINA, "_zh"));
+        GoldenFiles.verify(renderOf(Locale.CHINA, "_zh", dir));
     }
 
     @Test
     public void testEn() throws Throwable {
-        GoldenFiles.verify(renderOf(Locale.ENGLISH, "_en"));
+        GoldenFiles.verify(renderOf(Locale.ENGLISH, "_en", dir));
     }
 
-    static Map<String, String> renderOf(Locale locale, String suffix) throws Throwable {
+    static Map<String, String> renderOf(Locale locale, String suffix, Path dir) throws Throwable {
         Map<String, String> out = new LinkedHashMap<>();
         LoopScheduler scheduler = LoopExtension.builder().jobManager(null).defaultExecutor(false).build().scheduler();
         LoopTalent talent = new LoopTalent(scheduler);
@@ -109,7 +120,90 @@ public class LoopRenderGoldenTest {
         Fakes.StubContext ctx = new Fakes.StubContext(Fakes.newSession(), Arrays.asList("--cron", "bad", "hello")).locale(locale);
         command.execute(null, ctx.in(null), ctx);
         out.put("loop_command_failed" + suffix, normalize(ctx.output()));
+
+        out.put("loop_command_receipts" + suffix, commandReceipts(locale, dir));
+        out.put("loop_command_list" + suffix, listView(locale, dir));
         return out;
+    }
+
+    /**
+     * /loop 的回执：创建（间隔 / cron / 立即执行 / 已持久化）、列表（等待中 / 执行中 / 已暂停）、
+     * 暂停、恢复、删除、清空，以及用法与参数错误。任务 id 归一化。
+     */
+    static String commandReceipts(Locale locale, Path dir) throws Throwable {
+        LoopScheduler scheduler = LoopExtension.builder().jobManager(null).defaultExecutor(false)
+                .store(FileMountSource.of(dir, true), "loop")
+                .build().scheduler();
+        LoopCommand command = new LoopCommand(scheduler);
+        AgentSession session = Fakes.newSession();
+        String sid = session.getSessionId();
+        StringBuilder buf = new StringBuilder();
+
+        run(buf, command, session, locale);                                          // 空列表
+        run(buf, command, session, locale, "--every", "2h", "--now", "check", "ci"); // 间隔 + 立即执行
+        run(buf, command, session, locale, "--cron", "0 0 0 1 1 ? 2099", "yearly", "report");
+        run(buf, command, session, locale, "--every", "abc", "x");
+        run(buf, command, session, locale, "--foo", "hello");                         // 未知参数：告警后照常创建
+        run(buf, command, session, locale, "--cron");                                 // 缺值：打印用法
+
+        List<LoopTask> tasks = scheduler.list(sid);
+        String paused = tasks.get(1).getId();
+        run(buf, command, session, locale, "pause", paused);
+        LoopTask running = tasks.get(2);
+        running.tryStart();
+        run(buf, command, session, locale, "list");
+        running.finish();
+
+        run(buf, command, session, locale, "resume", paused);
+        run(buf, command, session, locale, "pause", "nope");
+        run(buf, command, session, locale, "resume", "");
+        run(buf, command, session, locale, "remove", paused);
+        run(buf, command, session, locale, "remove", "nope");
+        run(buf, command, session, locale, "clear");
+        return buf.toString();
+    }
+
+    private static void run(StringBuilder buf, LoopCommand command, AgentSession session, Locale locale, String... args)
+            throws Exception {
+        Fakes.StubContext ctx = new Fakes.StubContext(session, Arrays.asList(args)).locale(locale);
+        command.execute(null, ctx.in(null), ctx);
+        String transcript = "$ /loop " + String.join(" ", args) + "\n" + normalize(ctx.output());
+        buf.append(transcript.replaceAll("[0-9a-f]{32}", "<id>")).append("\n\n");
+    }
+
+    /**
+     * 列表视图：间隔 / cron / 状态 / 上次执行距今。
+     *
+     * <p>任务按存储格式落盘后重新加载（加载走的就是真实路径），再断言 {@code /loop list} 的实际输出；
+     * 渲染逻辑本身不在这里复刻。任务 id 归一化。</p>
+     */
+    static String listView(Locale locale, Path dir) throws Throwable {
+        Instant now = Instant.now();
+        Map<String, List<LoopTask>> seeded = new LinkedHashMap<>();
+        seeded.put("s9", Arrays.asList(
+                executedTask(locale, "check ci", 5, null, now.minusSeconds(30)),
+                executedTask(locale, "check deploy", 120, null, now.minusSeconds(300)),
+                executedTask(locale, "yearly report", 1, "0 0 0 1 1 ? 2099", now.minusSeconds(7200))));
+        new LoopStore(FileMountSource.of(dir, true), "loop", null).save(seeded);
+
+        LoopScheduler scheduler = LoopExtension.builder().jobManager(null).defaultExecutor(false)
+                .store(FileMountSource.of(dir, true), "loop")
+                .build().scheduler();
+        scheduler.load();
+
+        LoopCommand command = new LoopCommand(scheduler);
+        Fakes.StubContext ctx = new Fakes.StubContext(InMemoryAgentSession.of("s9"), Arrays.asList("list")).locale(locale);
+        command.execute(null, ctx.in(null), ctx);
+        return ctx.output().replaceAll("[0-9a-f]{32}", "<id>");
+    }
+
+    /** 已执行过一轮的任务（上次执行时刻固定在相对现在的偏移上） */
+    private static LoopTask executedTask(Locale locale, String prompt, int intervalMinutes, String cron,
+                                          Instant lastExecutedAt) {
+        ONode node = new LoopTask(prompt, intervalMinutes, cron, false, locale).toONode();
+        node.set("lastExecutedAt", lastExecutedAt.toString());
+        node.set("lastResult", "ok");
+        return LoopTask.fromONode(node);
     }
 
     static String call(Map<String, FunctionTool> tools, Locale locale, String tool, String sessionId, Object... kv) throws Throwable {

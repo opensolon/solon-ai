@@ -71,3 +71,69 @@ loop.tool.triggered: |-
 # ---- /loop 命令 ----
 command.loop.description: |-
   定时任务 (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)
+command.loop.usage: |-
+  用法：/loop [--every <间隔> | --cron <表达式>] [--now] <提示词>
+command.loop.usage_examples: |-
+  示例：
+    /loop --every 5m 检查部署状态
+    /loop --every 30s 检查 CI 状态
+    /loop 检查 CI 状态   （缺省每 5 分钟）
+    /loop --cron "0 */5 * * * ? *" 检查状态
+command.loop.id_usage: |-
+  用法：/loop {action} <id>
+command.loop.bad_interval: |-
+  间隔格式不对: {value}（例如 30s、5m、2h）
+command.loop.unknown_flag: |-
+  未知参数: {flag}
+command.loop.failed: |-
+  创建失败: {reason}
+command.loop.registered: |-
+  定时任务已创建：
+command.loop.field.interval: |-
+  间隔:
+command.loop.field.prompt: |-
+  提示词:
+command.loop.field.run_now: |-
+  立即执行:
+command.loop.field.state: |-
+  存储:
+command.loop.run_now_first: |-
+  创建后立即执行首轮
+command.loop.state_persisted: |-
+  已持久化
+command.loop.not_found: |-
+  定时任务 '{id}' 不存在。
+command.loop.removed: |-
+  定时任务 '{id}' 已删除。
+command.loop.paused: |-
+  定时任务 '{id}' 已暂停。
+command.loop.resumed: |-
+  定时任务 '{id}' 已恢复。
+command.loop.cleared: |-
+  已删除本会话的全部定时任务。
+command.loop.list.empty: |-
+  本会话没有定时任务。
+command.loop.list.title: |-
+  定时任务：
+command.loop.list.iterations: |-
+  已执行 {count} 轮
+command.loop.list.last: |-
+  （上次 {ago}：{result}）
+command.loop.list.footer: |-
+  用法：/loop remove <id> | /loop pause <id> | /loop resume <id> | /loop clear
+command.loop.status.paused: |-
+  已暂停
+command.loop.status.running: |-
+  执行中
+command.loop.status.idle: |-
+  等待中
+command.loop.every_minutes: |-
+  每 {n} 分钟
+command.loop.every_hours: |-
+  每 {n} 小时
+command.loop.ago_seconds: |-
+  {n} 秒前
+command.loop.ago_minutes: |-
+  {n} 分钟前
+command.loop.ago_hours: |-
+  {n} 小时前

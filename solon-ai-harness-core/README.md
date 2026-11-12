@@ -141,7 +141,7 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
 | 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（[ENGINE-L1](docs/ENGINE-L1.md) §2.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
-| 语言 | `locale(Locale)` | `null`（全局默认语言，中文） | 引擎实例的默认语言：输入没带语言时用它，goal / loop 后台轮次总是用它（[docs/I18n.md](docs/I18n.md)） |
+| 语言 | `locale(Locale)` | `null`（全局默认语言，中文） | 引擎实例的默认语言：输入没带语言时用它；goal 后台轮次先用目标创建时记下的语言，没有才用它；loop 后台轮次总是用它（[docs/I18n.md](docs/I18n.md) §2.2） |
 | 服务端 | `deployMode(DeployMode)` | `STANDALONE` | 部署模式（本机单用户 / 多租户服务端）；`SERVER` 的缺省见本表「SERVER 为」各项，构建期校验见 §1.2 上方说明，完整对照见 [SAAS.md](docs/SAAS.md) §2.1 |
 | 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
 | 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |

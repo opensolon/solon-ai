@@ -32,7 +32,7 @@ class GoalRoundExecutionTest {
         /** 轮次内回调：模拟 goal_update(complete) 在工具执行中把状态置为 ACHIEVED。 */
         Runnable duringRound;
 
-        final GoalExecutor handler = (sessionId, prompt) -> {
+        final GoalExecutor handler = (sessionId, prompt, locale) -> {
             prompts.add(prompt);
             if (duringRound != null) {
                 duringRound.run();
@@ -370,7 +370,7 @@ class GoalRoundExecutionTest {
         // 换成「不认领」的执行器：谓词不命中本会话，且没有内置兜底
         GoalRuntime noClaim = new GoalRuntime((org.noear.solon.ai.harness.HarnessEngine) null,
                 BudgetThresholds.defaults(), 3, 99, false);
-        noClaim.addExecutor("web", id -> false, (sessionId, prompt) -> TestOutcomes.ofText("不应执行"));
+        noClaim.addExecutor("web", id -> false, (sessionId, prompt, locale) -> TestOutcomes.ofText("不应执行"));
         AgentSession s2 = session();
         Goal gs2 = noClaim.attach(s2, "分析现状", 0, 0, 0);
 
@@ -390,7 +390,7 @@ class GoalRoundExecutionTest {
     /** skip：本通道认领但此刻不宜执行——不计错误、不推进、不改结果文本，目标保持活跃。 */
     @Test
     void skippedRoundKeepsStateUntouched() {
-        GoalRuntime e = engine((sessionId, prompt) -> GoalOutcome.skip("terminal busy"), 3);
+        GoalRuntime e = engine((sessionId, prompt, locale) -> GoalOutcome.skip("terminal busy"), 3);
         AgentSession s = session();
         Goal gs = e.attach(s, "分析现状", 0, 0, 0);
 
@@ -404,14 +404,14 @@ class GoalRoundExecutionTest {
     /** failed 与执行器返回 null 都按失败计（参与错误熔断），不再有「null = 穿透」。 */
     @Test
     void failedOrNullOutcomeCountsAsError() {
-        GoalRuntime e = engine((sessionId, prompt) -> GoalOutcome.failed("upstream 500"), 99);
+        GoalRuntime e = engine((sessionId, prompt, locale) -> GoalOutcome.failed("upstream 500"), 99);
         AgentSession s = session();
         Goal gs = e.attach(s, "分析现状", 0, 0, 0);
         e.runRound(s);
         assertEquals(1, gs.getConsecutiveErrors());
         assertTrue(gs.getLastResult().contains("upstream 500"), gs.getLastResult());
 
-        GoalRuntime n = engine((sessionId, prompt) -> null, 99);
+        GoalRuntime n = engine((sessionId, prompt, locale) -> null, 99);
         AgentSession s2 = session();
         Goal gs2 = n.attach(s2, "分析现状", 0, 0, 0);
         n.runRound(s2);
@@ -423,11 +423,11 @@ class GoalRoundExecutionTest {
     void firstClaimingExecutorIsFinalNoPassThrough() {
         GoalRuntime e = engine(null, 3);
         List<String> calls = new ArrayList<>();
-        e.addExecutor("a", id -> true, (sid, p) -> {
+        e.addExecutor("a", id -> true, (sid, p, locale) -> {
             calls.add("a");
             return GoalOutcome.skip("busy");
         });
-        e.addExecutor("b", id -> true, (sid, p) -> {
+        e.addExecutor("b", id -> true, (sid, p, locale) -> {
             calls.add("b");
             return TestOutcomes.ofText("from-b");
         });

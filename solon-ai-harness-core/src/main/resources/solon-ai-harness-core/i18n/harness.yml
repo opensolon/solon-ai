@@ -148,6 +148,26 @@ command.interrupt.idle: |-
   There is no running task
 command.model.description: |-
   Model management (ls, help, <name>)
+command.model.title: |-
+  Models:
+command.model.active: |-
+  (active)
+command.model.usage: |-
+  Usage: /model <name>
+command.model.help.title: |-
+  Model management
+command.model.help.list: |-
+  List all available models
+command.model.help.switch: |-
+  Switch to the specified model
+command.model.not_found: |-
+  Model not found: {name}
+command.model.see_list: |-
+  Use '/model' to see available models.
+command.model.switched: |-
+  Model switched to: {name}
+command.custom.description: |-
+  Custom command: {name}
 command.rerun.description: |-
   Rerun the last task
 command.rewind.description: |-

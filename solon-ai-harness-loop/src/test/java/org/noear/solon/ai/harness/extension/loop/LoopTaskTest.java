@@ -16,7 +16,7 @@ class LoopTaskTest {
         task.updateLastExecution("last");
         task.incrementIteration();
 
-        LoopTask updated = task.copyWithUpdate("new prompt", 5, null, false);
+        LoopTask updated = task.copyWithUpdate("new prompt", 5, null, false, task.getLocale());
 
         assertEquals(task.getId(), updated.getId());
         assertEquals(task.getCreatedAt(), updated.getCreatedAt());
@@ -75,7 +75,7 @@ class LoopTaskTest {
         LoopTask task = new LoopTask("旧任务", 5, null, false);
         task.putExtra("automation", new ONode().set("id", "a1"));
 
-        LoopTask updated = task.copyWithUpdate("新提示词", 10, null, null);
+        LoopTask updated = task.copyWithUpdate("新提示词", 10, null, null, task.getLocale());
         assertNotNull(updated.getExtra("automation"), "更新任务定义时必须保留扩展字段");
         assertEquals("新提示词", updated.getPrompt());
     }

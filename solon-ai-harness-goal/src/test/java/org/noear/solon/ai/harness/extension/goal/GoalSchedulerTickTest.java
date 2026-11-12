@@ -64,7 +64,7 @@ class GoalSchedulerTickTest {
         AtomicInteger peak = new AtomicInteger();
         AtomicInteger rounds = new AtomicInteger();
         CountDownLatch release = new CountDownLatch(1);
-        ext.addExecutor("test", null, (sid, prompt) -> {
+        ext.addExecutor("test", null, (sid, prompt, locale) -> {
             int c = concurrent.incrementAndGet();
             peak.accumulateAndGet(c, Math::max);
             rounds.incrementAndGet();

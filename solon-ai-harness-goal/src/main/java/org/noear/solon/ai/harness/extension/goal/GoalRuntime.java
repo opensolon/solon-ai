@@ -323,11 +323,33 @@ class GoalRuntime {
     }
 
     /**
-     * 本实例文案的语言：引擎实例的语言（goal 轮次由后台调度发起，不带输入语言）；没有引擎或未配置时为 null（默认语言）
+     * 引擎实例的语言（没有引擎或未配置时为 null，即默认语言）。与具体目标无关的文案用它。
      */
     @Nullable
     Locale locale() {
         return engine == null ? null : engine.getLocale();
+    }
+
+    /**
+     * 指定语言优先，未指定时用引擎实例的语言（都没有为 null，即默认语言）。
+     *
+     * <p>用于「目标尚未创建、只有调用方给的语言」的文案（如创建冲突的说明）。</p>
+     */
+    @Nullable
+    Locale localeOrEngine(@Nullable Locale locale) {
+        return locale != null ? locale : locale();
+    }
+
+    /**
+     * 某个目标的文案语言：目标创建时记下的语言优先，没有时用引擎实例的语言（都没有为 null，即默认语言）。
+     *
+     * <p>goal 轮次由后台调度发起、不带输入语言：每轮提示词、写入「上一轮结果」的系统说明、交给执行器的语言
+     * 都取自这里，保证提示词与这一轮智能体（协议指令、工具文案）是同一种语言。</p>
+     */
+    @Nullable
+    Locale localeOf(@Nullable Goal gs) {
+        Locale goalLocale = gs == null ? null : gs.getLocale();
+        return goalLocale != null ? goalLocale : locale();
     }
 
     AgentSession sessionOrNull(String sessionId) {
@@ -341,7 +363,7 @@ class GoalRuntime {
      * <p>不含任何业务判定（预算、熔断、完成条件都在调用方），只做「投递 + 取回结论」。
      * 执行者返回 null 视为编程错误，按失败处理；异常原样抛给调用方（参与错误分级熔断）。</p>
      */
-    GoalOutcome execute(String sessionId, String prompt) throws Exception {
+    GoalOutcome execute(String sessionId, String prompt, @Nullable Locale locale) throws Exception {
         // 谓词只评估一次，结果供「互斥检测」与「认领路由」复用：宿主谓词常是正则匹配
         // （如 isDesktop = matches("\\d{1,18}")），两次遍历等于双倍编译开销。
         TaskClaim[] claims = executors.toArray(new TaskClaim[0]);
@@ -382,7 +404,7 @@ class GoalRuntime {
             chosen = defaultExecutor;
         }
         if (chosen != null) {
-            GoalOutcome outcome = chosen.handle(sessionId, prompt);
+            GoalOutcome outcome = chosen.handle(sessionId, prompt, locale);
             return outcome != null ? outcome : GoalOutcome.failed("goal executor returned null");
         }
 
@@ -637,16 +659,17 @@ class GoalRuntime {
      * @param maxIterations 轮次预算（0 = 不限制）
      * @return 新建的 Goal
      * @throws IllegalStateException 已有活跃 goal
+     * @see #attach(AgentSession, String, String, long, long, int, Locale) 需指定语言时用它
      */
     public Goal attach(AgentSession session, String objective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
         return attach(session, objective, null, maxTokens, maxDurationMs, maxIterations);
     }
 
-    /** 按规格创建（含展示正文）。 */
+    /** 按规格创建（含展示正文与语言）。 */
     Goal attach(AgentSession session, GoalSpec spec) {
         return attach(session, spec.getObjective(), spec.getDisplayObjective(),
-                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations());
+                spec.getMaxTokens(), spec.getMaxDurationMs(), spec.getMaxIterations(), spec.getLocale());
     }
 
     /**
@@ -663,6 +686,19 @@ class GoalRuntime {
      */
     public Goal attach(AgentSession session, String objective, String displayObjective,
                             long maxTokens, long maxDurationMs, int maxIterations) {
+        return attach(session, objective, displayObjective, maxTokens, maxDurationMs, maxIterations, null);
+    }
+
+    /**
+     * 创建 goal（含目标的语言）。宿主经 {@link GoalSpec#locale} 指定语言，这里不再开放公开重载。
+     *
+     * @param displayObjective 展示正文；null 或与 objective 相同时不覆写
+     * @param locale 目标的语言（null = 跟随引擎实例的语言）；「已有进行中的 goal」的说明也按它输出
+     * @return 新建的 Goal
+     * @throws IllegalStateException 已有活跃 goal
+     */
+    Goal attach(AgentSession session, String objective, String displayObjective,
+                long maxTokens, long maxDurationMs, int maxIterations, @Nullable Locale locale) {
         if (session == null) {
             throw new IllegalArgumentException("session is required");
         }
@@ -670,12 +706,14 @@ class GoalRuntime {
         synchronized (session.attrs()) {
             Goal existing = stateLocked(session);
             if (existing != null && !existing.getStatus().isTerminal()) {
-                throw new GoalActiveException(GoalI18n.get(locale(), GoalI18nKeys.GOAL_ERROR_ACTIVE_EXISTS));
+                throw new GoalActiveException(GoalI18n.get(localeOrEngine(locale),
+                        GoalI18nKeys.GOAL_ERROR_ACTIVE_EXISTS));
             }
 
             gs = new Goal(objective, maxTokens, budgetThresholds);
             gs.setMaxDurationMs(maxDurationMs);
             gs.setMaxIterations(maxIterations);
+            gs.setLocale(locale);
 
             String displayed = resolveDisplayObjective(objective, displayObjective);
             if (displayed != null) {
@@ -734,13 +772,18 @@ class GoalRuntime {
         notifyChanged(session, gs, false);
     }
 
-    /** 按补丁改写（null 字段保持原值）；一次落盘、一次广播。调用方应先停稳在跑轮次。 */
+    /**
+     * 按补丁改写（null 字段保持原值）；一次落盘、一次广播。调用方应先停稳在跑轮次。
+     *
+     * <p>语言：补丁没带语言时保持目标的现语言；带了则改为它。</p>
+     */
     void apply(AgentSession session, Goal gs, GoalPatch patch) {
         synchronized (session.attrs()) {
             if (patch.getObjective() != null) gs.setObjective(patch.getObjective());
             if (patch.getMaxTokens() != null) gs.setMaxTokens(patch.getMaxTokens());
             if (patch.getMaxDurationMs() != null) gs.setMaxDurationMs(patch.getMaxDurationMs());
             if (patch.getMaxIterations() != null) gs.setMaxIterations(patch.getMaxIterations());
+            if (patch.getLocale() != null) gs.setLocale(patch.getLocale());
         }
         saveGuarded(session, gs);
         notifyChanged(session, gs, false);
@@ -967,7 +1010,9 @@ class GoalRuntime {
     /** 执行一轮主体：构建 prompt → 执行 → 状态评估 → 持久化。 */
     private boolean executeRound(AgentSession session, Goal gs) throws Exception {
         String sessionId = session.getSessionId();
-        String effectivePrompt = promptBuilder.buildEffectivePrompt(gs, locale());
+        // 本轮语言只取一次：提示词、交给执行器的输入、写入 lastResult 的系统说明用同一个
+        Locale roundLocale = localeOf(gs);
+        String effectivePrompt = promptBuilder.buildEffectivePrompt(gs, roundLocale);
 
         // 必须先置空：本轮证据要到 execute 返回才知道，而 goal_update(complete) 是在
         // execute 内部（工具调用阶段）读取的。若不置空，它会读到上一轮的值——上轮有
@@ -975,7 +1020,7 @@ class GoalRuntime {
         // 置空后本轮读取恒为 null（提示性校验放行），权威判定交给下方结果复核。
         gs.setLastHasToolCalls(null);
 
-        GoalOutcome result = execute(sessionId, effectivePrompt);
+        GoalOutcome result = execute(sessionId, effectivePrompt, roundLocale);
 
         if (result != null && result.isSkipped()) {
             // 通道认领但此刻不宜执行：不计错误、不推进、不改状态，等下一次调度
@@ -991,7 +1036,7 @@ class GoalRuntime {
             // 必须不记 ok、不清零连续错误计数：否则目标看起来一直在跑、实际什么都不做，
             // 且异常分级熔断被这轮流重置，永远不触发。
             // 与 loop 侧「无认领不记 ok」同口径。
-            String unclaimed = "error [no-executor]: " + GoalI18n.get(locale(), GoalI18nKeys.GOAL_ROUND_UNCLAIMED);
+            String unclaimed = "error [no-executor]: " + GoalI18n.get(roundLocale, GoalI18nKeys.GOAL_ROUND_UNCLAIMED);
             if (unclaimed.equals(gs.getLastResult()) == false) {
                 LOG.warn("Goal '{}' round not claimed by any executor (session '{}')", gs.getId(), sessionId);
             }
@@ -1027,7 +1072,7 @@ class GoalRuntime {
         if (achieved && requiresActionEvidence(gs.getObjective())
                 && !result.hasToolCalls()) {
             gs.rejectAchievement();
-            gs.updateLastExecution(GoalI18n.get(locale(), GoalI18nKeys.GOAL_ROUND_COMPLETION_REJECTED));
+            gs.updateLastExecution(GoalI18n.get(roundLocale, GoalI18nKeys.GOAL_ROUND_COMPLETION_REJECTED));
             achieved = false;
             LOG.warn("Goal '{}' completion rejected: no action evidence", gs.getId());
         }
@@ -1062,8 +1107,9 @@ class GoalRuntime {
     /** 预算耗尽收尾：让模型总结进展与剩余工作，不再续行。 */
     private void executeBudgetWrapUp(AgentSession session, Goal gs) {
         try {
-            String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs, locale());
-            execute(session.getSessionId(), wrapUpPrompt);
+            Locale roundLocale = localeOf(gs);
+            String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs, roundLocale);
+            execute(session.getSessionId(), wrapUpPrompt, roundLocale);
         } catch (Exception e) {
             LOG.warn("Goal '{}' wrap-up turn failed: {}", gs.getId(), e.getMessage());
         }
