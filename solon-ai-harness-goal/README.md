@@ -456,7 +456,7 @@ goal.registerValidator(
 | 项 | 说明 |
 |---|---|
 | 注册 | `GoalExtension#onAttach` 自动注册（幂等），宿主不用注册 |
-| 会话 | 作用于本次输入所在会话 `ctx.getSession()` |
+| 会话 | 作用于本次输入所在会话 `input.getSession()` |
 | 结局 | 恒为 `Kind.REPLY`：命令只建目标或改状态并回执，**不在本次 `handle` 里开流**；后续轮次由调度器驱动，别等 `getRequest()` |
 | 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用 |
 | 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务（含 goal 自己的一轮）运行中输入的 `/goal ...`，`engine.handle` 由引擎入积压并返回 `DEFERRED`；没装 queue 时返回 `REJECTED("busy")` |

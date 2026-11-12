@@ -435,7 +435,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).g
 3. **空闲时也能受理**：此时命令照常执行（`REPLY`，`isBesideRunning() == false`）并回复"当前无正在执行的任务可插话……"，不会被当成普通消息发给模型。
 4. **在运行任务旁边执行的命令不改回复路由**：运行中任务的回复目标属于那个任务；`/steer` 的回执直接回给本条消息的来源。
 5. **审批挂起期间**：`handle` 对普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；`/steer`、`/queue` 等声明了 `runnableWhenBusy` 的命令、审批决策与续流由引擎按输入本身豁免，宿主无需传谓词。
-6. **回执怎么落地**：缺省的缓冲式命令上下文会去掉 ANSI 颜色，回执从 `getCommandOutput()` 一次取回；CLI 想实时写终端，再给 `HarnessInput` 配 `commandContextFactory(...)`。
+6. **回执怎么落地**：缺省的缓冲式命令输出会去掉 ANSI 颜色，回执从 `getCommandOutput()` 一次取回；CLI 想实时写终端，再给 `HarnessInput` 配 `commandOutputFactory(...)`。
 7. **不要两条路都走**：已经用门面 `steer.steer(...)` 投递过的内容，不要再拼成 `/steer ...` 交给 `handle`，会投递两次。命令文本得到的是 `Kind.REPLY` + 人读回执，门面得到的是 `HarnessResult<SteerReceipt>`：要程序判定走门面，要现成文案走文本路径（三条路径的对照见 [ENGINE-L1 §3.3](../solon-ai-harness-core/docs/ENGINE-L1.md)）。
 
 ---

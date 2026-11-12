@@ -1,7 +1,11 @@
 package org.noear.solon.ai.harness.extension.goal.validate;
 
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 /**
  * 测试通过验证器 — 自动检测项目类型并运行测试。
@@ -45,12 +49,12 @@ public class TestsPassValidator extends CommandValidator {
     }
 
     @Override
-    protected ValidationResult whenNothingToRun() {
-        return ValidationResult.failed("未检测到已知的项目类型 (pom.xml / package.json / build.gradle / setup.py)");
+    protected ValidationResult whenNothingToRun(Locale locale) {
+        return ValidationResult.failed(GoalI18n.get(locale, GoalI18nKeys.GOAL_VALIDATE_UNKNOWN_PROJECT));
     }
 
     @Override
-    protected String failurePrefix() {
-        return "测试未通过";
+    protected String failurePrefix(Locale locale) {
+        return GoalI18n.get(locale, GoalI18nKeys.GOAL_VALIDATE_TESTS_FAILED);
     }
 }

@@ -1,0 +1,181 @@
+# solon-ai-harness-goal messages (English, also the fallback)
+# Convention: every value is a "|-" block scalar holding only the text itself - no leading/trailing newlines or spaces (code adds the separators); placeholders are {name}; never use ${ or #{
+# Protocol prefixes ("error [no-executor]: ", "(exit=N): ") are added by code and are not part of the messages
+
+# ---- Tool results (message of the error JSON) ----
+goal.tool.no_goal: |-
+  No goal found
+goal.tool.status_required: |-
+  The status parameter is required (complete or blocked)
+goal.tool.no_session: |-
+  No active session
+goal.tool.no_active_goal: |-
+  No active goal found
+goal.tool.not_active: |-
+  The goal is not active ({status}) and cannot be updated
+goal.tool.action_evidence_required: |-
+  The goal is not complete yet: this round has no successful real tool operation. Create, modify, run or verify the goal's deliverables first; goal_get/goal_update do not count as execution evidence.
+goal.tool.todo_unfinished: |-
+  The goal is not complete yet: the task list still has {count} unfinished item(s) (`- [ ]` or `- [/]`). Finish them, or update the list with todowrite, before calling goal_update(complete).
+goal.tool.validation_failed: |-
+  The goal is not complete yet: validation failed - {detail}. Keep improving, then call goal_update(complete) again.
+goal.tool.unknown_status: |-
+  Unknown status '{status}'. Only 'complete' or 'blocked' are supported.
+
+# ---- Round prompt: full mode ----
+goal.prompt.full.continuation: |-
+  --- Goal Continuation ---
+  You are working toward the following goal: {objective}
+  Your job is to complete this task. This is ongoing work - every round continues the same goal.
+goal.prompt.full.evidence: |-
+  --- Evidence-Based ---
+  Do not rely on memory or assumptions to judge the current state. Before acting, check objective evidence such as the actual file contents, test results and build output.
+  Base your judgment on the latest facts, not on memory from the previous round.
+goal.prompt.full.fidelity: |-
+  --- Goal Fidelity ---
+  Do not narrow the scope of the goal or lower the bar for completion. Every item in the goal must be done.
+  Do not leave placeholders, TODOs or stubs. If a part is hard, put in the effort to solve it instead of skipping it.
+goal.prompt.full.audit: |-
+  --- Audit Check ---
+  Before continuing, complete the following steps:
+  1. Review: what is the goal? Check the progress made so far.
+  2. Verify: for every item in the goal, confirm that it is done by objective means such as running tests or inspecting files.
+     Do not rely on reasoning alone - you need authoritative evidence (tests pass, build succeeds, files exist with the right content).
+     For goals that create, modify or run something, perform at least one real tool operation; goal_get/goal_update do not count as execution evidence.
+  3. If you have completed every item, explain how you achieved each one,
+     then call goal_update(complete) to mark the goal as achieved.
+goal.prompt.full.blocked: |-
+  --- Blocked Audit ---
+  If you are stuck (you have tried the same problem 3 times), call goal_update(blocked) to declare that you are blocked.
+  Do not declare blocked just because the work is hard, slow or uncertain - use it only when the same problem still cannot be solved after repeated attempts.
+  The blocked count resets to 0 after resume.
+goal.prompt.stagnation: |-
+  --- Stagnation Check ---
+  The system detected that the last {count} rounds made no substantial progress.
+  Assess honestly: are you retrying the same problem without moving forward?
+  If so, call goal_update(blocked) to declare that you are blocked.
+  If not, take a clearly different approach in your next step.
+goal.prompt.error.header: |-
+  --- Error Warning ---
+  The last {count} consecutive run(s) hit the same type of error:
+  - Error type: {type}
+goal.prompt.error.summary: |-
+  - Error summary: {summary}
+goal.prompt.error.ssl: |-
+  - This is an SSL/TLS certificate verification error. It is an environment problem that retrying or switching URLs will not fix.
+  - Use the websearch or codesearch tool instead of webfetch to get the information.
+goal.prompt.error.http_4xx: |-
+  - This is an HTTP 4xx client error (such as 404/403/401), which usually means the resource does not exist or access is denied.
+  - Retrying the same request will not succeed; switch to another URL or use a different tool.
+goal.prompt.error.network: |-
+  - This is a network connection error and may be temporary.
+  - You can retry later, but switch strategies if it keeps failing.
+goal.prompt.error.tool_execution: |-
+  - A tool call failed. Analyze the cause and consider using a different tool or adjusting the parameters.
+goal.prompt.error.other: |-
+  - Analyze the cause of the error. If the same problem has been tried 3 or more times, call goal_update(blocked).
+goal.prompt.urgent: |-
+  [URGENT] Your token budget is almost used up. Focus on completing the goal efficiently.
+goal.prompt.last_summary.title: |-
+  --- Summary of the previous round (round {iteration}) ---
+goal.prompt.last_summary.hint: |-
+  Build on the progress above and avoid repeating approaches you have already tried.
+
+# ---- Round prompt: compact / minimal mode ----
+goal.prompt.compact.continuation: |-
+  --- Goal Continuation ---
+  Goal: {objective}
+  Keep working until it is done. When done, call goal_update(complete) to mark it as achieved.
+goal.prompt.compact.audit: |-
+  --- Audit Check ---
+  Verify the goal item by item. You need objective evidence (tests pass / files exist). Do not judge completion by reasoning alone.
+  Goals that create, modify or run something require real tool operations; goal_get/goal_update do not count as execution evidence.
+goal.prompt.compact.last: |-
+  Previous round (round {iteration}): {summary}
+goal.prompt.minimal.objective: |-
+  Goal: {objective}
+goal.prompt.minimal.instruction: |-
+  Keep working until it is done. Action goals need real tool evidence first; goal_get/goal_update do not count. When done, call goal_update(complete); after 3 rounds without progress, call goal_update(blocked).
+
+# ---- Round prompt: budget-limit wrap-up ----
+goal.prompt.budget_limit.header: |-
+  --- Budget Limit ---
+  Your goal's token budget is used up.
+goal.prompt.budget_limit.objective: |-
+  Goal: {objective}
+goal.prompt.budget_limit.title: |-
+  Budget:
+goal.prompt.budget_limit.elapsed: |-
+  - Elapsed: {elapsed}
+goal.prompt.budget_limit.consumed: |-
+  - Used: {consumed}
+goal.prompt.budget_limit.instruction: |-
+  The system has marked this goal as budget_limited. Do not start any new substantial work.
+  In this reply:
+  1. Summarize the work done and the progress made
+  2. List the remaining unfinished work
+  3. Give clear recommendations for the next steps
+goal.prompt.budget_limit.no_update: |-
+  Do not call goal_update unless the goal is actually complete.
+
+# ---- Round prompt: budget and round info ----
+goal.prompt.budget.consumed: |-
+  Used {consumed} / {max} ({percent}%)
+goal.prompt.budget.remaining: |-
+  (remaining: {remaining})
+goal.prompt.budget.warning: |-
+  [Budget notice] {percent}% used. Consider whether to adjust your strategy or ask for a larger budget
+goal.prompt.budget.consumed_unlimited: |-
+  Tokens used: {consumed}
+goal.prompt.budget.elapsed: |-
+  Elapsed: {elapsed}
+goal.prompt.iteration: |-
+  Round limit: this is round {current} of {max}; at most {remaining} more round(s) can run after this one. Finish and verify the goal first, and do not leave key work until after the limit.
+goal.prompt.truncated: |-
+  ...(omitted)...
+
+# ---- Round records (written to the goal's lastResult) ----
+goal.round.unclaimed: |-
+  No executor claimed this round, so the goal cannot make progress.
+goal.round.completion_rejected: |-
+  Completion rejected: this round has no real tool execution evidence. Keep working and verify the goal.
+
+# ---- Action-goal keywords ("|" separated, matched in lower case; recognition merges all languages) ----
+goal.action_keywords: |-
+  create|generate|write|implement|modify|edit|fix|add|delete|remove|refactor|build|test|run|install|configure|deploy|file
+
+# ---- Conflict details for the facade and command ----
+goal.error.active_exists: |-
+  This session already has a goal in progress; clear it before creating a new one
+goal.error.terminal_edit: |-
+  A finished goal cannot be edited; clear it first
+
+# ---- Validation details ----
+goal.validate.error: |-
+  Validator error: {error}
+goal.validate.no_result: |-
+  Validator returned no result
+goal.validate.unable: |-
+  Unable to complete validation ({detail})
+goal.validate.workdir_empty: |-
+  Working directory is empty; cannot validate
+goal.validate.detect_failed: |-
+  Failed to detect the project type: {error}
+goal.validate.run_failed: |-
+  Running '{command}' failed: {error}
+goal.validate.run_no_result: |-
+  Running '{command}' returned no result
+goal.validate.run_timed_out: |-
+  Running '{command}' timed out
+goal.validate.tests_failed: |-
+  Tests failed
+goal.validate.build_failed: |-
+  Build failed
+goal.validate.unknown_project: |-
+  No known project type detected (pom.xml / package.json / build.gradle / setup.py)
+
+# ---- /goal command ----
+command.goal.description: |-
+  Set and track the session goal (one per session)
+command.goal.usage_example: |-
+  /goal fix the authentication bug in the login module

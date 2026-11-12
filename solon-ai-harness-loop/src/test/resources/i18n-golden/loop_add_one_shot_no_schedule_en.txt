@@ -1,0 +1,1 @@
+ERROR: oneShot=true requires at or cron (a fixed interval cannot express run-once semantics).

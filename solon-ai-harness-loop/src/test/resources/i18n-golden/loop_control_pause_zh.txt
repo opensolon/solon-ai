@@ -1,0 +1,8 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "pause",
+  "enabled": false,
+  "message": "任务已暂停（保留记录，可 loop_control(action=resume) 恢复）"
+}

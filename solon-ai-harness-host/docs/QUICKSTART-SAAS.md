@@ -195,7 +195,7 @@ host.submit(tenant, sid, HarnessInput.of(text).origin(origin)
         .attachments(files).selectedModel("gpt-4o").attr("effort", "high"));
 
 // 每条输入都要补的（用户提交、审批、队列续发、后台轮次）：放在 Builder.input
-HarnessHost.builder().input((tenant, in) -> in.commandContextFactory(myFactory));
+HarnessHost.builder().input((tenant, in) -> in.commandOutputFactory(myFactory));
 ```
 
 IM 类入口常用「忙时先插话、插不进再排队」：`HarnessInput.of(text).whenBusy(BusyPolicy.STEER)`（需装 steer 插件，命令不插话）。

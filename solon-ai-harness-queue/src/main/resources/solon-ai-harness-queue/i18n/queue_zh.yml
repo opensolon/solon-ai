@@ -1,0 +1,43 @@
+# solon-ai-harness-queue 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+
+# ---- 门面 ----
+queue.full_detail: |-
+  队列已满，上限 {max} 条
+
+# ---- /queue 命令 ----
+command.queue.description: |-
+  排队：当前任务结束后自动作为新任务发送 (<消息>, list, cancel, clear)
+command.queue.example_message: |-
+  /queue 接着帮我把文档也更新一下
+command.queue.example_cancel: |-
+  /queue cancel <id|序号>
+command.queue.usage: |-
+  用法：/queue <消息>（当前任务结束后自动作为新任务发送）
+        /queue list | /queue cancel <id|序号> | /queue clear | /queue -- <以子命令词开头的消息>
+command.queue.too_long: |-
+  排队内容过长（上限 {max} 字符）
+command.queue.full: |-
+  排队失败（队列已满，上限 {max} 条），请稍后再试
+command.queue.scope_not_deferrable: |-
+  排队失败：本轮作用域含无法保存的限制，不能排队，请在当前任务结束后直接发送
+command.queue.enqueued: |-
+  已加入队列（第 {position} 位），将按顺序在任务空闲后自动发送
+command.queue.list_empty: |-
+  队列为空
+command.queue.list_title: |-
+  队列（共 {count} 条）：
+command.queue.list_running: |-
+  (执行中)
+command.queue.list_footer: |-
+  取消：/queue cancel <id|序号>；清空：/queue clear
+command.queue.cancel_running: |-
+  这条正在执行，不能从队列取消（停止当前任务用 /interrupt）
+command.queue.cancelled: |-
+  已取消：{id}
+command.queue.cancel_not_found: |-
+  未找到待执行的消息：{target}
+command.queue.cleared: |-
+  已清空 {count} 条待执行（正在执行的不受影响）
+command.queue.clear_empty: |-
+  队列里没有待执行的消息

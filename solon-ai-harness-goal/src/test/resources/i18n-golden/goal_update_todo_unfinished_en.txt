@@ -1,0 +1,1 @@
+{"error":true,"code":"TODO_UNFINISHED","message":"The goal is not complete yet: the task list still has 2 unfinished item(s) (`- [ ]` or `- [/]`). Finish them, or update the list with todowrite, before calling goal_update(complete)."}

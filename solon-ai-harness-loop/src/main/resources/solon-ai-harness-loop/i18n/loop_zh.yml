@@ -1,0 +1,73 @@
+# solon-ai-harness-loop 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+# 协议性前缀（"ERROR: "）由代码补，不写进文案
+
+# ---- 规格校验异常 ----
+loop.error.prompt_empty: |-
+  prompt 不能为空
+loop.error.at_past: |-
+  at 时刻已过: {at}
+loop.error.one_shot_no_schedule: |-
+  一次性任务必须提供 at 或 cron（固定间隔无法表达一次性语义）
+loop.error.one_shot_run_now: |-
+  一次性任务不能同时要求立即执行（runNow）
+loop.error.interval_range: |-
+  intervalMinutes 须在 [{min}, {max}] 之间: {value}
+loop.error.cron_unparsable: |-
+  cron 表达式无法解析: {cron}（需 6 或 7 位：秒 分 时 日 月 周 [年]，日与周必须有一个为 ?）
+loop.error.cron_no_fire_time: |-
+  cron 无有效触发时刻: {cron}（时刻已过或日期不存在，服务器当前时间 {now}）
+loop.error.session_empty: |-
+  sessionId 不能为空
+
+# ---- 工具返回值 ----
+loop.tool.no_session_add: |-
+  无活跃会话，无法新增定时任务。
+loop.tool.no_session_list: |-
+  无活跃会话，无法查询定时任务。
+loop.tool.no_session_stop: |-
+  无活跃会话，无法停止定时任务。
+loop.tool.no_session_pause: |-
+  无活跃会话，无法暂停定时任务。
+loop.tool.no_session_resume: |-
+  无活跃会话，无法恢复定时任务。
+loop.tool.no_session_trigger: |-
+  无活跃会话，无法触发定时任务。
+loop.tool.prompt_empty: |-
+  prompt 不能为空。
+loop.tool.at_format: |-
+  at 格式错误，应为 yyyy-MM-ddTHH:mm（如 2026-09-05T18:00）。
+loop.tool.at_past: |-
+  at 时刻已过（服务器当前时间 {now}），请与用户确认后改为未来的时刻。
+loop.tool.one_shot_no_schedule: |-
+  oneShot=true 必须提供 at 或 cron（固定间隔无法表达一次性语义）。
+loop.tool.one_shot_run_now: |-
+  oneShot=true 与 runNow=true 互斥（一次性定时任务不应创建后立即执行）。
+loop.tool.cron_invalid: |-
+  {reason}。
+loop.tool.add_failed: |-
+  新增定时任务失败: {reason}
+loop.tool.added: |-
+  任务已新增，后续可用 loop_list 查询、loop_control(action=stop) 停止
+loop.tool.one_shot_added: |-
+  一次性任务已安排，到点执行后自动注销
+loop.tool.bad_action: |-
+  action 必须是 stop/pause/resume/trigger 之一，当前传入: {action}
+loop.tool.task_id_empty: |-
+  taskId 不能为空。
+loop.tool.task_not_found: |-
+  定时任务不存在，taskId={taskId}（可用 loop_list 查询当前任务）
+loop.tool.stopped: |-
+  任务已停止并删除
+loop.tool.paused: |-
+  任务已暂停（保留记录，可 loop_control(action=resume) 恢复）
+loop.tool.resumed: |-
+  任务已恢复调度
+loop.tool.trigger_paused: |-
+  任务已暂停，请先 loop_control(action=resume) 恢复后再触发。
+loop.tool.triggered: |-
+  已提交异步执行，稍后可用 loop_list 查看结果
+
+# ---- /loop 命令 ----
+command.loop.description: |-
+  定时任务 (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)

@@ -20,6 +20,9 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18n;
+import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 
@@ -28,6 +31,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Loop 管理工具 — 模型侧定时/循环任务全生命周期管理
@@ -58,6 +62,9 @@ public class LoopTalent extends AbsTalent {
 
     // ==================== loop_add ====================
 
+    /**
+     * 新增任务（__locale 由工具上下文注入）
+     */
     @ToolMapping(name = "loop_add",
             description = "新增当前会话的定时任务（或循环任务），成功后返回 taskId。" +
                     "三种调度方式（互斥，优先级：at > cron > intervalMinutes）：" +
@@ -74,12 +81,14 @@ public class LoopTalent extends AbsTalent {
             @Param(name = "cron", description = "标准 7 位 cron 表达式（秒 分 时 日 月 周 年）；提供后使用 cron 调度，例如 0 */5 * * * ? *", required = false) String cron,
             @Param(name = "oneShot", description = "是否只执行一次（默认 false）。为 true 时任务到点执行一次后自动注销；指定 at 时强制为 true", required = false) Boolean oneShot,
             @Param(name = "runNow", description = "是否在创建后立即执行一次，默认 false；一次性定时任务不应传 true", required = false) Boolean runNow,
-            String __sessionId) {
+            String __sessionId,
+            String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: 无活跃会话，无法新增定时任务。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_ADD);
         }
         if (Assert.isEmpty(prompt)) {
-            return "ERROR: prompt 不能为空。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_PROMPT_EMPTY);
         }
 
         boolean oneShotVal = oneShot != null && oneShot;
@@ -92,11 +101,11 @@ public class LoopTalent extends AbsTalent {
             try {
                 atTime = LocalDateTime.parse(at.trim(), AT_FORMAT);
             } catch (Exception e) {
-                return "ERROR: at 格式错误，应为 yyyy-MM-ddTHH:mm（如 2026-09-05T18:00）。";
+                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_AT_FORMAT);
             }
             if (!atTime.isAfter(LocalDateTime.now())) {
-                return "ERROR: at 时刻已过（服务器当前时间 " + LocalDateTime.now().format(NOW_FORMAT)
-                        + "），请与用户确认后改为未来的时刻。";
+                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_AT_PAST,
+                        "now", LocalDateTime.now().format(NOW_FORMAT));
             }
             cronVal = String.format("0 %d %d %d %d ? %d",
                     atTime.getMinute(), atTime.getHour(),
@@ -107,10 +116,10 @@ public class LoopTalent extends AbsTalent {
 
         if (oneShotVal) {
             if (Assert.isEmpty(cronVal)) {
-                return "ERROR: oneShot=true 必须提供 at 或 cron（固定间隔无法表达一次性语义）。";
+                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_NO_SCHEDULE);
             }
             if (runNow != null && runNow) {
-                return "ERROR: oneShot=true 与 runNow=true 互斥（一次性定时任务不应创建后立即执行）。";
+                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_RUN_NOW);
             }
         }
 
@@ -120,7 +129,8 @@ public class LoopTalent extends AbsTalent {
             try {
                 nextFireTime = LoopCron.requireNextFireTime(cronVal);
             } catch (IllegalArgumentException e) {
-                return "ERROR: " + e.getMessage() + "。";
+                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_CRON_INVALID,
+                        "reason", LoopArgumentException.messageOf(e, locale));
             }
         }
 
@@ -133,7 +143,8 @@ public class LoopTalent extends AbsTalent {
                     .oneShot(oneShotVal)
                     .runNow(runNow));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return "ERROR: 新增定时任务失败: " + e.getMessage();
+            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_ADD_FAILED,
+                    "reason", LoopArgumentException.messageOf(e, locale));
         }
 
         ONode root = okNode();
@@ -149,19 +160,31 @@ public class LoopTalent extends AbsTalent {
             schedule.set("intervalMinutes", task.getIntervalMinutes());
         }
         root.set("oneShot", task.isOneShot());
-        root.set("message", oneShotVal ? "一次性任务已安排，到点执行后自动注销"
-                : "任务已新增，后续可用 loop_list 查询、loop_control(action=stop) 停止");
+        root.set("message", oneShotVal ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_ADDED)
+                : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ADDED));
         return root.toJson();
+    }
+
+    /**
+     * 新增任务（默认语言）
+     */
+    public String loopAdd(String prompt, String at, Integer intervalMinutes, String cron, Boolean oneShot,
+                          Boolean runNow, String __sessionId) {
+        return loopAdd(prompt, at, intervalMinutes, cron, oneShot, runNow, __sessionId, null);
     }
 
     // ==================== loop_list ====================
 
+    /**
+     * 查询任务（__locale 由工具上下文注入）
+     */
     @ToolMapping(name = "loop_list",
             description = "查询当前会话的全部定时/循环任务（含已暂停的），返回 JSON 列表。" +
                     "字段：taskId、prompt（截断）、type、调度表达式、enabled、running、lastExecutedAt、lastResult（截断）。")
-    public String loopList(String __sessionId) {
+    public String loopList(String __sessionId, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: 无活跃会话，无法查询定时任务。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_LIST);
         }
 
         List<LoopTask> tasks = loopTasks.list(__sessionId);
@@ -175,8 +198,18 @@ public class LoopTalent extends AbsTalent {
         return root.toJson();
     }
 
+    /**
+     * 查询任务（默认语言）
+     */
+    public String loopList(String __sessionId) {
+        return loopList(__sessionId, null);
+    }
+
     // ==================== loop_control（stop/pause/resume/trigger 合一） ====================
 
+    /**
+     * 控制任务（__locale 由工具上下文注入）
+     */
     @ToolMapping(name = "loop_control",
             description = "控制当前会话的定时/循环任务，通过 action 指定动作（taskId 来自 loop_add 返回值或 loop_list）：" +
                     "stop：停止并删除任务（不可恢复）；" +
@@ -186,75 +219,85 @@ public class LoopTalent extends AbsTalent {
     public String loopControl(
             @Param(name = "action", description = "控制动作：stop / pause / resume / trigger") String action,
             @Param(name = "taskId", description = "目标定时任务 ID") String taskId,
-            String __sessionId) {
+            String __sessionId,
+            String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
         String act = action == null ? "" : action.trim().toLowerCase();
         switch (act) {
             case "stop":
-                return doStop(taskId, __sessionId);
+                return doStop(taskId, __sessionId, locale);
             case "pause":
-                return doPauseResume(taskId, __sessionId, false);
+                return doPauseResume(taskId, __sessionId, false, locale);
             case "resume":
-                return doPauseResume(taskId, __sessionId, true);
+                return doPauseResume(taskId, __sessionId, true, locale);
             case "trigger":
-                return doTrigger(taskId, __sessionId);
+                return doTrigger(taskId, __sessionId, locale);
             default:
-                return "ERROR: action 必须是 stop/pause/resume/trigger 之一，当前传入: " + action;
+                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_BAD_ACTION, "action", action);
         }
     }
 
-    private String doStop(String taskId, String __sessionId) {
+    /**
+     * 控制任务（默认语言）
+     */
+    public String loopControl(String action, String taskId, String __sessionId) {
+        return loopControl(action, taskId, __sessionId, null);
+    }
+
+    private String doStop(String taskId, String __sessionId, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: 无活跃会话，无法停止定时任务。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_STOP);
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: taskId 不能为空。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
         }
         if (!loopTasks.remove(__sessionId, taskId)) {
-            return "ERROR: 定时任务不存在，taskId=" + taskId + "（可用 loop_list 查询当前任务）";
+            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
         }
 
         ONode root = okNode();
         root.set("taskId", taskId);
         root.set("action", "stop");
-        root.set("message", "任务已停止并删除");
+        root.set("message", LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_STOPPED));
         return root.toJson();
     }
 
-    private String doPauseResume(String taskId, String __sessionId, boolean resume) {
+    private String doPauseResume(String taskId, String __sessionId, boolean resume, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: 无活跃会话，无法" + (resume ? "恢复" : "暂停") + "定时任务。";
+            return "ERROR: " + (resume ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_RESUME)
+                    : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_PAUSE));
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: taskId 不能为空。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
         }
 
         if (!loopTasks.setEnabled(__sessionId, taskId, resume)) {
-            return "ERROR: 定时任务不存在，taskId=" + taskId + "（可用 loop_list 查询当前任务）";
+            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
         }
 
         ONode root = okNode();
         root.set("taskId", taskId);
         root.set("action", resume ? "resume" : "pause");
         root.set("enabled", resume);
-        root.set("message", resume ? "任务已恢复调度"
-                : "任务已暂停（保留记录，可 loop_control(action=resume) 恢复）");
+        root.set("message", resume ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_RESUMED)
+                : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_PAUSED));
         return root.toJson();
     }
 
-    private String doTrigger(String taskId, String __sessionId) {
+    private String doTrigger(String taskId, String __sessionId, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: 无活跃会话，无法触发定时任务。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_TRIGGER);
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: taskId 不能为空。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
         }
 
         LoopTask task = loopTasks.get(__sessionId, taskId);
         if (task == null) {
-            return "ERROR: 定时任务不存在，taskId=" + taskId + "（可用 loop_list 查询当前任务）";
+            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
         }
         if (!task.isEnabled()) {
-            return "ERROR: 任务已暂停，请先 loop_control(action=resume) 恢复后再触发。";
+            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TRIGGER_PAUSED);
         }
 
         loopTasks.trigger(__sessionId, taskId);
@@ -263,7 +306,7 @@ public class LoopTalent extends AbsTalent {
         root.set("taskId", taskId);
         root.set("action", "trigger");
         root.set("submitted", true);
-        root.set("message", "已提交异步执行，稍后可用 loop_list 查看结果");
+        root.set("message", LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TRIGGERED));
         return root.toJson();
     }
 

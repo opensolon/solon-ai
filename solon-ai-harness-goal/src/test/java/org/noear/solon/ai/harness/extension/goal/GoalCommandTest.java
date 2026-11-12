@@ -33,16 +33,16 @@ class GoalCommandTest {
         GoalCommand command = new GoalCommand(null);
 
         assertEquals("goal", command.name());
-        assertEquals("/goal <objective>", command.examples()[0]);
+        assertEquals("/goal <objective>", command.examples(null)[0]);
     }
 
     @Test
     void descriptionShouldNotReferenceLoop() {
         GoalCommand command = new GoalCommand(null);
 
-        assertFalse(command.description().toLowerCase().contains("loop"),
+        assertFalse(command.description(null).toLowerCase().contains("loop"),
                 "goal 是独立能力，描述不应再引用 loop");
-        for (String example : command.examples()) {
+        for (String example : command.examples(null)) {
             assertFalse(example.contains("/loop"),
                     "示例不应再引用 /loop: " + example);
         }
@@ -52,7 +52,7 @@ class GoalCommandTest {
     void examplesShouldCoverControlSubcommands() {
         GoalCommand command = new GoalCommand(null);
 
-        String joined = String.join(" ", command.examples());
+        String joined = String.join(" ", command.examples(null));
         assertTrue(joined.contains("pause"), "应提供 pause 用法");
         assertTrue(joined.contains("clear"), "应提供 clear 用法");
     }

@@ -1,0 +1,4 @@
+/steer - Insert a real-time supplement into the running task (steer)
+Usage:
+  /steer One more requirement: update the README as well
+  /steer Do not modify the test code

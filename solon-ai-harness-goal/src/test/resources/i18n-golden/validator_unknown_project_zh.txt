@@ -1,0 +1,1 @@
+FAILED: 未检测到已知的项目类型 (pom.xml / package.json / build.gradle / setup.py)

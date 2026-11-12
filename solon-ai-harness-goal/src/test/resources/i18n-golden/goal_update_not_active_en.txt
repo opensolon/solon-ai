@@ -1,0 +1,1 @@
+{"error":true,"code":"GOAL_NOT_ACTIVE","message":"The goal is not active (PAUSED) and cannot be updated"}

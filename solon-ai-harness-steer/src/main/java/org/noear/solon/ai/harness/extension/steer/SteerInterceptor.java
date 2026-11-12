@@ -5,11 +5,13 @@ import org.noear.solon.ai.agent.react.AbsReActInterceptor;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.core.util.Assert;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Supplier;
 
 /**
@@ -104,8 +106,9 @@ public class SteerInterceptor extends AbsReActInterceptor {
             return;
         }
 
+        Locale locale = HarnessI18n.localeOf(trace);
         for (SteerMessage steer : messages) {
-            trace.getWorkingMemory().addMessage(SteerProtocol.toChatMessage(steer));
+            trace.getWorkingMemory().addMessage(SteerProtocol.toChatMessage(steer, locale));
         }
 
         // 不追加 systemPrompt 说明：注入消息自带前缀已足够表意，避免重复提示
@@ -140,7 +143,8 @@ public class SteerInterceptor extends AbsReActInterceptor {
             return;
         }
 
-        List<SteerMessage> failed = SteerMailbox.transferToBacklog(backlog(), session, leftovers);
+        List<SteerMessage> failed = SteerMailbox.transferToBacklog(backlog(), session, leftovers,
+                HarnessI18n.localeOf(trace));
         if (failed.isEmpty() == false) {
             state.park(failed);
         }

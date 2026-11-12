@@ -1,0 +1,1 @@
+A one-time task requires at or cron (a fixed interval cannot express run-once semantics)

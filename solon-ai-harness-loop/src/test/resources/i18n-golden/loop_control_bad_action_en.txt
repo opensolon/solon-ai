@@ -1,0 +1,1 @@
+ERROR: action must be one of stop/pause/resume/trigger, got: kill

@@ -19,9 +19,15 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.ai.harness.extension.steer.i18n.SteerI18n;
+import org.noear.solon.ai.harness.extension.steer.i18n.SteerI18nKeys;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
 
 /**
  * /steer 命令 - 向正在执行的任务插入实时补充（插话）。
@@ -59,16 +65,17 @@ class SteerCommand extends AbsCommand {
         return "steer";
     }
 
+
     @Override
-    public String description() {
-        return "向正在执行的任务插入实时补充（插话）";
+    public String description(@Nullable Locale locale) {
+        return SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
-                "/steer 补充一个要求：顺便更新 README",
-                "/steer 注意别改动测试代码"
+                SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_EXAMPLE_1),
+                SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_EXAMPLE_2)
         };
     }
 
@@ -96,15 +103,16 @@ class SteerCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        String text = ctx.getArgsJoined();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+        Locale locale = input.getLocale();
+        String text = input.getArgsJoined();
         if (Assert.isEmpty(text)) {
-            ctx.println("用法：/steer <补充内容>（在任务执行中向当前任务插入实时补充）");
+            output.println(SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_USAGE));
             return;
         }
 
-        AgentSession session = ctx.getSession();
-        InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
+        AgentSession session = input.getSession();
+        InputOrigin resolved = input.getOrigin();
         if (resolved.getChannel() == null || resolved.getChannel().isEmpty()) {
             resolved = InputOrigin.of("command", resolved.getSenderId(),
                     resolved.getReplyTarget(), resolved.getMessageId());
@@ -114,18 +122,18 @@ class SteerCommand extends AbsCommand {
         HarnessResult<SteerReceipt> result = steer.steer(session, text, resolved);
 
         if (result.isOk()) {
-            ctx.println("已插话，将在下一步注入当前任务（待生效 " + result.getValue().getPending() + " 条）");
+            output.println(SteerI18n.fmt(locale, SteerI18nKeys.COMMAND_STEER_APPLIED, "pending", result.getValue().getPending()));
         } else if (result.getCode() == HarnessResult.Code.DISABLED) {
-            ctx.println("插话能力已停用，可直接发送或使用 /queue 排队");
+            output.println(SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_DISABLED));
         } else if (result.hasReason(SteerExtension.REASON_BOX_FULL)) {
-            ctx.println("插话邮箱已满（上限 " + steer.getMaxBoxSize() + " 条），可用 /queue 排队");
+            output.println(SteerI18n.fmt(locale, SteerI18nKeys.COMMAND_STEER_BOX_FULL, "max", steer.getMaxBoxSize()));
         } else if (result.hasReason(SteerExtension.REASON_NOT_RUNNING)
                 || result.hasReason(SteerExtension.REASON_RUN_CHANGED)) {
-            ctx.println("当前无正在执行的任务可插话，可直接发送或用 /queue 排队");
+            output.println(SteerI18n.get(locale, SteerI18nKeys.COMMAND_STEER_NOT_RUNNING));
         } else if (result.hasReason(SteerExtension.REASON_TEXT_TOO_LONG)) {
-            ctx.println("插话内容过长（上限 " + steer.getMaxTextLength() + " 字符）");
+            output.println(SteerI18n.fmt(locale, SteerI18nKeys.COMMAND_STEER_TOO_LONG, "max", steer.getMaxTextLength()));
         } else {
-            ctx.println("插话未生效：" + result.getReasonOrCode());
+            output.println(SteerI18n.fmt(locale, SteerI18nKeys.COMMAND_STEER_FAILED, "reason", result.getReasonOrCode()));
         }
     }
 }

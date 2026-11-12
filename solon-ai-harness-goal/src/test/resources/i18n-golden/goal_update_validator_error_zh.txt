@@ -1,0 +1,1 @@
+{"error":true,"code":"VALIDATION_FAILED","message":"目标尚未完成：验证失败 - 无法完成验证（验证器异常: boom）。请继续改进后重新调用 goal_update(complete)。"}

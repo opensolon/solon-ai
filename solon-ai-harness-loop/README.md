@@ -370,7 +370,7 @@ loop.addExecutor("web", id -> id.startsWith("web-"), (sid, prompt) ->
 | 项 | 说明 |
 |---|---|
 | 注册 | `LoopExtension#onAttach` 自动注册，宿主不用注册 |
-| 会话 | 命令作用于 `ctx.getSession().getSessionId()`，即本次输入所在会话 |
+| 会话 | 命令作用于 `input.getSession().getSessionId()`，即本次输入所在会话 |
 | 结局 | 恒为 `Kind.REPLY`：命令只改任务表并回执，不在本次 `handle` 里开流 |
 | 渠道 | `terminalOnly() == false`，Web / IM / 桌面可用；不需要 `.terminal(true)` |
 | 忙态 | `runnableWhenBusy()` 为缺省 `false`：任务运行中输入 `/loop ...`，`engine.handle` 由引擎入积压并返回 `DEFERRED`（空闲后执行）；没装 queue 时返回 `REJECTED("busy")` |

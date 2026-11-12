@@ -18,11 +18,16 @@ package org.noear.solon.ai.harness.extension.queue;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.ai.harness.extension.queue.i18n.QueueI18n;
+import org.noear.solon.ai.harness.extension.queue.i18n.QueueI18nKeys;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -79,17 +84,18 @@ class QueueCommand extends AbsCommand {
         return "queue";
     }
 
+
     @Override
-    public String description() {
-        return "排队：当前任务结束后自动作为新任务发送 (<消息>, list, cancel, clear)";
+    public String description(@Nullable Locale locale) {
+        return QueueI18n.get(locale, QueueI18nKeys.COMMAND_QUEUE_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
-                "/queue 接着帮我把文档也更新一下",
+                QueueI18n.get(locale, QueueI18nKeys.COMMAND_QUEUE_EXAMPLE_MESSAGE),
                 "/queue list",
-                "/queue cancel <id|序号>",
+                QueueI18n.get(locale, QueueI18nKeys.COMMAND_QUEUE_EXAMPLE_CANCEL),
                 "/queue clear"
         };
     }
@@ -100,73 +106,83 @@ class QueueCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        String text = ctx.getArgsJoined().trim();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+        String text = input.getArgsJoined().trim();
         if (Assert.isEmpty(text)) {
-            printUsage(ctx);
+            printUsage(input, output);
             return;
         }
 
-        AgentSession session = ctx.getSession();
+        AgentSession session = input.getSession();
         if (text.startsWith("--") && (text.length() == 2 || Character.isWhitespace(text.charAt(2)))) {
-            enqueue(ctx, session, text.substring(2).trim(), origin);
+            enqueue(input, output, session, text.substring(2).trim());
             return;
         }
 
         String[] words = text.split("\\s+");
         if (words.length == 1 && "list".equals(words[0])) {
-            doList(ctx, session);
+            doList(input, output, session);
         } else if (words.length == 1 && "clear".equals(words[0])) {
             int n = QueueStore.clearPending(session);
             changed(session);
-            ctx.println(n > 0 ? "已清空 " + n + " 条待执行（正在执行的不受影响）" : "队列里没有待执行的消息");
+            output.println(n > 0
+                    ? QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_CLEARED, "count", n)
+                    : QueueI18n.get(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_CLEAR_EMPTY));
         } else if (words.length == 2 && "cancel".equals(words[0])) {
-            doCancel(ctx, session, words[1]);
+            doCancel(input, output, session, words[1]);
         } else {
-            enqueue(ctx, session, text, origin);
+            enqueue(input, output, session, text);
         }
     }
 
-    private void enqueue(CommandContext ctx, AgentSession session, String text, InputOrigin origin) {
+    private void enqueue(CommandInput input, CommandOutput output, AgentSession session, String text) {
         if (Assert.isEmpty(text)) {
-            printUsage(ctx);
+            printUsage(input, output);
             return;
         }
         if (text.length() > limits.maxTextLength) {
-            ctx.println("排队内容过长（上限 " + limits.maxTextLength + " 字符）");
+            output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_TOO_LONG, "max", limits.maxTextLength));
             return;
         }
 
-        // 渠道标识由宿主透传的 origin 承载（分发器已把 CLI/Web/IM 各自的渠道身份带进命令）；
-        // 此处不再兜底硬编码渠道名——本地无渠道来源（NONE）是合法值，展示层用 channelOr 自行降级。
-        InputOrigin resolved = origin == null ? InputOrigin.NONE : origin;
+        // 与扩展入队（QueueExtension#offer）同一口径：派生「同一轮」的输入，来源、模型、子代理、宿主域属性
+        // 与快照（视野、提示词、语言、显式作用域）一并保存，续发时原样还原——命令入队不能比接口入队丢得更多。
+        HarnessInput next = input.derive(text);
+        if (next.isScopeExplicit() && next.getScope().isDeferrable() == false) {
+            // 不能悄悄丢掉不可保存的维度、按更宽的权限续发（与引擎忙时积压同一规则）
+            output.println(QueueI18n.get(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_SCOPE_NOT_DEFERRABLE));
+            return;
+        }
 
-        int n = QueueStore.enqueue(session, text, resolved, null, null, null, null, null,
+        int n = QueueStore.enqueue(session, next.getText(), next.getOrigin(), null, next.getSelectedModel(),
+                next.getSelectedAgent(), next.getAttrs(), QueueItem.snapshotOf(next),
                 limits.maxSize, limits.maxTextLength);
         if (n < 0) {
-            ctx.println("排队失败（队列已满，上限 " + limits.maxSize + " 条），请稍后再试");
+            output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_FULL, "max", limits.maxSize));
         } else {
             changed(session);
-            ctx.println("已加入队列（第 " + n + " 位），将按顺序在任务空闲后自动发送");
+            output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_ENQUEUED, "position", n));
         }
     }
 
-    private void doList(CommandContext ctx, AgentSession session) {
+    private void doList(CommandInput input, CommandOutput output, AgentSession session) {
         List<QueueItem> items = QueueStore.view(session);
         if (items.isEmpty()) {
-            ctx.println("队列为空");
+            output.println(QueueI18n.get(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_LIST_EMPTY));
             return;
         }
-        ctx.println("队列（共 " + items.size() + " 条）：");
+        Locale locale = input.getLocale();
+        output.println(QueueI18n.fmt(locale, QueueI18nKeys.COMMAND_QUEUE_LIST_TITLE, "count", items.size()));
         int i = 1;
         for (QueueItem item : items) {
-            ctx.println("  " + i++ + ". [" + item.getId() + "] "
-                    + (item.isRunning() ? "(执行中) " : "") + abbreviate(item.getText()));
+            output.println("  " + i++ + ". [" + item.getId() + "] "
+                    + (item.isRunning() ? QueueI18n.get(locale, QueueI18nKeys.COMMAND_QUEUE_LIST_RUNNING) + " " : "")
+                    + abbreviate(item.getText()));
         }
-        ctx.println("取消：/queue cancel <id|序号>；清空：/queue clear");
+        output.println(QueueI18n.get(locale, QueueI18nKeys.COMMAND_QUEUE_LIST_FOOTER));
     }
 
-    private void doCancel(CommandContext ctx, AgentSession session, String idOrIndex) {
+    private void doCancel(CommandInput input, CommandOutput output, AgentSession session, String idOrIndex) {
         String id = idOrIndex;
         List<QueueItem> items = QueueStore.view(session);
         if (idOrIndex.matches("\\d+")) {
@@ -177,21 +193,23 @@ class QueueCommand extends AbsCommand {
         }
         for (QueueItem item : items) {
             if (item.getId().equals(id) && item.isRunning()) {
-                ctx.println("这条正在执行，不能从队列取消（停止当前任务用 /interrupt）");
+                output.println(QueueI18n.get(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_CANCEL_RUNNING));
                 return;
             }
         }
         if (QueueStore.cancelItem(session, id)) {
             changed(session);
-            ctx.println("已取消：" + id);
+            output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_CANCELLED, "id", id));
         } else {
-            ctx.println("未找到待执行的消息：" + idOrIndex);
+            output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_CANCEL_NOT_FOUND, "target", idOrIndex));
         }
     }
 
-    private void printUsage(CommandContext ctx) {
-        ctx.println("用法：/queue <消息>（当前任务结束后自动作为新任务发送）");
-        ctx.println("      /queue list | /queue cancel <id|序号> | /queue clear | /queue -- <以子命令词开头的消息>");
+    private void printUsage(CommandInput input, CommandOutput output) {
+        //多行用法：每行单独输出（各语言自行对齐续行）
+        for (String line : QueueI18n.get(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_USAGE).split("\n", -1)) {
+            output.println(line);
+        }
     }
 
     private static String abbreviate(String text) {

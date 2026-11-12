@@ -1,0 +1,7 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "stop",
+  "message": "Task stopped and deleted"
+}

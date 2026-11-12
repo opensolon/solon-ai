@@ -1,0 +1,8 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "trigger",
+  "submitted": true,
+  "message": "Submitted for asynchronous execution; check the result later with loop_list"
+}

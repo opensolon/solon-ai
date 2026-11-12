@@ -1,0 +1,1 @@
+ERROR: prompt must not be empty.

@@ -1,0 +1,1 @@
+{"error":true,"code":"ACTION_EVIDENCE_REQUIRED","message":"The goal is not complete yet: this round has no successful real tool operation. Create, modify, run or verify the goal's deliverables first; goal_get/goal_update do not count as execution evidence."}

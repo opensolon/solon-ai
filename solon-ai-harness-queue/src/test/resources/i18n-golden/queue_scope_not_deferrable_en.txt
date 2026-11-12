@@ -1,0 +1,1 @@
+Failed to queue: the scope of this turn has restrictions that cannot be saved; send it directly after the current task finishes

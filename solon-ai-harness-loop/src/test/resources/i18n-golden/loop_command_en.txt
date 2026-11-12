@@ -1,0 +1,9 @@
+description: Scheduled tasks (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)
+examples:
+/loop --every 5m <prompt>
+/loop --cron "<expr>" <prompt>
+/loop list
+/loop remove <id>
+/loop clear
+/loop pause <id>
+/loop resume <id>

@@ -1,0 +1,10 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "schedule": {
+    "intervalMinutes": 5
+  },
+  "oneShot": false,
+  "message": "Task added; use loop_list to query it and loop_control(action=stop) to stop it"
+}

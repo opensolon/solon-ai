@@ -1,0 +1,1 @@
+ERROR: at 格式错误，应为 yyyy-MM-ddTHH:mm（如 2026-09-05T18:00）。

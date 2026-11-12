@@ -1,0 +1,28 @@
+# solon-ai-harness-steer messages (English, fallback for every other language)
+# Rules: every value is a "|-" block scalar with body text only - no leading/trailing newline or space (separators are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- injection protocol (trailing space is added by code; recognition matches every known language) ----
+steer.prefix: |-
+  [Real-time user supplement]
+
+# ---- /steer command ----
+command.steer.description: |-
+  Insert a real-time supplement into the running task (steer)
+command.steer.example_1: |-
+  /steer One more requirement: update the README as well
+command.steer.example_2: |-
+  /steer Do not modify the test code
+command.steer.usage: |-
+  Usage: /steer <supplement> (insert a real-time supplement into the running task)
+command.steer.applied: |-
+  Steer accepted; it will be injected into the current task at the next step ({pending} pending)
+command.steer.disabled: |-
+  Steering is disabled; send the message directly or use /queue to queue it
+command.steer.box_full: |-
+  The steer mailbox is full (limit {max}); use /queue to queue it
+command.steer.not_running: |-
+  No running task to steer; send the message directly or use /queue to queue it
+command.steer.too_long: |-
+  The steer text is too long (limit {max} characters)
+command.steer.failed: |-
+  Steer not applied: {reason}

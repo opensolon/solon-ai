@@ -51,8 +51,10 @@ class LoopHostApiTest {
             }
         }
         assertEquals(new HashSet<>(Arrays.asList(
-                "LoopExtension", "LoopTask", "LoopExecutor", "LoopOutcome", "LoopSpec", "LoopPatch", "LoopTalent")),
-                publicTypes, "宿主可见类型应只有门面、只读任务、执行器三件套与规格/补丁（LoopTalent 仅为反射保持 public）");
+                "LoopExtension", "LoopTask", "LoopExecutor", "LoopOutcome", "LoopSpec", "LoopPatch", "LoopTalent",
+                "LoopArgumentException")),
+                publicTypes, "宿主可见类型应只有门面、只读任务、执行器三件套与规格/补丁（LoopTalent 仅为反射保持 public）"
+                        + "，以及规格异常（按语言渲染）；文案门面/key 在 i18n 子包里");
     }
 
     @Test

@@ -5,9 +5,12 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.input.HarnessInput;
+import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.command.AgentTaskIntent;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.mount.source.FileMountSource;
 
@@ -376,15 +379,15 @@ class LoopExtensionTest {
         LoopTask t = loop.schedule("s1", LoopSpec.of("p").everyMinutes(5)).getValue();
 
         StubContext ctx = new StubContext(s, "pause", t.getId());
-        loop.command().execute(engine, ctx, InputOrigin.NONE);
+        run(loop, engine, ctx);
         assertFalse(loop.get("s1", t.getId()).isEnabled(), "/loop pause 必须真的暂停");
         assertTrue(ctx.output().contains("paused"), ctx.output());
 
-        loop.command().execute(engine, new StubContext(s, "resume", t.getId()), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "resume", t.getId()));
         assertTrue(loop.get("s1", t.getId()).isEnabled(), "/loop resume 必须真的恢复");
 
         StubContext missing = new StubContext(s, "pause", "nope");
-        loop.command().execute(engine, missing, InputOrigin.NONE);
+        run(loop, engine, missing);
         assertTrue(missing.output().contains("not found"), missing.output());
     }
 
@@ -396,13 +399,13 @@ class LoopExtensionTest {
         AgentSession s = engine.getSession("s1");
 
         LoopTask idle = loop.schedule("s1", LoopSpec.of("idle").everyMinutes(5)).getValue();
-        loop.command().execute(engine, new StubContext(s, "stop", idle.getId()), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "stop", idle.getId()));
         assertNull(loop.get("s1", idle.getId()));
         assertEquals(0, probe.count.get(), "任务空闲时停止不得打断用户当前这一轮");
 
         LoopTask busy = loop.schedule("s1", LoopSpec.of("busy").everyMinutes(5)).getValue();
         assertTrue(busy.tryStart());
-        loop.command().execute(engine, new StubContext(s, "stop", busy.getId()), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "stop", busy.getId()));
         assertNull(loop.get("s1", busy.getId()));
         // 运行中的定时轮次只做程序级取消（cancelStream）：不走用户中断（那会清空用户排队并写取消消息）
         assertEquals(0, probe.count.get(), "停止定时任务不得触发用户级中断");
@@ -417,13 +420,13 @@ class LoopExtensionTest {
         AgentSession s = engine.getSession("s1");
 
         loop.schedule("s1", LoopSpec.of("a").everyMinutes(5));
-        loop.command().execute(engine, new StubContext(s, "stop-all"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "stop-all"));
         assertTrue(loop.list("s1").isEmpty());
         assertEquals(0, probe.count.get());
 
         LoopTask b = loop.schedule("s1", LoopSpec.of("b").everyMinutes(5)).getValue();
         b.tryStart();
-        loop.command().execute(engine, new StubContext(s, "stop-all"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "stop-all"));
         assertTrue(loop.list("s1").isEmpty());
         assertEquals(0, probe.count.get(), "stop-all 不得触发用户级中断（会清空用户排队）");
     }
@@ -434,14 +437,14 @@ class LoopExtensionTest {
         HarnessEngine engine = engine(loop);
         AgentSession s = engine.getSession("s1");
 
-        loop.command().execute(engine, new StubContext(s, "2h", "--now", "check", "ci"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "2h", "--now", "check", "ci"));
         LoopTask t = loop.list("s1").get(0);
         assertEquals(120, t.getIntervalMinutes());
         assertTrue(t.isRunNow());
         assertEquals("check ci", t.getPrompt());
 
         StubContext bad = new StubContext(s, "cron:\"every day\"", "x");
-        loop.command().execute(engine, bad, InputOrigin.NONE);
+        run(loop, engine, bad);
         assertTrue(bad.output().contains("Failed"), bad.output());
         assertEquals(1, loop.list("s1").size());
 
@@ -455,36 +458,41 @@ class LoopExtensionTest {
         HarnessEngine engine = engine(loop);
         AgentSession s = engine.getSession("s1");
 
-        loop.command().execute(engine, new StubContext(s, "--every", "30m", "--now", "check", "ci"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "--every", "30m", "--now", "check", "ci"));
         LoopTask t = loop.list("s1").get(0);
         assertEquals(30, t.getIntervalMinutes());
         assertTrue(t.isRunNow());
         assertEquals("check ci", t.getPrompt());
 
-        loop.command().execute(engine, new StubContext(s, "--cron", "0 */5 * * * ? *", "check"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "--cron", "0 */5 * * * ? *", "check"));
         assertTrue(loop.list("s1").get(1).isCronMode());
 
         // 自然语言不被误认成子命令；「--」之后一律是提示词
-        loop.command().execute(engine, new StubContext(s, "list", "the", "files"), InputOrigin.NONE);
-        loop.command().execute(engine, new StubContext(s, "--", "clear"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "list", "the", "files"));
+        run(loop, engine, new StubContext(s, "--", "clear"));
         assertEquals(4, loop.list("s1").size());
         assertEquals("list the files", loop.list("s1").get(2).getPrompt());
         assertEquals("clear", loop.list("s1").get(3).getPrompt());
 
         StubContext list = new StubContext(s, "list");
-        loop.command().execute(engine, list, InputOrigin.NONE);
+        run(loop, engine, list);
         assertTrue(list.output().contains(t.getId()), list.output());
 
-        loop.command().execute(engine, new StubContext(s, "remove", t.getId()), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "remove", t.getId()));
         assertNull(loop.get("s1", t.getId()));
 
-        loop.command().execute(engine, new StubContext(s, "clear"), InputOrigin.NONE);
+        run(loop, engine, new StubContext(s, "clear"));
         assertTrue(loop.list("s1").isEmpty());
     }
 
-    // ==================== 命令上下文桩 ====================
+    // ==================== 命令桩 ====================
 
-    static final class StubContext implements CommandContext {
+    private static void run(LoopExtension loop, HarnessEngine engine, StubContext ctx) throws Exception {
+        loop.command().execute(engine, ctx.in(), ctx);
+    }
+
+    /** 命令输出桩（收集回执），{@link #in()} 构造对应的只读输入 */
+    static final class StubContext implements CommandOutput {
         final AgentSession session;
         final List<String> args;
         final List<String> out = new ArrayList<>();
@@ -494,28 +502,12 @@ class LoopExtensionTest {
             this.args = Arrays.asList(args);
         }
 
+        CommandInput in() {
+            return CommandInput.of(HarnessInput.of(session, null), ParsedCommand.of("loop", args, null), null);
+        }
+
         String output() {
             return String.join("\n", out);
-        }
-
-        @Override
-        public AgentSession getSession() {
-            return session;
-        }
-
-        @Override
-        public String getRawInput() {
-            return null;
-        }
-
-        @Override
-        public String getCommandName() {
-            return "loop";
-        }
-
-        @Override
-        public List<String> getArgs() {
-            return args;
         }
 
         @Override
@@ -525,11 +517,6 @@ class LoopExtensionTest {
 
         @Override
         public void requestAgentTask(String prompt, String model) {
-        }
-
-        @Override
-        public AgentTaskIntent getAgentTaskIntent() {
-            return null;
         }
     }
 }

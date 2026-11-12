@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -208,10 +209,11 @@ final class SteerMailbox {
      * 均按失败计（拦截器链遍历处没有 try，异常不得冒泡）。</p>
      *
      * @param backlog 积压能力（可为 null）
+     * @param locale  本轮的语言（转入积压的输入带上它，续发时与原轮次同一语言；可为 null）
      * @return 转入失败的插话（永不为 null）
      */
     static List<SteerMessage> transferToBacklog(@Nullable InputBacklog backlog, AgentSession session,
-                                                List<SteerMessage> items) {
+                                                List<SteerMessage> items, @Nullable Locale locale) {
         List<SteerMessage> failed = new ArrayList<>();
         if (session == null || items == null || items.isEmpty()) {
             return failed;
@@ -221,7 +223,7 @@ final class SteerMailbox {
             boolean ok;
             try {
                 ok = backlog != null && backlog.offer(session,
-                        HarnessInput.of(session, message.getText()).origin(message.getOrigin())) >= 0;
+                        HarnessInput.of(session, message.getText()).origin(message.getOrigin()).locale(locale)) >= 0;
             } catch (RuntimeException e) {
                 LOG.warn("[SteerMailbox] enqueue steer failed for session {}: {}",
                         session.getSessionId(), e.getMessage());

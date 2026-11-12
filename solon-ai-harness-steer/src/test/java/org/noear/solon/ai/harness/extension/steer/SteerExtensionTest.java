@@ -299,11 +299,11 @@ class SteerExtensionTest {
 
     @Test
     void steerMessagesTextOfRecognizesBothMarks() {
-        ChatMessage injected = SteerProtocol.toChatMessage(new SteerMessage("s1", "别改测试"));
+        ChatMessage injected = SteerProtocol.toChatMessage(new SteerMessage("s1", "别改测试"), null);
         assertEquals("别改测试", SteerProtocol.textOf(injected));
 
         // metadata 在快照往返中丢失：前缀兜底
-        assertEquals("换个思路", SteerProtocol.textOf(ChatMessage.ofUser(SteerProtocol.PREFIX + "换个思路")));
+        assertEquals("换个思路", SteerProtocol.textOf(ChatMessage.ofUser(SteerProtocol.prefix() + "换个思路")));
 
         // 只有 metadata：原样返回
         ChatMessage marked = ChatMessage.ofUser("无前缀");
@@ -311,7 +311,7 @@ class SteerExtensionTest {
         assertEquals("无前缀", SteerProtocol.textOf(marked));
 
         assertNull(SteerProtocol.textOf(ChatMessage.ofUser("普通提问")));
-        assertNull(SteerProtocol.textOf(ChatMessage.ofAssistant(SteerProtocol.PREFIX + "x")), "只认 UserMessage");
+        assertNull(SteerProtocol.textOf(ChatMessage.ofAssistant(SteerProtocol.prefix() + "x")), "只认 UserMessage");
         assertNull(SteerProtocol.textOf(ChatMessage.ofUser("")));
         assertNull(SteerProtocol.textOf(null));
     }

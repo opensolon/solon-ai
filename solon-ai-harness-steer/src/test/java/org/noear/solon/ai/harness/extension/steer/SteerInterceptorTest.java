@@ -1,7 +1,9 @@
 package org.noear.solon.ai.harness.extension.steer;
 
 import org.noear.solon.ai.harness.HarnessResult;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.extension.queue.QueueExtension;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +19,7 @@ import org.noear.solon.ai.chat.prompt.Prompt;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -197,7 +200,7 @@ public class SteerInterceptorTest {
 
         List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
         assertEquals(2, messages.size());
-        assertTrue(messages.get(0).getContent().startsWith(SteerProtocol.PREFIX));
+        assertTrue(messages.get(0).getContent().startsWith(SteerProtocol.prefix()));
         assertTrue(messages.get(0).getContent().contains("改用方案B"));
         assertEquals("steer", messages.get(0).getMetadata().get("source"));
         assertEquals("s0", messages.get(0).getMetadata().get(SteerProtocol.META_STEER_ID));
@@ -547,12 +550,41 @@ public class SteerInterceptorTest {
     }
 
     @Test
+    @DisplayName("transferToBacklog: 转入积压的输入带上本轮语言（续发时与原轮次同一语言）")
+    public void transferToBacklog_keepsRunLocale() {
+        List<HarnessInput> offered = new ArrayList<>();
+        InputBacklog backlog = new InputBacklog() {
+            @Override
+            public int offer(AgentSession s, HarnessInput input) {
+                offered.add(input);
+                return offered.size();
+            }
+
+            @Override
+            public boolean hasPending(AgentSession s) {
+                return offered.isEmpty() == false;
+            }
+        };
+        List<SteerMessage> items = new ArrayList<>();
+        items.add(new SteerMessage("s1", "more", InputOrigin.channel("web")));
+
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, items, Locale.ENGLISH).isEmpty());
+        assertEquals(1, offered.size());
+        assertEquals(Locale.ENGLISH, offered.get(0).getLocale());
+        assertEquals("web", offered.get(0).getOrigin().getChannel());
+
+        offered.clear();
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, items, null).isEmpty());
+        assertNull(offered.get(0).getLocale(), "本轮没有语言时不指定（续发时按引擎默认语言）");
+    }
+
+    @Test
     @DisplayName("transferToBacklog: 空列表 / null 会话零行为，不抛异常")
     public void transferToBacklog_noop() {
         QueueExtension backlog = new QueueExtension();
-        assertTrue(SteerMailbox.transferToBacklog(backlog, null, new ArrayList<>()).isEmpty());
-        assertTrue(SteerMailbox.transferToBacklog(backlog, session, null).isEmpty());
-        assertTrue(SteerMailbox.transferToBacklog(backlog, session, new ArrayList<>()).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, null, new ArrayList<>(), null).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, null, null).isEmpty());
+        assertTrue(SteerMailbox.transferToBacklog(backlog, session, new ArrayList<>(), null).isEmpty());
         assertEquals(0, new org.noear.solon.ai.harness.extension.queue.QueueExtension().pendingSize(session));
     }
 

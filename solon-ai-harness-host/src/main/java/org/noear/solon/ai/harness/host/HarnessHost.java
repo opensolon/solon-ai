@@ -1255,7 +1255,7 @@ public final class HarnessHost {
 
         /**
          * 统一补充每条输入（用户提交、审批决策、队列续发、后台轮次四处都经过它），
-         * 如统一的 {@code commandContextFactory}、租户级属性。单次提交的参数直接写在交给 {@code submit} 的 {@link HarnessInput} 上。
+         * 如统一的 {@code commandOutputFactory}、租户级属性。单次提交的参数直接写在交给 {@code submit} 的 {@link HarnessInput} 上。
          *
          * @param input (租户, 输入) → 就地补充
          */

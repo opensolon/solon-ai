@@ -24,12 +24,16 @@ import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
 import org.noear.solon.ai.harness.extension.goal.validate.ValidationResult;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.ai.harness.extension.goal.validate.GoalValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Locale;
 
 /**
  * Goal 工具 —— 模型侧 Goal 生命周期控制。
@@ -69,17 +73,27 @@ public class GoalTalent extends AbsTalent {
     }
 
     /**
-     * 获取当前 goal 状态
+     * 获取当前 goal 状态（默认语言）
+     */
+    public String goal_get(String __sessionId,
+                          String __cwd) {
+        return goal_get(__sessionId, __cwd, null);
+    }
+
+    /**
+     * 获取当前 goal 状态（__locale 由工具上下文注入）
      */
     @ToolMapping(name = "goal_get",
             description = "获取当前活跃目标的状态，若无活跃目标则返回 null。")
     public String goal_get(String __sessionId,
-                          String __cwd) {
+                          String __cwd,
+                          String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
         AgentSession session = sessionOf(__sessionId);
         Goal gs = goalRuntime.state(session);
 
         if (gs == null) {
-            return errJson("NO_GOAL", "未找到目标");
+            return errJson("NO_GOAL", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_GOAL));
         }
 
         ONode goalNode = new ONode(Options.of(Feature.Write_PrettyFormat));
@@ -120,7 +134,16 @@ public class GoalTalent extends AbsTalent {
     }
 
     /**
-     * 更新 goal 状态
+     * 更新 goal 状态（默认语言）
+     */
+    public String goal_update(String status,
+                              String __sessionId,
+                              String __cwd) {
+        return goal_update(status, __sessionId, __cwd, null);
+    }
+
+    /**
+     * 更新 goal 状态（__locale 由工具上下文注入）
      *
      * <p>complete: 通过实例级验证器执行客观校验后标记完成。
      * blocked: 模型主动声明阻塞（同一困境尝试了 3 次后），暂停调度等待 resume。
@@ -132,25 +155,27 @@ public class GoalTalent extends AbsTalent {
     public String goal_update(
             @Param(name = "status", description = "状态值：complete 或 blocked") String status,
             String __sessionId,
-            String __cwd) {
+            String __cwd,
+            String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
 
         if (status == null) {
-            return errJson("INVALID_PARAMETER", "status 参数必填（complete 或 blocked）");
+            return errJson("INVALID_PARAMETER", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_STATUS_REQUIRED));
         }
 
         if (__sessionId == null) {
-            return errJson("NO_SESSION", "无活跃会话");
+            return errJson("NO_SESSION", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_SESSION));
         }
 
         AgentSession session = sessionOf(__sessionId);
         Goal gs = goalRuntime.state(session);
         if (gs == null) {
-            return errJson("NO_GOAL", "未找到活跃目标");
+            return errJson("NO_GOAL", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_ACTIVE_GOAL));
         }
 
         if (!gs.getStatus().isActive()) {
             return errJson("GOAL_NOT_ACTIVE",
-                    "目标不在活跃状态（" + gs.getStatus() + "），无法更新");
+                    GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_NOT_ACTIVE, "status", gs.getStatus()));
         }
 
         ONode root = new ONode(Options.of(Feature.Write_PrettyFormat));
@@ -165,8 +190,7 @@ public class GoalTalent extends AbsTalent {
             if (GoalRuntime.requiresActionEvidence(gs.getObjective())
                     && Boolean.FALSE.equals(hasActionEvidence)) {
                 return errJson("ACTION_EVIDENCE_REQUIRED",
-                        "目标尚未完成：本轮没有成功的实际工具操作。"
-                                + "请先创建、修改、运行或验证目标产物；goal_get/goal_update 不算执行证据。");
+                        GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_ACTION_EVIDENCE_REQUIRED));
             }
 
             // 本轮会话工作目录：与文件工具、todowrite 同口径。会话目录可以不是引擎工作区
@@ -178,18 +202,16 @@ public class GoalTalent extends AbsTalent {
                     engine.getTodoTalent(), workDir, __sessionId);
             if (unfinishedTodos > 0) {
                 return errJson("TODO_UNFINISHED",
-                        "目标尚未完成：任务清单还有 " + unfinishedTodos + " 项未完成（`- [ ]` 或 `- [/]`）。"
-                                + "请先完成或用 todowrite 更新清单状态后再调用 goal_update(complete)。");
+                        GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_TODO_UNFINISHED, "count", unfinishedTodos));
             }
 
             if (goalRuntime.isValidatorEnabled()) {
                 // 已按 ValidatorPolicy 处理「无法判定」：这里只会拿到通过/未通过
-                ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir);
+                ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir, locale);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.getDetail());
                     return errJson("VALIDATION_FAILED",
-                            "目标尚未完成：验证失败 - " + vr.getDetail()
-                                    + "。请继续改进后重新调用 goal_update(complete)。");
+                            GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_VALIDATION_FAILED, "detail", vr.getDetail()));
                 }
             }
 
@@ -237,7 +259,7 @@ public class GoalTalent extends AbsTalent {
         }
 
         return errJson("INVALID_PARAMETER",
-                "未知状态 '" + status + "'. 仅支持 'complete' 或 'blocked'.");
+                GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_UNKNOWN_STATUS, "status", status));
     }
 
     private AgentSession sessionOf(String sessionId) {

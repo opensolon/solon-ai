@@ -5,6 +5,7 @@
 package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -96,7 +97,7 @@ public final class LoopSpec {
     /** @throws IllegalArgumentException 规格不合法（cron 可触发性由调度器在同一入口校验） */
     LoopTask toTask() {
         if (prompt == null || prompt.trim().isEmpty()) {
-            throw new IllegalArgumentException("prompt 不能为空");
+            throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_PROMPT_EMPTY);
         }
 
         String cronVal = cron;
@@ -105,7 +106,7 @@ public final class LoopSpec {
 
         if (at != null) {
             if (!at.isAfter(LocalDateTime.now())) {
-                throw new IllegalArgumentException("at 时刻已过: " + at);
+                throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_AT_PAST, "at", at);
             }
             // 7 位 cron（带年份）天然只命中一次
             cronVal = String.format("0 %d %d %d %d ? %d",
@@ -117,10 +118,10 @@ public final class LoopSpec {
 
         if (oneShotVal) {
             if (cronVal == null) {
-                throw new IllegalArgumentException("一次性任务必须提供 at 或 cron（固定间隔无法表达一次性语义）");
+                throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_ONE_SHOT_NO_SCHEDULE);
             }
             if (runNow) {
-                throw new IllegalArgumentException("一次性任务不能同时要求立即执行（runNow）");
+                throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_ONE_SHOT_RUN_NOW);
             }
         }
 
@@ -134,8 +135,8 @@ public final class LoopSpec {
 
     static int requireInterval(int minutes) {
         if (minutes < LoopTask.MIN_INTERVAL || minutes > LoopTask.MAX_INTERVAL) {
-            throw new IllegalArgumentException("intervalMinutes 须在 [" + LoopTask.MIN_INTERVAL + ", "
-                    + LoopTask.MAX_INTERVAL + "] 之间: " + minutes);
+            throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_INTERVAL_RANGE,
+                    "min", LoopTask.MIN_INTERVAL, "max", LoopTask.MAX_INTERVAL, "value", minutes);
         }
         return minutes;
     }

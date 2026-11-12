@@ -1,0 +1,7 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "stop",
+  "message": "任务已停止并删除"
+}

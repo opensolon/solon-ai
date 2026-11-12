@@ -1,0 +1,8 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "resume",
+  "enabled": true,
+  "message": "任务已恢复调度"
+}

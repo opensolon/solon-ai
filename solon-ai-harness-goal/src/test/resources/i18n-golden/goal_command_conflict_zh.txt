@@ -1,0 +1,3 @@
+WARN: 当前会话已有进行中的 Goal，请先清除后再创建
+  Active: first goal
+  Use /goal clear first to replace the goal.

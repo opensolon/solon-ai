@@ -25,12 +25,14 @@ import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Predicate;
@@ -250,9 +252,9 @@ public class LoopExtension extends AbsHarnessExtension {
         try {
             return HarnessResult.ok(scheduler.schedule(sessionId, spec));
         } catch (IllegalArgumentException e) {
-            return HarnessResult.invalid(e.getMessage());
+            return HarnessResult.invalid(LoopArgumentException.messageOf(e, engineLocale()));
         } catch (IllegalStateException e) {
-            return HarnessResult.full(e.getMessage());
+            return HarnessResult.full(LoopArgumentException.messageOf(e, engineLocale()));
         }
     }
 
@@ -289,8 +291,14 @@ public class LoopExtension extends AbsHarnessExtension {
             LoopTask task = scheduler.update(sessionId, taskId, patch);
             return task == null ? HarnessResult.<LoopTask>notFound("loop task not found") : HarnessResult.ok(task);
         } catch (IllegalArgumentException e) {
-            return HarnessResult.invalid(e.getMessage());
+            return HarnessResult.invalid(LoopArgumentException.messageOf(e, engineLocale()));
         }
+    }
+
+    /** 门面 API 没有输入：说明文字用引擎实例的默认语言（未挂接或未配置为 null，即全局默认语言）。 */
+    private @Nullable Locale engineLocale() {
+        HarnessEngine e = engine;
+        return e == null ? null : e.getLocale();
     }
 
     /** 立即异步执行一轮（不消耗 oneShot 配额）。NOT_FOUND = 不存在 */

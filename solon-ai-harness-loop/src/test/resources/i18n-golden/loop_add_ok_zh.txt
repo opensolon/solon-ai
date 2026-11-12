@@ -1,0 +1,10 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "schedule": {
+    "intervalMinutes": 5
+  },
+  "oneShot": false,
+  "message": "任务已新增，后续可用 loop_list 查询、loop_control(action=stop) 停止"
+}

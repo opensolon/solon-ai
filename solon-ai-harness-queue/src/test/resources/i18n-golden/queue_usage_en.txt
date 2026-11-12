@@ -1,0 +1,2 @@
+Usage: /queue <message> (sent automatically as a new task after the current task ends)
+       /queue list | /queue cancel <id|index> | /queue clear | /queue -- <message starting with a sub-command word>

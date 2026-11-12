@@ -1,0 +1,1 @@
+{"error":true,"code":"ACTION_EVIDENCE_REQUIRED","message":"目标尚未完成：本轮没有成功的实际工具操作。请先创建、修改、运行或验证目标产物；goal_get/goal_update 不算执行证据。"}

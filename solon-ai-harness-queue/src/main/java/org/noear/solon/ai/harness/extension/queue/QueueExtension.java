@@ -6,6 +6,8 @@ package org.noear.solon.ai.harness.extension.queue;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
+import org.noear.solon.ai.harness.extension.queue.i18n.QueueI18n;
+import org.noear.solon.ai.harness.extension.queue.i18n.QueueI18nKeys;
 import org.noear.solon.flow.FlowContext;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessResult;
@@ -319,7 +321,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
         switch (position) {
             case QueueStore.ENQUEUE_FULL:
-                return HarnessResult.full("队列已满，上限 " + limits.maxSize + " 条");
+                HarnessEngine e = engine;
+                return HarnessResult.full(QueueI18n.fmt(e == null ? input.getLocale() : e.localeOf(input),
+                        QueueI18nKeys.QUEUE_FULL_DETAIL, "max", limits.maxSize));
             case QueueStore.ENQUEUE_DUPLICATE:
                 return HarnessResult.conflict("duplicate queue item id: " + id);
             default:

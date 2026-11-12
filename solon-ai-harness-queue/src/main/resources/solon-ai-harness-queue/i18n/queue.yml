@@ -1,0 +1,43 @@
+# solon-ai-harness-queue messages (English, fallback for every other language)
+# Rules: every value is a "|-" block scalar with body text only - no leading/trailing newline or space (separators are added by code); placeholders are {name}; never use ${ or #{
+
+# ---- facade ----
+queue.full_detail: |-
+  Queue is full (limit {max})
+
+# ---- /queue command ----
+command.queue.description: |-
+  Queue: send automatically as a new task after the current task ends (<message>, list, cancel, clear)
+command.queue.example_message: |-
+  /queue Then update the docs as well
+command.queue.example_cancel: |-
+  /queue cancel <id|index>
+command.queue.usage: |-
+  Usage: /queue <message> (sent automatically as a new task after the current task ends)
+         /queue list | /queue cancel <id|index> | /queue clear | /queue -- <message starting with a sub-command word>
+command.queue.too_long: |-
+  The queued text is too long (limit {max} characters)
+command.queue.full: |-
+  Failed to queue (the queue is full, limit {max}); please try again later
+command.queue.scope_not_deferrable: |-
+  Failed to queue: the scope of this turn has restrictions that cannot be saved; send it directly after the current task finishes
+command.queue.enqueued: |-
+  Queued (position {position}); it will be sent in order once the task is idle
+command.queue.list_empty: |-
+  The queue is empty
+command.queue.list_title: |-
+  Queue ({count} total):
+command.queue.list_running: |-
+  (running)
+command.queue.list_footer: |-
+  Cancel: /queue cancel <id|index>; clear: /queue clear
+command.queue.cancel_running: |-
+  This item is running and cannot be cancelled from the queue (use /interrupt to stop the current task)
+command.queue.cancelled: |-
+  Cancelled: {id}
+command.queue.cancel_not_found: |-
+  No pending message found: {target}
+command.queue.cleared: |-
+  Cleared pending items: {count} (the running one is not affected)
+command.queue.clear_empty: |-
+  No pending messages in the queue

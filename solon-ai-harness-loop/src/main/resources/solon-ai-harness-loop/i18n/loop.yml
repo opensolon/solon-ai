@@ -1,0 +1,73 @@
+# solon-ai-harness-loop messages (English, fallback for every other language)
+# Rules: every value is a "|-" block scalar with body text only - no leading/trailing newline or space (separators are added by code); placeholders are {name}; never use ${ or #{
+# Protocol prefixes ("ERROR: ") are added by code
+
+# ---- spec validation errors ----
+loop.error.prompt_empty: |-
+  prompt must not be empty
+loop.error.at_past: |-
+  at is in the past: {at}
+loop.error.one_shot_no_schedule: |-
+  A one-time task requires at or cron (a fixed interval cannot express run-once semantics)
+loop.error.one_shot_run_now: |-
+  A one-time task cannot also request immediate execution (runNow)
+loop.error.interval_range: |-
+  intervalMinutes must be within [{min}, {max}]: {value}
+loop.error.cron_unparsable: |-
+  Cannot parse cron expression: {cron} (needs 6 or 7 fields: second minute hour day month week [year]; either day or week must be ?)
+loop.error.cron_no_fire_time: |-
+  cron has no valid fire time: {cron} (the time has passed or the date does not exist; server time is {now})
+loop.error.session_empty: |-
+  sessionId must not be empty
+
+# ---- tool results ----
+loop.tool.no_session_add: |-
+  No active session; cannot add a scheduled task.
+loop.tool.no_session_list: |-
+  No active session; cannot list scheduled tasks.
+loop.tool.no_session_stop: |-
+  No active session; cannot stop the scheduled task.
+loop.tool.no_session_pause: |-
+  No active session; cannot pause the scheduled task.
+loop.tool.no_session_resume: |-
+  No active session; cannot resume the scheduled task.
+loop.tool.no_session_trigger: |-
+  No active session; cannot trigger the scheduled task.
+loop.tool.prompt_empty: |-
+  prompt must not be empty.
+loop.tool.at_format: |-
+  Invalid at format; expected yyyy-MM-ddTHH:mm (e.g. 2026-09-05T18:00).
+loop.tool.at_past: |-
+  at is in the past (server time is {now}); confirm with the user and use a future moment.
+loop.tool.one_shot_no_schedule: |-
+  oneShot=true requires at or cron (a fixed interval cannot express run-once semantics).
+loop.tool.one_shot_run_now: |-
+  oneShot=true and runNow=true are mutually exclusive (a one-time scheduled task must not run right after creation).
+loop.tool.cron_invalid: |-
+  {reason}.
+loop.tool.add_failed: |-
+  Failed to add the scheduled task: {reason}
+loop.tool.added: |-
+  Task added; use loop_list to query it and loop_control(action=stop) to stop it
+loop.tool.one_shot_added: |-
+  One-time task scheduled; it will be unregistered automatically after it runs
+loop.tool.bad_action: |-
+  action must be one of stop/pause/resume/trigger, got: {action}
+loop.tool.task_id_empty: |-
+  taskId must not be empty.
+loop.tool.task_not_found: |-
+  Scheduled task not found, taskId={taskId} (use loop_list to see the current tasks)
+loop.tool.stopped: |-
+  Task stopped and deleted
+loop.tool.paused: |-
+  Task paused (record kept; resume with loop_control(action=resume))
+loop.tool.resumed: |-
+  Task scheduling resumed
+loop.tool.trigger_paused: |-
+  The task is paused; resume it with loop_control(action=resume) before triggering.
+loop.tool.triggered: |-
+  Submitted for asynchronous execution; check the result later with loop_list
+
+# ---- /loop command ----
+command.loop.description: |-
+  Scheduled tasks (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)

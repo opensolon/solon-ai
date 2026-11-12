@@ -1,0 +1,8 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "trigger",
+  "submitted": true,
+  "message": "已提交异步执行，稍后可用 loop_list 查看结果"
+}

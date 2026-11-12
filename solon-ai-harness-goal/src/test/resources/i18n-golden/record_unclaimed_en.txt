@@ -1,0 +1,1 @@
+error [no-executor]: No executor claimed this round, so the goal cannot make progress.

@@ -1,0 +1,9 @@
+/loop - 定时任务 (<prompt>, --every <interval>, --cron <expr>, --now, list, remove, clear, pause, resume)
+用法：
+  /loop --every 5m <prompt>
+  /loop --cron "<expr>" <prompt>
+  /loop list
+  /loop remove <id>
+  /loop clear
+  /loop pause <id>
+  /loop resume <id>

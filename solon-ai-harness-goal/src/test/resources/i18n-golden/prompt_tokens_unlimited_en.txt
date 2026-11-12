@@ -1,0 +1,31 @@
+修复登录缺陷
+
+--- Goal Continuation ---
+You are working toward the following goal: 修复登录缺陷
+Your job is to complete this task. This is ongoing work - every round continues the same goal.
+
+--- Evidence-Based ---
+Do not rely on memory or assumptions to judge the current state. Before acting, check objective evidence such as the actual file contents, test results and build output.
+Base your judgment on the latest facts, not on memory from the previous round.
+
+--- Goal Fidelity ---
+Do not narrow the scope of the goal or lower the bar for completion. Every item in the goal must be done.
+Do not leave placeholders, TODOs or stubs. If a part is hard, put in the effort to solve it instead of skipping it.
+
+--- Audit Check ---
+Before continuing, complete the following steps:
+1. Review: what is the goal? Check the progress made so far.
+2. Verify: for every item in the goal, confirm that it is done by objective means such as running tests or inspecting files.
+   Do not rely on reasoning alone - you need authoritative evidence (tests pass, build succeeds, files exist with the right content).
+   For goals that create, modify or run something, perform at least one real tool operation; goal_get/goal_update do not count as execution evidence.
+3. If you have completed every item, explain how you achieved each one,
+   then call goal_update(complete) to mark the goal as achieved.
+
+--- Blocked Audit ---
+If you are stuck (you have tried the same problem 3 times), call goal_update(blocked) to declare that you are blocked.
+Do not declare blocked just because the work is hard, slow or uncertain - use it only when the same problem still cannot be solved after repeated attempts.
+The blocked count resets to 0 after resume.
+
+
+Tokens used: 1.5k
+Elapsed: 2h 0m

@@ -1,0 +1,1 @@
+intervalMinutes must be within [1, 1440]: 99999

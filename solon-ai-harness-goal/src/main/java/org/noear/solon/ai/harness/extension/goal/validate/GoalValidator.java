@@ -1,5 +1,9 @@
 package org.noear.solon.ai.harness.extension.goal.validate;
 
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
+
 /**
  * Goal 验证器接口 — 在标记目标达成前执行外部校验。
  *
@@ -24,4 +28,16 @@ public interface GoalValidator {
      * @return 验证结果
      */
     ValidationResult validate(String condition, String workDir);
+
+    /**
+     * 验证目标是否真实完成（带说明文案的语言）。
+     *
+     * <p>默认忽略语言、转调 {@link #validate(String, String)}；内置验证器按该语言生成说明。</p>
+     *
+     * @param locale 说明文案的语言（null 为默认语言）
+     * @since 4.2.0
+     */
+    default ValidationResult validate(String condition, String workDir, @Nullable Locale locale) {
+        return validate(condition, workDir);
+    }
 }

@@ -1,0 +1,13 @@
+name: goal_get
+--- description ---
+获取当前活跃目标的状态，若无活跃目标则返回 null。
+--- inputSchema ---
+{"type":"object","properties":{},"required":[]}
+
+===
+
+name: goal_update
+--- description ---
+更新当前活跃目标的状态。status='complete' 标记目标已完成；status='blocked' 声明遇到阻塞（同一困境尝试了3次后使用）。
+--- inputSchema ---
+{"type":"object","properties":{"status":{"type":"string","description":"状态值：complete 或 blocked"}},"required":["status"]}

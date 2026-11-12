@@ -1,0 +1,4 @@
+description: Insert a real-time supplement into the running task (steer)
+examples:
+/steer One more requirement: update the README as well
+/steer Do not modify the test code

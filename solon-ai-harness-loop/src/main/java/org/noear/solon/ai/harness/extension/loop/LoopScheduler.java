@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.extension.loop;
 
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
 import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.scheduling.ScheduledAnno;
@@ -156,7 +157,7 @@ final class LoopScheduler {
      */
     LoopTask schedule(String sessionId, LoopSpec spec) {
         if (sessionId == null || sessionId.isEmpty()) {
-            throw new IllegalArgumentException("sessionId 不能为空");
+            throw new LoopArgumentException(LoopI18nKeys.LOOP_ERROR_SESSION_EMPTY);
         }
         return schedule(sessionId, spec.toTask());
     }

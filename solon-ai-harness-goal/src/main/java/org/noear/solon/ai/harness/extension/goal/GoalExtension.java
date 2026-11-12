@@ -20,6 +20,8 @@ import org.noear.solon.ai.agent.react.ReActOptionsAmend;
 import org.noear.solon.ai.agent.react.ReActResponse;
 import org.noear.solon.ai.harness.AbsHarnessExtension;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
 import org.noear.solon.lang.Nullable;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.HarnessResult;
@@ -365,7 +367,7 @@ public class GoalExtension extends AbsHarnessExtension {
             return HarnessResult.notFound("goal not found");
         }
         if (gs.getStatus().isTerminal()) {
-            return HarnessResult.conflict("已完成的 Goal 不能编辑，请先清除");
+            return HarnessResult.conflict(GoalI18n.get(engine == null ? null : engine.getLocale(), GoalI18nKeys.GOAL_ERROR_TERMINAL_EDIT));
         }
         if (patch == null || patch.isEmpty()) {
             return HarnessResult.ok(goalRuntime.snapshot(session));

@@ -1,0 +1,6 @@
+/queue - Queue: send automatically as a new task after the current task ends (<message>, list, cancel, clear)
+Usage:
+  /queue Then update the docs as well
+  /queue list
+  /queue cancel <id|index>
+  /queue clear

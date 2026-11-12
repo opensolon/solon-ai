@@ -1,0 +1,3 @@
+WARN: This session already has a goal in progress; clear it before creating a new one
+  Active: first goal
+  Use /goal clear first to replace the goal.

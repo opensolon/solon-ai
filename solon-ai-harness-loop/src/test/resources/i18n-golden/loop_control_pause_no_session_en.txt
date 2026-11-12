@@ -1,0 +1,1 @@
+ERROR: No active session; cannot pause the scheduled task.

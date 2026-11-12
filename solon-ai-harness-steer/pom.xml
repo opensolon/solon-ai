@@ -25,14 +25,6 @@
 
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-harness-core</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.noear</groupId>
             <artifactId>solon-test</artifactId>
             <scope>test</scope>
         </dependency>
@@ -44,5 +36,24 @@
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- 测试工具（i18n 覆盖率/lint/golden）：由 solon-ai-core 的 test-jar 提供 -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- 测试替身（command.builtin.Fakes）：由 solon-ai-harness-core 的 test-jar 提供 -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-harness-core</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 </project>

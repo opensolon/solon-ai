@@ -1,0 +1,9 @@
+/goal - 设置并追踪会话目标（每会话一个）
+用法：
+  /goal <objective>
+  /goal --max-tokens 2000 <objective>
+  /goal --max-duration 30m <objective>
+  /goal --max-iterations 20 <objective>
+  /goal pause | resume | clear
+  /goal -- <objective starting with a sub-command word>
+  /goal

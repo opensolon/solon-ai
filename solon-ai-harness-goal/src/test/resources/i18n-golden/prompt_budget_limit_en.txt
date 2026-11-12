@@ -1,0 +1,18 @@
+
+
+--- Budget Limit ---
+Your goal's token budget is used up.
+
+Goal: 修复登录缺陷
+
+Budget:
+- Elapsed: 2h 0m
+- Used: 1.0k / 1.0k
+
+The system has marked this goal as budget_limited. Do not start any new substantial work.
+In this reply:
+1. Summarize the work done and the progress made
+2. List the remaining unfinished work
+3. Give clear recommendations for the next steps
+
+Do not call goal_update unless the goal is actually complete.

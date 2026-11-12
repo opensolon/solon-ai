@@ -28,7 +28,7 @@ class SteerCommandTest {
     @Test
     void emptyArgsPrintsUsage() {
         Fakes.StubContext ctx = Fakes.StubContext.im("");
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         assertTrue(ctx.output().contains("用法：/steer"));
     }
 
@@ -36,7 +36,7 @@ class SteerCommandTest {
     void steeredPrintsPendingCount() {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         withActiveRun(ctx.getSession(), "run-1");
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         assertTrue(ctx.output().contains("已插话，将在下一步注入当前任务（待生效 1 条）"));
     }
 
@@ -46,7 +46,7 @@ class SteerCommandTest {
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
         new SteerExtension().steer(session, "第一条", InputOrigin.channel("command"));
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         assertTrue(ctx.output().contains("待生效 2 条"));
     }
 
@@ -59,7 +59,7 @@ class SteerCommandTest {
         for (int i = 0; i < SteerMailbox.MAX_BOX_SIZE; i++) {
             assertEquals("OK", ext.steer(session, "seed-" + i).getReasonOrCode());
         }
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         assertTrue(ctx.output().contains("插话邮箱已满（上限 " + SteerMailbox.MAX_BOX_SIZE + " 条），可用 /queue 排队"));
         assertEquals(0, queuePending(session));
     }
@@ -67,7 +67,7 @@ class SteerCommandTest {
     @Test
     void notRunningAdvisesQueueWithoutDegrading() {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
-        command.execute(null, ctx, Fakes.StubContext.imOrigin()); // 未开轮
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx); // 未开轮
         assertTrue(ctx.output().contains("当前无正在执行的任务可插话，可直接发送或用 /queue 排队"));
         assertTrue(ctx.tasks.isEmpty());
         assertEquals(0, queuePending(ctx.getSession()));
@@ -78,7 +78,7 @@ class SteerCommandTest {
         StringBuilder longText = new StringBuilder();
         for (int i = 0; i < SteerMailbox.MAX_TEXT_LENGTH + 1; i++) longText.append('x');
         Fakes.StubContext ctx = Fakes.StubContext.im(longText.toString());
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         assertTrue(ctx.output().contains("上限 " + SteerMailbox.MAX_TEXT_LENGTH + " 字符"));
     }
 
@@ -87,7 +87,7 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.local("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        command.execute(null, ctx, Fakes.StubContext.localOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.localOrigin()), ctx);
         SteerMessage msg = firstPending(session);
         assertNotNull(msg);
         assertEquals("command", msg.getOrigin().getChannel());
@@ -99,7 +99,7 @@ class SteerCommandTest {
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         AgentSession session = ctx.getSession();
         withActiveRun(session, "run-1");
-        command.execute(null, ctx, Fakes.StubContext.imOrigin());
+        command.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
         SteerMessage msg = firstPending(session);
         assertNotNull(msg);
         assertEquals("Feishu", msg.getOrigin().getChannel());
@@ -117,7 +117,7 @@ class SteerCommandTest {
 
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         withActiveRun(ctx.getSession(), "run-1");
-        owned.execute(null, ctx, Fakes.StubContext.imOrigin());
+        owned.execute(null, ctx.in(Fakes.StubContext.imOrigin()), ctx);
 
         assertTrue(ctx.output().contains("插话能力已停用"));
         assertNull(firstPending(ctx.getSession()));
@@ -134,7 +134,7 @@ class SteerCommandTest {
 
         Fakes.StubContext ctx = Fakes.StubContext.im("补充要求");
         withActiveRun(ctx.getSession(), "run-1");
-        new SteerCommand().execute(engine, ctx, Fakes.StubContext.imOrigin());
+        new SteerCommand().execute(engine, ctx.in(Fakes.StubContext.imOrigin()), ctx);
 
         assertTrue(ctx.output().contains("当前无正在执行的任务可插话"));
         assertNull(firstPending(ctx.getSession()), "回滚后不得残留");

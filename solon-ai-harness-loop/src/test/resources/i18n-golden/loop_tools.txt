@@ -1,0 +1,21 @@
+name: loop_add
+--- description ---
+新增当前会话的定时任务（或循环任务），成功后返回 taskId。三种调度方式（互斥，优先级：at > cron > intervalMinutes）：1) at：指定一次性执行时刻（如 '2026-09-05T18:00'，即晚上 6 点），到点执行一次后自动注销；2) cron：标准 7 位表达式（秒 分 时 日 月 周 年），配合 oneShot=true 表示只执行一次；3) intervalMinutes：固定间隔循环（默认 5 分钟）。所有时间均为服务器本地时区（见响应中的 serverNow/timezone）：用户说'晚上 6 点/明早 9 点执行一次'时，须依据 serverNow 推算具体日期后传 at；若语义是'之后每天都这样'则用 cron 且不传 oneShot。
+--- inputSchema ---
+{"type":"object","properties":{"at":{"type":"string","description":"一次性执行时刻，服务器本地时间，格式 yyyy-MM-ddTHH:mm（如 2026-09-05T18:00）；提供后忽略 cron/intervalMinutes"},"cron":{"type":"string","description":"标准 7 位 cron 表达式（秒 分 时 日 月 周 年）；提供后使用 cron 调度，例如 0 */5 * * * ? *"},"intervalMinutes":{"type":"integer","description":"固定执行间隔（分钟），默认 5；提供 cron 时以 cron 为准"},"oneShot":{"type":"boolean","description":"是否只执行一次（默认 false）。为 true 时任务到点执行一次后自动注销；指定 at 时强制为 true"},"prompt":{"type":"string","description":"任务触发后交给 AI 执行的提示词"},"runNow":{"type":"boolean","description":"是否在创建后立即执行一次，默认 false；一次性定时任务不应传 true"}},"required":["prompt"]}
+
+===
+
+name: loop_control
+--- description ---
+控制当前会话的定时/循环任务，通过 action 指定动作（taskId 来自 loop_add 返回值或 loop_list）：stop：停止并删除任务（不可恢复）；pause：暂停任务（保留记录，停止调度）；resume：恢复已暂停的任务，重新开始调度；trigger：立即手动执行一轮（异步提交，不消耗 oneShot 一次性配额，结果稍后用 loop_list 查看）。
+--- inputSchema ---
+{"type":"object","properties":{"action":{"type":"string","description":"控制动作：stop / pause / resume / trigger"},"taskId":{"type":"string","description":"目标定时任务 ID"}},"required":["action","taskId"]}
+
+===
+
+name: loop_list
+--- description ---
+查询当前会话的全部定时/循环任务（含已暂停的），返回 JSON 列表。字段：taskId、prompt（截断）、type、调度表达式、enabled、running、lastExecutedAt、lastResult（截断）。
+--- inputSchema ---
+{"type":"object","properties":{},"required":[]}

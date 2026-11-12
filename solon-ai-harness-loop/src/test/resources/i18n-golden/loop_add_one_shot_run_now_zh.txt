@@ -1,0 +1,1 @@
+ERROR: oneShot=true 与 runNow=true 互斥（一次性定时任务不应创建后立即执行）。

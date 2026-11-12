@@ -1,0 +1,1 @@
+ERROR: action 必须是 stop/pause/resume/trigger 之一，当前传入: kill

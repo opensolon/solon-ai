@@ -1,0 +1,3 @@
+Invalid --max-tokens value: abc
+  Usage: /goal [--max-tokens N] [--max-duration 30m] [--max-iterations N] <objective>
+  /goal fix the authentication bug in the login module

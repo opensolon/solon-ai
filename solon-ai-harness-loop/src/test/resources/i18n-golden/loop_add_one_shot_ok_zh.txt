@@ -1,0 +1,11 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "schedule": {
+    "cron": "0 0 8 1 1 ? 2099",
+    "nextFireTime": "<time>"
+  },
+  "oneShot": true,
+  "message": "一次性任务已安排，到点执行后自动注销"
+}

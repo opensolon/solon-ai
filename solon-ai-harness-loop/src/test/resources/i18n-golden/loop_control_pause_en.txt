@@ -1,0 +1,8 @@
+{
+  "serverNow": "<time>",
+  "timezone": "<tz>",
+  "taskId": "<id>",
+  "action": "pause",
+  "enabled": false,
+  "message": "Task paused (record kept; resume with loop_control(action=resume))"
+}

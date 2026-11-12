@@ -1,0 +1,6 @@
+description: 排队：当前任务结束后自动作为新任务发送 (<消息>, list, cancel, clear)
+examples:
+/queue 接着帮我把文档也更新一下
+/queue list
+/queue cancel <id|序号>
+/queue clear

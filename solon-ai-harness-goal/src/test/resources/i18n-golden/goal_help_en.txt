@@ -1,0 +1,9 @@
+/goal - Set and track the session goal (one per session)
+Usage:
+  /goal <objective>
+  /goal --max-tokens 2000 <objective>
+  /goal --max-duration 30m <objective>
+  /goal --max-iterations 20 <objective>
+  /goal pause | resume | clear
+  /goal -- <objective starting with a sub-command word>
+  /goal

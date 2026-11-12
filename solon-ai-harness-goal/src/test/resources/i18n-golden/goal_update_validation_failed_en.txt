@@ -1,0 +1,1 @@
+{"error":true,"code":"VALIDATION_FAILED","message":"The goal is not complete yet: validation failed - custom failure. Keep improving, then call goal_update(complete) again."}

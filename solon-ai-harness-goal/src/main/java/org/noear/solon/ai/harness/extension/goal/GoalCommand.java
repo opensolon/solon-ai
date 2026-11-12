@@ -18,8 +18,13 @@ package org.noear.solon.ai.harness.extension.goal;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
 
 /**
  * /goal 命令 —— 会话级目标的独立命令（不再经由 loop 命令转发）。
@@ -60,12 +65,12 @@ class GoalCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "设置并追踪会话目标（每会话一个）";
+    public String description(@Nullable Locale locale) {
+        return GoalI18n.get(locale, GoalI18nKeys.COMMAND_GOAL_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/goal <objective>",
                 "/goal --max-tokens 2000 <objective>",
@@ -78,36 +83,36 @@ class GoalCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        AgentSession session = ctx.getSession();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        AgentSession session = input.getSession();
         if (session == null) {
-            ctx.println(ctx.color(RED + "No active session." + RESET));
+            output.println(output.color(RED + "No active session." + RESET));
             return;
         }
 
-        String first = ctx.argAt(0);
+        String first = input.argAt(0);
 
         // 无参：展示当前目标状态
         if (first == null) {
-            printStatus(ctx, session);
+            printStatus(input, output, session);
             return;
         }
 
         // 子命令只在「恰好一个参数」时生效："/goal pause the build" 是目标正文，不是暂停。
         // 与 /loop、/queue 同口径；全部转调 GoalExtension（避免与门面实现分叉）
-        if (ctx.argCount() == 1) {
+        if (input.argCount() == 1) {
             switch (first.toLowerCase()) {
                 case "pause": {
-                    pauseSub(ctx, session);
+                    pauseSub(input, output, session);
                     return;
                 }
                 case "resume": {
-                    resumeSub(ctx, session);
+                    resumeSub(input, output, session);
                     return;
                 }
                 case "clear":
                 case "remove": {
-                    clearSub(ctx, session);
+                    clearSub(input, output, session);
                     return;
                 }
                 default:
@@ -118,23 +123,27 @@ class GoalCommand extends AbsCommand {
         // 创建目标：flag → GoalSpec → 与编程 API 同一条路径
         GoalSpec spec;
         try {
-            spec = parseSpec(ctx);
+            spec = parseSpec(input, output);
         } catch (IllegalArgumentException e) {
-            ctx.println(ctx.color(RED + e.getMessage() + RESET));
-            ctx.println(ctx.color(DIM + "  Usage: /goal [--max-tokens N] [--max-duration 30m] [--max-iterations N] <objective>" + RESET));
-            ctx.println(ctx.color(DIM + "  /goal 修复登录模块的鉴权缺陷" + RESET));
+            output.println(output.color(RED + e.getMessage() + RESET));
+            output.println(output.color(DIM + "  Usage: /goal [--max-tokens N] [--max-duration 30m] [--max-iterations N] <objective>" + RESET));
+            output.println(output.color(DIM + "  " + GoalI18n.get(input.getLocale(), GoalI18nKeys.COMMAND_GOAL_USAGE_EXAMPLE) + RESET));
             return;
         }
 
         try {
             GoalSnapshot task = goal.create(session, spec);
-            printCreated(ctx, task);
+            printCreated(input, output, task);
         } catch (IllegalStateException e) {
             GoalSnapshot existing = goal.snapshot(session);
-            ctx.println(ctx.color(YELLOW + "WARN: " + e.getMessage() + RESET));
+            // 「已有进行中的 goal」按命令上下文的语言输出（异常自带的说明是引擎语言）
+            String message = e instanceof GoalActiveException
+                    ? GoalI18n.get(input.getLocale(), GoalI18nKeys.GOAL_ERROR_ACTIVE_EXISTS)
+                    : e.getMessage();
+            output.println(output.color(YELLOW + "WARN: " + message + RESET));
             if (existing != null) {
-                ctx.println(ctx.color(DIM + "  Active: " + existing.getObjective() + RESET));
-                ctx.println(ctx.color(DIM + "  Use /goal clear first to replace the goal." + RESET));
+                output.println(output.color(DIM + "  Active: " + existing.getObjective() + RESET));
+                output.println(output.color(DIM + "  Use /goal clear first to replace the goal." + RESET));
             }
         }
     }
@@ -147,20 +156,20 @@ class GoalCommand extends AbsCommand {
      *
      * @throws IllegalArgumentException 数字非法或缺值（调用方据此打印用法）
      */
-    private GoalSpec parseSpec(CommandContext ctx) {
+    private GoalSpec parseSpec(CommandInput input, CommandOutput output) {
         StringBuilder objective = new StringBuilder();
         Long maxTokens = null;
         Long maxDurationMs = null;
         Integer maxIterations = null;
 
-        int argc = ctx.argCount();
+        int argc = input.argCount();
         for (int i = 0; i < argc; i++) {
-            String arg = ctx.argAt(i);
+            String arg = input.argAt(i);
 
             if ("--".equals(arg)) {
                 // 转义：之后的全部当作正文（允许正文以 pause / -- 等开头）
                 for (int j = i + 1; j < argc; j++) {
-                    appendWord(objective, ctx.argAt(j));
+                    appendWord(objective, input.argAt(j));
                 }
                 break;
             }
@@ -184,11 +193,11 @@ class GoalCommand extends AbsCommand {
             }
 
             if (isKnownFlag(key) == false) {
-                ctx.println(ctx.color(YELLOW + "Unknown flag: --" + key + RESET));
+                output.println(output.color(YELLOW + "Unknown flag: --" + key + RESET));
                 continue;
             }
             if (val == null) {
-                val = i + 1 < argc ? ctx.argAt(++i) : null;
+                val = i + 1 < argc ? input.argAt(++i) : null;
                 if (val == null) {
                     throw new IllegalArgumentException("Missing value for --" + key);
                 }
@@ -253,73 +262,73 @@ class GoalCommand extends AbsCommand {
         return Long.parseLong(s.substring(0, s.length() - 1)) * unitMs;
     }
 
-    private void pauseSub(CommandContext ctx, AgentSession session) {
+    private void pauseSub(CommandInput input, CommandOutput output, AgentSession session) {
         GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
-            ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
+            output.println(output.color(DIM + "No goal in this session." + RESET));
             return;
         }
         if (goal.pause(session) == false) {
-            ctx.println(ctx.color(YELLOW + "Cannot pause goal in state: " + gs.getStatus() + RESET));
+            output.println(output.color(YELLOW + "Cannot pause goal in state: " + gs.getStatus() + RESET));
             return;
         }
-        ctx.println(ctx.color(GREEN + "Goal paused." + RESET));
+        output.println(output.color(GREEN + "Goal paused." + RESET));
     }
 
-    private void resumeSub(CommandContext ctx, AgentSession session) {
+    private void resumeSub(CommandInput input, CommandOutput output, AgentSession session) {
         GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
-            ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
+            output.println(output.color(DIM + "No goal in this session." + RESET));
             return;
         }
         if (goal.resume(session) == false) {
-            ctx.println(ctx.color(YELLOW + "Cannot resume goal in state: " + gs.getStatus() + RESET));
+            output.println(output.color(YELLOW + "Cannot resume goal in state: " + gs.getStatus() + RESET));
             return;
         }
-        ctx.println(ctx.color(GREEN + "Goal resumed." + RESET));
+        output.println(output.color(GREEN + "Goal resumed." + RESET));
     }
 
-    private void clearSub(CommandContext ctx, AgentSession session) {
+    private void clearSub(CommandInput input, CommandOutput output, AgentSession session) {
         if (goal.remove(session) == false) {
-            ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
+            output.println(output.color(DIM + "No goal in this session." + RESET));
             return;
         }
-        ctx.println(ctx.color(GREEN + "Goal cleared." + RESET));
+        output.println(output.color(GREEN + "Goal cleared." + RESET));
     }
 
-    private void printCreated(CommandContext ctx, GoalSnapshot gs) {
-        ctx.println(ctx.color(GREEN + "Goal registered:" + RESET));
-        ctx.println(ctx.color("  " + BOLD + "Objective:" + RESET + " " + gs.getObjective()));
+    private void printCreated(CommandInput input, CommandOutput output, GoalSnapshot gs) {
+        output.println(output.color(GREEN + "Goal registered:" + RESET));
+        output.println(output.color("  " + BOLD + "Objective:" + RESET + " " + gs.getObjective()));
         if (gs.getMaxTokens() > 0) {
-            ctx.println(ctx.color("  " + MAGENTA + "Max Tokens:" + RESET + " " + gs.getMaxTokens()));
+            output.println(output.color("  " + MAGENTA + "Max Tokens:" + RESET + " " + gs.getMaxTokens()));
         }
         if (gs.getMaxDurationMs() > 0) {
-            ctx.println(ctx.color("  " + MAGENTA + "Max Duration:" + RESET + " " + (gs.getMaxDurationMs() / 60_000L) + "m"));
+            output.println(output.color("  " + MAGENTA + "Max Duration:" + RESET + " " + (gs.getMaxDurationMs() / 60_000L) + "m"));
         }
         if (gs.getMaxIterations() > 0) {
-            ctx.println(ctx.color("  " + MAGENTA + "Max Iterations:" + RESET + " " + gs.getMaxIterations()));
+            output.println(output.color("  " + MAGENTA + "Max Iterations:" + RESET + " " + gs.getMaxIterations()));
         }
-        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " saved with this conversation"));
+        output.println(output.color("  " + DIM + "State:" + RESET + " saved with this conversation"));
     }
 
-    private void printStatus(CommandContext ctx, AgentSession session) {
+    private void printStatus(CommandInput input, CommandOutput output, AgentSession session) {
         GoalSnapshot gs = goal.snapshot(session);
         if (gs == null) {
-            ctx.println(ctx.color(DIM + "No goal in this session." + RESET));
-            ctx.println(ctx.color(DIM + "Usage: /goal <objective>" + RESET));
+            output.println(output.color(DIM + "No goal in this session." + RESET));
+            output.println(output.color(DIM + "Usage: /goal <objective>" + RESET));
             return;
         }
 
         long elapsedSec = (System.currentTimeMillis() - gs.getStartEpochMs()) / 1000;
-        ctx.println(ctx.color(BOLD + "Goal:" + RESET + " " + gs.getObjective()));
-        ctx.println(ctx.color("  Status: " + statusColor(gs.getStatus()) + gs.getStatus() + RESET));
-        ctx.println(ctx.color("  Iteration: " + gs.getCurrentIteration()
+        output.println(output.color(BOLD + "Goal:" + RESET + " " + gs.getObjective()));
+        output.println(output.color("  Status: " + statusColor(gs.getStatus()) + gs.getStatus() + RESET));
+        output.println(output.color("  Iteration: " + gs.getCurrentIteration()
                 + (gs.getMaxIterations() > 0 ? " / " + gs.getMaxIterations() : "")));
-        ctx.println(ctx.color("  Tokens: " + gs.getConsumedTokens()
+        output.println(output.color("  Tokens: " + gs.getConsumedTokens()
                 + (gs.getMaxTokens() > 0 ? " / " + gs.getMaxTokens() : "")));
-        ctx.println(ctx.color("  Elapsed: " + formatElapsed(elapsedSec)));
+        output.println(output.color("  Elapsed: " + formatElapsed(elapsedSec)));
         if (gs.getLastResult() != null) {
-            ctx.println(ctx.color(DIM + "  Last: " + truncate(gs.getLastResult(), 100) + RESET));
+            output.println(output.color(DIM + "  Last: " + truncate(gs.getLastResult(), 100) + RESET));
         }
     }
 

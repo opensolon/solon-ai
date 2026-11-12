@@ -1,0 +1,4 @@
+Queue (2 total):
+  1. [q1] (running) 第一条
+  2. [q2] 第二条
+Cancel: /queue cancel <id|index>; clear: /queue clear

@@ -1,0 +1,1 @@
+ERROR: oneShot=true 必须提供 at 或 cron（固定间隔无法表达一次性语义）。

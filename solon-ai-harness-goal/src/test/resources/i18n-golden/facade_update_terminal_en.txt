@@ -1,0 +1,1 @@
+A finished goal cannot be edited; clear it first

@@ -1,0 +1,6 @@
+修复登录缺陷
+
+Goal: 修复登录缺陷 | Used 90.0k / 100.0k (90%) (remaining: 10.0k)
+Elapsed: 2h 0m
+Round limit: this is round 1 of 5; at most 4 more round(s) can run after this one. Finish and verify the goal first, and do not leave key work until after the limit.
+Keep working until it is done. Action goals need real tool evidence first; goal_get/goal_update do not count. When done, call goal_update(complete); after 3 rounds without progress, call goal_update(blocked).

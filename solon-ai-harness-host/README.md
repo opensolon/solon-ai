@@ -572,7 +572,7 @@ host.submit(tenant, sid, HarnessInput.of(text)
         .selectedModel("gpt-4o").selectedAgent("reviewer").attr("effort", "high"));
 
 // 每条输入都要补的（用户提交、审批决策、队列续发、后台轮次四处都经过它）
-HarnessHost.builder().input((tenant, in) -> in.attr("tenant", tenant).commandContextFactory(myFactory));
+HarnessHost.builder().input((tenant, in) -> in.attr("tenant", tenant).commandOutputFactory(myFactory));
 
 // 只作用于本次请求开出的那一轮的附加监听（在全局 sink 之后调用；进了积压时不调用）
 host.submit(tenant, sid, HarnessInput.of(text), new RunSink() {

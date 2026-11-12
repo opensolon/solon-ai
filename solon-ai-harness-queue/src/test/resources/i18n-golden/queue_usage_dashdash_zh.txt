@@ -1,0 +1,2 @@
+用法：/queue <消息>（当前任务结束后自动作为新任务发送）
+      /queue list | /queue cancel <id|序号> | /queue clear | /queue -- <以子命令词开头的消息>

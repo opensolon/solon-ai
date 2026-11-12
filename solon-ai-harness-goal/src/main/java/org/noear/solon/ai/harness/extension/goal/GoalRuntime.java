@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
+import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
 import org.noear.solon.ai.talents.todo.TodoTalent;
 import org.noear.solon.ai.harness.extension.goal.validate.BuildPassValidator;
 import org.noear.solon.ai.harness.extension.goal.validate.ConditionMatcher;
@@ -29,14 +31,10 @@ import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.util.ErrorClassifier;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -324,6 +322,14 @@ class GoalRuntime {
         return engine;
     }
 
+    /**
+     * 本实例文案的语言：引擎实例的语言（goal 轮次由后台调度发起，不带输入语言）；没有引擎或未配置时为 null（默认语言）
+     */
+    @Nullable
+    Locale locale() {
+        return engine == null ? null : engine.getLocale();
+    }
+
     AgentSession sessionOrNull(String sessionId) {
         if (engine == null || sessionId == null) return null;
         return engine.getSessionOrNull(sessionId);
@@ -490,21 +496,30 @@ class GoalRuntime {
         if (engine == null || engine.getTerminalTalent() == null) {
             return CommandResult.failed("no command runner (engine not attached)");
         }
-        return engine.getTerminalTalent().exec(command, workDir, validatorTimeoutMs, VALIDATOR_MAX_OUTPUT_CHARS);
+        return engine.getTerminalTalent().exec(command, workDir, validatorTimeoutMs, VALIDATOR_MAX_OUTPUT_CHARS, engine.getLocale());
+    }
+
+    /**
+     * 按目标条件验证（默认语言）
+     */
+    ValidationResult validate(String condition, String workDir) {
+        return validate(condition, workDir, null);
     }
 
     /**
      * 按目标条件验证，并按 {@link ValidatorPolicy} 处理「无法判定」：返回值只会是 PASSED 或 FAILED。
+     *
+     * @param locale 验证说明的语言（null 为默认语言）
      */
-    ValidationResult validate(String condition, String workDir) {
+    ValidationResult validate(String condition, String workDir, @Nullable Locale locale) {
         ValidationResult vr;
         try {
-            vr = resolveValidator(condition).validate(condition, workDir);
+            vr = resolveValidator(condition).validate(condition, workDir, locale);
         } catch (Throwable e) {
-            vr = ValidationResult.inconclusive("验证器异常: " + e.getMessage());
+            vr = ValidationResult.inconclusive(GoalI18n.fmt(locale, GoalI18nKeys.GOAL_VALIDATE_ERROR, "error", e.getMessage()));
         }
         if (vr == null) {
-            vr = ValidationResult.inconclusive("验证器无结果");
+            vr = ValidationResult.inconclusive(GoalI18n.get(locale, GoalI18nKeys.GOAL_VALIDATE_NO_RESULT));
         }
         if (!vr.isInconclusive()) {
             return vr;
@@ -513,7 +528,7 @@ class GoalRuntime {
             LOG.warn("Goal validation inconclusive, treated as passed (FAIL_OPEN): {}", vr.getDetail());
             return ValidationResult.passed();
         }
-        return ValidationResult.failed("无法完成验证（" + vr.getDetail() + "）");
+        return ValidationResult.failed(GoalI18n.fmt(locale, GoalI18nKeys.GOAL_VALIDATE_UNABLE, "detail", vr.getDetail()));
     }
 
     /** 注册默认验证器（执行目录在验证时传入）。 */
@@ -590,8 +605,13 @@ class GoalRuntime {
 
         @Override
         public ValidationResult validate(String condition, String workDir) {
+            return validate(condition, workDir, null);
+        }
+
+        @Override
+        public ValidationResult validate(String condition, String workDir, Locale locale) {
             for (GoalValidator v : validators) {
-                ValidationResult vr = v.validate(condition, workDir);
+                ValidationResult vr = v.validate(condition, workDir, locale);
                 if (!vr.isPassed()) {
                     return vr;
                 }
@@ -650,7 +670,7 @@ class GoalRuntime {
         synchronized (session.attrs()) {
             Goal existing = stateLocked(session);
             if (existing != null && !existing.getStatus().isTerminal()) {
-                throw new IllegalStateException("当前会话已有进行中的 Goal，请先清除后再创建");
+                throw new GoalActiveException(GoalI18n.get(locale(), GoalI18nKeys.GOAL_ERROR_ACTIVE_EXISTS));
             }
 
             gs = new Goal(objective, maxTokens, budgetThresholds);
@@ -947,7 +967,7 @@ class GoalRuntime {
     /** 执行一轮主体：构建 prompt → 执行 → 状态评估 → 持久化。 */
     private boolean executeRound(AgentSession session, Goal gs) throws Exception {
         String sessionId = session.getSessionId();
-        String effectivePrompt = promptBuilder.buildEffectivePrompt(gs);
+        String effectivePrompt = promptBuilder.buildEffectivePrompt(gs, locale());
 
         // 必须先置空：本轮证据要到 execute 返回才知道，而 goal_update(complete) 是在
         // execute 内部（工具调用阶段）读取的。若不置空，它会读到上一轮的值——上轮有
@@ -971,7 +991,7 @@ class GoalRuntime {
             // 必须不记 ok、不清零连续错误计数：否则目标看起来一直在跑、实际什么都不做，
             // 且异常分级熔断被这轮流重置，永远不触发。
             // 与 loop 侧「无认领不记 ok」同口径。
-            String unclaimed = "error [no-executor]: 本轮未被执行器认领，目标无法推进。";
+            String unclaimed = "error [no-executor]: " + GoalI18n.get(locale(), GoalI18nKeys.GOAL_ROUND_UNCLAIMED);
             if (unclaimed.equals(gs.getLastResult()) == false) {
                 LOG.warn("Goal '{}' round not claimed by any executor (session '{}')", gs.getId(), sessionId);
             }
@@ -1007,7 +1027,7 @@ class GoalRuntime {
         if (achieved && requiresActionEvidence(gs.getObjective())
                 && !result.hasToolCalls()) {
             gs.rejectAchievement();
-            gs.updateLastExecution("完成声明被拒绝：本轮没有实际工具执行证据，请继续完成并验证目标。");
+            gs.updateLastExecution(GoalI18n.get(locale(), GoalI18nKeys.GOAL_ROUND_COMPLETION_REJECTED));
             achieved = false;
             LOG.warn("Goal '{}' completion rejected: no action evidence", gs.getId());
         }
@@ -1042,7 +1062,7 @@ class GoalRuntime {
     /** 预算耗尽收尾：让模型总结进展与剩余工作，不再续行。 */
     private void executeBudgetWrapUp(AgentSession session, Goal gs) {
         try {
-            String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs);
+            String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(gs, locale());
             execute(session.getSessionId(), wrapUpPrompt);
         } catch (Exception e) {
             LOG.warn("Goal '{}' wrap-up turn failed: {}", gs.getId(), e.getMessage());
@@ -1133,21 +1153,16 @@ class GoalRuntime {
 
     /**
      * 执行型目标（创建/修改/运行等）必须有实际工具证据才能声明完成。
+     *
+     * <p>关键词合并所有已知语言（与目标正文用什么语言写无关，也不随引擎语言变化）。</p>
      */
     static boolean requiresActionEvidence(String objective) {
         if (objective == null || objective.trim().isEmpty()) {
             return false;
         }
         String normalized = objective.toLowerCase(Locale.ROOT);
-        String[] keywords = {
-                "create", "generate", "write", "implement", "modify", "edit", "fix",
-                "add", "delete", "remove", "refactor", "build", "test", "run", "install",
-                "configure", "deploy", "file",
-                "生成", "创建", "新建", "编写", "写入", "修改", "编辑", "修复", "实现",
-                "添加", "删除", "重构", "构建", "测试", "运行", "安装", "配置", "部署", "文件"
-        };
-        for (String keyword : keywords) {
-            if (normalized.contains(keyword)) {
+        for (String keyword : GoalI18n.itemsOfAllLocales(GoalI18nKeys.GOAL_ACTION_KEYWORDS)) {
+            if (normalized.contains(keyword.toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }

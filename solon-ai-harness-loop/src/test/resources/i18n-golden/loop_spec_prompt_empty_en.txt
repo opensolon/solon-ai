@@ -1,0 +1,1 @@
+prompt must not be empty
