@@ -1290,12 +1290,13 @@ public class AnthropicRequestBuilder {
                 .set("type", "tool_result")
                 .set("tool_use_id", toolUseId);
 
-        // 协议：tool_result.is_error 标记失败结果，供模型前置纠错（经 ToolMessage.metadata 透传）
+        // 协议：tool_result.is_error 标记失败结果，供模型前置纠错
+        // 来源：工具返回的 ToolResult.error（ToolMessage.isError），或经 ToolMessage.metadata 透传
         Object isError = toolMessage.getMetadataAs("is_error");
         if (isError == null) {
             isError = toolMessage.getMetadataAs("isError");
         }
-        if (Boolean.TRUE.equals(isError) || "true".equals(String.valueOf(isError))) {
+        if (toolMessage.isError() || Boolean.TRUE.equals(isError) || "true".equals(String.valueOf(isError))) {
             block.set("is_error", true);
         }
 

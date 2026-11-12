@@ -1035,8 +1035,11 @@ public class TerminalTalent extends AbsTalent {
     /**
      * 执行命令
      *
-     * <p>非零退出码、超时、拒绝执行等都返回 {@link ToolResult#error(String)}，
+     * <p>拒绝执行、超时、未能启动或未正常结束返回 {@link ToolResult#error(String)}，
      * 让宿主侧（{@code ToolCallEndEvent#isError()}）不必解析文案就能判断成败。</p>
+     *
+     * <p>进程正常结束即算成功，不论退出码：退出码的含义因命令而异（grep 未匹配、diff 有差异都返回 1），
+     * 由文本中的 {@code [exit_code=N]} 告诉模型自行判断。</p>
      */
     @ToolMapping(
             name = "bash",
@@ -1066,9 +1069,12 @@ public class TerminalTalent extends AbsTalent {
             envs.put("NODE", ndCmd);
         }
 
-        // 命令正常结束且退出码为 0 才算成功；非零退出码保留输出文本，但标记为错误
+        // 进程正常结束即成功（不论退出码，退出码由文本中的 [exit_code=N] 告知模型）；
+        // 只有超时、未能启动或未正常结束才标记为错误
         CommandResult result = runCommand(command, workPath, envs, timeout, maxOutputChars, locale);
-        return result.isSuccess() ? ToolResult.success(result.getText()) : ToolResult.error(result.getText());
+        return result.getStatus() == CommandResult.Status.COMPLETED
+                ? ToolResult.success(result.getText())
+                : ToolResult.error(result.getText());
     }
 
     /**

@@ -1093,4 +1093,25 @@ public class AnthropicRoundTripAlignTest {
         assertEquals("application/pdf", inner.get(1).get("source").get("media_type").getString());
         assertEquals(pdf, inner.get(1).get("source").get("data").getString());
     }
+
+    /**
+     * 工具返回 ToolResult.error 时（ToolMessage.isError），tool_result 必须带 is_error；
+     * 成功结果不带。文本原样保留（前缀给模型看）。
+     */
+    @Test
+    public void toolResultErrorFlagMapsToIsError() {
+        ONode root = build(ChatOptions.of(), Arrays.asList(
+                ChatMessage.ofUser("帮我生成"),
+                ChatMessage.ofTool(ToolResult.error("ERROR: bad name"), "generate", "toolu_e", false),
+                ChatMessage.ofTool(ToolResult.success("[OK] done"), "generate", "toolu_s", false)));
+
+        ONode err = root.get("messages").get(1).get("content").get(0);
+        assertEquals("toolu_e", err.get("tool_use_id").getString());
+        assertTrue(err.get("is_error").getBoolean(), err.toJson());
+        assertTrue(err.toJson().contains("ERROR: bad name"), err.toJson());
+
+        ONode ok = root.get("messages").get(1).get("content").get(1);
+        assertEquals("toolu_s", ok.get("tool_use_id").getString());
+        assertFalse(ok.hasKey("is_error"), ok.toJson());
+    }
 }

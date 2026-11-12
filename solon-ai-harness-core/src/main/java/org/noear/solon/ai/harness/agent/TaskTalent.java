@@ -33,6 +33,7 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
@@ -276,22 +277,27 @@ public class TaskTalent extends AbsTalent {
     }
 
     public String task(SingleTaskOp taskSpec, String __cwd, String __sessionId) {
-        return task(taskSpec, __cwd, __sessionId, null);
+        return task(taskSpec, __cwd, __sessionId, null).getContent();
     }
 
     /**
+     * 委派单一任务
+     *
+     * <p>嵌套调用、找不到代理、定义加载失败、子代理执行异常返回 {@link ToolResult#error(String)}；
+     * 子代理正常结束返回成功（不解读它返回的内容）。文本不变（失败项带 {@code ERROR: } 与 result_status）。</p>
+     *
      * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
      * @since 4.2
      */
     @ToolMapping(name = TOOL_TASK, description =
             "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。不支持并行调用（并行请用 multitask）。")
-    public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId, String __locale) {
+    public ToolResult task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId, String __locale) {
         if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
         }
 
         if (TASK_DEPTH.get() != null) {
-            return "ERROR: " + HarnessI18n.get(AiI18n.toLocale(__locale), HarnessI18nKeys.TASK_ERROR_NESTED_TASK);
+            return err(HarnessI18n.get(AiI18n.toLocale(__locale), HarnessI18nKeys.TASK_ERROR_NESTED_TASK));
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
@@ -307,24 +313,30 @@ public class TaskTalent extends AbsTalent {
         TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession), ctx.locale);
 
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
-        return runTask(ctx, plan, false, Utils.uuid());
+        String text = runTask(ctx, plan, false, Utils.uuid());
+        return ctx.succeeded.get() > 0 ? ToolResult.success(text) : ToolResult.error(text);
     }
 
     public String multitask(List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
-        return multitask(tasks, __cwd, __sessionId, null);
+        return multitask(tasks, __cwd, __sessionId, null).getContent();
     }
 
     /**
+     * 并行执行多个子任务
+     *
+     * <p>成败标记：嵌套调用、被取消或中断、所有子任务都失败，返回 {@link ToolResult#error(String)}；
+     * 部分失败算成功（每项成败已写在文本的 result_status 里）；空列表（{@code WARNING:}）算成功。文本不变。</p>
+     *
      * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
      * @since 4.2
      */
     @ToolMapping(name = TOOL_MULTITASK, description =
             "并行执行多个互不依赖的子任务。要求任务之间必须没有资源竞争（例如：不同的模块开发、多路搜索）。")
-    public String multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId, String __locale) {
+    public ToolResult multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId, String __locale) {
         final Locale locale = AiI18n.toLocale(__locale);
 
         if (Assert.isEmpty(tasks)) {
-            return "WARNING: " + HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_EMPTY_TASKS);
+            return ToolResult.success("WARNING: " + HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_EMPTY_TASKS));
         }
 
         if (Assert.isEmpty(__sessionId)) {
@@ -332,7 +344,7 @@ public class TaskTalent extends AbsTalent {
         }
 
         if (TASK_DEPTH.get() != null) {
-            return "ERROR: " + HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_NESTED_MULTITASK);
+            return err(HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_NESTED_MULTITASK));
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
@@ -473,8 +485,10 @@ public class TaskTalent extends AbsTalent {
      * <p>不用 {@code join()}：它不可中断，用户按停止后只能逐个等到底。改为节拍轮询 {@code get}，
      * 每轮检查取消；一旦取消或中断就放弃等待后续任务。<b>没有截止时间</b>——
      * 超时只是节拍，不当成失败（子任务可能跑数天）。</p>
+     *
+     * <p>成败标记：被取消或中断，或一个子任务都没成功，标记失败；部分失败算成功。</p>
      */
-    private String aggregate(List<CompletableFuture<String>> futures, MultitaskContext ctx) {
+    private ToolResult aggregate(List<CompletableFuture<String>> futures, MultitaskContext ctx) {
         StringBuilder compositeResult = new StringBuilder();
         compositeResult.append("<multitask_results>\n");
 
@@ -531,7 +545,9 @@ public class TaskTalent extends AbsTalent {
             compositeResult.append("</multitask_advice>");
         }
 
-        return compositeResult.toString();
+        // 被取消/中断，或一个都没成功：整次调用没完成要做的事
+        boolean failed = abortedNote != null || ctx.succeeded.get() == 0;
+        return failed ? ToolResult.error(compositeResult.toString()) : ToolResult.success(compositeResult.toString());
     }
 
     /** 一次调用的共享上下文（避免 runTask 参数过长）；错误统计标记可为 null（单任务路径不统计） */
@@ -550,6 +566,11 @@ public class TaskTalent extends AbsTalent {
         private final InputScope scope;
         /** 父代理的语言：子代理继承它，结果文案也按它输出 */
         private final Locale locale;
+        /**
+         * 成功的子任务数（决定工具的失败标记）。只在 runTask 唯一的成功出口计数：
+         * 失败出口有多处（未启动、定义无效、找不到代理、执行异常），以后新增失败分支也不用管计数。
+         */
+        private final AtomicInteger succeeded = new AtomicInteger();
 
         MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
@@ -627,6 +648,14 @@ public class TaskTalent extends AbsTalent {
 
     private static boolean isCancelled(FluxSink<AgentEvent> sink) {
         return sink != null && sink.isCancelled();
+    }
+
+    /**
+     * 失败结果：文本带 {@code ERROR: } 前缀给模型看（模型只能从文本判断成败），
+     * 失败标记给宿主看（前端、统计不必解析文案）。两者在此一处生成，避免一处有、一处漏。
+     */
+    private static ToolResult err(String body) {
+        return ToolResult.error("ERROR: " + body);
     }
 
     private static String rootMessage(Throwable e) {
@@ -731,7 +760,10 @@ public class TaskTalent extends AbsTalent {
             }
 
             // 超长结果落盘到本轮会话工作目录：模型的文件工具按 __cwd 解析相对路径
-            return formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd, ctx.locale);
+            // 先拼好结果再计数：拼结果时抛异常会走失败分支，不会误计
+            String resp = formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd, ctx.locale);
+            ctx.succeeded.incrementAndGet();
+            return resp;
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", plan.op.index, ctx.total, plan.op.agent_name,
                     e.getMessage(), e);

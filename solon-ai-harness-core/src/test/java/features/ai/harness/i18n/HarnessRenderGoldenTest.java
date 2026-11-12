@@ -41,7 +41,6 @@ import org.noear.solon.ai.i18n.testkit.GoldenFiles;
 import org.noear.solon.lang.Nullable;
 import reactor.core.Disposable;
 
-import java.lang.reflect.Constructor;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -114,28 +113,6 @@ public class HarnessRenderGoldenTest {
 
     // ---------------- TaskTalent ----------------
 
-    static TaskTalent.MultiTaskOp op(String agent, int index) {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
-        op.agent_name = agent;
-        op.description = "d" + index;
-        op.prompt = "p" + index;
-        op.index = index;
-        return op;
-    }
-
-    static Object multitaskContext(ReActTrace trace, int total, AtomicBoolean rate, AtomicBoolean timeout,
-                                   AtomicBoolean upstream) throws Exception {
-        Class<?> type = Class.forName(TaskTalent.class.getName() + "$MultitaskContext");
-        Constructor<?> ctor = type.getDeclaredConstructors()[0];
-        ctor.setAccessible(true);
-        return ctor.newInstance(trace, null, "s1", total, rate, timeout, upstream);
-    }
-
-    static String aggregate(TaskTalent talent, List<CompletableFuture<String>> futures, Object ctx) throws Throwable {
-        return (String) HarnessFixtures.invoke(talent, "aggregate",
-                new Class<?>[]{List.class, ctx.getClass()}, futures, ctx);
-    }
-
     static void renderTask(Map<String, String> out, Path ws, Locale locale, String suffix) throws Throwable {
         HarnessEngine engine = HarnessFixtures.engine(ws.resolve("task"));
         TaskTalent talent = engine.getTaskTalent();
@@ -160,20 +137,20 @@ public class HarnessRenderGoldenTest {
         ThreadLocal<Boolean> depth = (ThreadLocal<Boolean>) HarnessFixtures.getStatic(TaskTalent.class, "TASK_DEPTH");
         depth.set(Boolean.TRUE);
         try {
-            out.put("task_nested" + suffix, talent.task(op("explore", 1), cwd, "s1", tag));
-            out.put("multitask_nested" + suffix, talent.multitask(Collections.singletonList(op("explore", 1)), cwd, "s1", tag));
+            out.put("task_nested" + suffix, talent.task(HarnessFixtures.taskOp("explore", 1), cwd, "s1", tag).getContent());
+            out.put("multitask_nested" + suffix, talent.multitask(Collections.singletonList(HarnessFixtures.taskOp("explore", 1)), cwd, "s1", tag).getContent());
         } finally {
             depth.remove();
         }
 
-        out.put("multitask_empty" + suffix, talent.multitask(Collections.emptyList(), cwd, "s1", tag));
+        out.put("multitask_empty" + suffix, talent.multitask(Collections.emptyList(), cwd, "s1", tag).getContent());
 
         //无效任务：未知子代理 + null 条目
         HarnessFixtures.bindTrace(s1, HarnessFixtures.trace(locale, false));
         List<TaskTalent.MultiTaskOp> bad = new ArrayList<>();
-        bad.add(op("no-such-agent", 1));
+        bad.add(HarnessFixtures.taskOp("no-such-agent", 1));
         bad.add(null);
-        out.put("multitask_invalid" + suffix, talent.multitask(bad, cwd, "s1", tag));
+        out.put("multitask_invalid" + suffix, talent.multitask(bad, cwd, "s1", tag).getContent());
 
         //聚合：失败 + 三种建议
         ReActTrace trace = HarnessFixtures.trace(locale, false);
@@ -187,8 +164,8 @@ public class HarnessRenderGoldenTest {
             List<CompletableFuture<String>> futures = new ArrayList<>();
             futures.add(CompletableFuture.completedFuture("ok"));
             futures.add(failed);
-            out.put("aggregate_" + advice + suffix, aggregate(talent, futures,
-                    multitaskContext(trace, 2, rate, timeout, upstream)));
+            out.put("aggregate_" + advice + suffix, HarnessFixtures.aggregate(talent, futures,
+                    HarnessFixtures.multitaskContext(trace, 2, rate, timeout, upstream)).getContent());
         }
 
         //聚合：主流程已取消
@@ -196,24 +173,24 @@ public class HarnessRenderGoldenTest {
         List<CompletableFuture<String>> pending = new ArrayList<>();
         pending.add(new CompletableFuture<>());
         pending.add(new CompletableFuture<>());
-        out.put("aggregate_cancelled" + suffix, aggregate(talent, pending,
-                multitaskContext(cancelled, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())));
+        out.put("aggregate_cancelled" + suffix, HarnessFixtures.aggregate(talent, pending,
+                HarnessFixtures.multitaskContext(cancelled, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())).getContent());
 
         //聚合：中断
         Thread.currentThread().interrupt();
         try {
-            out.put("aggregate_interrupted" + suffix, aggregate(talent, pending,
-                    multitaskContext(trace, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())));
+            out.put("aggregate_interrupted" + suffix, HarnessFixtures.aggregate(talent, pending,
+                    HarnessFixtures.multitaskContext(trace, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())).getContent());
         } finally {
             Thread.interrupted();
         }
 
         //未启动
         Class<?>[] opType = {TaskTalent.MultiTaskOp.class, Locale.class};
-        out.put("task_not_started" + suffix, (String) HarnessFixtures.invoke(talent, "notStarted", opType, op("explore", 3), locale));
+        out.put("task_not_started" + suffix, (String) HarnessFixtures.invoke(talent, "notStarted", opType, HarnessFixtures.taskOp("explore", 3), locale));
         Thread.currentThread().interrupt();
         try {
-            out.put("task_not_started_interrupted" + suffix, (String) HarnessFixtures.invoke(talent, "notStarted", opType, op("explore", 3), locale));
+            out.put("task_not_started_interrupted" + suffix, (String) HarnessFixtures.invoke(talent, "notStarted", opType, HarnessFixtures.taskOp("explore", 3), locale));
         } finally {
             Thread.interrupted();
         }
@@ -223,9 +200,9 @@ public class HarnessRenderGoldenTest {
         Class<?>[] respType = {TaskTalent.MultiTaskOp.class, String.class, boolean.class, String.class, boolean.class,
                 String.class, Locale.class};
         out.put("task_result_spilled" + suffix, (String) HarnessFixtures.invoke(talent, "formatTaskResp", respType,
-                op("explore", 1), "t1", true, longText, false, cwd, locale));
+                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
         out.put("task_result_truncated" + suffix, (String) HarnessFixtures.invoke(new TaskTalent(null), "formatTaskResp", respType,
-                op("explore", 1), "t1", true, longText, false, cwd, locale));
+                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
     }
 
     // ---------------- GenerateTalent ----------------
@@ -238,24 +215,24 @@ public class HarnessRenderGoldenTest {
         engine.getSession("s1");
 
         out.put("generate_tools", GoldenFiles.dumpTools(talent.getTools(prompt(locale))));
-        out.put("generate_bad_name" + suffix, talent.generate("bad name", "d", "sp", null, null, false, cwd, "s1", tag));
-        out.put("generate_reserved" + suffix, talent.generate(AgentDefinition.AGENT_GENERAL, "d", "sp", null, null, false, cwd, "s1", tag));
-        out.put("generate_no_session" + suffix, talent.generate("a1", "d", "sp", null, null, false, cwd, "no-such-session", tag));
-        out.put("generate_session_ok" + suffix, talent.generate("a1", "d1", "sp", null, null, false, cwd, "s1", tag));
-        out.put("generate_session_dup" + suffix, talent.generate("a1", "d1", "sp", null, null, false, cwd, "s1", tag));
-        out.put("generate_global_ok" + suffix, talent.generate("g1", "dg", "sp", null, null, true, cwd, "s1", tag));
-        out.put("generate_global_dup" + suffix, talent.generate("g1", "dg", "sp", null, null, true, cwd, "s1", tag));
-        out.put("generate_session_vs_global" + suffix, talent.generate("g1", "dg", "sp", null, null, false, cwd, "s1", tag));
+        out.put("generate_bad_name" + suffix, talent.generate("bad name", "d", "sp", null, null, false, cwd, "s1", tag).getContent());
+        out.put("generate_reserved" + suffix, talent.generate(AgentDefinition.AGENT_GENERAL, "d", "sp", null, null, false, cwd, "s1", tag).getContent());
+        out.put("generate_no_session" + suffix, talent.generate("a1", "d", "sp", null, null, false, cwd, "no-such-session", tag).getContent());
+        out.put("generate_session_ok" + suffix, talent.generate("a1", "d1", "sp", null, null, false, cwd, "s1", tag).getContent());
+        out.put("generate_session_dup" + suffix, talent.generate("a1", "d1", "sp", null, null, false, cwd, "s1", tag).getContent());
+        out.put("generate_global_ok" + suffix, talent.generate("g1", "dg", "sp", null, null, true, cwd, "s1", tag).getContent());
+        out.put("generate_global_dup" + suffix, talent.generate("g1", "dg", "sp", null, null, true, cwd, "s1", tag).getContent());
+        out.put("generate_session_vs_global" + suffix, talent.generate("g1", "dg", "sp", null, null, false, cwd, "s1", tag).getContent());
 
         String agentPath = engine.getHarnessAgents() + "g2.md";
         engine.getWorkspaceSource().writeString(agentPath, "x");
-        out.put("generate_file_exists" + suffix, talent.generate("g2", "dg", "sp", null, null, true, cwd, "s1", tag)
+        out.put("generate_file_exists" + suffix, talent.generate("g2", "dg", "sp", null, null, true, cwd, "s1", tag).getContent()
                 .replace(agentPath, "<agentPath>"));
 
         HarnessEngine denied = HarnessFixtures.builder(ws.resolve("gen2"))
                 .agentPersistPolicy((s, d) -> false)
                 .build();
-        out.put("generate_global_denied" + suffix, denied.getGenerateTalent().generate("g3", "dg", "sp", null, null, true, cwd, "s1", tag));
+        out.put("generate_global_denied" + suffix, denied.getGenerateTalent().generate("g3", "dg", "sp", null, null, true, cwd, "s1", tag).getContent());
     }
 
     // ---------------- HITL ----------------

@@ -68,7 +68,12 @@ public final class CommandResult {
         return text;
     }
 
-    /** 进程自然结束且退出码为 0 */
+    /**
+     * 进程自然结束且退出码为 0
+     *
+     * <p>供程序侧判断用（如 goal 验证器要求退出码为 0）。与 bash 工具的失败标记含义不同：
+     * 工具只在未能正常结束（{@link Status#TIMED_OUT} / {@link Status#FAILED}）时标记失败，不看退出码。</p>
+     */
     public boolean isSuccess() {
         return status == Status.COMPLETED && exitCode == 0;
     }

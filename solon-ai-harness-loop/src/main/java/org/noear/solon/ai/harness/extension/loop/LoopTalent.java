@@ -20,6 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18n;
 import org.noear.solon.ai.harness.extension.loop.i18n.LoopI18nKeys;
 import org.noear.solon.ai.i18n.AiI18n;
@@ -45,6 +46,9 @@ import java.util.Locale;
  * <p>开关由 {@link LoopExtension#setEnabled} 统一控制（扩展停用时引擎不再回调
  * {@code onRequestAssemble}，工具自然不挂；命令与已有定时任务不受影响）。
  * 所有响应附带 serverNow/timezone，供模型换算「晚上 6 点」这类相对时间语义。</p>
+ *
+ * <p>工具方法（带 {@code __locale}）返回 {@link ToolResult}：失败为 {@link ToolResult#error(String)}
+ * （文本带 {@code ERROR: } 前缀），成功为 JSON 文本；查询为空（total=0）也算成功。</p>
  *
  * @author noear
  * @since 3.9.4
@@ -74,7 +78,7 @@ public class LoopTalent extends AbsTalent {
                     "所有时间均为服务器本地时区（见响应中的 serverNow/timezone）：" +
                     "用户说'晚上 6 点/明早 9 点执行一次'时，须依据 serverNow 推算具体日期后传 at；" +
                     "若语义是'之后每天都这样'则用 cron 且不传 oneShot。")
-    public String loopAdd(
+    public ToolResult loopAdd(
             @Param(name = "prompt", description = "任务触发后交给 AI 执行的提示词") String prompt,
             @Param(name = "at", description = "一次性执行时刻，服务器本地时间，格式 yyyy-MM-ddTHH:mm（如 2026-09-05T18:00）；提供后忽略 cron/intervalMinutes", required = false) String at,
             @Param(name = "intervalMinutes", description = "固定执行间隔（分钟），默认 5；提供 cron 时以 cron 为准", required = false) Integer intervalMinutes,
@@ -85,10 +89,10 @@ public class LoopTalent extends AbsTalent {
             String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_ADD);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_ADD));
         }
         if (Assert.isEmpty(prompt)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_PROMPT_EMPTY);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_PROMPT_EMPTY));
         }
 
         boolean oneShotVal = oneShot != null && oneShot;
@@ -101,11 +105,11 @@ public class LoopTalent extends AbsTalent {
             try {
                 atTime = LocalDateTime.parse(at.trim(), AT_FORMAT);
             } catch (Exception e) {
-                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_AT_FORMAT);
+                return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_AT_FORMAT));
             }
             if (!atTime.isAfter(LocalDateTime.now())) {
-                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_AT_PAST,
-                        "now", LocalDateTime.now().format(NOW_FORMAT));
+                return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_AT_PAST,
+                        "now", LocalDateTime.now().format(NOW_FORMAT)));
             }
             cronVal = String.format("0 %d %d %d %d ? %d",
                     atTime.getMinute(), atTime.getHour(),
@@ -116,10 +120,10 @@ public class LoopTalent extends AbsTalent {
 
         if (oneShotVal) {
             if (Assert.isEmpty(cronVal)) {
-                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_NO_SCHEDULE);
+                return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_NO_SCHEDULE));
             }
             if (runNow != null && runNow) {
-                return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_RUN_NOW);
+                return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_RUN_NOW));
             }
         }
 
@@ -129,8 +133,8 @@ public class LoopTalent extends AbsTalent {
             try {
                 nextFireTime = LoopCron.requireNextFireTime(cronVal);
             } catch (IllegalArgumentException e) {
-                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_CRON_INVALID,
-                        "reason", LoopArgumentException.messageOf(e, locale));
+                return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_CRON_INVALID,
+                        "reason", LoopArgumentException.messageOf(e, locale)));
             }
         }
 
@@ -143,8 +147,8 @@ public class LoopTalent extends AbsTalent {
                     .oneShot(oneShotVal)
                     .runNow(runNow));
         } catch (IllegalArgumentException | IllegalStateException e) {
-            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_ADD_FAILED,
-                    "reason", LoopArgumentException.messageOf(e, locale));
+            return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_ADD_FAILED,
+                    "reason", LoopArgumentException.messageOf(e, locale)));
         }
 
         ONode root = okNode();
@@ -162,7 +166,7 @@ public class LoopTalent extends AbsTalent {
         root.set("oneShot", task.isOneShot());
         root.set("message", oneShotVal ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ONE_SHOT_ADDED)
                 : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_ADDED));
-        return root.toJson();
+        return ToolResult.success(root.toJson());
     }
 
     /**
@@ -170,7 +174,7 @@ public class LoopTalent extends AbsTalent {
      */
     public String loopAdd(String prompt, String at, Integer intervalMinutes, String cron, Boolean oneShot,
                           Boolean runNow, String __sessionId) {
-        return loopAdd(prompt, at, intervalMinutes, cron, oneShot, runNow, __sessionId, null);
+        return loopAdd(prompt, at, intervalMinutes, cron, oneShot, runNow, __sessionId, null).getContent();
     }
 
     // ==================== loop_list ====================
@@ -181,10 +185,10 @@ public class LoopTalent extends AbsTalent {
     @ToolMapping(name = "loop_list",
             description = "查询当前会话的全部定时/循环任务（含已暂停的），返回 JSON 列表。" +
                     "字段：taskId、prompt（截断）、type、调度表达式、enabled、running、lastExecutedAt、lastResult（截断）。")
-    public String loopList(String __sessionId, String __locale) {
+    public ToolResult loopList(String __sessionId, String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_LIST);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_LIST));
         }
 
         List<LoopTask> tasks = loopTasks.list(__sessionId);
@@ -195,14 +199,14 @@ public class LoopTalent extends AbsTalent {
             array.add(buildTaskNode(t));
         }
         root.set("total", tasks.size());
-        return root.toJson();
+        return ToolResult.success(root.toJson());
     }
 
     /**
      * 查询任务（默认语言）
      */
     public String loopList(String __sessionId) {
-        return loopList(__sessionId, null);
+        return loopList(__sessionId, null).getContent();
     }
 
     // ==================== loop_control（stop/pause/resume/trigger 合一） ====================
@@ -216,7 +220,7 @@ public class LoopTalent extends AbsTalent {
                     "pause：暂停任务（保留记录，停止调度）；" +
                     "resume：恢复已暂停的任务，重新开始调度；" +
                     "trigger：立即手动执行一轮（异步提交，不消耗 oneShot 一次性配额，结果稍后用 loop_list 查看）。")
-    public String loopControl(
+    public ToolResult loopControl(
             @Param(name = "action", description = "控制动作：stop / pause / resume / trigger") String action,
             @Param(name = "taskId", description = "目标定时任务 ID") String taskId,
             String __sessionId,
@@ -233,7 +237,7 @@ public class LoopTalent extends AbsTalent {
             case "trigger":
                 return doTrigger(taskId, __sessionId, locale);
             default:
-                return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_BAD_ACTION, "action", action);
+                return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_BAD_ACTION, "action", action));
         }
     }
 
@@ -241,38 +245,38 @@ public class LoopTalent extends AbsTalent {
      * 控制任务（默认语言）
      */
     public String loopControl(String action, String taskId, String __sessionId) {
-        return loopControl(action, taskId, __sessionId, null);
+        return loopControl(action, taskId, __sessionId, null).getContent();
     }
 
-    private String doStop(String taskId, String __sessionId, Locale locale) {
+    private ToolResult doStop(String taskId, String __sessionId, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_STOP);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_STOP));
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY));
         }
         if (!loopTasks.remove(__sessionId, taskId)) {
-            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
+            return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId));
         }
 
         ONode root = okNode();
         root.set("taskId", taskId);
         root.set("action", "stop");
         root.set("message", LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_STOPPED));
-        return root.toJson();
+        return ToolResult.success(root.toJson());
     }
 
-    private String doPauseResume(String taskId, String __sessionId, boolean resume, Locale locale) {
+    private ToolResult doPauseResume(String taskId, String __sessionId, boolean resume, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: " + (resume ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_RESUME)
+            return err(resume ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_RESUME)
                     : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_PAUSE));
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY));
         }
 
         if (!loopTasks.setEnabled(__sessionId, taskId, resume)) {
-            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
+            return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId));
         }
 
         ONode root = okNode();
@@ -281,23 +285,23 @@ public class LoopTalent extends AbsTalent {
         root.set("enabled", resume);
         root.set("message", resume ? LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_RESUMED)
                 : LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_PAUSED));
-        return root.toJson();
+        return ToolResult.success(root.toJson());
     }
 
-    private String doTrigger(String taskId, String __sessionId, Locale locale) {
+    private ToolResult doTrigger(String taskId, String __sessionId, Locale locale) {
         if (Assert.isEmpty(__sessionId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_TRIGGER);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_NO_SESSION_TRIGGER));
         }
         if (Assert.isEmpty(taskId)) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TASK_ID_EMPTY));
         }
 
         LoopTask task = loopTasks.get(__sessionId, taskId);
         if (task == null) {
-            return "ERROR: " + LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId);
+            return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_TASK_NOT_FOUND, "taskId", taskId));
         }
         if (!task.isEnabled()) {
-            return "ERROR: " + LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TRIGGER_PAUSED);
+            return err(LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TRIGGER_PAUSED));
         }
 
         loopTasks.trigger(__sessionId, taskId);
@@ -307,7 +311,7 @@ public class LoopTalent extends AbsTalent {
         root.set("action", "trigger");
         root.set("submitted", true);
         root.set("message", LoopI18n.get(locale, LoopI18nKeys.LOOP_TOOL_TRIGGERED));
-        return root.toJson();
+        return ToolResult.success(root.toJson());
     }
 
     // ==================== 辅助 ====================
@@ -339,6 +343,14 @@ public class LoopTalent extends AbsTalent {
         root.set("serverNow", LocalDateTime.now().format(NOW_FORMAT));
         root.set("timezone", ZoneId.systemDefault().getId());
         return root;
+    }
+
+    /**
+     * 失败结果：文本带 {@code ERROR: } 前缀给模型看（模型只能从文本判断成败），
+     * 失败标记给宿主看（前端、统计、goal 证据不必解析文案）。两者在此一处生成，避免一处有、一处漏。
+     */
+    private static ToolResult err(String body) {
+        return ToolResult.error("ERROR: " + body);
     }
 
     private static String truncate(String text, int max) {

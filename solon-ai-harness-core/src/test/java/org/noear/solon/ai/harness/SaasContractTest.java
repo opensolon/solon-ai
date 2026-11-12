@@ -318,7 +318,7 @@ class SaasContractTest {
         session("s1");
         session("s2");
 
-        String r = gen.generate("helper", "d", "you are helper", null, null, false, null, "s1",null);
+        String r = gen.generate("helper", "d", "you are helper", null, null, false, null, "s1",null).getContent();
         assertTrue(r.startsWith("[OK]"), r);
         assertNotNull(engine.resolveAgent(sessions.get("s1"), "helper"), "本会话可见");
         assertNull(engine.resolveAgent(sessions.get("s2"), "helper"), "其它会话不可见");
@@ -326,19 +326,19 @@ class SaasContractTest {
         assertTrue(SessionAgents.names(sessions.get("s1")).contains("helper"));
 
         // 保留名
-        assertTrue(gen.generate("explore", "d", "x", null, null, true, null, "s1",null).startsWith("ERROR"));
-        assertTrue(gen.generate("general", "d", "x", null, null, false, null, "s1",null).startsWith("ERROR"));
+        assertTrue(gen.generate("explore", "d", "x", null, null, true, null, "s1",null).getContent().startsWith("ERROR"));
+        assertTrue(gen.generate("general", "d", "x", null, null, false, null, "s1",null).getContent().startsWith("ERROR"));
         assertEquals("explore", engine.getAgentManager().getAgent("explore").getName());
 
         // 全局（STANDALONE 缺省允许持久化）
-        String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1",null);
+        String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1",null).getContent();
         assertTrue(g.startsWith("[OK]"), g);
         assertNotNull(engine.resolveAgent(sessions.get("s2"), "reviewer"), "全局对所有会话可见");
         assertTrue(engine.getWorkspaceSource().exists(engine.getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
 
         // 同名不覆盖（全局与会话级都拒绝）
-        assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2",null).startsWith("ERROR"));
-        assertTrue(gen.generate("reviewer", "d", "y", null, null, false, null, "s2",null).startsWith("ERROR"));
+        assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2",null).getContent().startsWith("ERROR"));
+        assertTrue(gen.generate("reviewer", "d", "y", null, null, false, null, "s2",null).getContent().startsWith("ERROR"));
     }
 
     @Test
@@ -346,16 +346,16 @@ class SaasContractTest {
         HarnessEngine engine = builder().runtimeMutable(false).build();
         session("s1");
         GenerateTalent gen = new GenerateTalent(engine);
-        String r = gen.generate("x1", "d", "p", null, null, true, null, "s1",null);
+        String r = gen.generate("x1", "d", "p", null, null, true, null, "s1",null).getContent();
         assertTrue(r.startsWith("ERROR") && r.contains("saveToFile=false"), r);
-        assertTrue(gen.generate("x1", "d", "p", null, null, false, null, "s1",null).startsWith("[OK]"));
+        assertTrue(gen.generate("x1", "d", "p", null, null, false, null, "s1",null).getContent().startsWith("[OK]"));
 
         HarnessEngine admin = builder().runtimeMutable(false)
                 .agentPersistPolicy((s, d) -> "admin".equals(SessionSelections.principalOf(s)))
                 .build();
         AgentSession s2 = session("s-admin");
         admin.setSessionPrincipal(s2, "admin");
-        assertTrue(new GenerateTalent(admin).generate("x2", "d", "p", null, null, true, null, "s-admin",null).startsWith("[OK]"));
+        assertTrue(new GenerateTalent(admin).generate("x2", "d", "p", null, null, true, null, "s-admin",null).getContent().startsWith("[OK]"));
     }
 
     /**
@@ -368,7 +368,7 @@ class SaasContractTest {
         session("s1");
         session("s2");
 
-        String r = new GenerateTalent(engine).generate("helper", "helper-desc", "you are helper", null, null, false, null, "s1",null);
+        String r = new GenerateTalent(engine).generate("helper", "helper-desc", "you are helper", null, null, false, null, "s1",null).getContent();
         assertTrue(r.startsWith("[OK]"), r);
 
         String own = engine.getTaskTalent().getInstruction(promptOf("s1"));

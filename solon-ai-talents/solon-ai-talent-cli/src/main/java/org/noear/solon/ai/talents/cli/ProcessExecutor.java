@@ -429,12 +429,9 @@ public class ProcessExecutor {
                         + CliI18n.fmt(locale, CliI18nKeys.EXECUTOR_SIZE_CAPPED, "bytes", maxOutputSize));
             }
 
-            if (binary) {
-                return CommandResult.completed(process.exitValue(), result);
-            }
-
             // 退出码：非零时必须显式给出。否则命令失败（编译报错、测试失败、脚本 exit 1）时模型只能
-            // 从输出文本里猜成败，而 PowerShell 的错误对象经 CLIXML 剥离后已丢失与正文的交错顺序
+            // 从输出文本里猜成败，而 PowerShell 的错误对象经 CLIXML 剥离后已丢失与正文的交错顺序。
+            // 二进制输出同样追加：它已被整理成摘要，模型更无从判断成败（工具失败标记不看退出码）
             int exitCode = process.exitValue();
             if (exitCode != 0) {
                 result = (result.isEmpty() ? "" : result + "\n") + "[exit_code=" + exitCode + "]";

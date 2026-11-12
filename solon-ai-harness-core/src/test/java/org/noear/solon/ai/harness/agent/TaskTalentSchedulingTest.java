@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness.agent;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 
 import java.lang.reflect.Constructor;
@@ -93,7 +94,7 @@ public class TaskTalentSchedulingTest {
         String out = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
                 java.time.Duration.ofSeconds(2), () -> {
                     Thread.currentThread().interrupt();
-                    return (String) m.invoke(talent, futures, ctx);
+                    return ((ToolResult) m.invoke(talent, futures, ctx)).getContent();
                 });
 
         assertTrue(out.contains("已中断"), "应说明是中断导致放弃等待: " + out);

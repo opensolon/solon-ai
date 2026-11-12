@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
@@ -45,6 +46,37 @@ public class GenerateTalent extends AbsTalent {
 
 
     /**
+     * 创建子代理（4.1.1 签名，无会话）
+     *
+     * <p>4.2 起 {@code saveToFile=false} 是会话级代理、必须有会话，经此签名调用会返回“无会话”错误；
+     * {@code saveToFile=true}（全局持久化）不受影响。</p>
+     *
+     * @deprecated 4.2，改用 {@link #generate(String, String, String, List, List, Boolean, String, String)}；4.3.0 删除
+     */
+    @Deprecated
+    public String generate(String name, String description, String systemPrompt,
+                           List<String> tools, List<String> skills, Boolean saveToFile,
+                           String __cwd) {
+        return generate(name, description, systemPrompt, tools, skills, saveToFile, __cwd, null);
+    }
+
+    /**
+     * 创建子代理（默认语言，返回文本；成败以文本前缀 {@code ERROR: } / {@code [OK] } 区分）
+     *
+     * @param __sessionId 会话 id（{@code saveToFile=false} 的会话级代理必需）
+     */
+    public String generate(String name, String description, String systemPrompt,
+                           List<String> tools, List<String> skills, Boolean saveToFile,
+                           String __cwd, String __sessionId) {
+        return generate(name, description, systemPrompt, tools, skills, saveToFile, __cwd, __sessionId, null).getContent();
+    }
+
+    /**
+     * 创建子代理
+     *
+     * <p>失败返回 {@link ToolResult#error(String)}（文本带 {@code ERROR: } 前缀），成功返回
+     * {@link ToolResult#success(String)}（文本带 {@code [OK] } 前缀）。</p>
+     *
      * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
      * @since 4.2
      */
@@ -52,7 +84,7 @@ public class GenerateTalent extends AbsTalent {
             description = "动态构建一个具备特定专家知识和工具权限的子代理。用于将复杂大任务拆解给垂直领域的‘虚拟专家’执行。\n" +
                     "- 只有当‘当前可用代理列表’中无匹配项时，才允许调用此工具。\n" +
                     "- 创建前应查阅相关知识库和技能，以确保 systemPrompt 的专业性。")
-    public String generate(
+    public ToolResult generate(
             @Param(name = "name", description = "子代理的唯一英文标识符（如 code_reviewer）") String name,
             @Param(name = "description", description = "对该代理职能的精炼描述，便于主代理后续识别和调用") String description,
             @Param(name = "systemPrompt", description = "核心指令集。需包含角色身份、技能范畴、输出格式规范及负面约束（避免废话）") String systemPrompt,
@@ -81,12 +113,12 @@ public class GenerateTalent extends AbsTalent {
         final Locale locale = AiI18n.toLocale(__locale);
 
         if (name == null || !name.matches("^[a-zA-Z0-9_-]+$")) {
-            return "ERROR: " + HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_BAD_NAME);
+            return err(HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_BAD_NAME));
         }
 
         // 保留名（main / general / 内置代理）不可创建：同名会把所有会话的内置代理换成模型生成的提示词
         if (engine.isReservedAgentName(name)) {
-            return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_RESERVED, "name", name);
+            return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_RESERVED, "name", name));
         }
 
         try {
@@ -109,18 +141,18 @@ public class GenerateTalent extends AbsTalent {
             if (shouldSave) {
                 // 全局：同名不覆盖（含挂载目录与已有文件），且受持久化策略约束（SERVER 缺省拒绝）
                 if (engine.getAgentManager().hasAgent(name)) {
-                    return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_EXISTS, "name", name);
+                    return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_EXISTS, "name", name));
                 }
                 if (engine.getAgentPersistPolicy().test(session, definition) == false) {
-                    return "ERROR: " + HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_DENIED);
+                    return err(HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_DENIED));
                 }
                 // 经工作区来源写入 <harnessAgents>/<name>.md（与工作区 agents 挂载同口径，不再硬编码 .soloncode、不随 cwd 漂移）
                 String agentPath = engine.getHarnessAgents() + name + ".md";
                 if (engine.getWorkspaceSource().exists(agentPath)) {
-                    return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_FILE_EXISTS, "path", agentPath);
+                    return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_FILE_EXISTS, "path", agentPath));
                 }
                 if (engine.getAgentManager().addAgentIfAbsent(definition) == false) {
-                    return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_EXISTS, "name", name);
+                    return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_GLOBAL_EXISTS, "name", name));
                 }
                 engine.getWorkspaceSource().writeString(agentPath, definition.toMarkdown());
                 if (LOG.isDebugEnabled()) {
@@ -129,14 +161,14 @@ public class GenerateTalent extends AbsTalent {
             } else {
                 // 会话级：只对本会话可见（随会话快照保存，不进引擎级注册表）
                 if (session == null) {
-                    return "ERROR: " + HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_NO_SESSION);
+                    return err(HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_ERROR_NO_SESSION));
                 }
                 if (engine.getAgentManager().hasAgent(name)) {
-                    return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_CONFLICT_GLOBAL, "name", name);
+                    return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_CONFLICT_GLOBAL, "name", name));
                 }
                 if (SessionAgents.putIfAbsent(session, definition, SessionAgents.MAX_PER_SESSION) == false) {
-                    return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_SESSION_FULL,
-                            "max", SessionAgents.MAX_PER_SESSION);
+                    return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_SESSION_FULL,
+                            "max", SessionAgents.MAX_PER_SESSION));
                 }
                 session.updateSnapshot();
             }
@@ -144,12 +176,20 @@ public class GenerateTalent extends AbsTalent {
             String scope = shouldSave
                     ? HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_SCOPE_GLOBAL)
                     : HarnessI18n.get(locale, HarnessI18nKeys.GENERATE_SCOPE_SESSION);
-            return "[OK] " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_OK,
-                    "scope", scope, "name", name, "description", description);
+            return ToolResult.success("[OK] " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_OK,
+                    "scope", scope, "name", name, "description", description));
 
         } catch (Throwable e) {
             LOG.error("创建子代理失败: name={}, error={}", name, e.getMessage(), e);
-            return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_FAILED, "error", e.getMessage());
+            return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_FAILED, "error", e.getMessage()));
         }
+    }
+
+    /**
+     * 失败结果：文本带 {@code ERROR: } 前缀给模型看（模型只能从文本判断成败），
+     * 失败标记给宿主看（前端、统计、goal 证据不必解析文案）。两者在此一处生成，避免一处有、一处漏。
+     */
+    private static ToolResult err(String body) {
+        return ToolResult.error("ERROR: " + body);
     }
 }

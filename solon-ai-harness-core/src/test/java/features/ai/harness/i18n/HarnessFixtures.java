@@ -7,7 +7,9 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.command.BufferedCommandOutput;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.command.CommandInput;
@@ -17,32 +19,36 @@ import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * i18n 用例的测试替身（反射只用于构造私有结构，不复制产品逻辑）
+ * harness 用例的测试替身（i18n 与工具成败标记等用例共用；反射只用于构造私有结构，不复制产品逻辑）
  */
-final class HarnessFixtures {
+public final class HarnessFixtures {
     private HarnessFixtures() {
     }
 
-    static HarnessEngine engine(Path workspace) {
+    public static HarnessEngine engine(Path workspace) {
         return builder(workspace).build();
     }
 
     /**
      * 会话按 id 缓存（getSessionOrNull 对未建过的会话返回 null）
      */
-    static HarnessEngine.Builder builder(Path workspace) {
+    public static HarnessEngine.Builder builder(Path workspace) {
         Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
         //假模型（不可达地址）：只装配请求，不实际调用
         ChatConfig model = new ChatConfig();
@@ -61,7 +67,7 @@ final class HarnessFixtures {
     /**
      * 带 options 的轨迹（locale 为 null 表示未显式设置）
      */
-    static ReActTrace trace(Locale locale, boolean cancelledSink) throws Exception {
+    public static ReActTrace trace(Locale locale, boolean cancelledSink) throws Exception {
         ReActOptions options = new ReActOptions((ChatModel) null);
         if (locale != null) {
             Method m = ReActOptions.class.getDeclaredMethod("setLocale", Locale.class);
@@ -86,7 +92,7 @@ final class HarnessFixtures {
     /**
      * 让会话的“当前轨迹”指向 trace（TaskTalent 从这里取父轨迹）
      */
-    static void bindTrace(AgentSession session, ReActTrace trace) {
+    public static void bindTrace(AgentSession session, ReActTrace trace) {
         session.getContext().put(Agent.KEY_CURRENT_UNIT_TRACE_KEY, "__i18n_trace");
         session.getContext().put("__i18n_trace", trace);
         //主代理轨迹（中断补写取消消息时从这里取语言）
@@ -94,43 +100,43 @@ final class HarnessFixtures {
     }
 
     /** 命令输入 + 缓冲输出（不经分发器直接执行命令时用） */
-    static final class Cmd {
-        final CommandInput in;
-        final BufferedCommandOutput out = new BufferedCommandOutput();
+    public static final class Cmd {
+        public final CommandInput in;
+        public final BufferedCommandOutput out = new BufferedCommandOutput();
 
         Cmd(CommandInput in) {
             this.in = in;
         }
 
-        String text() {
+        public String text() {
             return out.getText();
         }
     }
 
-    static Cmd ctx(Locale locale, AgentSession session, String raw, String name, String... args) {
+    public static Cmd ctx(Locale locale, AgentSession session, String raw, String name, String... args) {
         HarnessInput input = HarnessInput.of(session, raw).locale(locale);
         return new Cmd(CommandInput.of(input, ParsedCommand.of(name, Arrays.asList(args), raw), locale));
     }
 
-    static void set(Object target, String field, Object value) throws Exception {
+    public static void set(Object target, String field, Object value) throws Exception {
         Field f = findField(target.getClass(), field);
         f.setAccessible(true);
         f.set(target, value);
     }
 
-    static Object get(Object target, String field) throws Exception {
+    public static Object get(Object target, String field) throws Exception {
         Field f = findField(target.getClass(), field);
         f.setAccessible(true);
         return f.get(target);
     }
 
-    static Object getStatic(Class<?> type, String field) throws Exception {
+    public static Object getStatic(Class<?> type, String field) throws Exception {
         Field f = type.getDeclaredField(field);
         f.setAccessible(true);
         return f.get(null);
     }
 
-    static Field findField(Class<?> type, String field) throws NoSuchFieldException {
+    public static Field findField(Class<?> type, String field) throws NoSuchFieldException {
         for (Class<?> c = type; c != null; c = c.getSuperclass()) {
             try {
                 return c.getDeclaredField(field);
@@ -140,7 +146,7 @@ final class HarnessFixtures {
         throw new NoSuchFieldException(field);
     }
 
-    static Object invoke(Object target, String method, Class<?>[] types, Object... args) throws Throwable {
+    public static Object invoke(Object target, String method, Class<?>[] types, Object... args) throws Throwable {
         Class<?> type = target instanceof Class ? (Class<?>) target : target.getClass();
         Method m = type.getDeclaredMethod(method, types);
         m.setAccessible(true);
@@ -151,7 +157,36 @@ final class HarnessFixtures {
         }
     }
 
-    static String repeat(char c, int n) {
+    // ---------------- TaskTalent ----------------
+
+    public static TaskTalent.MultiTaskOp taskOp(String agent, int index) {
+        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+        op.agent_name = agent;
+        op.description = "d" + index;
+        op.prompt = "p" + index;
+        op.index = index;
+        return op;
+    }
+
+    /**
+     * 构造 TaskTalent 私有的 MultitaskContext（会话 s1，默认工作目录）
+     */
+    public static Object multitaskContext(ReActTrace trace, int total, AtomicBoolean rate, AtomicBoolean timeout,
+                                          AtomicBoolean upstream) throws Exception {
+        Class<?> type = Class.forName(TaskTalent.class.getName() + "$MultitaskContext");
+        Constructor<?> ctor = type.getDeclaredConstructors()[0];
+        ctor.setAccessible(true);
+        return ctor.newInstance(trace, null, "s1", total, rate, timeout, upstream);
+    }
+
+    /**
+     * 调用 TaskTalent 私有的 aggregate（multitask 结果汇总）
+     */
+    public static ToolResult aggregate(TaskTalent talent, List<CompletableFuture<String>> futures, Object ctx) throws Throwable {
+        return (ToolResult) invoke(talent, "aggregate", new Class<?>[]{List.class, ctx.getClass()}, futures, ctx);
+    }
+
+    public static String repeat(char c, int n) {
         StringBuilder sb = new StringBuilder(n);
         for (int i = 0; i < n; i++) {
             sb.append(c);

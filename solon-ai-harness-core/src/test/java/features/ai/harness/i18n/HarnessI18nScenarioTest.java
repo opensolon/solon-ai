@@ -122,7 +122,7 @@ public class HarnessI18nScenarioTest {
             HarnessFixtures.bindTrace(session, HarnessFixtures.trace(locale, false));
 
             String out = engine.getTaskTalent().multitask(Collections.singletonList(op("explore")),
-                    workspace.toString(), "s1", AiI18n.toTag(locale));
+                    workspace.toString(), "s1", AiI18n.toTag(locale)).getContent();
 
             String reason = expect(locale, "ERROR: 任务执行失败: boom",
                     "ERROR: " + en(HarnessI18nKeys.TASK_ERROR_FAILED, "error", "boom"));
@@ -154,7 +154,7 @@ public class HarnessI18nScenarioTest {
             HarnessFixtures.bindTrace(session, HarnessFixtures.trace(locale, false));
 
             String out = engine.getTaskTalent().multitask(Collections.singletonList(op("explore")),
-                    workspace.toString(), "s1", AiI18n.toTag(locale));
+                    workspace.toString(), "s1", AiI18n.toTag(locale)).getContent();
 
             String reason = expect(locale, "ERROR: 子代理 'explore' 定义加载失败: boom",
                     "ERROR: " + en(HarnessI18nKeys.TASK_ERROR_LOAD_FAILED, "name", "explore", "error", "boom"));
@@ -249,7 +249,7 @@ public class HarnessI18nScenarioTest {
             engine.getSession("s1");
 
             String out = engine.getGenerateTalent().generate("g1", "dg", "sp", null, null, true,
-                    workspace.toString(), "s1", AiI18n.toTag(locale));
+                    workspace.toString(), "s1", AiI18n.toTag(locale)).getContent();
             assertEquals(expect(locale, "ERROR: 创建子代理失败: boom",
                     "ERROR: " + en(HarnessI18nKeys.GENERATE_ERROR_FAILED, "error", "boom")), out);
         }

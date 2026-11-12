@@ -23,6 +23,7 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18n;
 import org.noear.solon.ai.harness.extension.goal.i18n.GoalI18nKeys;
@@ -139,7 +140,7 @@ public class GoalTalent extends AbsTalent {
     public String goal_update(String status,
                               String __sessionId,
                               String __cwd) {
-        return goal_update(status, __sessionId, __cwd, null);
+        return goal_update(status, __sessionId, __cwd, null).getContent();
     }
 
     /**
@@ -147,12 +148,15 @@ public class GoalTalent extends AbsTalent {
      *
      * <p>complete: 通过实例级验证器执行客观校验后标记完成。
      * blocked: 模型主动声明阻塞（同一困境尝试了 3 次后），暂停调度等待 resume。
+     *
+     * <p>没改成状态（参数不合法、无目标、完成被拒等）返回 {@link ToolResult#error(String)}，文本仍是错误码 JSON。
+     * 注意 {@code goal_get} 查不到目标时不算失败（查询的正常状态），仍返回 String，框架按成功处理。</p>
      */
     @ToolMapping(name = "goal_update",
             description = "更新当前活跃目标的状态。" +
                     "status='complete' 标记目标已完成；" +
                     "status='blocked' 声明遇到阻塞（同一困境尝试了3次后使用）。")
-    public String goal_update(
+    public ToolResult goal_update(
             @Param(name = "status", description = "状态值：complete 或 blocked") String status,
             String __sessionId,
             String __cwd,
@@ -160,21 +164,21 @@ public class GoalTalent extends AbsTalent {
         Locale locale = AiI18n.toLocale(__locale);
 
         if (status == null) {
-            return errJson("INVALID_PARAMETER", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_STATUS_REQUIRED));
+            return errResult("INVALID_PARAMETER", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_STATUS_REQUIRED));
         }
 
         if (__sessionId == null) {
-            return errJson("NO_SESSION", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_SESSION));
+            return errResult("NO_SESSION", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_SESSION));
         }
 
         AgentSession session = sessionOf(__sessionId);
         Goal gs = goalRuntime.state(session);
         if (gs == null) {
-            return errJson("NO_GOAL", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_ACTIVE_GOAL));
+            return errResult("NO_GOAL", GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_NO_ACTIVE_GOAL));
         }
 
         if (!gs.getStatus().isActive()) {
-            return errJson("GOAL_NOT_ACTIVE",
+            return errResult("GOAL_NOT_ACTIVE",
                     GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_NOT_ACTIVE, "status", gs.getStatus()));
         }
 
@@ -189,7 +193,7 @@ public class GoalTalent extends AbsTalent {
             Boolean hasActionEvidence = goalRuntime.currentRoundHasActionEvidence(session);
             if (GoalRuntime.requiresActionEvidence(gs.getObjective())
                     && Boolean.FALSE.equals(hasActionEvidence)) {
-                return errJson("ACTION_EVIDENCE_REQUIRED",
+                return errResult("ACTION_EVIDENCE_REQUIRED",
                         GoalI18n.get(locale, GoalI18nKeys.GOAL_TOOL_ACTION_EVIDENCE_REQUIRED));
             }
 
@@ -201,7 +205,7 @@ public class GoalTalent extends AbsTalent {
             int unfinishedTodos = goalRuntime.countUnfinishedTodos(
                     engine.getTodoTalent(), workDir, __sessionId);
             if (unfinishedTodos > 0) {
-                return errJson("TODO_UNFINISHED",
+                return errResult("TODO_UNFINISHED",
                         GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_TODO_UNFINISHED, "count", unfinishedTodos));
             }
 
@@ -210,7 +214,7 @@ public class GoalTalent extends AbsTalent {
                 ValidationResult vr = goalRuntime.validate(gs.getObjective(), workDir, locale);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", gs.getId(), vr.getDetail());
-                    return errJson("VALIDATION_FAILED",
+                    return errResult("VALIDATION_FAILED",
                             GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_VALIDATION_FAILED, "detail", vr.getDetail()));
                 }
             }
@@ -232,7 +236,7 @@ public class GoalTalent extends AbsTalent {
                     ? gs.getMaxTokens() - gs.getConsumedTokens() : null);
             root.set("completionBudgetReport", buildCompletionBudgetReport(gs));
 
-            return root.toJson();
+            return ToolResult.success(root.toJson());
         }
 
         // ---- blocked ----
@@ -255,10 +259,10 @@ public class GoalTalent extends AbsTalent {
                     ? gs.getMaxTokens() - gs.getConsumedTokens() : null);
             root.set("completionBudgetReport", null);
 
-            return root.toJson();
+            return ToolResult.success(root.toJson());
         }
 
-        return errJson("INVALID_PARAMETER",
+        return errResult("INVALID_PARAMETER",
                 GoalI18n.fmt(locale, GoalI18nKeys.GOAL_TOOL_UNKNOWN_STATUS, "status", status));
     }
 
@@ -289,6 +293,13 @@ public class GoalTalent extends AbsTalent {
             sb.append("Duration: ").append(elapsedSec).append("s.");
         }
         return sb.toString();
+    }
+
+    /**
+     * 失败结果：文本是错误码 JSON 给模型看，失败标记给宿主看（前端、统计不必解析文案）。两者在此一处生成。
+     */
+    private static ToolResult errResult(String code, String message) {
+        return ToolResult.error(errJson(code, message));
     }
 
     /**

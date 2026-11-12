@@ -52,12 +52,33 @@ public class TerminalTalentWriteBashErrorFlagTest {
     }
 
     @Test
-    public void bashNonZeroExitIsError() throws Throwable {
-        Path workDir = Files.createTempDirectory("cli-bash-flag-fail");
+    public void bashNonZeroExitIsNotError() throws Throwable {
+        Path workDir = Files.createTempDirectory("cli-bash-flag-exit");
         try {
-            ToolResult result = newTalent(workDir).bash("exit 3", 10_000, 64_000, workDir.toString(), null);
+            // 不能用 exit N：它会被安全校验拦下（不是真正执行）。ls 一个不存在的文件在各 shell 下都是非零退出
+            ToolResult result = newTalent(workDir).bash("ls __no_such_file__", 10_000, 64_000, workDir.toString(), null);
 
-            assertTrue(result.isError(), "非零退出码必须标记为失败");
+            // 进程正常结束即成功；退出码只通过文本告诉模型（grep 未匹配、diff 有差异也是非零）
+            assertFalse(result.isError(), result.getContent());
+            assertTrue(result.getContent().contains("[exit_code="), result.getContent());
+        } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    @Test
+    public void bashBinaryOutputStillReportsExitCode() throws Throwable {
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            return;
+        }
+        Path workDir = Files.createTempDirectory("cli-bash-flag-binary");
+        try {
+            // 含 NUL 的输出走二进制摘要分支；非零退出码仍须写进文本（失败标记不看退出码，模型只能靠文本）
+            ToolResult result = newTalent(workDir).bash("printf 'ELF\\000\\001\\002payload\\000' && ls __no_such_file__",
+                    10_000, 64_000, workDir.toString(), null);
+
+            assertFalse(result.isError(), result.getContent());
+            assertTrue(result.getContent().contains("[exit_code="), result.getContent());
         } finally {
             deleteRecursively(workDir);
         }
@@ -67,8 +88,8 @@ public class TerminalTalentWriteBashErrorFlagTest {
     public void bashViolationIsError() throws Throwable {
         Path workDir = Files.createTempDirectory("cli-bash-flag-violation");
         try {
-            // 安全校验拒绝（kill 类命令）：不应以普通文本返回
-            ToolResult result = newTalent(workDir).bash("kill -9 1", 10_000, 64_000, workDir.toString(), null);
+            // 安全校验拒绝（exit 类自毁命令）：不应以普通文本返回
+            ToolResult result = newTalent(workDir).bash("exit 3", 10_000, 64_000, workDir.toString(), null);
 
             assertTrue(result.isError());
         } finally {
@@ -87,7 +108,7 @@ public class TerminalTalentWriteBashErrorFlagTest {
             assertNotNull(tool, "bash 工具应已注册");
 
             Map<String, Object> args = new LinkedHashMap<>();
-            args.put("command", "exit 7");
+            args.put("command", "exit 7"); // 被安全校验拒绝
             args.put("__cwd", workDir.toString());
 
             ToolResult result = tool.call(args);
