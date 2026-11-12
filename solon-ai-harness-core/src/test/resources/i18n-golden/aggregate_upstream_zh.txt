@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: 子任务未完成（失败或被中断）: boom
+</multitask_results>
+<multitask_advice>
+检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`。
+</multitask_advice>

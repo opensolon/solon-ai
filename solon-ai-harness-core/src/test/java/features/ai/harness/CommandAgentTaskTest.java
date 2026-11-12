@@ -7,12 +7,14 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.lang.Nullable;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,23 +56,23 @@ class CommandAgentTaskTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "test command";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[0];
             }
 
             @Override
-            public void execute(HarnessEngine e, CommandContext ctx, InputOrigin origin) {
-                ctx.println("回执-" + commandName);
+            public void execute(HarnessEngine e, CommandInput input, CommandOutput output) {
+                output.println("回执-" + commandName);
                 if (crossSession) {
                     // 纯回执命令：不声明任何任务意图
                     return;
                 }
-                ctx.requestAgentTask(prompt, null);
+                output.requestAgentTask(prompt, null);
             }
         });
 

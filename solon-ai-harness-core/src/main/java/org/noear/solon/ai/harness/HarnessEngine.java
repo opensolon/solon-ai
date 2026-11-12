@@ -17,6 +17,7 @@ package org.noear.solon.ai.harness;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.NotOwnerException;
@@ -550,6 +551,57 @@ public class HarnessEngine {
      */
     public String getAgentPrefix() {
         return options.getAgentPrefix();
+    }
+
+    /**
+     * 引擎实例的默认语言（未配置时为 null，即用全局默认语言）。
+     *
+     * <p>只在输入没有指定语言时生效，见 {@link #localeOf(HarnessInput)}。没有输入的场景（如 goal 生成提示词、
+     * 门面 API 的说明文字）直接用它。</p>
+     *
+     * @since 4.2.0
+     */
+    public @Nullable Locale getLocale() {
+        return options.getLocale();
+    }
+
+    /**
+     * 一次输入的生效语言：输入指定的优先，没有时用引擎实例的默认语言（都没有为 null，即用全局默认语言）。
+     *
+     * <p>引擎在受理时取一次并下传到整条链路：本轮请求的 {@code options.locale}（协议指令、才能指令与工具描述、
+     * 工具参数 {@code __locale}、HITL 理由、子代理）、命令上下文、忙碌 / 待审批提示、附件前缀。
+     * 程序轮次（goal / loop）的输入不带语言，因此用引擎实例的默认语言。</p>
+     *
+     * <p>不会回写到输入：进积压时只保存输入自己指定的语言，续发时再按本规则取值。</p>
+     *
+     * <p>续流（HITL 审批后继续、resume、/continue）不是新的一轮：输入没指定语言时，本轮请求不设语言，
+     * 由智能体沿用被中断那一轮的语言（见 {@code ReActTrace#getRunLocale()}），所以 {@code decide} 不需要语言参数。
+     * 本方法本身仍只看输入与引擎（续流被“会话忙”拒绝时的提示按它出）。</p>
+     *
+     * @param input 输入（可为 null）
+     * @since 4.2.0
+     */
+    public @Nullable Locale localeOf(@Nullable HarnessInput input) {
+        if (input != null && input.getLocale() != null) {
+            return input.getLocale();
+        }
+        return options.getLocale();
+    }
+
+    /**
+     * 一次会话的生效语言：会话当前轨迹的语言优先（它有本轮的语言），没有轨迹时用引擎实例的默认语言。
+     *
+     * <p>宿主手上只有会话时用它（如发取消回执、中断文案），不必自己取轨述再取语言。</p>
+     *
+     * @param session 会话（可为 null）
+     * @since 4.2.0
+     */
+    public @Nullable Locale localeOf(@Nullable AgentSession session) {
+        Locale sessionLocale = HarnessI18n.localeOf(session);
+        if (sessionLocale != null) {
+            return sessionLocale;
+        }
+        return options.getLocale();
     }
 
     public String getWorkspace() {
@@ -1684,7 +1736,8 @@ public class HarnessEngine {
 
         // 清单是会话级状态：经数据来源读写（默认 <workspace>/<harnessHome>/sessions/<sid>/TODO.md，与旧路径一致）
         this.todoTalent = new TodoTalent(options.getStateSource(), "sessions/");
-        this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
+        //CODE.md 是写在工作区里的共用文件：按引擎实例的语言生成（指令仍跟随每轮的请求语言）
+        this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome()).locale(options.getLocale());
         this.taskTalent = new TaskTalent(this, options.getTaskExecutor());
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
         this.taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());
@@ -1896,12 +1949,33 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public ReActAgent.Builder getAgentBuilderOrNil(@Nullable AgentSession session, String agentName, String sessionModel) {
-        AgentDefinition definition = resolveAgent(session, agentName);
+        return getAgentBuilderOrNil(session, agentName, sessionModel, null);
+    }
+
+    /**
+     * 会话感知、按语言的子代理构建器（内置子代理按语言取描述与系统提示词）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2.0
+     */
+    public ReActAgent.Builder getAgentBuilderOrNil(@Nullable AgentSession session, String agentName, String sessionModel,
+                                                   @Nullable Locale locale) {
+        AgentDefinition definition = localizeAgent(resolveAgent(session, agentName), locale);
         if (definition == null) {
             return null;
         }
 
         return getAgentBuilder(definition, sessionModel);
+    }
+
+    /**
+     * 取子代理定义的语言版本：只作用于内置子代理（见 {@link BuiltinAgentI18n}），其它定义原样返回
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2.0
+     */
+    public AgentDefinition localizeAgent(@Nullable AgentDefinition definition, @Nullable Locale locale) {
+        return BuiltinAgentI18n.localize(definition, locale, BUILTIN_AGENT_MOUNT);
     }
 
     /**
@@ -2598,6 +2672,19 @@ public class HarnessEngine {
          */
         public Builder agentPrefix(String agentPrefix) {
             options.setAgentPrefix(agentPrefix);
+            return this;
+        }
+
+        /**
+         * 引擎实例的默认语言（不设置则用全局默认语言）。
+         *
+         * <p>输入指定了语言（{@link HarnessInput#locale}）时以输入为准；没有指定时用这里的值，并下传到本轮的整条链路。
+         * goal / loop 等后台轮次没有输入语言，总是用它。</p>
+         *
+         * @since 4.2.0
+         */
+        public Builder locale(@Nullable Locale locale) {
+            options.setLocale(locale);
             return this;
         }
 

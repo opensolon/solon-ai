@@ -130,11 +130,11 @@ class HarnessEngineTalentAccessorTest {
         HarnessInput input = HarnessInput.of((AgentSession) null, "text")
                 .terminal(true)
                 .agentNameValidator(validator)
-                .commandContextFactory(null);
+                .commandOutputFactory(null);
 
         assertTrue(input.isTerminal());
         assertSame(validator, input.getAgentNameValidator());
-        assertNull(input.getCommandContextFactory());
+        assertNull(input.getCommandOutputFactory());
 
         // 默认值
         HarnessInput plain = HarnessInput.of((AgentSession) null, "text");

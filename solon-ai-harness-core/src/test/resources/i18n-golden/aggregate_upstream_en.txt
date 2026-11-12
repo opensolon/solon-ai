@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: Subtask not completed (failed or interrupted): boom
+</multitask_results>
+<multitask_advice>
+The relay gateway or the upstream model service is temporarily unavailable, possibly due to upstream rate limiting, service overload or a gateway error. Retry later, and consider lowering `concurrency` in the model configuration or the engine's `subagentDefaultConcurrency`.
+</multitask_advice>

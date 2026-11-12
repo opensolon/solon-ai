@@ -1,0 +1,1 @@
+ERROR: This session already has a subagent with the same name, or the number of session subagents has reached the limit (16).

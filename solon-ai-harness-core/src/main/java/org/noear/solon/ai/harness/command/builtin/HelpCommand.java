@@ -15,16 +15,19 @@
  */
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.ai.harness.command.CommandDispatcher;
 import org.noear.solon.ai.harness.command.CommandRegistry;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.lang.Nullable;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Locale;
 
 /**
  * /help 命令：在 CLI、Web 和 IM 中查看当前工作区可用的斜杠命令。
@@ -39,12 +42,12 @@ public class HelpCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "查看可用命令；/help <命令> 查看详情";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_HELP_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/help",
                 "/help interrupt"
@@ -57,13 +60,18 @@ public class HelpCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        boolean terminal = ctx.isTerminal();
-        String topic = ctx.argAt(0);
+    public boolean requiresSession() {
+        return false;
+    }
+
+    @Override
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+        boolean terminal = input.isTerminal();
+        String topic = input.argAt(0);
         List<Command> commands = engine.getCommandRegistry().all();
 
-        for (String line : formatHelp(commands, topic, terminal).split("\\n", -1)) {
-            ctx.println(line);
+        for (String line : formatHelp(commands, topic, terminal, input.getLocale()).split("\\n", -1)) {
+            output.println(line);
         }
     }
 
@@ -75,6 +83,16 @@ public class HelpCommand extends AbsCommand {
      * 无终端渠道既不列入清单，也不返回其用法细节，改为明确提示不可用。</p>
      */
     public static String formatHelp(List<Command> commands, String topic, boolean terminal) {
+        return formatHelp(commands, topic, terminal, null);
+    }
+
+    /**
+     * 生成帮助文本（按语言；内置命令的描述同样按语言输出，见 {@link Command#description(Locale)}）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    public static String formatHelp(List<Command> commands, String topic, boolean terminal, Locale locale) {
         if (topic != null && !topic.trim().isEmpty()) {
             String name = topic.trim();
 
@@ -84,15 +102,15 @@ public class HelpCommand extends AbsCommand {
                 }
 
                 if (!terminal && command.terminalOnly()) {
-                    return "/" + command.name() + " 仅支持 CLI，Web/IM 端不可用。发送 /help 查看可用命令。";
+                    return CommandDispatcher.unavailableHint(command.name(), locale);
                 }
 
                 StringBuilder out = new StringBuilder();
-                appendCommandLine(out, command);
+                appendCommandLine(out, command, locale);
 
-                String[] examples = command.examples();
+                String[] examples = command.examples(locale);
                 if (examples != null && examples.length > 0) {
-                    out.append("用法：\n");
+                    out.append(HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_HELP_USAGE)).append("\n");
                     for (String example : examples) {
                         if (example != null && !example.trim().isEmpty()) {
                             out.append("  ").append(example).append("\n");
@@ -102,29 +120,29 @@ public class HelpCommand extends AbsCommand {
                 return trimTrailingNewline(out).toString();
             }
 
-            return "未找到命令 /" + name + "。发送 /help 查看可用命令。";
+            return HarnessI18n.fmt(locale, HarnessI18nKeys.COMMAND_HELP_NOT_FOUND, "name", name);
         }
 
-        StringBuilder out = new StringBuilder("可用命令：\n");
+        StringBuilder out = new StringBuilder(HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_HELP_TITLE)).append("\n");
         for (Command command : commands) {
             if (!terminal && command.terminalOnly()) {
                 continue;
             }
-            appendCommandLine(out, command);
+            appendCommandLine(out, command, locale);
         }
-        out.append("\n发送 /help <命令> 查看用法。\n")
-                .append("普通文本不会被当作命令处理。\n");
+        out.append("\n").append(HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_HELP_FOOTER)).append("\n");
         return trimTrailingNewline(out).toString();
     }
 
-    private static void appendCommandLine(StringBuilder out, Command command) {
+    private static void appendCommandLine(StringBuilder out, Command command, Locale locale) {
         out.append("/").append(command.name()).append(" - ")
-                .append(safeDescription(command)).append("\n");
+                .append(safeDescription(command, locale)).append("\n");
     }
 
-    private static String safeDescription(Command command) {
-        String description = command.description();
-        return description == null || description.trim().isEmpty() ? "暂无描述" : description.trim();
+    private static String safeDescription(Command command, Locale locale) {
+        String description = command.description(locale);
+        return description == null || description.trim().isEmpty()
+                ? HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_HELP_NO_DESCRIPTION) : description.trim();
     }
 
     private static StringBuilder trimTrailingNewline(StringBuilder text) {

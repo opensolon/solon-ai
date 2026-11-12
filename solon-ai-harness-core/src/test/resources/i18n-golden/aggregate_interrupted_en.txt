@@ -1,0 +1,4 @@
+<multitask_results>
+ERROR: Subtask not completed (interrupted; not waited for)
+ERROR: Subtask not completed (interrupted; not waited for)
+</multitask_results>

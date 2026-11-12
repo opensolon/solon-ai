@@ -18,10 +18,14 @@ package org.noear.solon.ai.harness.input;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.chat.content.VideoBlock;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
+import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 输入附件装配结果：多媒体块 + 文件引用
@@ -158,6 +162,16 @@ public final class InputAttachments {
      * 构建带附件前缀的输入文本（文件引用写成 {@code [附件: xxx]}）
      */
     public String withFilePrefix(String text) {
+        return withFilePrefix(text, null);
+    }
+
+    /**
+     * 构建带附件前缀的输入文本（按语言；前缀与无正文时的默认请求都按 locale 输出）
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    public String withFilePrefix(String text, @Nullable Locale locale) {
         if (references.isEmpty()) {
             return text;
         }
@@ -167,11 +181,11 @@ public final class InputAttachments {
             if (prefix.length() > 0) {
                 prefix.append("\n");
             }
-            prefix.append("[附件: ").append(reference).append("]");
+            prefix.append(HarnessI18n.fmt(locale, HarnessI18nKeys.INPUT_ATTACHMENT, "path", reference));
         }
 
         if (text == null || text.isEmpty()) {
-            return prefix + "\n请帮我处理这些附件";
+            return prefix + "\n" + HarnessI18n.get(locale, HarnessI18nKeys.INPUT_ATTACHMENTS_DEFAULT);
         }
         return prefix + "\n" + text;
     }

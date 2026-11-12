@@ -1,0 +1,4 @@
+<multitask_results>
+ERROR: 子任务未完成（主流程已取消，未等待）
+ERROR: 子任务未完成（主流程已取消，未等待）
+</multitask_results>

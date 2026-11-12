@@ -180,14 +180,14 @@ final class HarnessInterrupts {
         ReActTrace trace = TraceUtil.getCurrentTrace(session);
         String runId = trace == null ? null : trace.getRunId();
 
-        AssistantMessage assistantMessage = ChatMessage.ofAssistant(InterruptPlan.CANCEL_TEXT);
+        AssistantMessage assistantMessage = ChatMessage.ofAssistant(InterruptPlan.cancelText(session));
         if (runId != null) {
             assistantMessage.addMetadata(AgentTrace.META_RUN_ID, runId);
         }
 
         // 幂等：避免重复中断又补一条取消消息
         for (ChatMessage message : session.getMessages()) {
-            if (InterruptPlan.CANCEL_TEXT.equals(message.getContent())
+            if (InterruptPlan.isCancelText(message.getContent())
                     && Objects.equals(runId, message.getMetadata().get(AgentTrace.META_RUN_ID))) {
                 session.updateSnapshot();
                 return;

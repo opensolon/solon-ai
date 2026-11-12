@@ -1,0 +1,1 @@
+/exit is only available in the CLI, not on Web/IM. Send /help to see the available commands.

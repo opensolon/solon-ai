@@ -1,0 +1,4 @@
+/rewind - 回退对话记录 (<n>, 默认1)
+用法：
+  /rewind
+  /rewind <n>

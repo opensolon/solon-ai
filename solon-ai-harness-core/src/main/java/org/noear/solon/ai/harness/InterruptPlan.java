@@ -15,6 +15,13 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
+
 /**
  * 已准备但尚未提交的中断（两段式中断的第二段入口）。
  *
@@ -47,13 +54,48 @@ package org.noear.solon.ai.harness;
  */
 public interface InterruptPlan extends AutoCloseable {
     /**
-     * 中断补写的收尾文本（「用户已取消任务.」）。
+     * 中断补写的收尾文本（默认语言）。
+     *
+     * @since 4.2.0
+     */
+    static String cancelText() {
+        return cancelText((Locale) null);
+    }
+
+    /**
+     * 中断补写的收尾文本（按会话的语言；无会话或无轨迹时用默认语言）。
+     *
+     * <p>宿主只需给出会话，不必自己取轨迹再取语言。</p>
+     *
+     * @param session 会话（可为 null）
+     * @since 4.2.0
+     */
+    static String cancelText(@Nullable AgentSession session) {
+        return cancelText(HarnessI18n.localeOf(session));
+    }
+
+    /**
+     * 中断补写的收尾文本（指定语言；null 为默认语言）。
      *
      * <p>宿主向用户展示的中断提示文案属于门面契约：需要发送取消回执的宿主
-     * （如 Web 的 error / trace 帧、IM 的终态回执）应直接引用本常量，
+     * （如 Web 的 error / trace 帧、IM 的终态回执）应直接调用本方法，
      * 不要再去内核类 {@code HarnessInterrupts} 里取——那是实现细节。</p>
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2.0
      */
-    String CANCEL_TEXT = "用户已取消任务.";
+    static String cancelText(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.RUN_CANCELLED);
+    }
+
+    /**
+     * 是否为中断补写的收尾文本（匹配所有已知语言：会话可能来自其它语言的旧会话）
+     *
+     * @since 4.2.0
+     */
+    static boolean isCancelText(String text) {
+        return text != null && HarnessI18n.messages().textsOfAllLocales(HarnessI18nKeys.RUN_CANCELLED).contains(text);
+    }
 
     /**
      * 第一段认领时是否存在活跃运行流。

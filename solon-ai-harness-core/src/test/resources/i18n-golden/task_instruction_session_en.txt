@@ -1,0 +1,17 @@
+## Available Subagents
+<available_agents>
+  - "bash": Bash command expert, dedicated to git operations, command-line tasks, and terminal operations (no file write permission)
+  - "explore": Exploration expert: a composite agent capable of deep local file system analysis and web research (no file write permission)
+  - "general": General-purpose expert. Can handle any problem (pick me first when no other subagent fits!)
+  - "plan": Planning expert for designing the logical path, execution steps, and resource plan of complex tasks (no file write permission)
+</available_agents>
+
+## Session-only Subagents (available in this session only; also invoked via task / multitask)
+<session_agents>
+  - "helper": helper desc
+</session_agents>
+
+## Task Assignment Strategy:
+1. **Prefer parallelism**: When a task can be split into independent units that do not interfere with each other (e.g., developing different modules, searching multiple sources), use `multitask` to save time.
+2. **Atomicity**: Each subtask should have clear boundaries.
+3. **Context awareness**: The prompt must contain all the background the task needs; subagents cannot see the full history of the main session.

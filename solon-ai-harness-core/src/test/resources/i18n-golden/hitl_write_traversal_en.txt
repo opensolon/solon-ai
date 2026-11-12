@@ -1,0 +1,1 @@
+Path traversal detected; access outside the workspace is not allowed.

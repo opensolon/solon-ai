@@ -15,12 +15,16 @@
  */
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
 
 /**
  * /rewind 命令，用于回退最近 N 条对话记录
@@ -38,12 +42,12 @@ public class RewindCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "回退对话记录 (<n>, 默认1)";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_REWIND_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/rewind",
                 "/rewind <n>"
@@ -51,19 +55,19 @@ public class RewindCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        String flag = ctx.argAt(0);
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        String flag = input.argAt(0);
         int count = 1;
 
         if (Assert.isInteger(flag)) {
             count = Integer.parseInt(flag);
             if (count <= 0) {
-                ctx.println(ctx.color(DIM + "回退数量必须为正整数" + RESET));
+                output.println(output.color(DIM + HarnessI18n.get(input.getLocale(), HarnessI18nKeys.COMMAND_REWIND_INVALID) + RESET));
                 return;
             }
         }
 
-        ctx.getSession().removeLatestMessage(count);
-        ctx.println(ctx.color(DIM + "已回退 " + count + " 条记录" + RESET));
+        input.getSession().removeLatestMessage(count);
+        output.println(output.color(DIM + HarnessI18n.fmt(input.getLocale(), HarnessI18nKeys.COMMAND_REWIND_DONE, "count", count) + RESET));
     }
 }

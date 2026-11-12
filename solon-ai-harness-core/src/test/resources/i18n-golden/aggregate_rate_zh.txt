@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: 子任务未完成（失败或被中断）: boom
+</multitask_results>
+<multitask_advice>
+检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，可在模型配置中调低 `concurrency`（未配置时调低引擎的 `subagentDefaultConcurrency`）。
+</multitask_advice>

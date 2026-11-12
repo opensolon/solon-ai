@@ -1,9 +1,11 @@
 package org.noear.solon.ai.harness.command;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.lang.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -33,18 +36,18 @@ class CommandRegistryAndLoaderTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "desc-" + name;
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[]{"/" + name};
             }
 
             @Override
             public void execute(org.noear.solon.ai.harness.HarnessEngine engine,
-                                CommandContext ctx, InputOrigin origin) {
+                                CommandInput input, CommandOutput output) {
             }
         };
     }
@@ -56,7 +59,7 @@ class CommandRegistryAndLoaderTest {
         registry.register(cmd("a"));
 
         assertEquals(1, registry.all().size());
-        assertEquals("desc-a", registry.find("a").description());
+        assertEquals("desc-a", registry.find("a").description(null));
     }
 
     @Test
@@ -99,7 +102,7 @@ class CommandRegistryAndLoaderTest {
 
         Command commit = registry.find("commit");
         assertTrue(commit instanceof MarkdownCommand);
-        assertEquals("Create a git commit", commit.description());
+        assertEquals("Create a git commit", commit.description(null));
         // 空参数列表：$ARGUMENTS 替换为空串（args.isEmpty() 分支）
         assertEquals("帮我把改动提交：", ((MarkdownCommand) commit).getResolvedPrompt(new ArrayList<>()));
 
@@ -124,48 +127,24 @@ class CommandRegistryAndLoaderTest {
     @Test
     void markdownCommandDefaultsDescriptionAndEmptyExamples() {
         MarkdownCommand command = new MarkdownCommand("x", "tpl", null, null);
-        assertEquals("Custom command: x", command.description());
-        assertEquals(0, command.examples().length);
+        assertEquals("Custom command: x", command.description(null));
+        assertEquals(0, command.examples(null).length);
     }
 
     @Test
     void markdownCommandExecuteDeclaresTaskIntent() throws Exception {
         MarkdownCommand command = new MarkdownCommand("x", "模板 $ARGUMENTS", null, "m1");
-        StubCtx ctx = new StubCtx(java.util.Arrays.asList("参数"));
-        command.execute(null, ctx, InputOrigin.NONE);
+        StubCtx ctx = new StubCtx();
+        CommandInput input = CommandInput.of(HarnessInput.of(null, "/x 参数"), ParsedCommand.parse("/x 参数"), null);
+        command.execute(null, input, ctx);
 
         assertNotNull(ctx.intent);
         assertEquals("模板 参数", ctx.intent.getPrompt());
         assertEquals("m1", ctx.intent.getModel());
     }
 
-    static class StubCtx implements CommandContext {
-        final List<String> args;
-        org.noear.solon.ai.harness.command.AgentTaskIntent intent;
-
-        StubCtx(List<String> args) {
-            this.args = args;
-        }
-
-        @Override
-        public org.noear.solon.ai.agent.AgentSession getSession() {
-            return null;
-        }
-
-        @Override
-        public String getRawInput() {
-            return null;
-        }
-
-        @Override
-        public String getCommandName() {
-            return "x";
-        }
-
-        @Override
-        public List<String> getArgs() {
-            return args;
-        }
+    static class StubCtx implements CommandOutput {
+        AgentTaskIntent intent;
 
         @Override
         public void println(String text) {
@@ -173,7 +152,7 @@ class CommandRegistryAndLoaderTest {
 
         @Override
         public void requestAgentTask(String prompt, String model) {
-            this.intent = new org.noear.solon.ai.harness.command.AgentTaskIntent(prompt, model);
+            this.intent = new AgentTaskIntent(prompt, model);
         }
     }
 }

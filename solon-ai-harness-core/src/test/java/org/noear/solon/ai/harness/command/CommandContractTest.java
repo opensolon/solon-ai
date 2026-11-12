@@ -3,12 +3,15 @@ package org.noear.solon.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
+import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.lang.Nullable;
 
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,19 +35,18 @@ class CommandContractTest {
         }
 
         @Override
-        public String description() {
+        public String description(@Nullable Locale locale) {
             return "最小实现";
         }
 
         @Override
-        public String[] examples() {
+        public String[] examples(@Nullable Locale locale) {
             return new String[]{"/minimal"};
         }
 
         @Override
-        public void execute(org.noear.solon.ai.harness.HarnessEngine engine, CommandContext ctx,
-                            org.noear.solon.ai.harness.input.InputOrigin origin) {
-            ctx.println("ok");
+        public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+            output.println("ok");
         }
     }
 
@@ -59,7 +61,7 @@ class CommandContractTest {
 
     @Test
     void examplesIsPartOfContract() {
-        assertEquals(1, new MinimalCommand().examples().length);
+        assertEquals(1, new MinimalCommand().examples(null).length);
     }
 
     @Test
@@ -119,16 +121,15 @@ class CommandContractTest {
         assertTrue(intent.toString().contains("model=gpt-4"));
     }
 
-    // ========== BufferedCommandContext ==========
+    // ========== CommandInput + BufferedCommandOutput ==========
 
-    private static CommandContext ctx(String rawInput, String name, String... args) {
-        return new BufferedCommandContext(
-                InMemoryAgentSession.of("s1"), rawInput, name, Arrays.asList(args), false);
+    private static CommandInput in(AgentSession session, String rawInput, boolean terminal) {
+        return CommandInput.of(HarnessInput.of(session, rawInput).terminal(terminal), ParsedCommand.parse(rawInput), null);
     }
 
     @Test
-    void bufferedContextExposesRawInputAndName() {
-        CommandContext c = ctx("/queue hello", "queue", "hello");
+    void inputExposesRawInputAndName() {
+        CommandInput c = in(InMemoryAgentSession.of("s1"), "/queue hello", false);
         assertEquals("/queue hello", c.getRawInput());
         assertEquals("queue", c.getCommandName());
         assertEquals(Collections.singletonList("hello"), c.getArgs());
@@ -136,34 +137,33 @@ class CommandContractTest {
     }
 
     @Test
-    void bufferedContextCollectsOutput() {
-        CommandContext c = ctx("/help", "help");
+    void bufferedOutputCollectsOutput() {
+        CommandOutput c = new BufferedCommandOutput();
         c.println("第一行");
         c.println("第二行");
 
-        String out = c.getCommandOutput();
+        String out = c.getText();
         assertTrue(out.contains("第一行"));
         assertTrue(out.contains("第二行"));
     }
 
     @Test
-    void bufferedContextBindsSession() {
+    void inputBindsSession() {
         AgentSession session = InMemoryAgentSession.of("s1");
-        CommandContext c = new BufferedCommandContext(session, "/x", "x",
-                Collections.<String>emptyList(), true);
+        CommandInput c = in(session, "/x", true);
 
         assertEquals(session, c.getSession());
         assertTrue(c.isTerminal());
     }
 
     @Test
-    void bufferedContextArgAccess() {
-        CommandContext c = ctx("/steer a b", "steer", "a", "b");
+    void inputArgAccess() {
+        CommandInput c = in(InMemoryAgentSession.of("s1"), "/steer a b", false);
         assertEquals("a", c.argAt(0));
         assertEquals("b", c.argAt(1));
         assertNull(c.argAt(9));
-        // 接口默认实现只判上界：负索引会落到 List.get 抛 AIOOBE（现状锁定）
-        assertThrows(IndexOutOfBoundsException.class, () -> c.argAt(-1));
+        // 负索引与上界越界同一口径：返回 null
+        assertNull(c.argAt(-1));
     }
 
     // ========== ParsedCommand 与意图组合 ==========

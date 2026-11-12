@@ -16,9 +16,11 @@
 package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.agent.react.intercept.HITL;
@@ -31,10 +33,7 @@ import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
-import org.noear.solon.ai.harness.agent.*;
-import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
 import org.noear.solon.ai.harness.command.CommandDispatcher;
-import org.noear.solon.ai.harness.command.CommandContextFactory;
 import org.noear.solon.ai.harness.command.ParsedCommand;
 import org.noear.solon.ai.harness.input.AgentMentions;
 import org.noear.solon.ai.harness.input.HarnessInput;
@@ -46,10 +45,8 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.mount.*;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
-import org.noear.solon.ai.mount.catalog.*;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Nullable;
 import java.util.*;
@@ -240,7 +237,7 @@ final class InputPipeline {
 
         // ========== 3. 命令识别与执行（有附件或声明非命令语境时不当作命令，与既有口径一致）==========
         if (input.isCommandAware() && !attachments.hasAny()) {
-            InputOutcome commandOutcome = dispatchCommand(session, input, scope);
+            InputOutcome commandOutcome = dispatchCommand(input, scope);
             if (commandOutcome != null) {
                 return commandOutcome;
             }
@@ -253,7 +250,7 @@ final class InputPipeline {
 
         AgentMentions.Mention mention = input.parseMention(engine);
         String agentName = mention.getAgentName();
-        text = attachments.withFilePrefix(mention.getText());
+        text = attachments.withFilePrefix(mention.getText(), engine.localeOf(input));
 
         if (Assert.isEmpty(text) && !attachments.hasMedia()) {
             return InputOutcome.ignored();
@@ -261,9 +258,11 @@ final class InputPipeline {
 
         if (Assert.isEmpty(text)) {
             if (attachments.isAllImages()) {
-                text = attachments.getMediaBlocks().size() > 1 ? "请描述这些图片" : "请描述这张图片";
+                text = attachments.getMediaBlocks().size() > 1
+                        ? HarnessI18n.get(engine.localeOf(input), HarnessI18nKeys.INPUT_DESCRIBE_IMAGES)
+                        : HarnessI18n.get(engine.localeOf(input), HarnessI18nKeys.INPUT_DESCRIBE_IMAGE);
             } else {
-                text = "请分析这些媒体文件";
+                text = HarnessI18n.get(engine.localeOf(input), HarnessI18nKeys.INPUT_ANALYZE_MEDIA);
             }
         }
 
@@ -288,7 +287,8 @@ final class InputPipeline {
             agentName = input.getSelectedAgent();
         }
 
-        ReActRequest request = engine.promptDo(prompt, engine.getAgentOrMain(session, agentName));
+        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName);
+        ReActRequest request = engine.promptDo(prompt, targetAgent);
 
         if (session != null) {
             // 会话级子代理的清单与委派解析都由 TaskTalent 按会话完成，这里不再转递
@@ -296,19 +296,19 @@ final class InputPipeline {
         }
 
         // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示。
-        // 语言环境随提示词一起带上：纯文本提示词不带语言信息，不指定时协议指令一律按中文注入，
-        // 英文提示词会与中文“工作范式 / 工具规则”混排。
+        // 语言由 locale 决定（模板不自带语言），所以提示词与协议指令不会中英混排。
         final String inputSystemPrompt = input.getSystemPrompt();
-        final Locale inputLocale = input.getLocale();
+        // 本轮语言（见 runLocaleOf）。写进本轮 options 后随轨迹下传：
+        // 协议指令、才能指令与工具描述、工具参数 __locale、HITL 理由、子代理。
+        final Locale runLocale = runLocaleOf(session, prompt, input, targetAgent);
 
-        if (Assert.isNotEmpty(inputSystemPrompt)) {
-            // 带上 locale：纯文本提示词不带语言信息，不指定时协议指令按中文注入（英文提示词会错配）
-            request.options(o -> o.systemPrompt(inputSystemPromptOf(inputSystemPrompt, inputLocale)));
+        if (runLocale != null) {
+            request.options(o -> o.locale(runLocale));
         }
 
-        if (inputLocale != null) {
-            // 单独指定的语言环境：未替换提示词时，按指定语言注入协议指令（locale 不允许 null）
-            request.options(o -> o.locale(inputLocale));
+        if (Assert.isNotEmpty(inputSystemPrompt)) {
+            // 只换文本：语言仍由下面的 locale 决定（模板不自带语言）
+            request.options(o -> o.systemPrompt(trace -> inputSystemPrompt));
         }
 
         if (Assert.isNotEmpty(input.getSelectedSkills())) {
@@ -348,37 +348,30 @@ final class InputPipeline {
     }
 
     /**
-     * 把宿主输入的纯文本提示词 + 语言环境变成 {@link AgentSystemPrompt}（包内可见：便于直接校验语言环境口径）。
-     */
-    static AgentSystemPrompt<ReActTrace> inputSystemPromptOf(String prompt, @Nullable Locale locale) {
-        return new InputAgentSystemPrompt(prompt, locale);
-    }
-
-    /**
-     * 宿主输入携带的系统提示词（整体替换目标智能体的模板，并自带语言环境）。
+     * 本轮要显式设置的语言（null 表示不设，由智能体决定）
      *
-     * <p>为什么不直接用 lambda：{@link AgentSystemPrompt#getLocale()} 的默认值是中文，
-     * 用 lambda 时宿主传的英文提示词也会配上中文协议指令。</p>
+     * <p>语言属于一轮：</p>
+     * <ul>
+     *     <li>新任务：输入指定的优先，没有时用引擎实例的语言（{@link HarnessEngine#localeOf(HarnessInput)}）；</li>
+     *     <li>续流（HITL 审批后继续、resume、/continue）：不是新的一轮。输入指定了语言就用输入的；
+     *     没指定就不设，由智能体沿用被中断那一轮的语言（会话重新加载后也一样）。
+     *     那一轮没留下语言（升级前保存的旧会话或从未跑过）时，才用引擎语言。</li>
+     * </ul>
+     *
+     * <p>读的是这次续流实际要接着跑的那个代理的轨迹。</p>
      */
-    private static final class InputAgentSystemPrompt implements AgentSystemPrompt<ReActTrace> {
-        private final String prompt;
-        private final Locale locale;
-
-        InputAgentSystemPrompt(String prompt, @Nullable Locale locale) {
-            this.prompt = prompt;
-            this.locale = locale;
+    private @Nullable Locale runLocaleOf(@Nullable AgentSession session, @Nullable Prompt prompt,
+                                         HarnessInput input, ReActAgent targetAgent) {
+        if (session != null && input.getLocale() == null && Prompt.isEmpty(prompt)) {
+            ReActTrace trace = targetAgent.getTrace(session);
+            if (trace != null && trace.getRunLocale() != null) {
+                return null;
+            }
         }
 
-        @Override
-        public Locale getLocale() {
-            return locale == null ? AgentSystemPrompt.super.getLocale() : locale;
-        }
-
-        @Override
-        public String getSystemPrompt(ReActTrace trace) {
-            return prompt;
-        }
+        return engine.localeOf(input);
     }
+
 
     /**
      * 作用域预检（受理之前、锁外）：确定本轮作用域并写回输入；不通过时返回拒绝结局（不占位、不入积压）。
@@ -575,7 +568,7 @@ final class InputPipeline {
      * 供 {@link #handle} 与宿主的「是不是命令」快速判断共用：后者在普通输入上不应触发
      * 附件落盘、提及解析与请求装配 —— 那些结果会被宿主丢弃，白跑一遍。
      */
-    private @Nullable InputOutcome dispatchCommand(AgentSession session, HarnessInput input, @Nullable InputScope scope) {
+    private @Nullable InputOutcome dispatchCommand(HarnessInput input, @Nullable InputScope scope) {
         if (input.getText() == null || input.hasAttachments()) {
             return null;
         }
@@ -589,13 +582,12 @@ final class InputPipeline {
         if (scope != null && scope.allowsCommand(command.getName()) == false
                 && options.commandRegistry.get(command.getName()) != null) {
             return InputOutcome.unavailable(command.getName(),
-                    "命令不可用：" + options.getCommandPrefix() + command.getName(), command);
+                    HarnessI18n.fmt(engine.localeOf(input), HarnessI18nKeys.COMMAND_SCOPE_DENIED,
+                            "command", options.getCommandPrefix() + command.getName()), command);
         }
 
-        CommandContextFactory factory = input.getCommandContextFactory();
-        CommandContextFactory realFactory = factory != null ? factory : new BufferedCommandContextFactory();
         try {
-            return CommandDispatcher.dispatch(engine, session, command, realFactory, input.getOrigin(), input.isTerminal(), input);
+            return CommandDispatcher.dispatch(engine, input, command);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

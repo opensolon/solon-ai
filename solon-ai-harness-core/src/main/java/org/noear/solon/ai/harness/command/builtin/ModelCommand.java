@@ -1,16 +1,19 @@
 package org.noear.solon.ai.harness.command.builtin;
 
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * /model 命令（多子命令）
@@ -31,12 +34,12 @@ public class ModelCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "模型管理 (ls, help, <name>)";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_MODEL_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/model",
                 "/model help",
@@ -45,30 +48,30 @@ public class ModelCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        String flag = ctx.argAt(0);
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        String flag = input.argAt(0);
 
         if ("ls".equals(flag) || flag == null || flag.isEmpty()) {
-            String currentModel = engine.getSessionModel(ctx.getSession());
+            String currentModel = engine.getSessionModel(input.getSession());
             currentModel = engine.getModelOrDef(currentModel).getNameOrModel();
 
             for (String line : formatModels(engine.getModels(), currentModel)) {
-                ctx.println(ctx.color(line));
+                output.println(output.color(line));
             }
-            ctx.println(ctx.color(DIM + "\nUsage: /model <name>" + RESET));
+            output.println(output.color(DIM + "\nUsage: /model <name>" + RESET));
         } else if ("help".equals(flag)) {
-            ctx.println(ctx.color(BOLD + "/model" + RESET + " - Model management"));
-            ctx.println(ctx.color(DIM + "  /model" + RESET + "          List all available models"));
-            ctx.println(ctx.color(DIM + "  /model ls" + RESET + "       List all available models"));
-            ctx.println(ctx.color(DIM + "  /model <name>" + RESET + "   Switch to the specified model"));
+            output.println(output.color(BOLD + "/model" + RESET + " - Model management"));
+            output.println(output.color(DIM + "  /model" + RESET + "          List all available models"));
+            output.println(output.color(DIM + "  /model ls" + RESET + "       List all available models"));
+            output.println(output.color(DIM + "  /model <name>" + RESET + "   Switch to the specified model"));
         } else {
             if (engine.getModelOrNil(flag) == null) {
-                ctx.println(ctx.color(RED + "Model not found: " + RESET + BOLD + flag + RESET));
-                ctx.println(ctx.color(DIM + "Use '/model' to see available models." + RESET));
+                output.println(output.color(RED + "Model not found: " + RESET + BOLD + flag + RESET));
+                output.println(output.color(DIM + "Use '/model' to see available models." + RESET));
             } else {
-                engine.setSessionModel(ctx.getSession(), flag);
-                ctx.getSession().updateSnapshot();
-                ctx.println(ctx.color(GREEN + "Model switched to: " + RESET + BOLD + flag + RESET));
+                engine.setSessionModel(input.getSession(), flag);
+                input.getSession().updateSnapshot();
+                output.println(output.color(GREEN + "Model switched to: " + RESET + BOLD + flag + RESET));
             }
         }
     }

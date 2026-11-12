@@ -25,7 +25,7 @@ import java.util.Map;
  * 一次输入在渠道侧的来源身份：渠道、发送者、关联消息与返回地址。
  *
  * <p>这是「这条输入从哪来、怎么回给它」的唯一载体，取代了分散在
- * {@code HarnessInput}、{@code CommandContext}、{@code QueueItem}、{@code SteerMessage}
+ * {@code HarnessInput}、命令执行参数、{@code QueueItem}、{@code SteerMessage}
  * 以及 {@code session.replyRoute} 裸 Map 中的同一组字段。</p>
  *
  * <p><b>字段语义是渠道方言，不是统一 ID</b>（勿假定四字段同时非空）：</p>

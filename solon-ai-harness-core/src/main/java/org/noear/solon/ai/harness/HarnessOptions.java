@@ -158,6 +158,12 @@ class HarnessOptions implements NonSerializable {
      */
     private volatile String agentPrefix = "@";
 
+    // ========== 语言 ==========
+    /**
+     * 引擎实例的默认语言（为空时用全局默认语言）。输入未指定语言时用它，见 {@code HarnessEngine#localeOf}。
+     */
+    private volatile Locale locale;
+
     // ========== 集合类配置 ==========
     protected final MountManager mountManager;
     protected final CommandRegistry commandRegistry;
@@ -696,6 +702,16 @@ class HarnessOptions implements NonSerializable {
             throw new IllegalArgumentException("agentPrefix cannot be empty");
         }
         this.agentPrefix = agentPrefix;
+    }
+
+    // ========== 语言 ==========
+
+    Locale getLocale() {
+        return locale;
+    }
+
+    void setLocale(Locale locale) {
+        this.locale = locale;
     }
 
     List<HarnessExtension> getExtensions() {

@@ -1,0 +1,4 @@
+<multitask_results>
+<task_result><index>1</index><description>d1</description><agent_name>no-such-agent</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: 未知的子代理类型 'no-such-agent'。]]></result_content></task_result>
+<task_result><index>2</index><description></description><agent_name></agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: 第 2 个任务定义为空（null），已跳过。]]></result_content></task_result>
+</multitask_results>

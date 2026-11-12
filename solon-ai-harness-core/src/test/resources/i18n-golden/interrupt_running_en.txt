@@ -1,0 +1,1 @@
+The task was cancelled by the user (or interrupted)

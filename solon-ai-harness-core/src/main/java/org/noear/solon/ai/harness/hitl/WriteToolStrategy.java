@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
@@ -23,8 +25,11 @@ import org.noear.solon.ai.harness.permission.PermissionEngine;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -44,6 +49,8 @@ public class WriteToolStrategy implements HITLStrategy {
     private final PermissionEngine permissionEngine = new PermissionEngine();
     private final String toolName;
     private final List<PermissionRule> internalRules = new ArrayList<>();
+    /** 内置拒绝规则的提示文案（按请求语言渲染，所以不写进规则的 prompt） */
+    private final Map<PermissionRule, Function<Locale, String>> reasons = new IdentityHashMap<>();
     private boolean internalRulesEnabled = true;
     private Supplier<PermissionContext> permissionContextSupplier = () -> PermissionContext.create();
     private PermissionBehavior defaultDecision = PermissionBehavior.ALLOW;
@@ -55,21 +62,26 @@ public class WriteToolStrategy implements HITLStrategy {
         this.toolName = toolName;
 
         // 规则1：路径回溯防御
-        internalRules.add(PermissionRule.of(toolName, PermissionBehavior.DENY,
+        addRule(PermissionRule.of(toolName, PermissionBehavior.DENY,
                 (tn, args) -> {
                     String filePath = (String) args.get("file_path");
                     return filePath != null && (filePath.contains("../") || filePath.contains("..\\"));
                 },
-                "检测到路径回溯操作，禁止访问工作区外目录。", INTERNAL_PRIORITY));
+                null, INTERNAL_PRIORITY), l -> HarnessI18n.get(l, HarnessI18nKeys.HITL_PATH_TRAVERSAL));
 
         // 规则2：敏感系统文件
-        internalRules.add(PermissionRule.of(toolName, PermissionBehavior.DENY,
+        addRule(PermissionRule.of(toolName, PermissionBehavior.DENY,
                 (tn, args) -> {
                     String filePath = (String) args.get("file_path");
                     return filePath != null && (filePath.contains("/etc/") || filePath.contains("/var/") || filePath.contains("/root/")
                             || filePath.contains("~/.ssh/") || filePath.contains("~/.bashrc") || filePath.contains("~/.zshrc"));
                 },
-                "禁止访问系统敏感配置文件。", INTERNAL_PRIORITY));
+                null, INTERNAL_PRIORITY), l -> HarnessI18n.get(l, HarnessI18nKeys.HITL_SENSITIVE_FILE));
+    }
+
+    private void addRule(PermissionRule rule, Function<Locale, String> reason) {
+        internalRules.add(rule);
+        reasons.put(rule, reason);
     }
 
     /**
@@ -121,12 +133,13 @@ public class WriteToolStrategy implements HITLStrategy {
     @Override
     public String evaluate(ReActTrace trace, Map<String, Object> args) {
         PermissionContext ctx = resolveContext(trace);
+        Locale locale = HarnessI18n.localeOf(trace);
 
         // 阶段1：内置规则优先匹配（仅在启用时生效）
         if (internalRulesEnabled) {
             for (PermissionRule rule : internalRules) {
                 if (rule.hasMatcher() && rule.matcher().get().test(toolName, args)) {
-                    return toResult(rule);
+                    return toResult(rule, locale);
                 }
             }
         }
@@ -135,20 +148,23 @@ public class WriteToolStrategy implements HITLStrategy {
         PermissionContext merged = ctx.addRules(internalRules);
         PermissionBehavior decision = permissionEngine.evaluate(toolName, args, merged, this.defaultDecision);
 
-        return toDefaultResult(decision);
+        return toDefaultResult(decision, locale);
     }
 
     /**
      * 将内置规则的匹配结果转换为策略返回值
      */
-    private String toResult(PermissionRule rule) {
+    private String toResult(PermissionRule rule, Locale locale) {
         switch (rule.behavior()) {
             case ALLOW:
                 return null;
             case DENY:
-                return rule.prompt() != null ? rule.prompt() : "文件写入操作被权限策略拒绝。";
+                if (reasons.containsKey(rule)) {
+                    return reasons.get(rule).apply(locale);
+                }
+                return rule.prompt() != null ? rule.prompt() : HarnessI18n.get(locale, HarnessI18nKeys.HITL_WRITE_DENY);
             case ASK:
-                return "文件写入操作，需要人工介入确认。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WRITE_ASK);
             default:
                 return null;
         }
@@ -157,14 +173,14 @@ public class WriteToolStrategy implements HITLStrategy {
     /**
      * 将引擎决策结果转换为策略返回值（使用通用提示）
      */
-    private String toDefaultResult(PermissionBehavior decision) {
+    private String toDefaultResult(PermissionBehavior decision, Locale locale) {
         switch (decision) {
             case ALLOW:
                 return null;
             case DENY:
-                return "文件写入操作被权限策略拒绝。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WRITE_DENY);
             case ASK:
-                return "文件写入操作，需要人工介入确认。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WRITE_ASK);
             default:
                 return null;
         }

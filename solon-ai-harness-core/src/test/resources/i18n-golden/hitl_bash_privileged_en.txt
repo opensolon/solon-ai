@@ -1,0 +1,1 @@
+Privileged system command detected [sudo ls].

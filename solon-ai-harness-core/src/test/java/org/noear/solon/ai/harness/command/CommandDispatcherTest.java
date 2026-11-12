@@ -19,11 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputAttachments;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
-
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -43,58 +40,53 @@ class CommandDispatcherTest {
     @Test
     void commandUnavailableHintIsUnifiedForAllHosts() {
         //三端共用同一句提示，避免各写一份导致口径漂移
-        assertTrue(CommandDispatcher.COMMAND_UNAVAILABLE_HINT.contains("仅支持 CLI"));
-        assertTrue(CommandDispatcher.COMMAND_UNAVAILABLE_HINT.contains("/help"));
+        assertTrue(CommandDispatcher.unavailableHint("exit", null).startsWith("/exit 仅支持 CLI"));
+        assertTrue(CommandDispatcher.unavailableHint("exit", null).contains("/help"));
     }
 
     @Test
-    void bufferedContextCollectsOutput() {
-        AgentSession session = InMemoryAgentSession.of();
-        BufferedCommandContext ctx = new BufferedCommandContext(session, "/x", "x",
-                Collections.<String>emptyList());
+    void bufferedOutputCollectsOutput() {
+        BufferedCommandOutput out = new BufferedCommandOutput();
 
-        assertNull(ctx.getCommandOutput(), "无输出时返回 null，由调用方决定默认文案");
+        assertNull(out.getText(), "无输出时返回 null，由调用方决定默认文案");
 
-        ctx.println("line-1");
-        assertEquals("line-1\n", ctx.getCommandOutput());
-        assertFalse(ctx.isTerminal(), "缓冲上下文默认不具备终端能力（不接受终端交互）");
-        assertFalse(ctx.supportsAnsi());
-        assertNull(ctx.getAgentTaskIntent(), "未声明意图时为空");
+        out.println("line-1");
+        assertEquals("line-1\n", out.getText());
+        assertFalse(out.supportsAnsi());
+        assertNull(out.getAgentTaskIntent(), "未声明意图时为空");
     }
 
     @Test
-    void bufferedContextHonorsTerminalFlag() {
-        //终端能力由分发器从 HarnessInput.isTerminal() 传入，上下文须如实自述
-        BufferedCommandContext ctx = new BufferedCommandContext(InMemoryAgentSession.of(),
-                "/exit", "exit", Collections.<String>emptyList(), true);
+    void commandInputHonorsTerminalFlag() {
+        //终端能力随输入走：命令读 CommandInput.isTerminal()，与分发器的拦截判据同源
+        CommandInput cli = CommandInput.of(HarnessInput.of(InMemoryAgentSession.of(), "/exit").terminal(true),
+                ParsedCommand.parse("/exit"), null);
+        CommandInput web = CommandInput.of(HarnessInput.of(InMemoryAgentSession.of(), "/exit"),
+                ParsedCommand.parse("/exit"), null);
 
-        assertTrue(ctx.isTerminal(), "CLI 经缓冲工厂构造时同样要如实自述终端能力");
+        assertTrue(cli.isTerminal(), "CLI 输入须如实自述终端能力");
+        assertFalse(web.isTerminal(), "缓冲式渠道默认不具备终端能力");
     }
 
     @Test
-    void bufferedContextRecordsAgentTaskIntent() {
-        AgentSession session = InMemoryAgentSession.of();
+    void bufferedOutputRecordsAgentTaskIntent() {
+        BufferedCommandOutput out = new BufferedCommandOutput();
 
-        BufferedCommandContext ctx = new BufferedCommandContext(session, "/custom", "custom",
-                Collections.<String>emptyList());
+        out.requestAgentTask("go on", "m1");
 
-        ctx.requestAgentTask("go on", "m1");
-
-        assertNotNull(ctx.getAgentTaskIntent(), "命令声明任务后必须可被分发器读到");
-        assertEquals("go on", ctx.getAgentTaskIntent().getPrompt());
-        assertEquals("m1", ctx.getAgentTaskIntent().getModel());
+        assertNotNull(out.getAgentTaskIntent(), "命令声明任务后必须可被分发器读到");
+        assertEquals("go on", out.getAgentTaskIntent().getPrompt());
+        assertEquals("m1", out.getAgentTaskIntent().getModel());
     }
 
     @Test
-    void bufferedContextResumeIntentHasEmptyPrompt() {
-        AgentSession session = InMemoryAgentSession.of();
-        BufferedCommandContext ctx = new BufferedCommandContext(session, "/continue", "continue",
-                Collections.<String>emptyList());
+    void bufferedOutputResumeIntentHasEmptyPrompt() {
+        BufferedCommandOutput out = new BufferedCommandOutput();
 
-        ctx.requestAgentTask(null, null);
+        out.requestAgentTask(null, null);
 
         // 续流意图用空正文表达：分发器据此走续流装配，而不是被空输入判空拦成 IGNORED
-        assertTrue(ctx.getAgentTaskIntent().isResume());
+        assertTrue(out.getAgentTaskIntent().isResume());
     }
 
        @Test

@@ -16,8 +16,10 @@
 package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.util.CmdUtil;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -77,6 +79,22 @@ public final class ParsedCommand {
 
     public String getArgsJoined() {
         return String.join(" ", args);
+    }
+
+    /**
+     * 直接构造（不经解析：参数已按词切好的场景，如单测与宿主自行调用命令）
+     *
+     * @param name     命令名（转小写）
+     * @param args     参数（null 视为空；复制为不可变列表）
+     * @param rawInput 原始输入（可为 null）
+     * @since 4.2
+     */
+    @Internal
+    public static ParsedCommand of(String name, @Nullable List<String> args, @Nullable String rawInput) {
+        List<String> list = (args == null || args.isEmpty())
+                ? Collections.<String>emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(args));
+        return new ParsedCommand(name == null ? "" : name.toLowerCase(), list, rawInput);
     }
 
     /**

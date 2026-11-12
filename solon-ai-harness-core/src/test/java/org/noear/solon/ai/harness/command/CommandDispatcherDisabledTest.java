@@ -1,15 +1,15 @@
 package org.noear.solon.ai.harness.command;
 
 import org.junit.jupiter.api.Test;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.lang.Nullable;
 
 import java.nio.file.Path;
-import java.util.Collections;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,9 +23,11 @@ class CommandDispatcherDisabledTest {
     @TempDir
     Path workspace;
 
-    private static final CommandContextFactory BUFFERED = (engine, session, command, terminal) ->
-            new BufferedCommandContext(session, command.getRawInput(), command.getName(),
-                    Collections.<String>emptyList(), terminal);
+    private static final CommandOutputFactory BUFFERED = in -> new BufferedCommandOutput();
+
+    private static HarnessInput input(String raw) {
+        return HarnessInput.of(InMemoryAgentSession.of(), raw).terminal(true).commandOutputFactory(BUFFERED);
+    }
 
     private HarnessEngine newEngine() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
@@ -40,18 +42,18 @@ class CommandDispatcherDisabledTest {
         }
 
         @Override
-        public String description() {
+        public String description(@Nullable Locale locale) {
             return "测试命令";
         }
 
         @Override
-        public String[] examples() {
+        public String[] examples(@Nullable Locale locale) {
             return new String[]{"/probe"};
         }
 
         @Override
-        public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-            ctx.println("executed");
+        public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+            output.println("executed");
         }
     }
 
@@ -62,8 +64,7 @@ class CommandDispatcherDisabledTest {
         engine.getCommandRegistry().register(command);
         command.setEnabled(false);
 
-        InputOutcome outcome = CommandDispatcher.dispatch(engine, InMemoryAgentSession.of(),
-                ParsedCommand.parse("/probe"), BUFFERED, null, true);
+        InputOutcome outcome = CommandDispatcher.dispatch(engine, input("/probe"), ParsedCommand.parse("/probe"));
 
         assertNotNull(outcome, "停用的命令仍是命令，不能返回 null（否则原文会进入模型）");
         assertEquals(InputOutcome.Kind.REPLY, outcome.getKind());
@@ -75,8 +76,7 @@ class CommandDispatcherDisabledTest {
     void unregisteredCommandStillFallsThroughAsPlainInput() throws Exception {
         HarnessEngine engine = newEngine();
 
-        InputOutcome outcome = CommandDispatcher.dispatch(engine, InMemoryAgentSession.of(),
-                ParsedCommand.parse("/nope"), BUFFERED, null, true);
+        InputOutcome outcome = CommandDispatcher.dispatch(engine, input("/nope"), ParsedCommand.parse("/nope"));
 
         assertNull(outcome, "未注册仍按普通输入处理");
     }
@@ -86,8 +86,7 @@ class CommandDispatcherDisabledTest {
         HarnessEngine engine = newEngine();
         engine.getCommandRegistry().register(new ProbeCommand());
 
-        InputOutcome outcome = CommandDispatcher.dispatch(engine, InMemoryAgentSession.of(),
-                ParsedCommand.parse("/probe"), BUFFERED, null, true);
+        InputOutcome outcome = CommandDispatcher.dispatch(engine, input("/probe"), ParsedCommand.parse("/probe"));
 
         assertNotNull(outcome);
         assertEquals("executed\n", outcome.getCommandOutput());

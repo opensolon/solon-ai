@@ -1,0 +1,6 @@
+[OK] Subagent created (this session only)!
+
+**Name**: a1
+**Description**: d1
+
+You can now call it with `task(name="a1", prompt="...")`.

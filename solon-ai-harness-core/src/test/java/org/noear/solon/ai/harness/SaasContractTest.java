@@ -5,7 +5,6 @@ import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -13,7 +12,8 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.agent.SessionAgents;
 import org.noear.solon.ai.harness.agent.GenerateTalent;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.RejectReason;
@@ -23,6 +23,7 @@ import org.noear.solon.ai.talents.cli.CommandResult;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.NotOwnerException;
 import org.noear.solon.ai.harness.session.SessionOwnership;
+import org.noear.solon.lang.Nullable;
 import reactor.core.Disposable;
 
 import java.nio.file.Files;
@@ -286,17 +287,17 @@ class SaasContractTest {
                     }
 
                     @Override
-                    public String description() {
+                    public String description(@Nullable Locale locale) {
                         return "d";
                     }
 
                     @Override
-                    public String[] examples() {
+                    public String[] examples(@Nullable Locale locale) {
                         return new String[0];
                     }
 
                     @Override
-                    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+                    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
                         runs.incrementAndGet();
                     }
                 })
@@ -317,7 +318,7 @@ class SaasContractTest {
         session("s1");
         session("s2");
 
-        String r = gen.generate("helper", "d", "you are helper", null, null, false, null, "s1");
+        String r = gen.generate("helper", "d", "you are helper", null, null, false, null, "s1",null);
         assertTrue(r.startsWith("[OK]"), r);
         assertNotNull(engine.resolveAgent(sessions.get("s1"), "helper"), "本会话可见");
         assertNull(engine.resolveAgent(sessions.get("s2"), "helper"), "其它会话不可见");
@@ -325,19 +326,19 @@ class SaasContractTest {
         assertTrue(SessionAgents.names(sessions.get("s1")).contains("helper"));
 
         // 保留名
-        assertTrue(gen.generate("explore", "d", "x", null, null, true, null, "s1").startsWith("ERROR"));
-        assertTrue(gen.generate("general", "d", "x", null, null, false, null, "s1").startsWith("ERROR"));
+        assertTrue(gen.generate("explore", "d", "x", null, null, true, null, "s1",null).startsWith("ERROR"));
+        assertTrue(gen.generate("general", "d", "x", null, null, false, null, "s1",null).startsWith("ERROR"));
         assertEquals("explore", engine.getAgentManager().getAgent("explore").getName());
 
         // 全局（STANDALONE 缺省允许持久化）
-        String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1");
+        String g = gen.generate("reviewer", "d", "x", null, null, true, null, "s1",null);
         assertTrue(g.startsWith("[OK]"), g);
         assertNotNull(engine.resolveAgent(sessions.get("s2"), "reviewer"), "全局对所有会话可见");
         assertTrue(engine.getWorkspaceSource().exists(engine.getHarnessAgents() + "reviewer.md"), "全局子代理已持久化");
 
         // 同名不覆盖（全局与会话级都拒绝）
-        assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2").startsWith("ERROR"));
-        assertTrue(gen.generate("reviewer", "d", "y", null, null, false, null, "s2").startsWith("ERROR"));
+        assertTrue(gen.generate("reviewer", "d", "y", null, null, true, null, "s2",null).startsWith("ERROR"));
+        assertTrue(gen.generate("reviewer", "d", "y", null, null, false, null, "s2",null).startsWith("ERROR"));
     }
 
     @Test
@@ -345,16 +346,16 @@ class SaasContractTest {
         HarnessEngine engine = builder().runtimeMutable(false).build();
         session("s1");
         GenerateTalent gen = new GenerateTalent(engine);
-        String r = gen.generate("x1", "d", "p", null, null, true, null, "s1");
+        String r = gen.generate("x1", "d", "p", null, null, true, null, "s1",null);
         assertTrue(r.startsWith("ERROR") && r.contains("saveToFile=false"), r);
-        assertTrue(gen.generate("x1", "d", "p", null, null, false, null, "s1").startsWith("[OK]"));
+        assertTrue(gen.generate("x1", "d", "p", null, null, false, null, "s1",null).startsWith("[OK]"));
 
         HarnessEngine admin = builder().runtimeMutable(false)
                 .agentPersistPolicy((s, d) -> "admin".equals(SessionSelections.principalOf(s)))
                 .build();
         AgentSession s2 = session("s-admin");
         admin.setSessionPrincipal(s2, "admin");
-        assertTrue(new GenerateTalent(admin).generate("x2", "d", "p", null, null, true, null, "s-admin").startsWith("[OK]"));
+        assertTrue(new GenerateTalent(admin).generate("x2", "d", "p", null, null, true, null, "s-admin",null).startsWith("[OK]"));
     }
 
     /**
@@ -367,7 +368,7 @@ class SaasContractTest {
         session("s1");
         session("s2");
 
-        String r = new GenerateTalent(engine).generate("helper", "helper-desc", "you are helper", null, null, false, null, "s1");
+        String r = new GenerateTalent(engine).generate("helper", "helper-desc", "you are helper", null, null, false, null, "s1",null);
         assertTrue(r.startsWith("[OK]"), r);
 
         String own = engine.getTaskTalent().getInstruction(promptOf("s1"));
@@ -412,17 +413,17 @@ class SaasContractTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[0];
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
             }
         }));
         assertThrows(IllegalStateException.class, () -> engine.getAgentManager().addAgent(AgentDefinition.builder().name("z").build()));

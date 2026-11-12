@@ -18,11 +18,13 @@ package features.ai.harness.command;
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.command.builtin.HelpCommand;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.lang.Nullable;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -44,12 +46,12 @@ class HelpCommandTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return description;
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return examples;
             }
 
@@ -59,7 +61,7 @@ class HelpCommandTest {
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
             }
         };
     }

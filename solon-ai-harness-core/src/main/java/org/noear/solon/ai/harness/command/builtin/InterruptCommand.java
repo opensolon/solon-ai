@@ -15,12 +15,17 @@
  */
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.InterruptMode;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
 
 /**
  * /interrupt 命令 - 中断当前正在执行的任务。
@@ -42,12 +47,12 @@ public class InterruptCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "中断当前正在执行的任务";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_INTERRUPT_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/interrupt"
         };
@@ -59,8 +64,8 @@ public class InterruptCommand extends AbsCommand {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        AgentSession session = ctx.getSession();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        AgentSession session = input.getSession();
 
         if (session == null || engine == null) {
             return;
@@ -68,9 +73,9 @@ public class InterruptCommand extends AbsCommand {
 
         // 必须经引擎：插件的中断参与（先清积压再停流）只在引擎入口回调，不存在绕开引擎的第二套中断。
         if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).getValue())) {
-            ctx.println("用户已取消任务（或中断）");
+            output.println(HarnessI18n.get(input.getLocale(), HarnessI18nKeys.COMMAND_INTERRUPT_DONE));
         } else {
-            ctx.println("当前没有正在执行的任务");
+            output.println(HarnessI18n.get(input.getLocale(), HarnessI18nKeys.COMMAND_INTERRUPT_IDLE));
         }
     }
 }

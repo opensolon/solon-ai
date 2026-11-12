@@ -24,7 +24,7 @@ class RerunCommandTest {
     @Test
     void sessionNullIsSilentNoOp() throws Exception {
         Fakes.StubContext ctx = new Fakes.StubContext(null, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertTrue(ctx.out.isEmpty());
         assertNull(ctx.intent);
     }
@@ -33,7 +33,7 @@ class RerunCommandTest {
     void emptySessionDeclaresNothing() throws Exception {
         AgentSession session = Fakes.newSession();
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertNull(ctx.intent);
         assertTrue(session.getMessages().isEmpty());
     }
@@ -46,7 +46,7 @@ class RerunCommandTest {
         session.addMessage(ChatMessage.ofAssistant("草稿二"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         // 意图正文 = 被移除的最后一条 User 消息内容
         assertEquals("帮我写个函数", ctx.intent.getPrompt());
@@ -63,7 +63,7 @@ class RerunCommandTest {
         session.addMessage(ChatMessage.ofUser("第二问"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals("第二问", ctx.intent.getPrompt());
         // 只移除最后一条 User，前两轮保留
@@ -78,7 +78,7 @@ class RerunCommandTest {
         session.addMessage(ChatMessage.ofAssistant("孤儿回答二"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertNull(ctx.intent);
         assertTrue(session.getMessages().isEmpty());

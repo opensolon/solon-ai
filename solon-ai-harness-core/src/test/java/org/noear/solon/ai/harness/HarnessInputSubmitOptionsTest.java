@@ -6,7 +6,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
+import org.noear.solon.ai.harness.command.BufferedCommandOutputFactory;
 import org.noear.solon.ai.harness.input.BusyPolicy;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOrigin;
@@ -160,7 +160,7 @@ class HarnessInputSubmitOptionsTest {
                 .selectedSkill("k")
                 .selectedMcp("p")
                 .scope(InputScope.builder("alice").build())
-                .commandContextFactory(new BufferedCommandContextFactory())
+                .commandOutputFactory(new BufferedCommandOutputFactory())
                 .origin(InputOrigin.channel("im"))
                 .hitl(HITLAction.APPROVE, "c1")
                 .hitlOutput("o")

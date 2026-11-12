@@ -10,14 +10,15 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.agent.session.SessionRuns;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.command.builtin.InterruptCommand;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.spi.InputBacklog;
+import org.noear.solon.lang.Nullable;
 import reactor.core.Disposable;
 import reactor.core.scheduler.Schedulers;
 
@@ -25,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -273,17 +275,17 @@ class HandleAdmissionContractTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "plain";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[0];
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
                 executed.incrementAndGet();
             }
         });
@@ -329,18 +331,18 @@ class HandleAdmissionContractTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "again";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[0];
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-                ctx.requestAgentTask("再跑一轮", null);
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+                output.requestAgentTask("再跑一轮", null);
             }
         });
         AgentSession session = InMemoryAgentSession.of();
@@ -401,12 +403,12 @@ class HandleAdmissionContractTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "tty";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[0];
             }
 
@@ -421,7 +423,7 @@ class HandleAdmissionContractTest {
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
             }
         });
         AgentSession session = InMemoryAgentSession.of();

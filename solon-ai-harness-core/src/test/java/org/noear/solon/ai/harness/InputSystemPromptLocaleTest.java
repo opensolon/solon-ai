@@ -17,8 +17,6 @@ package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.input.HarnessInput;
 
@@ -28,10 +26,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * 宿主输入的 systemPrompt / locale：复制不丢、语言环境口径正确
+ * 宿主输入的 systemPrompt / locale：复制不丢、置空可清
  *
  * <p>这两项都是「本轮」语义，但会被复制（宿主骨架 {@code copyFor}）与重放（命令触发的嵌套输入、
  * 积压续发）。复制路径漏拷会变成静默失效——不报错，只是提示词和语言环境悄悄回到默认。</p>
+ *
+ * <p>语言只经 {@code InputPipeline} 的 {@code options.locale(...)} 生效：4.2 起
+ * {@code AgentSystemPrompt} 不再自带语言，纯文本提示词也不会与协议指令错配。</p>
  */
 class InputSystemPromptLocaleTest {
     @Test
@@ -66,28 +67,5 @@ class InputSystemPromptLocaleTest {
 
         assertNull(input.getSystemPrompt());
         assertNull(input.getLocale());
-    }
-
-    @Test
-    void inputSystemPromptCarriesLocale() {
-        AgentSystemPrompt<ReActTrace> prompt = InputPipelineAccess.systemPromptOf("You are a shell assistant.", Locale.ENGLISH);
-
-        assertEquals(Locale.ENGLISH, prompt.getLocale(), "英文提示词必须带上英文语言环境，否则协议指令按中文注入");
-        assertEquals("You are a shell assistant.", prompt.getSystemPrompt(null));
-    }
-
-    @Test
-    void inputSystemPromptFallsBackToFrameworkDefault() {
-        AgentSystemPrompt<ReActTrace> prompt = InputPipelineAccess.systemPromptOf("随便一段提示词", null);
-
-        assertEquals(Locale.CHINESE, prompt.getLocale(), "未指定 locale 时沿用框架默认（中文）");
-        assertEquals("随便一段提示词", prompt.getSystemPrompt(null));
-    }
-
-    /** 包内改私：{@code InputPipeline#inputSystemPromptOf} 是包内可见的 */
-    private static class InputPipelineAccess {
-        static AgentSystemPrompt<ReActTrace> systemPromptOf(String prompt, Locale locale) {
-            return InputPipeline.inputSystemPromptOf(prompt, locale);
-        }
     }
 }

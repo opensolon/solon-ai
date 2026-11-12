@@ -16,6 +16,8 @@
 package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
@@ -131,12 +133,13 @@ public class WebToolStrategy implements HITLStrategy {
     @Override
     public String evaluate(ReActTrace trace, Map<String, Object> args) {
         PermissionContext ctx = resolveContext(trace);
+        Locale locale = HarnessI18n.localeOf(trace);
 
         // 阶段1：内置规则优先匹配（仅在启用时生效）
         if (internalRulesEnabled) {
             for (PermissionRule rule : internalRules) {
                 if (rule.hasMatcher() && rule.matcher().get().test(toolName, args)) {
-                    return toResult(rule, args);
+                    return toResult(rule, args, locale);
                 }
             }
         }
@@ -145,13 +148,13 @@ public class WebToolStrategy implements HITLStrategy {
         PermissionContext merged = ctx.addRules(internalRules);
         PermissionBehavior decision = permissionEngine.evaluate(toolName, args, merged, this.defaultDecision);
 
-        return toDefaultResult(decision);
+        return toDefaultResult(decision, locale);
     }
 
     /**
      * 将内置规则的匹配结果转换为策略返回值
      */
-    private String toResult(PermissionRule rule, Map<String, Object> args) {
+    private String toResult(PermissionRule rule, Map<String, Object> args, Locale locale) {
         switch (rule.behavior()) {
             case ALLOW:
                 return null;
@@ -161,10 +164,10 @@ public class WebToolStrategy implements HITLStrategy {
                 }
                 // 无 prompt 时生成动态消息（包含域名信息）
                 String url = extractUrl(args);
-                String hostname = (url != null) ? extractHostname(url) : "未知";
-                return "检测到高风险域名 [" + hostname + "]，拒绝访问。";
+                String hostname = (url != null) ? extractHostname(url) : HarnessI18n.get(locale, HarnessI18nKeys.HITL_WEB_UNKNOWN_HOST);
+                return HarnessI18n.fmt(locale, HarnessI18nKeys.HITL_WEB_RISKY, "host", hostname);
             case ASK:
-                return "网络访问操作，需要人工介入确认。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WEB_ASK);
             default:
                 return null;
         }
@@ -173,14 +176,14 @@ public class WebToolStrategy implements HITLStrategy {
     /**
      * 将引擎决策结果转换为策略返回值（使用通用提示）
      */
-    private String toDefaultResult(PermissionBehavior decision) {
+    private String toDefaultResult(PermissionBehavior decision, Locale locale) {
         switch (decision) {
             case ALLOW:
                 return null;
             case DENY:
-                return "网络访问操作被权限策略拒绝。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WEB_DENY);
             case ASK:
-                return "网络访问操作，需要人工介入确认。";
+                return HarnessI18n.get(locale, HarnessI18nKeys.HITL_WEB_ASK);
             default:
                 return null;
         }

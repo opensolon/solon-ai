@@ -22,6 +22,7 @@
 | [docs/ENGINE-L1.md](docs/ENGINE-L1.md) | 自己编排（L1）：`handle` / `InputOutcome` 详解、两段式宿主端到端示例、HITL 续流与受理控制、会话插件接线与停 / 改 / 重排 |
 | [docs/SAAS.md](docs/SAAS.md) | 服务端（多租户）的引擎侧约定：隔离模型、`DeployMode.SERVER`、作用域、会话归属、存储、容量、上线清单与已知限制 |
 | [docs/hitl.md](docs/hitl.md) | HITL 人工介入：权限规则、干预策略、决策 API |
+| [docs/I18n.md](docs/I18n.md) | 国际化：引擎与输入的语言、后台轮次与续流用什么语言、资源包、内置子代理多语言、测试 |
 | 插件 README | [goal](../solon-ai-harness-goal/README.md) · [queue](../solon-ai-harness-queue/README.md) · [steer](../solon-ai-harness-steer/README.md) · [loop](../solon-ai-harness-loop/README.md)（每份都有 L0 / L1 下使用态与管理态的示例） |
 
 ### 怎么读这份文档
@@ -139,6 +140,7 @@ builder 的可选配置一览（`of(workspace, harnessHome)` 与 `sessionProvide
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
 | 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（[ENGINE-L1](docs/ENGINE-L1.md) §2.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
+| 语言 | `locale(Locale)` | `null`（全局默认语言，中文） | 引擎实例的默认语言：输入没带语言时用它，goal / loop 后台轮次总是用它（[docs/I18n.md](docs/I18n.md)） |
 | 服务端 | `deployMode(DeployMode)` | `STANDALONE` | 部署模式（本机单用户 / 多租户服务端）；`SERVER` 的缺省见本表「SERVER 为」各项，构建期校验见 §1.2 上方说明，完整对照见 [SAAS.md](docs/SAAS.md) §2.1 |
 | 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
 | 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |
@@ -343,12 +345,12 @@ public class StatusCommand implements Command {
     }
 
     @Override
-    public String description() {
+    public String description(@Nullable Locale locale) {
         return "显示当前会话状态";
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{"/status"};
     }
 
@@ -363,36 +365,42 @@ public class StatusCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        ctx.println("session = " + ctx.getSession().getSessionId());
-        ctx.println("args    = " + ctx.getArgsJoined());
-        ctx.println("color   = " + ctx.color("\033[32mOK\033[0m"));
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+        output.println("session = " + input.getSession().getSessionId());
+        output.println("args    = " + input.getArgsJoined());
+        output.println("color   = " + output.color("\033[32mOK\033[0m"));
     }
 }
 
 engine.getCommandRegistry().register(new StatusCommand());
 ```
 
-`CommandContext` 是端适配层：CLI 实现可实时写终端并读键盘（`/model` 选择器、`/help` 分页），Web 实现可以是内存缓冲。
+命令拿到两个对象，读写分开：
 
-**命令内部要触发 Agent 任务**时调 `ctx.requestAgentTask(prompt, model)`（只声明意图，不自己开流）：
+| 对象 | 职责 | 内容 |
+|---|---|---|
+| `CommandInput` | 只读输入（`HarnessInput` 的只读包装） | 会话、命令名与参数、来源 `getOrigin()`、终端能力 `isTerminal()`、**生效语言** `getLocale()`（输入优先、引擎兜底）、本轮属性（提示词、模型/子代理选择、技能/MCP 视野、作用域、宿主域属性） |
+| `CommandOutput` | 输出（端适配层） | `println` / `color` 回执、`requestAgentTask` 任务意图；CLI 实现实时写终端，Web/IM 默认是内存缓冲 |
+
+> `HarnessInput` 本身仍可写（`onInput` 要改它），但命令拿不到可写对象；命令要派生新输入时用 `input.derive(text)`，返回全新的 `HarnessInput`。
+>
+> 命令默认**需要会话**（`requiresSession()` 为 true）：无会话的输入（`HarnessInput.of(null, "/xxx")`）由分发器统一回执「需要会话」，命令里 `input.getSession()` 因此不为 null。不碰会话的命令（如 `/help`、Markdown 命令）覆写为 false。
+
+**命令内部要触发 Agent 任务**时调 `output.requestAgentTask(prompt, model)`（只声明意图，不自己开流）：
 
 ```java
 @Override
-public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-    // 第二个参数为模型名；传 null 则走会话级回退
-    ctx.requestAgentTask("请审查本次 diff 里的并发问题", "deepseek");
+public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+    // 第二个参数为模型名；传 null 则沿用本轮的模型选择（再回退会话级）
+    output.requestAgentTask("请审查本次 diff 里的并发问题", "deepseek");
 }
 ```
 
-> **`execute` 只有三参一形**：`origin` 是本次输入在渠道侧的身份（无来源时为 `InputOrigin.NONE`）。
-> 不需要来源的命令照样写三参、忽略它即可；`/queue`、`/steer` 靠它把来源带到投递链路。
-
-分发器会把这个意图交回引擎的同一个入口 `engine.handle(...)` 完成二段装配（`commandAware(false)` 不再识别命令、`resume(...)` 让空正文成为续流，因此不用另开方法），
+分发器会把这个意图交回引擎的同一个入口 `engine.handle(...)` 完成二段装配。二段输入由 `HarnessInput#derive` 派生：本轮属性（提示词、语言、视野、**显式作用域**、来源、宿主域属性）一并带上，`commandAware(false)` 不再识别命令，`resume(...)` 让空正文成为续流，
 `InputOutcome.getKind()` 因此返回 `TASK`、`isCommand()` 为 true，`getRequest()` 直接可用——
 宿主按 `kind` 分路由即可，不要自己再拼 Prompt 或开流。
 
-意图只有两个字段：`prompt`（<b>为空表示续流</b>，如 `/continue`）、`model`（为空走会话级回退）。
+意图只有两个字段：`prompt`（<b>为空表示续流</b>，如 `/continue`）、`model`（为空沿用本轮选择，再回退会话级）。
 「是否续流」由 `prompt` 为空派生（`AgentTaskIntent.isResume()`），不是独立字段——
 引擎侧以 `HarnessInput.resume(true)` 接住，所以宿主不用为续流命令单写分支。
 
@@ -421,10 +429,10 @@ $ARGUMENTS
 
 子目录即命名空间：`commands/deploy/staging.md` → `/deploy:staging`。
 
-### 3.4 自定义命令上下文（宿主接管回执）
+### 3.4 自定义命令输出（宿主接管回执）
 
-`commandContextFactory(...)` **是可选项**：不设时引擎自动用 `new BufferedCommandContextFactory()`，
-回执写内存、从 `getCommandOutput()` 一次取回——[ENGINE-L1](docs/ENGINE-L1.md) §2.1 的最小骨架就是靠这个默认值跑通 `/help` 的。
+`commandOutputFactory(...)` **是可选项**：不设时分发器自动用 `BufferedCommandOutputFactory.INSTANCE`，
+回执写内存、从 `InputOutcome.getCommandOutput()` 一次取回——[ENGINE-L1](docs/ENGINE-L1.md) §2.1 的最小骨架就是靠这个默认值跑通 `/help` 的。
 **命令内部声明的 Agent 任务同样会真实执行**——`CommandDispatcher` 在 `dispatch` 尾部直接调
 `engine.handle(...)` 完成二段装配，与是否有自定义工厂无关。
 
@@ -433,13 +441,13 @@ $ARGUMENTS
 ```java
 InputOutcome outcome = engine.handle(
         HarnessInput.of(session, "/help")
-                .commandContextFactory((engine0, session0, command, terminal) ->
-                        new MyTerminalCommandContext(session0, command, terminal)));
+                .commandOutputFactory(in -> new MyTerminalCommandOutput(terminal)));
 ```
 
+工厂只收一个参数 `CommandInput`（想按渠道区分输出时读它），输出对象只管写，不持有会话、参数或语言。
+
 终端能力是**输入属性**，不是工厂属性。`HarnessInput.terminal(true)` 决定两件事：
-`terminalOnly()` 的命令是否放行，以及 `CommandContext.isTerminal()` 的返回值。
-两者同源——工厂只负责构造上下文，不再持有渠道能力。
+`terminalOnly()` 的命令是否放行，以及 `CommandInput.isTerminal()` 的返回值。两者同源。
 
 > 默认 `terminal=false`。CLI 宿主必须把 `.terminal(true)` 显式打开，否则 `/help` 会裁掉 `terminalOnly` 命令，
 > `/exit` 也会被统一拦截。桌面端虽在本地运行，同样保持默认：它没有命令行终端。
@@ -1049,7 +1057,7 @@ org.noear.solon.ai.harness
 ├── InputPipeline / SessionControl / AdmissionGate / AdmissionDecision / AdmittedRequest / HarnessInterrupts   受理、装配与停流实现（包内，不是 API）
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、AgentMentions
-├── command/                      命令框架：Command / CommandContext / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
+├── command/                      命令框架：Command / CommandInput / CommandOutput / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
 ├── agent/                        子代理（一个包覆盖定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName（定义）、AgentManager / SessionAgents / GenerateTalent（注册与创建）、AgentFactory（构建）、TaskTalent / TaskWrapEvent（委派与子事件；TaskTalent 按会话一并列出会话级子代理）；SubTaskScheduler 包内
 ├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
@@ -1081,7 +1089,7 @@ org.noear.solon.ai.harness
 
 ## 十一、常见坑
 
-1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先注册：构建期 `Builder.commandAdd(...)` / `commandLoad(source, dir)`（SERVER 模式只能这样，build 末尾注册表封口），或运行期 `getCommandRegistry().register(...)`（仅 `runtimeMutable` 时）；注册后**不需要**配 `commandContextFactory`，默认 `BufferedCommandContextFactory` 已经能把回执交给 `getCommandOutput()`。
+1. **裸引擎没有命令**——`/help` 会返回 `TASK`。测试命令必须先注册：构建期 `Builder.commandAdd(...)` / `commandLoad(source, dir)`（SERVER 模式只能这样，build 末尾注册表封口），或运行期 `getCommandRegistry().register(...)`（仅 `runtimeMutable` 时）；注册后**不需要**配 `commandOutputFactory`，默认 `BufferedCommandOutputFactory` 已经能把回执交给 `getCommandOutput()`。
 2. **HITL 续流必须显式，但一次调用就够**——`Kind.HITL` 不携带请求。三端统一写 `.hitl(action, callId).resume(true)`，引擎自检「决策命中 + 本批齐备 + 显式要求」三项，全成立返回 `TASK`，否则返回 `HITL`（并携带 `isHitlApplied()` / `getPendingHitlCount()` 供宿主判断）。续流时**不要**传正文。
 3. **HITL 续流要用 `outcome.getAgentName()`**——它是「本轮生效代理」（显式入参 → `engine.getSessionAgent` 兜底）。换回主代理会取不到挂起的 `tool_calls`，续跑空转。
 4. **`@` 提及必须带空白边界**——`@bash 内容` 有效，`@bash内容` 走普通文本。

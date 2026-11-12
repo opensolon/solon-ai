@@ -33,7 +33,7 @@ class RewindCommandTest {
     void defaultRewindsOne() throws Exception {
         AgentSession session = sessionWith(3);
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(2, session.getMessages().size());
         assertTrue(ctx.output().contains("已回退 1 条记录"));
@@ -44,7 +44,7 @@ class RewindCommandTest {
     void explicitCountRewindsN() throws Exception {
         AgentSession session = sessionWith(5);
         Fakes.StubContext ctx = new Fakes.StubContext(session, Arrays.asList("3"));
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(2, session.getMessages().size());
         assertTrue(ctx.output().contains("已回退 3 条记录"));
@@ -54,13 +54,13 @@ class RewindCommandTest {
     void zeroOrNegativeIsRejectedWithoutRemoving() throws Exception {
         AgentSession session = sessionWith(2);
         Fakes.StubContext ctx = new Fakes.StubContext(session, Arrays.asList("0"));
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(2, session.getMessages().size());
         assertTrue(ctx.output().contains("回退数量必须为正整数"));
 
         Fakes.StubContext ctx2 = new Fakes.StubContext(session, Arrays.asList("-2"));
-        command.execute(null, ctx2, InputOrigin.NONE);
+        command.execute(null, ctx2.in(InputOrigin.NONE), ctx2);
         assertEquals(2, session.getMessages().size());
     }
 
@@ -69,7 +69,7 @@ class RewindCommandTest {
         // 隐式行为锁定：isInteger("abc")=false → count 保持 1，无任何提示
         AgentSession session = sessionWith(3);
         Fakes.StubContext ctx = new Fakes.StubContext(session, Arrays.asList("abc"));
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(2, session.getMessages().size());
         assertTrue(ctx.output().contains("已回退 1 条记录"));
@@ -79,7 +79,7 @@ class RewindCommandTest {
     void nullArgsSameAsDefault() throws Exception {
         AgentSession session = sessionWith(2);
         Fakes.StubContext ctx = new Fakes.StubContext(session, Collections.singletonList(""));
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(1, session.getMessages().size());
     }

@@ -1,0 +1,4 @@
+/rewind - Rewind the conversation history (<n>, default 1)
+Usage:
+  /rewind
+  /rewind <n>

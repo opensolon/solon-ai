@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: 子任务未完成（失败或被中断）: boom
+</multitask_results>
+<multitask_advice>
+模型服务响应超时。后续请适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`，必要时改用 task 串行执行。
+</multitask_advice>

@@ -9,13 +9,17 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatConfigReadonly;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.input.InputOutcome;
 import org.noear.solon.ai.harness.util.TraceUtil;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 import demo.ai.harness.LlmUtil;
+import org.noear.solon.lang.Nullable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -254,12 +258,12 @@ class BuiltinCommandsSystemTest {
         }
 
         @Override
-        public String description() {
+        public String description(@Nullable Locale locale) {
             return "仅终端";
         }
 
         @Override
-        public String[] examples() {
+        public String[] examples(@Nullable Locale locale) {
             return new String[]{"/term-only"};
         }
 
@@ -269,9 +273,8 @@ class BuiltinCommandsSystemTest {
         }
 
         @Override
-        public void execute(HarnessEngine engine, org.noear.solon.ai.harness.command.CommandContext ctx,
-                            org.noear.solon.ai.harness.input.InputOrigin origin) {
-            ctx.println("should not run");
+        public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+            output.println("should not run");
         }
     }
 }

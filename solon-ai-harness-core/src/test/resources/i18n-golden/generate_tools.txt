@@ -1,0 +1,7 @@
+name: generate
+--- description ---
+动态构建一个具备特定专家知识和工具权限的子代理。用于将复杂大任务拆解给垂直领域的‘虚拟专家’执行。
+- 只有当‘当前可用代理列表’中无匹配项时，才允许调用此工具。
+- 创建前应查阅相关知识库和技能，以确保 systemPrompt 的专业性。
+--- inputSchema ---
+{"type":"object","properties":{"description":{"type":"string","description":"对该代理职能的精炼描述，便于主代理后续识别和调用"},"name":{"type":"string","description":"子代理的唯一英文标识符（如 code_reviewer）"},"saveToFile":{"type":"boolean","description":"是否持久化。true：写入工作区代理目录，所有会话可用（通用、可复用的专家角色）；false：仅当前会话可用（临时任务助手）。","default":false},"skills":{"type":"array","items":{"type":"string"},"description":"子代理具备的特定专家能力标识列表"},"systemPrompt":{"type":"string","description":"核心指令集。需包含角色身份、技能范畴、输出格式规范及负面约束（避免废话）"},"tools":{"type":"array","items":{"type":"string"},"description":"赋予子代理的工具权限（严禁全选，仅勾选任务相关项）。从给定列表中选择：\n- `read`，读取文件完整内容\n- `write`，写入文件完整内容\n- `edit`，修改文件内容（包括：read,write,edit）\n- `glob`，使用模式匹配\n- `grep`，基于正则表达式的全文检索\n- `list`，列出目录内容\n- `bash`，运行 Shell 命令\n- `skill`，调用预定义的技能模块\n- `mcp`，MCP 网关工具集\n- `code`，编码指导模块\n- `todo`，任务清单管理\n- `webfetch`，直接抓取特定网页内容\n- `websearch`，互联网通用搜索\n- `codesearch`，互联网代码仓库搜索\n- `*`，全量授权"}},"required":["name","description","systemPrompt"]}

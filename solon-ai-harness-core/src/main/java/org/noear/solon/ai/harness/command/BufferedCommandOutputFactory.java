@@ -15,31 +15,27 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
-import org.noear.solon.ai.harness.HarnessEngine;
 
 /**
- * 默认命令上下文工厂（缓冲式）
+ * 默认命令输出工厂（缓冲式）
  * <p>
  * 用于宿主未提供工厂的场景：回执写入内存缓冲，由 {@link InputOutcome#getCommandOutput()} 一次取回。
  * 命令内部声明的 Agent 意图由分发器交给引擎装配，因此未提供工厂的宿主（IM 等）同样能触发任务。
  *
- * <p>本工厂不持有任何渠道元数据：来源身份由分发器经
- * {@link org.noear.solon.ai.harness.command.Command#execute(HarnessEngine, CommandContext, InputOrigin)}
- * 直接交给命令，终端能力则由分发器按
- * {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 传入，
- * 避免「同一条信息既从 input 嗅探、又从工厂注入」的双通路。</p>
+ * <p>工厂无状态：渠道、语言、会话等信息一律由命令从 {@link CommandInput} 读取，输出侧不持有任何输入元数据。</p>
  *
  * @author noear
  * @since 4.2
  */
-public class BufferedCommandContextFactory implements CommandContextFactory {
+public class BufferedCommandOutputFactory implements CommandOutputFactory {
+    /**
+     * 共享实例（无状态）
+     */
+    public static final BufferedCommandOutputFactory INSTANCE = new BufferedCommandOutputFactory();
+
     @Override
-    public CommandContext create(HarnessEngine engine, AgentSession session, ParsedCommand command, boolean terminal) {
-        return new BufferedCommandContext(session,
-                command.getRawInput(), command.getName(), command.getArgs(), terminal);
+    public CommandOutput create(CommandInput input) {
+        return new BufferedCommandOutput();
     }
 }

@@ -36,7 +36,7 @@ public class ContinueCommandTest {
     void sessionNullIsSilentNoOp() throws Exception {
         // session 为 null：静默返回，不抛异常、无回执
         Fakes.StubContext ctx = new Fakes.StubContext(null, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertTrue(ctx.out.isEmpty());
         assertNull(ctx.intent);
     }
@@ -45,7 +45,7 @@ public class ContinueCommandTest {
     void noTracePrintsHintAndDeclaresNothing() throws Exception {
         AgentSession session = Fakes.newSession();
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(1, ctx.out.size());
         assertTrue(ctx.out.get(0).contains("没有可继续的任务"));
@@ -58,7 +58,7 @@ public class ContinueCommandTest {
         AgentSession session = Fakes.newSession();
         session.getContext().put(TraceUtil.TRACE_KEY_MAIN, new ReActTrace());
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertTrue(ctx.output().contains("没有可继续的任务"));
         assertNull(ctx.intent);
@@ -82,7 +82,7 @@ public class ContinueCommandTest {
         session.addMessage(ChatMessage.ofAssistant("最终回答"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         // 声明了续流意图（prompt 为空 = 续流）
         assertNotNull(ctx.intent);
@@ -116,7 +116,7 @@ public class ContinueCommandTest {
         session.addMessage(ChatMessage.ofAssistant("中途回答"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertNotNull(ctx.intent);
         assertTrue(ctx.intent.isResume());

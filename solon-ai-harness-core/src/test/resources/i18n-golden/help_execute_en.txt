@@ -1,0 +1,4 @@
+Available commands:
+
+Send /help <command> to see its usage.
+Plain text is not treated as a command.

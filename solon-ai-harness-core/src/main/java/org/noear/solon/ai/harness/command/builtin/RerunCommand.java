@@ -15,17 +15,19 @@
  */
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * /rerun 命令
@@ -40,20 +42,20 @@ public class RerunCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "重新运行最后一个任务";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_RERUN_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/rerun"
         };
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        AgentSession session = ctx.getSession();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        AgentSession session = input.getSession();
 
         if (session == null) {
             return;
@@ -74,7 +76,7 @@ public class RerunCommand extends AbsCommand {
 
         if (lastUserInput != null) {
             //声明意图（带目标会话，修正 /rerun <id> 的手术与开流会话错位）
-            ctx.requestAgentTask(lastUserInput, null);
+            output.requestAgentTask(lastUserInput, null);
         }
     }
 }

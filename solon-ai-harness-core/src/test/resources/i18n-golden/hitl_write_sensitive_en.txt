@@ -1,0 +1,1 @@
+Access to sensitive system configuration files is not allowed.

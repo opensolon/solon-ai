@@ -1,0 +1,1 @@
+ERROR: Subagents are not allowed to delegate further subtasks (one level at most). Complete the current task directly, or put what you need into the prompt and do it yourself.

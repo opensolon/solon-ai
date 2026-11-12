@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: Subtask not completed (failed or interrupted): boom
+</multitask_results>
+<multitask_advice>
+Rate limiting was detected from the model service, possibly from a relay gateway or the upstream model service. Prefer running tasks serially with task from now on; if multitask is required, lower `concurrency` in the model configuration (or the engine's `subagentDefaultConcurrency` when it is not configured).
+</multitask_advice>

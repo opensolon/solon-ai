@@ -15,10 +15,11 @@
  */
 package org.noear.solon.ai.harness;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.agent.*;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandRegistry;
 import org.noear.solon.ai.harness.command.ParsedCommand;
@@ -30,10 +31,6 @@ import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.session.SessionStatus;
-import org.noear.solon.ai.mount.*;
-import org.noear.solon.ai.harness.agent.ToolName;
-import org.noear.solon.ai.talents.cli.*;
-import org.noear.solon.ai.mount.catalog.*;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -242,7 +239,9 @@ final class SessionControl {
                     HitlCard next = HitlCard.next(session);
                     String toolName = next == null ? null : next.getToolName();
                     return AdmissionDecision.outcome(InputOutcome.rejected(RejectReason.HITL_PENDING,
-                            toolName == null ? "请先处理待审批操作" : "请先处理待审批操作：" + toolName));
+                            toolName == null
+                                    ? HarnessI18n.get(engine.localeOf(input), HarnessI18nKeys.INPUT_HITL_PENDING)
+                                    : HarnessI18n.fmt(engine.localeOf(input), HarnessI18nKeys.INPUT_HITL_PENDING_TOOL, "tool", toolName)));
                 }
             }
 
@@ -275,7 +274,8 @@ final class SessionControl {
 
     /** 忙态结局：能排队就交积压（DEFERRED），否则拒绝（REJECTED）。调用方持有会话锁。 */
     private InputOutcome deferOrReject(AgentSession session, HarnessInput input) {
-        final String busyText = "当前任务正在执行，请稍后再试";
+        final Locale locale = engine.localeOf(input);
+        final String busyText = HarnessI18n.get(locale, HarnessI18nKeys.INPUT_BUSY);
 
         // 程序轮次、续流不可排队：程序轮次有自己的重试节奏；续流没有正文可存。
         // 调用方选了 REJECT：与「是否忙」同在会话锁内判定，不会被别的输入抢先开流后错进积压
@@ -290,7 +290,7 @@ final class SessionControl {
 
         if (input.hasAttachments()) {
             return InputOutcome.rejected(RejectReason.ATTACHMENTS_NOT_DEFERRABLE,
-                    "当前任务正在执行，带附件的消息不能排队，请稍后再发");
+                    HarnessI18n.get(locale, HarnessI18nKeys.INPUT_BUSY_ATTACHMENTS));
         }
 
         if (Assert.isEmpty(input.getText())) {
@@ -301,7 +301,7 @@ final class SessionControl {
         // 不能悄悄丢掉模型 / 属性后按更宽的权限执行
         if (input.isScopeExplicit() && input.getScope().isDeferrable() == false) {
             return InputOutcome.rejected(RejectReason.SCOPE_NOT_DEFERRABLE,
-                    "当前任务正在执行，该消息带有不可保存的权限范围，请稍后再发");
+                    HarnessI18n.get(locale, HarnessI18nKeys.INPUT_BUSY_SCOPE));
         }
 
         int position;
@@ -313,7 +313,7 @@ final class SessionControl {
         }
 
         if (position < 0) {
-            return InputOutcome.rejected(RejectReason.BACKLOG_UNAVAILABLE, "当前任务正在执行，且排队已满或不可用");
+            return InputOutcome.rejected(RejectReason.BACKLOG_UNAVAILABLE, HarnessI18n.get(locale, HarnessI18nKeys.INPUT_BUSY_BACKLOG));
         }
 
         return InputOutcome.deferred(position);

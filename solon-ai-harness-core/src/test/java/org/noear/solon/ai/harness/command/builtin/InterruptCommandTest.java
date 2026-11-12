@@ -55,7 +55,7 @@ class InterruptCommandTest {
     @Test
     void sessionNullIsSilentNoOp() throws Exception {
         Fakes.StubContext ctx = new Fakes.StubContext(null, new ArrayList<>());
-        command.execute(engine(), ctx, InputOrigin.NONE);
+        command.execute(engine(), ctx.in(InputOrigin.NONE), ctx);
         assertTrue(ctx.out.isEmpty());
     }
 
@@ -73,7 +73,7 @@ class InterruptCommandTest {
             }
         }));
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertTrue(ctx.out.isEmpty());
         assertTrue(session.getMessages().isEmpty(), "无引擎不得绕过引擎私自中断");
     }
@@ -82,7 +82,7 @@ class InterruptCommandTest {
     void noRunningTaskPrintsHint() throws Exception {
         AgentSession session = Fakes.newSession();
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(engine(), ctx, InputOrigin.NONE);
+        command.execute(engine(), ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(1, ctx.out.size());
         assertTrue(ctx.out.get(0).contains("当前没有正在执行的任务"));
@@ -108,7 +108,7 @@ class InterruptCommandTest {
 
         HarnessEngine engine = engine();
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(engine, ctx, InputOrigin.NONE);
+        command.execute(engine, ctx.in(InputOrigin.NONE), ctx);
 
         assertEquals(1, disposed.get());
         assertTrue(ctx.output().contains("用户已取消任务（或中断）"));
@@ -122,7 +122,7 @@ class InterruptCommandTest {
 
         // 句柄已被取消：重复执行进入「无任务」分支（只回执，不追加消息、不重复 dispose）
         Fakes.StubContext ctx2 = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(engine, ctx2, InputOrigin.NONE);
+        command.execute(engine, ctx2.in(InputOrigin.NONE), ctx2);
         assertEquals(1, disposed.get());
         assertEquals(1, session.getMessages().size());
         assertTrue(ctx2.output().contains("当前没有正在执行的任务"));
@@ -149,7 +149,7 @@ class InterruptCommandTest {
         }));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(engine(), ctx, InputOrigin.NONE);
+        command.execute(engine(), ctx.in(InputOrigin.NONE), ctx);
 
         assertNotNull(trace.getRunId());
         AssistantMessage last = (AssistantMessage) session.getMessages().get(session.getMessages().size() - 1);

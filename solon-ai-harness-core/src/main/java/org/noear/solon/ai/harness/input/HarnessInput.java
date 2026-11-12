@@ -16,8 +16,8 @@
 package org.noear.solon.ai.harness.input;
 
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.harness.command.BufferedCommandContextFactory;
-import org.noear.solon.ai.harness.command.CommandContextFactory;
+import org.noear.solon.ai.harness.command.BufferedCommandOutputFactory;
+import org.noear.solon.ai.harness.command.CommandOutputFactory;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.chat.content.MediaBlock;
 import org.noear.solon.ai.harness.HarnessEngine;
@@ -60,7 +60,7 @@ import java.util.function.Predicate;
  *       {@link #selectedSkill}、{@link #selectedMcp}、{@link #media}、{@link #reference}、{@link #attachments}、
  *       {@link #attr}、{@link #hitl}、{@link #hitlOutput}、{@link #resume}、{@link #systemPrompt}、{@link #locale}；</li>
  *   <li><b>渠道特性</b>（接入新端时才需要）：{@link #origin}、{@link #terminal}、{@link #commandAware}、
- *       {@link #agentAware}、{@link #commandContextFactory}、{@link #scope}；</li>
+ *       {@link #agentAware}、{@link #commandOutputFactory}、{@link #scope}；</li>
  *   <li><b>进阶</b>（宿主自行解析提及时）：{@link #explicitAgent}、{@link #trimContent}、
  *       {@link #agentNameValidator}、{@link #parseMention}；</li>
  *   <li><b>框架内部 / SPI</b>（宿主不要调）：{@link #copyFor}（宿主骨架）、{@link #restoredScope}（积压实现）、
@@ -105,8 +105,8 @@ public final class HarnessInput {
     private boolean scopeResolved;
     /** scope 是从积压还原的显式作用域 */
     private boolean scopeRestored;
-    /** 命令上下文工厂；为空时 handle 内部落为 BufferedCommandContextFactory（回执缓冲进 commandOutput） */
-    private CommandContextFactory commandContextFactory;
+    /** 命令输出工厂；为空时分发器落为 BufferedCommandOutputFactory（回执缓冲进 commandOutput） */
+    private CommandOutputFactory commandOutputFactory;
     /** 渠道来源身份；消费于命令分发（回执路由）与 Prompt 的 source 元数据；null 归一化为 {@link InputOrigin#NONE} */
     private InputOrigin origin = InputOrigin.NONE;
     /** HITL 决策动作：非空即进入决策分支（优先于空输入判空）；线上字符串到枚举的解析由宿主完成（{@link HITLAction#of}） */
@@ -129,7 +129,7 @@ public final class HarnessInput {
     private boolean commandAware = true;
     /** 是否解析输入开头的 {@code @} 提及（默认 true）；false 时原文保留，只认 explicitAgent 与 selectedAgent */
     private boolean agentAware = true;
-    /** 渠道是否具备终端交互能力（默认 false）；经分发器成为 CommandContext.isTerminal()，控制 terminalOnly 命令 */
+    /** 渠道是否具备终端交互能力（默认 false）；经分发器成为 CommandInput.isTerminal()，控制 terminalOnly 命令 */
     private boolean terminal;
     /** 续流模式：不产生新输入，仅按会话挂起的 tool_calls 续跑；文本与附件均被忽略 */
     private boolean resume;
@@ -191,7 +191,7 @@ public final class HarnessInput {
         c.scope = scope;
         c.scopeResolved = scopeResolved;
         c.scopeRestored = scopeRestored;
-        c.commandContextFactory = commandContextFactory;
+        c.commandOutputFactory = commandOutputFactory;
         c.origin = origin;
         c.hitlAction = hitlAction;
         c.hitlCallId = hitlCallId;
@@ -207,6 +207,38 @@ public final class HarnessInput {
         c.whenBusy = whenBusy;
         c.principal = principal;
         c.attrs = attrs == null ? null : new LinkedHashMap<>(attrs);
+        return c;
+    }
+
+    /**
+     * 派生「同一轮」的下一条输入（命令触发的二段任务、命令入队等）。
+     *
+     * <p>带上本轮属性：会话、系统提示词、语言、模型与子代理选择、技能/MCP 视野、作用域（含显式/解析/还原标志）、
+     * 来源、终端能力、主体、宿主域属性（复制一份）。丢掉按条消息的属性：附件、HITL 决策、续流、程序轮次标记、
+     * 忙时策略、显式子代理、子代理名校验、trimContent、提及解析开关、命令输出工厂。派生的文本不再按命令识别（commandAware=false）。</p>
+     *
+     * <p>作用域标志照搬：显式的保持显式（嵌套受理直接放行，宿主收窄的边界不会被重新解析放宽），解析所得的仍重新解析。</p>
+     *
+     * @param text 派生输入的文本（为空表示续流类任务，由调用方自行设置 resume）
+     * @since 4.2.0
+     */
+    @Internal
+    public HarnessInput derive(@Nullable String text) {
+        HarnessInput c = new HarnessInput(session, text);
+        c.systemPrompt = systemPrompt;
+        c.locale = locale;
+        c.selectedModel = selectedModel;
+        c.selectedAgent = selectedAgent;
+        c.selectedSkills = selectedSkills;
+        c.selectedMcps = selectedMcps;
+        c.scope = scope;
+        c.scopeResolved = scopeResolved;
+        c.scopeRestored = scopeRestored;
+        c.origin = origin;
+        c.terminal = terminal;
+        c.principal = principal;
+        c.attrs = attrs == null ? null : new LinkedHashMap<>(attrs);
+        c.commandAware = false;
         return c;
     }
 
@@ -289,14 +321,15 @@ public final class HarnessInput {
      * 本轮的语言环境（可选）：决定协议指令注入（{@code AgentProtocol#injectAgentInstruction}）
      * 以及提示词模板缺省语言。
      *
-     * <p>未设置（null）时沿用目标智能体的语言环境——即 {@link #systemPrompt} 自带的
-     * {@code AgentSystemPrompt#getLocale()}，或智能体配置的 locale。</p>
+     * <p>未设置（null）时用引擎实例的默认语言（{@code HarnessEngine.Builder#locale}）；引擎也没配置时沿用
+     * 目标智能体的语言环境（缺省为中文）。生效语言见 {@code HarnessEngine#localeOf}，它会下传到本轮的整条链路
+     * （协议指令、才能与工具文案、HITL 理由、子代理、命令回执、忙碌提示）。</p>
      *
      * <p><b>为什么要显式传</b>：{@link #systemPrompt} 是纯文本，不带语言信息；
      * 不传时一律按中文注入协议指令（ReAct 的「工作范式」「工具规则」等），
      * 英文提示词会与中文协议指令混排。传 {@code Locale.ENGLISH} 即可让两者一致。</p>
      *
-     * <p>注意：本值只作用于「本轮」；会话内其它轮次仍用智能体默认语言环境。
+     * <p>注意：本值只作用于「本轮」；会话内其它轮次（含 goal / loop 等后台轮次）各按自己的输入取值，没有就用引擎默认语言。
      * 只有 {@code systemPrompt} 也替换时，语义才是「这一轮换了一套提示词」；
      * 单独设置 locale 相当于按目标语言环境改写协议指令部分。</p>
      *
@@ -648,22 +681,26 @@ public final class HarnessInput {
     }
 
     /**
-     * 命令上下文工厂（由宿主实现）。为空时使用缓冲式默认实现
-     * {@link BufferedCommandContextFactory}。
+     * 命令输出工厂（由宿主实现）。为空时使用缓冲式默认实现
+     * {@link BufferedCommandOutputFactory}。
      * <p>
      * 与 {@link #commandAware} 配套：前者决定「是否识别命令」，本方法决定
      * 「识别到命令后回执怎么落地」。两者都为空/默认时，宿主无需关心命令体系。
+     *
+     * @since 4.2
      */
-    public HarnessInput commandContextFactory(@Nullable CommandContextFactory commandContextFactory) {
-        this.commandContextFactory = commandContextFactory;
+    public HarnessInput commandOutputFactory(@Nullable CommandOutputFactory commandOutputFactory) {
+        this.commandOutputFactory = commandOutputFactory;
         return this;
     }
 
     /**
-     * 命令上下文工厂；为空表示使用缓冲式默认实现
+     * 命令输出工厂；为空表示使用缓冲式默认实现
+     *
+     * @since 4.2
      */
-    public CommandContextFactory getCommandContextFactory() {
-        return commandContextFactory;
+    public @Nullable CommandOutputFactory getCommandOutputFactory() {
+        return commandOutputFactory;
     }
 
     /**
@@ -840,8 +877,8 @@ public final class HarnessInput {
      * CLI 宿主置 true；Web/IM/桌面等缓冲式宿主保持默认。
      * <p>
      * 注意这与 {@link #origin} 无关：桌面端是本地进程但无终端能力，CLI 有渠道标识且具备终端能力。
-     * 引擎读取本值后经分发器交给 {@link org.noear.solon.ai.harness.command.CommandContext#isTerminal()}，
-     * 保证「拦截判据」与「上下文自述」同源。
+     * 分发器经 {@link org.noear.solon.ai.harness.command.CommandInput#isTerminal()} 把本值交给命令，
+     * 保证「拦截判据」与「命令所见」同源。
      */
     public HarnessInput terminal(boolean terminal) {
         this.terminal = terminal;

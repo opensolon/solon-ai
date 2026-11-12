@@ -1,0 +1,1 @@
+<task_result><index>3</index><description>d3</description><agent_name>explore</agent_name><result_status>failure</result_status><result_content><![CDATA[执行被中断，任务未启动]]></result_content></task_result>

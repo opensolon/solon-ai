@@ -1,0 +1,1 @@
+检测到高风险域名 [evil.example.com]，拒绝访问。

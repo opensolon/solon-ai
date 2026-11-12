@@ -1,0 +1,7 @@
+help: 查看可用命令；/help <命令> 查看详情
+clear: 清空会话记录
+continue: 继续运行最后一个未完成的任务
+interrupt: 中断当前正在执行的任务
+model: 模型管理 (ls, help, <name>)
+rerun: 重新运行最后一个任务
+rewind: 回退对话记录 (<n>, 默认1)

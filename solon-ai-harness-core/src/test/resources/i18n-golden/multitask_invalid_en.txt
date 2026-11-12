@@ -1,0 +1,4 @@
+<multitask_results>
+<task_result><index>1</index><description>d1</description><agent_name>no-such-agent</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: Unknown subagent type 'no-such-agent'.]]></result_content></task_result>
+<task_result><index>2</index><description></description><agent_name></agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: Task 2 is empty (null) and has been skipped.]]></result_content></task_result>
+</multitask_results>

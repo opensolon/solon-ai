@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.command.builtin;
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
@@ -24,13 +26,13 @@ import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.util.TraceUtil;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * /continue 命令
@@ -51,20 +53,20 @@ public class ContinueCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "继续运行最后一个未完成的任务";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_CONTINUE_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/continue"
         };
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
-        AgentSession session = ctx.getSession();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
+        AgentSession session = input.getSession();
 
         if (session == null) {
             return;
@@ -77,7 +79,7 @@ public class ContinueCommand extends AbsCommand {
         // originalPrompt 为空：__main 是从未跑过任务的空壳轨迹（如恢复会话时被惰性创建）。
         // 此两种情况下声明「续流意图」只会触发空转结束，前端表现为「点了没反应、马上结束」。
         if (trace == null || Prompt.isEmpty(trace.getOriginalPrompt())) {
-            ctx.println("没有可继续的任务");
+            output.println(HarnessI18n.get(input.getLocale(), HarnessI18nKeys.COMMAND_CONTINUE_NONE));
             return;
         }
 
@@ -100,6 +102,6 @@ public class ContinueCommand extends AbsCommand {
         }
 
         // 声明续流意图（prompt 为空 = 续流；装配走引擎 promptDo 的续流分支，不受空输入判空影响）
-        ctx.requestAgentTask(null, null);
+        output.requestAgentTask(null, null);
     }
 }

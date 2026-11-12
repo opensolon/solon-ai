@@ -93,7 +93,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `attr(key, value)` / `attrs(Map)` | 宿主域属性（引擎不解读，进积压时原样保存） |
 | `HarnessInput.ofProgram(session, text, channel)` | 程序轮次（goal / loop 缺省执行器用）：不识别命令与提及，忙时 `REJECTED(busy)`、不进积压 |
  | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
-| `commandContextFactory(CommandContextFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
+| `commandOutputFactory(CommandOutputFactory)` | 识别到命令后回执怎么落地（默认缓冲式） |
 | `commandAware(boolean)` | 是否把输入当命令识别（默认 `true`） |
 | `agentAware(boolean)` | 是否解析开头 `@xxx`（默认 `true`） |
 | `terminal(boolean)` | 本次渠道是否具备终端交互能力（默认 `false`，决定 `terminalOnly()` 命令是否可见） |
@@ -103,7 +103,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 
 - **`commandAware(false)`**——文本来源不是用户手输时使用（定时任务提示词、已受理的排队输入、命令内部自造提示词）。这些即使以 `/` 开头也不应执行。
 - **`agentAware(false)`**——文本由程序生成时使用（如 goal 的 objective）。即使以 `@xxx` 开头也原样交给代理，不被当作提及剥离。与 `commandAware` 成对：`/` 前缀是命令，`@` 前缀是子代理。
-- **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandContext.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
+- **`terminal(true)`**——只有命令行宿主才开。它同时决定 `terminalOnly()` 命令是否放行、以及 `CommandInput.isTerminal()` 的返回值；不开则 `/exit` 类命令被统一拦截。与 `origin` 无关：桌面在本地运行但无终端能力。
 - **`resume(true)`**——本次不产生新用户输入，只按会话中挂起的 `tool_calls` 续跑。文本与附件都被忽略。它与 `hitl(action, callId)` 合用表示「写完决策就试着续流」，但**只是一种意愿表达，不保证续流一定发生**：引擎会在写入决策后自检三项，全部成立才装配请求返回 `TASK`，否则返回 `HITL` 并携带事实（详见 §1.3）。三端的正确写法都是传 `resume(true)` 后只 `switch (kind)`——批挂起时引擎会拒绝过早续流，宿主不必自己判断「整批是否齐备」。
 
 #### 视野选择：`selectedSkill` / `selectedMcp`
@@ -309,9 +309,9 @@ host.getEngine().getCommandRegistry().register(new HelpCommand());
 host.send("/help");   // REPLY → 渲染回执后收尾
 ```
 
-**注册命令并不需要配 `commandContextFactory`**——这一点是本节曾被误读的地方。引擎在 `dispatchCommand` 里就会兜底创建 `BufferedCommandContextFactory`（`HarnessEngine` 内），回执写入内存、由 `getCommandOutput()` 一次取回；骨架里 `System.out.print(outcome.getCommandOutput())` 的写法**已经**是这个默认工厂的正确消费方式。
+**注册命令并不需要配 `commandOutputFactory`**——这一点是本节曾被误读的地方。分发器（`CommandDispatcher.dispatch`）会兜底使用 `BufferedCommandOutputFactory`，回执写入内存、由 `getCommandOutput()` 一次取回；骨架里 `System.out.print(outcome.getCommandOutput())` 的写法**已经**是这个默认工厂的正确消费方式。
 
-只有在需要改动「回执怎么落地」时才提供工厂——CLI 要实时写终端并读键盘（`/help` 分页、`/model` 选择器），这时才用 `commandContextFactory(...)`（[core README](../README.md) §3.4）。因此最小骨架刻意不配它：多配一个默认值的等价物，只会让读者以为「不配就不工作」。
+只有在需要改动「回执怎么落地」时才提供工厂——CLI 要实时写终端（带 ANSI），这时才用 `commandOutputFactory(...)`（[core README](../README.md) §3.4）。因此最小骨架刻意不配它：多配一个默认值的等价物，只会让读者以为「不配就不工作」。
 
 一个值得提前知道的副作用：默认 `terminal=false`，所以 `/help` 会裁掉所有 `terminalOnly()` 命令（如 `/exit`）。
 若你的宿主就是命令行程序，用 `.terminal(true)` 打开即可（[core README](../README.md) §3.4）。

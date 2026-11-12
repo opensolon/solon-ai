@@ -1,0 +1,7 @@
+help: Show available commands; /help <command> for details
+clear: Clear the conversation history
+continue: Continue the last unfinished task
+interrupt: Interrupt the running task
+model: Model management (ls, help, <name>)
+rerun: Rerun the last task
+rewind: Rewind the conversation history (<n>, default 1)

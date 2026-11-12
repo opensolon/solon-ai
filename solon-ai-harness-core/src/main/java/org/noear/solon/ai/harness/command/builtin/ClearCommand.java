@@ -16,13 +16,16 @@
 package org.noear.solon.ai.harness.command.builtin;
 
 
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.AbsCommand;
-import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.ai.harness.input.InputOrigin;
-import org.noear.solon.core.util.Assert;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
+import org.noear.solon.lang.Nullable;
+
+import java.util.Locale;
 
 /**
  * /clear 命令
@@ -37,20 +40,20 @@ public class ClearCommand extends AbsCommand {
     }
 
     @Override
-    public String description() {
-        return "清空会话记录";
+    public String description(@Nullable Locale locale) {
+        return HarnessI18n.get(locale, HarnessI18nKeys.COMMAND_CLEAR_DESCRIPTION);
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[]{
                 "/clear",
         };
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-        AgentSession session = ctx.getSession();
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+        AgentSession session = input.getSession();
 
         if (session == null) {
             return;

@@ -22,7 +22,7 @@ class ClearCommandTest {
     @Test
     void sessionNullIsSilentNoOp() throws Exception {
         Fakes.StubContext ctx = new Fakes.StubContext(null, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertTrue(ctx.out.isEmpty());
     }
 
@@ -33,7 +33,7 @@ class ClearCommandTest {
         session.addMessage(ChatMessage.ofAssistant("a1"));
 
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
 
         assertTrue(session.getMessages().isEmpty());
         // 纯会话操作命令：无回执、无任务意图
@@ -45,8 +45,8 @@ class ClearCommandTest {
     void emptySessionIsIdempotent() throws Exception {
         AgentSession session = Fakes.newSession();
         Fakes.StubContext ctx = new Fakes.StubContext(session, new ArrayList<>());
-        command.execute(null, ctx, InputOrigin.NONE);
-        command.execute(null, ctx, InputOrigin.NONE);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
+        command.execute(null, ctx.in(InputOrigin.NONE), ctx);
         assertTrue(session.getMessages().isEmpty());
     }
 }

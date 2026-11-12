@@ -31,11 +31,13 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
-import org.noear.solon.ai.chat.ModelOptionsAmend;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
+import org.noear.solon.ai.harness.i18n.HarnessI18n;
+import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.talents.cli.SkillTalent;
@@ -52,6 +54,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -214,27 +217,26 @@ public class TaskTalent extends AbsTalent {
     }
 
     @Override
-    public String description() {
-        return "多任务调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），支持并行处理以提高效率。";
+    public String description(Prompt prompt) {
+        return HarnessI18n.get(AiI18n.localeOf(prompt), HarnessI18nKeys.TASK_DESCRIPTION);
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
+        final Locale locale = AiI18n.localeOf(prompt);
         StringBuilder sb = new StringBuilder();
 
-        sb.append("## 当前可用的子代理\n");
+        sb.append(HarnessI18n.get(locale, HarnessI18nKeys.TASK_INSTRUCTION_AGENTS_TITLE)).append("\n");
         sb.append("<available_agents>\n");
         for (AgentDefinition agent : engine.getAgentManager().getAgents()) {
+            agent = engine.localizeAgent(agent, locale);
             sb.append(String.format("  - \"%s\": %s\n", agent.getName(), agent.getDescription()));
         }
         sb.append("</available_agents>\n\n");
 
-        appendSessionAgents(prompt, sb);
+        appendSessionAgents(prompt, locale, sb);
 
-        sb.append("## 任务分配策略：\n");
-        sb.append("1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。\n");
-        sb.append("2. **原子性**: 每个子任务应具备明确的边界。\n");
-        sb.append("3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。\n");
+        sb.append(HarnessI18n.get(locale, HarnessI18nKeys.TASK_INSTRUCTION_STRATEGY)).append("\n");
 
         return sb.toString();
     }
@@ -245,7 +247,7 @@ public class TaskTalent extends AbsTalent {
      * <p>按 prompt 携带的会话 ID 现查会话：清单只对创建它的会话可见，其它会话的请求查不到，自然不列；
      * 与委派时的解析（{@link HarnessEngine#getAgentBuilderOrNil}）同一来源，不再经请求上下文转递。</p>
      */
-    private void appendSessionAgents(Prompt prompt, StringBuilder sb) {
+    private void appendSessionAgents(Prompt prompt, Locale locale, StringBuilder sb) {
         if (prompt == null) {
             return;
         }
@@ -262,7 +264,7 @@ public class TaskTalent extends AbsTalent {
             return;
         }
 
-        sb.append("## 本会话专用的子代理（仅当前会话可用，同样通过 task / multitask 调用）\n");
+        sb.append(HarnessI18n.get(locale, HarnessI18nKeys.TASK_INSTRUCTION_SESSION_AGENTS_TITLE)).append("\n");
         sb.append("<session_agents>\n");
         for (String name : names) {
             AgentDefinition agent = SessionAgents.get(session, name);
@@ -273,15 +275,23 @@ public class TaskTalent extends AbsTalent {
         sb.append("</session_agents>\n\n");
     }
 
+    public String task(SingleTaskOp taskSpec, String __cwd, String __sessionId) {
+        return task(taskSpec, __cwd, __sessionId, null);
+    }
+
+    /**
+     * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
+     * @since 4.2
+     */
     @ToolMapping(name = TOOL_TASK, description =
             "委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。不支持并行调用（并行请用 multitask）。")
-    public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId) {
+    public String task(@Body SingleTaskOp taskSpec, String __cwd, String __sessionId, String __locale) {
         if (Assert.isEmpty(__sessionId)) {
             throw new IllegalStateException("__sessionId is required");
         }
 
         if (TASK_DEPTH.get() != null) {
-            return "ERROR: 子代理不允许再委派子任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。";
+            return "ERROR: " + HarnessI18n.get(AiI18n.toLocale(__locale), HarnessI18nKeys.TASK_ERROR_NESTED_TASK);
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
@@ -294,17 +304,27 @@ public class TaskTalent extends AbsTalent {
 
         MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId,1, null, null, null);
 
-        TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession));
+        TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession), ctx.locale);
 
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
         return runTask(ctx, plan, false, Utils.uuid());
     }
 
+    public String multitask(List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
+        return multitask(tasks, __cwd, __sessionId, null);
+    }
+
+    /**
+     * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
+     * @since 4.2
+     */
     @ToolMapping(name = TOOL_MULTITASK, description =
             "并行执行多个互不依赖的子任务。要求任务之间必须没有资源竞争（例如：不同的模块开发、多路搜索）。")
-    public String multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
+    public String multitask(@Param(name = "tasks", description = "任务列表") List<MultiTaskOp> tasks, String __cwd, String __sessionId, String __locale) {
+        final Locale locale = AiI18n.toLocale(__locale);
+
         if (Assert.isEmpty(tasks)) {
-            return "WARNING: 任务列表为空";
+            return "WARNING: " + HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_EMPTY_TASKS);
         }
 
         if (Assert.isEmpty(__sessionId)) {
@@ -312,7 +332,7 @@ public class TaskTalent extends AbsTalent {
         }
 
         if (TASK_DEPTH.get() != null) {
-            return "ERROR: 子代理不允许再委派子任务（最多一层）。请直接完成当前任务；如需并行，请返回后由主代理统一编排。";
+            return "ERROR: " + HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_NESTED_MULTITASK);
         }
 
         AgentSession __parentSession = engine.getSession(__sessionId);
@@ -326,7 +346,7 @@ public class TaskTalent extends AbsTalent {
 
         // 预解析一次并向下传递：执行时不再重走 getModelOrDef，避免「默认模型」的 fallback
         // 在并发下取到与分派时不同的实例
-        final List<TaskPlan> plans = preparePlans(__parentSession, tasks, sessionModel);
+        final List<TaskPlan> plans = preparePlans(__parentSession, tasks, sessionModel, ctx.locale);
 
         // 生效上限按调用算一个数：取会话模型的 concurrency（未配置回退默认值）
         final int cap = resolveConcurrency(concurrencyOf(sessionModel), defaultConcurrency);
@@ -358,7 +378,7 @@ public class TaskTalent extends AbsTalent {
         }
     }
 
-    private List<TaskPlan> preparePlans(AgentSession session, List<MultiTaskOp> tasks, String sessionModel) {
+    private List<TaskPlan> preparePlans(AgentSession session, List<MultiTaskOp> tasks, String sessionModel, Locale locale) {
         final List<TaskPlan> plans = new ArrayList<>(tasks.size());
 
         for (int i = 0; i < tasks.size(); i++) {
@@ -371,38 +391,40 @@ public class TaskTalent extends AbsTalent {
                 empty.agent_name = "";
                 empty.description = "";
                 empty.prompt = "";
-                plans.add(new TaskPlan(empty, null,"ERROR: 第 " + (i + 1) + " 个任务定义为空（null），已跳过。"));
+                plans.add(new TaskPlan(empty, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_ERROR_NULL_TASK, "index", i + 1)));
                 continue;
             }
 
-            plans.add(preparePlan(session, op, sessionModel));
+            plans.add(preparePlan(session, op, sessionModel, locale));
         }
 
         return plans;
     }
 
-    private TaskPlan preparePlan(AgentSession session, MultiTaskOp op, String sessionModel) {
+    private TaskPlan preparePlan(AgentSession session, MultiTaskOp op, String sessionModel, Locale locale) {
         final ReActAgent.Builder agentBuilder;
 
         try {
             // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级
-            agentBuilder = engine.getAgentBuilderOrNil(session, op.agent_name, sessionModel);
+            // 内置子代理按父代理的语言取提示词
+            agentBuilder = engine.getAgentBuilderOrNil(session, op.agent_name, sessionModel, locale);
         } catch (Throwable e) {
             // 名称存在但定义加载失败：同样只废这一条
-            return new TaskPlan(op, null, "ERROR: 子代理 '" + op.agent_name + "' 定义加载失败: " + e.getMessage());
+            return new TaskPlan(op, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_ERROR_LOAD_FAILED,
+                    "name", op.agent_name, "error", e.getMessage()));
         }
 
         if (agentBuilder == null) {
             // 走 invalidReason 而非裸文本：否则 multitask 里会出现没有外壳、无法对位的一行
-            return new TaskPlan(op, null, unknownAgentReason(op));
+            return new TaskPlan(op, null, unknownAgentReason(op, locale));
         }
 
 
         return new TaskPlan(op, agentBuilder, null);
     }
 
-    private static String unknownAgentReason(MultiTaskOp op) {
-        return "ERROR: 未知的子代理类型 '" + op.agent_name + "'。";
+    private static String unknownAgentReason(MultiTaskOp op, Locale locale) {
+        return "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_ERROR_UNKNOWN_AGENT, "name", op.agent_name);
     }
 
     /** 会话模型的 concurrency（0 = 未设置）；模型不可解析时同样返回 0，走默认值 */
@@ -436,7 +458,7 @@ public class TaskTalent extends AbsTalent {
                 i -> runTask(ctx, plans.get(i), true, Utils.uuid()),
                 i -> plans.get(i).invalidReason != null
                         ? formatTaskResp(plans.get(i).op, false, plans.get(i).invalidReason, true)
-                        : notStarted(plans.get(i).op));
+                        : notStarted(plans.get(i).op, ctx.locale));
 
         if (!submitted) {
             LOG.warn("子任务执行器已关闭，{} 个子任务未启动", plans.size());
@@ -473,7 +495,7 @@ public class TaskTalent extends AbsTalent {
 
             while (line == null) {
                 if (isCancelled(sink)) {
-                    abortedNote = "ERROR: 子任务未完成（主流程已取消，未等待）";
+                    abortedNote = "ERROR: " + HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_AGGREGATE_CANCELLED);
                     break;
                 }
 
@@ -483,10 +505,10 @@ public class TaskTalent extends AbsTalent {
                 } catch (TimeoutException e) {
                     // 轮询节拍：任务还在跑，下一轮重新检查取消
                 } catch (ExecutionException e) {
-                    line = "ERROR: 子任务未完成（失败或被中断）: " + rootMessage(e.getCause());
+                    line = "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_AGGREGATE_FAILED, "error", rootMessage(e.getCause()));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    abortedNote = "ERROR: 子任务未完成（已中断，未等待）";
+                    abortedNote = "ERROR: " + HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_AGGREGATE_INTERRUPTED);
                     // 必须跳出：中断标志已置回，下一轮 get 会立即再抛，不退出就是零间隔死循环
                     break;
                 }
@@ -500,11 +522,11 @@ public class TaskTalent extends AbsTalent {
         if (ctx.rateLimited.get() || ctx.upstreamUnavailable.get() || ctx.timedOut.get()) {
             compositeResult.append("\n<multitask_advice>\n");
             if (ctx.rateLimited.get()) {
-                compositeResult.append("检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，可在模型配置中调低 `concurrency`（未配置时调低引擎的 `subagentDefaultConcurrency`）。\n");
+                compositeResult.append(HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_ADVICE_RATE_LIMIT)).append("\n");
             } else if (ctx.upstreamUnavailable.get()) {
-                compositeResult.append("检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`。\n");
+                compositeResult.append(HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_ADVICE_UPSTREAM)).append("\n");
             } else {
-                compositeResult.append("模型服务响应超时。后续请适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`，必要时改用 task 串行执行。\n");
+                compositeResult.append(HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_ADVICE_TIMEOUT)).append("\n");
             }
             compositeResult.append("</multitask_advice>");
         }
@@ -526,6 +548,8 @@ public class TaskTalent extends AbsTalent {
         private final List<String> mcpsSelected;
         /** 父请求的作用域（强制边界与租户模型，子代理必须继承，否则可经委派绕过） */
         private final InputScope scope;
+        /** 父代理的语言：子代理继承它，结果文案也按它输出 */
+        private final Locale locale;
 
         MultitaskContext(ReActTrace parentTrace, String cwd, String sessionId,
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
@@ -541,10 +565,13 @@ public class TaskTalent extends AbsTalent {
             this.skillsSelected = SkillTalent.getSelected(parentTrace.getOptions().getToolContext());
             this.mcpsSelected = McpGatewayTalent.getSelected(parentTrace.getOptions().getToolContext());
             this.scope = InputScope.of(parentTrace);
+            this.locale = parentTrace.getOptions().getLocale();
         }
 
-        /** 把继承到的视野写进子代理的 toolContext */
+        /** 把继承到的视野与语言写进子代理的选项 */
         private void applyScope(ReActOptionsAmend options) {
+            options.locale(locale);
+
             if (skillsSelected.isEmpty() == false) {
                 options.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, skillsSelected);
             }
@@ -560,8 +587,8 @@ public class TaskTalent extends AbsTalent {
     }
 
     /** 未启动的任务结果（保持总数与下标不变，避免结果错位） */
-    private String notStarted(MultiTaskOp task) {
-        return formatTaskResp(task, false, notStartedReason(), true);
+    private String notStarted(MultiTaskOp task, Locale locale) {
+        return formatTaskResp(task, false, notStartedReason(locale), true);
     }
 
     /**
@@ -571,8 +598,12 @@ public class TaskTalent extends AbsTalent {
      * 能准确反映用户中断；worker 线程上的占位补全会读到 worker 自身状态，可能退化为
      * 「主流程已取消」。这里不做额外的状态传递——真正常见的只有取消，中断那条是兜底。</p>
      */
-    private static String notStartedReason() {
-        return Thread.currentThread().isInterrupted() ? "执行被中断，任务未启动" : "主流程已取消，任务未启动";
+    private static String notStartedReason(Locale locale) {
+        if (Thread.currentThread().isInterrupted()) {
+            return HarnessI18n.get(locale, HarnessI18nKeys.TASK_NOT_STARTED_INTERRUPTED);
+        } else {
+            return HarnessI18n.get(locale, HarnessI18nKeys.TASK_NOT_STARTED_CANCELLED);
+        }
     }
 
     /**
@@ -613,7 +644,7 @@ public class TaskTalent extends AbsTalent {
 
         if (plan.agentBuilder == null) {
             // 保底：统一走外壳，不返回裸文本（否则会混进 <multitask_results> 里错位）
-            return formatTaskResp(plan.op, false, unknownAgentReason(plan.op), isMultitask);
+            return formatTaskResp(plan.op, false, unknownAgentReason(plan.op, ctx.locale), isMultitask);
         }
 
         if (LOG.isDebugEnabled()) {
@@ -685,13 +716,7 @@ public class TaskTalent extends AbsTalent {
                         .blockLast();
             }
 
-            if (agentEnd == null) {
-                FluxSink<AgentEvent> sink = streamSinkOf(ctx.parentTrace);
-                if (isCancelled(sink)) {
-                    throw new IllegalStateException("主代理已暂停");
-                }
-                throw new IllegalStateException("子代理未正常完成：未收到正常响应");
-            }
+            requireEnd(agentEnd, streamSinkOf(ctx.parentTrace), ctx.locale);
 
             countLlmErrorType(agentEnd.getLlmErrorType(), ctx.rateLimited, ctx.timedOut,
                     ctx.upstreamUnavailable);
@@ -706,18 +731,31 @@ public class TaskTalent extends AbsTalent {
             }
 
             // 超长结果落盘到本轮会话工作目录：模型的文件工具按 __cwd 解析相对路径
-            return formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd);
+            return formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd, ctx.locale);
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", plan.op.index, ctx.total, plan.op.agent_name,
                     e.getMessage(), e);
             countLlmErrorType(LlmErrorClassifier.classify(e), ctx.rateLimited, ctx.timedOut,
                     ctx.upstreamUnavailable);
 
-            return formatTaskResp(plan.op, false, String.format("ERROR: 任务执行失败: %s", e.getMessage()),
+            return formatTaskResp(plan.op, false,
+                    "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_ERROR_FAILED, "error", e.getMessage()),
                     isMultitask);
         } finally {
             // 必须清理：池线程会被复用，残留标记会误伤后续任务
             TASK_DEPTH.remove();
+        }
+    }
+
+    /**
+     * 子代理流必须以结束事件收尾：没有时按父流是否已取消给出原因（异常信息会进入任务结果，按父代理语言输出）
+     */
+    static void requireEnd(RunEndEvent agentEnd, FluxSink<AgentEvent> parentSink, Locale locale) {
+        if (agentEnd == null) {
+            if (isCancelled(parentSink)) {
+                throw new IllegalStateException(HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_PARENT_PAUSED));
+            }
+            throw new IllegalStateException(HarnessI18n.get(locale, HarnessI18nKeys.TASK_ERROR_NO_RESPONSE));
         }
     }
 
@@ -770,6 +808,14 @@ public class TaskTalent extends AbsTalent {
      */
     String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask,
                           String cwd) {
+        return formatTaskResp(task, taskId, successful, result, isMultitask, cwd, null);
+    }
+
+    /**
+     * @param locale 截断说明的语言（null 为默认语言）
+     */
+    String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask,
+                          String cwd, Locale locale) {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_result>");
@@ -779,7 +825,7 @@ public class TaskTalent extends AbsTalent {
         buf.append("<description>").append(escapeXml(task.description)).append("</description>");
         buf.append("<agent_name>").append(escapeXml(task.agent_name)).append("</agent_name>");
         buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
-        buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result, cwd)).append("]]></result_content>");
+        buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result, cwd, locale)).append("]]></result_content>");
         buf.append("</task_result>");
 
         return buf.toString();
@@ -804,7 +850,7 @@ public class TaskTalent extends AbsTalent {
      * 一定有 read 工具，也无专属召回工具）；落盘不可用（无 engine / 写入失败）时保持纯截断，
      * 行为与历史版本一致。</p>
      */
-    private String toCdata(MultiTaskOp op, String taskId, String text, String cwd) {
+    private String toCdata(MultiTaskOp op, String taskId, String text, String cwd, Locale locale) {
         if (text == null) {
             return "";
         }
@@ -824,12 +870,12 @@ public class TaskTalent extends AbsTalent {
 
         String spillRef = trySpill(op, taskId, text, cwd);
         if (spillRef != null) {
-            body = head + "\n...[内容过长已截断：原始长度 " + text.length() + " 字符，此处保留前 " + cut
-                    + " 字符；完整结果已落盘到 " + spillRef + "，可按需分页读取该文件，不要重新委派该任务]";
+            body = head + "\n" + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_RESULT_SPILLED,
+                    "length", text.length(), "kept", cut, "path", spillRef);
             LOG.info("子任务结果超限已落盘: task_id={}, agent={}, 原始长度 {} 字符",
                     taskId, op.agent_name, text.length());
         } else {
-            body = head + "\n...[内容过长已截断，原始长度 " + text.length() + " 字符]";
+            body = head + "\n" + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_RESULT_TRUNCATED, "length", text.length());
         }
 
         // CDATA 里只有终止符 ]]> 需要拆开，其余字符（含 < &）无需转义

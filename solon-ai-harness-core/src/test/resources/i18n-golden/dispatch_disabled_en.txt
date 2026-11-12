@@ -1,0 +1,1 @@
+/off is disabled. Send /help to see the available commands.

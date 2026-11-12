@@ -17,7 +17,10 @@ package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.AiSwitchable;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.lang.Nullable;
+import org.noear.solon.lang.Preview;
+
+import java.util.Locale;
 
 /**
  * 通用命令接口（适用于 CLI、Web 等所有端）
@@ -25,6 +28,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
  * @author noear
  * @since 4.0
  */
+@Preview("4.0")
 public interface Command extends AiSwitchable {
     /**
      * 命令名（不含 / 前缀）
@@ -33,13 +37,19 @@ public interface Command extends AiSwitchable {
 
     /**
      * 命令描述
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
      */
-    String description();
+     String description(@Nullable Locale locale) ;
 
     /**
      * 示例
-     * */
-    String[] examples();
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2
+     */
+    String[] examples(@Nullable Locale locale);
 
     /**
      * 使用模型
@@ -70,12 +80,27 @@ public interface Command extends AiSwitchable {
     }
 
     /**
-     * 执行命令（带输入来源身份）
+     * 是否需要会话（默认 true）
      * <p>
-     * 需要把来源透传到排队/插话/回复链路的命令（{@code /queue}、{@code /steer}）覆写本方法；
-     * 不关心来源的命令保持两参实现即可。默认实现委托给两参版本，保证既有命令零改动。
+     * 为 true 时，无会话的输入（{@code HarnessInput.of(null, "/xxx")}）不会进入命令，
+     * 由分发器直接回执统一提示；命令执行时 {@link CommandInput#getSession()} 因此一定不为 null。
+     * 不碰会话的命令（如 {@code /help}、Markdown 自定义命令）覆写为 false。
      *
-     * @param origin 本次输入在渠道侧的身份（不为 null，无来源时为 {@link InputOrigin#NONE}）
+     * @since 4.2
      */
-     void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception;
+    default boolean requiresSession() {
+        return true;
+    }
+
+    /**
+     * 执行命令
+     * <p>
+     * 读取一律走 {@code input}（会话、参数、渠道、生效语言、本轮属性），产出一律走 {@code output}
+     * （回执文本、Agent 任务意图）。
+     *
+     * @param input  本次命令的只读输入
+     * @param output 本次命令的输出（端适配）
+     * @since 4.2
+     */
+    void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception;
 }

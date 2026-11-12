@@ -10,12 +10,14 @@ import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
-import org.noear.solon.ai.harness.command.CommandContext;
+import org.noear.solon.ai.harness.command.CommandInput;
+import org.noear.solon.ai.harness.command.CommandOutput;
 import org.noear.solon.ai.harness.input.HarnessInput;
-import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.InputOutcome;
+import org.noear.solon.lang.Nullable;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,18 +52,18 @@ class InputCommandAwareTest {
             }
 
             @Override
-            public String description() {
+            public String description(@Nullable Locale locale) {
                 return "ping test";
             }
 
             @Override
-            public String[] examples() {
+            public String[] examples(@Nullable Locale locale) {
                 return new String[]{"ping"};
             }
 
             @Override
-            public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) {
-                ctx.println("pong");
+            public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) {
+                output.println("pong");
             }
         });
 

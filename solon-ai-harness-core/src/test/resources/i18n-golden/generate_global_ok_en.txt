@@ -1,0 +1,6 @@
+[OK] Subagent created (global)!
+
+**Name**: g1
+**Description**: dg
+
+You can now call it with `task(name="g1", prompt="...")`.

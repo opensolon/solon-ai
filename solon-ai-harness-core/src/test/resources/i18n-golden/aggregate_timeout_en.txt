@@ -1,0 +1,7 @@
+<multitask_results>
+ok
+ERROR: Subtask not completed (failed or interrupted): boom
+</multitask_results>
+<multitask_advice>
+The model service timed out. Consider lowering `concurrency` in the model configuration or the engine's `subagentDefaultConcurrency`, and switch to running tasks serially with task if necessary.
+</multitask_advice>

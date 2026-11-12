@@ -34,8 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <pre>
  * spi        → input, session          只放插件能力接口（可带静态槽位访问方法）
- * input      → command, hitl, scope     输入值对象；带着命令工厂 / 解析结果、审批卡、作用域
- * command    → input, session, util
+ * input      → command, hitl, scope     输入值对象；带着命令输出工厂 / 解析结果、审批卡、作用域
+ * command    → input, scope, session, util  CommandInput 是 HarnessInput 的只读包装，同样暴露本轮作用域
  * agent      → permission, scope, session
  * scope      → agent                   只用 agent.ToolName（4.0.4 起已发布在 agent 包）
  * util       → session
@@ -46,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>只允许两个双包循环（{@link #ALLOWED_CYCLES}），其余依赖必须单向：</p>
  * <ul>
- *   <li>{@code {input, command}}：{@code HarnessInput} 带着 {@code CommandContextFactory}、{@code InputOutcome} 带着
+ *   <li>{@code {input, command}}：{@code HarnessInput} 带着 {@code CommandOutputFactory}、{@code InputOutcome} 带着
  *   {@code ParsedCommand}，是宿主 API 的一部分；命令又天然要读输入。</li>
  *   <li>{@code {agent, scope}}：{@code InputScope} 的工具名单用 {@code agent.ToolName}（已发布，不能挪），
  *   子代理构建又要挂作用域守卫。</li>
@@ -74,7 +74,7 @@ class HarnessPackageBoundaryTest {
     static {
         ALLOWED.put("spi", set("input", "session"));
         ALLOWED.put("input", set("command", "hitl", "scope"));
-        ALLOWED.put("command", set("input", "session", "util"));
+        ALLOWED.put("command", set("input", "scope", "session", "util"));
         ALLOWED.put("agent", set("permission", "scope", "session"));
         ALLOWED.put("scope", set("agent"));
         ALLOWED.put("util", set("session"));

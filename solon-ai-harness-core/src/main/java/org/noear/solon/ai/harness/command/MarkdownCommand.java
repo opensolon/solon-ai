@@ -16,9 +16,10 @@
 package org.noear.solon.ai.harness.command;
 
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.harness.input.InputOrigin;
+import org.noear.solon.lang.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 基于 Markdown 模板的自定义命令（兼容 Claude Code 的 Custom Commands 规范）
@@ -55,18 +56,26 @@ public class MarkdownCommand extends AbsCommand implements Command {
     }
 
     @Override
-    public String description() {
+    public String description(@Nullable Locale locale) {
         return description;
     }
 
     @Override
-    public String[] examples() {
+    public String[] examples(@Nullable Locale locale) {
         return new String[0];
     }
 
     @Override
     public String model() {
         return model;
+    }
+
+    /**
+     * 只声明任务意图、不碰会话：无会话时二段任务走临时会话（与普通消息一致）
+     */
+    @Override
+    public boolean requiresSession() {
+        return false;
     }
 
     /**
@@ -106,11 +115,11 @@ public class MarkdownCommand extends AbsCommand implements Command {
     }
 
     @Override
-    public void execute(HarnessEngine engine, CommandContext ctx, InputOrigin origin) throws Exception {
+    public void execute(HarnessEngine engine, CommandInput input, CommandOutput output) throws Exception {
         // 替换变量得到 prompt
-        String prompt = getResolvedPrompt(ctx.getArgs());
+        String prompt = getResolvedPrompt(input.getArgs());
 
         // 作为 Agent 任务执行（只声明意图，装配与开流由引擎/宿主完成）
-        ctx.requestAgentTask(prompt, model());
+        output.requestAgentTask(prompt, model());
     }
 }

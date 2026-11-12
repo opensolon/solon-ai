@@ -11,6 +11,7 @@ import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -234,6 +235,12 @@ class HarnessOptionsAccessorTest {
         CacheControl cc = new CacheControl();
         o.setCacheControl(cc);
         assertSame(cc, o.getCacheControl());
+
+        assertNull(o.getLocale(), "未配置时为 null（用全局默认语言）");
+        o.setLocale(Locale.ENGLISH);
+        assertSame(Locale.ENGLISH, o.getLocale());
+        o.setLocale(null);
+        assertNull(o.getLocale());
     }
 
     @Test
@@ -449,7 +456,7 @@ class HarnessOptionsAccessorTest {
                 "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",
                 "setSubagentEnabled", "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
                 "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
-                "setCommandPrefix", "setAgentPrefix", "setDefaultModel",
+                "setCommandPrefix", "setAgentPrefix", "setDefaultModel", "setLocale",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
                 "setHitlInterceptor", "setMemoryProvider", "setStateSource",
                 "setMemorySessionIsolation", "setSandboxSelfBootstrap", "setRuntimeMutable",

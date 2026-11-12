@@ -1,0 +1,184 @@
+# solon-ai-harness-core 文案（中文）
+# 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
+# 协议性前缀（"ERROR: "、"WARNING: "、"[OK] "）由代码补，不写进文案
+
+# ---- 子代理（task / multitask）----
+task.description: |-
+  多任务调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），支持并行处理以提高效率。
+task.instruction.agents_title: |-
+  ## 当前可用的子代理
+task.instruction.session_agents_title: |-
+  ## 本会话专用的子代理（仅当前会话可用，同样通过 task / multitask 调用）
+task.instruction.strategy: |-
+  ## 任务分配策略：
+  1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。
+  2. **原子性**: 每个子任务应具备明确的边界。
+  3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。
+task.error.nested_task: |-
+  子代理不允许再委派子任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。
+task.error.nested_multitask: |-
+  子代理不允许再委派子任务（最多一层）。请直接完成当前任务；如需并行，请返回后由主代理统一编排。
+task.error.empty_tasks: |-
+  任务列表为空
+task.error.null_task: |-
+  第 {index} 个任务定义为空（null），已跳过。
+task.error.load_failed: |-
+  子代理 '{name}' 定义加载失败: {error}
+task.error.unknown_agent: |-
+  未知的子代理类型 '{name}'。
+task.error.parent_paused: |-
+  主代理已暂停
+task.error.no_response: |-
+  子代理未正常完成：未收到正常响应
+task.error.failed: |-
+  任务执行失败: {error}
+task.aggregate.cancelled: |-
+  子任务未完成（主流程已取消，未等待）
+task.aggregate.interrupted: |-
+  子任务未完成（已中断，未等待）
+task.aggregate.failed: |-
+  子任务未完成（失败或被中断）: {error}
+task.advice.rate_limit: |-
+  检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，可在模型配置中调低 `concurrency`（未配置时调低引擎的 `subagentDefaultConcurrency`）。
+task.advice.upstream: |-
+  检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`。
+task.advice.timeout: |-
+  模型服务响应超时。后续请适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`，必要时改用 task 串行执行。
+task.not_started.cancelled: |-
+  主流程已取消，任务未启动
+task.not_started.interrupted: |-
+  执行被中断，任务未启动
+task.result.spilled: |-
+  ...[内容过长已截断：原始长度 {length} 字符，此处保留前 {kept} 字符；完整结果已落盘到 {path}，可按需分页读取该文件，不要重新委派该任务]
+task.result.truncated: |-
+  ...[内容过长已截断，原始长度 {length} 字符]
+
+# ---- 子代理生成（generate）----
+generate.error.bad_name: |-
+  name 标识符不合法，仅允许使用英文字符、数字、下划线或中划线。
+generate.error.reserved: |-
+  '{name}' 是保留名，请换一个名字。
+generate.error.global_exists: |-
+  已存在同名的全局子代理，不覆盖：{name}
+generate.error.global_denied: |-
+  当前环境不允许创建全局子代理。请改用 saveToFile=false（仅本会话可用）。
+generate.error.file_exists: |-
+  代理定义文件已存在，不覆盖：{path}
+generate.error.no_session: |-
+  缺少会话上下文，无法创建仅本会话可用的子代理。
+generate.error.conflict_global: |-
+  与全局子代理同名：{name}，请换一个名字。
+generate.error.session_full: |-
+  本会话已有同名子代理，或会话级子代理数量已达上限（{max}）。
+generate.error.failed: |-
+  创建子代理失败: {error}
+generate.ok: |-
+  子代理创建成功（{scope}）！
+
+  **标识**: {name}
+  **描述**: {description}
+
+  现在可以使用 `task(name="{name}", prompt="...")` 来调用。
+generate.scope.global: |-
+  全局
+generate.scope.session: |-
+  仅本会话
+
+# ---- 人工介入（HITL）----
+hitl.path_traversal: |-
+  检测到路径回溯操作，禁止访问工作区外目录。
+hitl.sensitive_file: |-
+  禁止访问系统敏感配置文件。
+hitl.bash.injection: |-
+  检测到潜在的命令注入或设备重定向风险。
+hitl.bash.privileged: |-
+  检测到系统特权指令 [{command}]。
+hitl.bash.incomplete: |-
+  检测到不完整的命令或空命令。
+hitl.bash.deny: |-
+  操作被权限策略拒绝。
+hitl.bash.ask: |-
+  高危操作，需要人工介入确认。
+hitl.write.deny: |-
+  文件写入操作被权限策略拒绝。
+hitl.write.ask: |-
+  文件写入操作，需要人工介入确认。
+hitl.web.risky: |-
+  检测到高风险域名 [{host}]，拒绝访问。
+hitl.web.unknown_host: |-
+  未知
+hitl.web.deny: |-
+  网络访问操作被权限策略拒绝。
+hitl.web.ask: |-
+  网络访问操作，需要人工介入确认。
+
+# ---- 命令 ----
+command.unavailable: |-
+  仅支持 CLI，Web/IM 端不可用。发送 /help 查看可用命令。
+command.disabled: |-
+  已停用。发送 /help 查看可用命令。
+command.session_required: |-
+  需要会话才能执行，请在会话中使用。
+command.scope_denied: |-
+  命令不可用：{command}
+command.help.description: |-
+  查看可用命令；/help <命令> 查看详情
+command.help.title: |-
+  可用命令：
+command.help.usage: |-
+  用法：
+command.help.not_found: |-
+  未找到命令 /{name}。发送 /help 查看可用命令。
+command.help.footer: |-
+  发送 /help <命令> 查看用法。
+  普通文本不会被当作命令处理。
+command.help.no_description: |-
+  暂无描述
+command.clear.description: |-
+  清空会话记录
+command.continue.description: |-
+  继续运行最后一个未完成的任务
+command.continue.none: |-
+  没有可继续的任务
+command.interrupt.description: |-
+  中断当前正在执行的任务
+command.interrupt.done: |-
+  用户已取消任务（或中断）
+command.interrupt.idle: |-
+  当前没有正在执行的任务
+command.model.description: |-
+  模型管理 (ls, help, <name>)
+command.rerun.description: |-
+  重新运行最后一个任务
+command.rewind.description: |-
+  回退对话记录 (<n>, 默认1)
+command.rewind.invalid: |-
+  回退数量必须为正整数
+command.rewind.done: |-
+  已回退 {count} 条记录
+
+# ---- 输入与会话 ----
+input.hitl_pending: |-
+  请先处理待审批操作
+input.hitl_pending_tool: |-
+  请先处理待审批操作：{tool}
+input.busy: |-
+  当前任务正在执行，请稍后再试
+input.busy_attachments: |-
+  当前任务正在执行，带附件的消息不能排队，请稍后再发
+input.busy_scope: |-
+  当前任务正在执行，该消息带有不可保存的权限范围，请稍后再发
+input.busy_backlog: |-
+  当前任务正在执行，且排队已满或不可用
+input.describe_image: |-
+  请描述这张图片
+input.describe_images: |-
+  请描述这些图片
+input.analyze_media: |-
+  请分析这些媒体文件
+input.attachment: |-
+  [附件: {path}]
+input.attachments_default: |-
+  请帮我处理这些附件
+run.cancelled: |-
+  用户已取消任务.

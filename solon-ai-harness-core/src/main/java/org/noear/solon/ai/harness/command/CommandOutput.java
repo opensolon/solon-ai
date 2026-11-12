@@ -15,76 +15,20 @@
  */
 package org.noear.solon.ai.harness.command;
 
-import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.lang.Nullable;
 
-import java.util.List;
-
 /**
- * 通用命令上下文接口
+ * 命令输出（端适配）
  * <p>
- * 不同端（CLI、Web）提供各自的实现，使命令逻辑与具体环境解耦。
+ * 命令的产出只有两样：回执文本与 Agent 任务意图。不同端（CLI、Web）提供各自的实现，
+ * 决定回执怎么落地（即时写终端，或缓冲后一次回传）。
+ *
+ * <p>命令需要读取的一切（会话、参数、渠道、语言、本轮属性）都在 {@link CommandInput} 上，本接口不承载输入。</p>
  *
  * @author noear
- * @since 4.2.0
+ * @since 4.2
  */
-public interface CommandContext {
-    /**
-     * 本次命令执行所在渠道是否具备终端交互能力
-     * <p>
-     * 供 {@code /help} 等命令裁剪可见命令集；取值与
-     * {@link org.noear.solon.ai.harness.input.HarnessInput#isTerminal()} 同源（由分发器统一传入），
-     * 与 {@link org.noear.solon.ai.harness.input.InputOrigin} 无关（CLI 有渠道标识且具备终端能力，
-     * 桌面是本地进程却无终端能力）。
-     */
-    default boolean isTerminal(){
-        return false;
-    }
-
-    /**
-     * 获取当前会话
-     */
-    AgentSession getSession();
-
-    /**
-     * 获取用户原始输入
-     */
-    String getRawInput();
-
-    /**
-     * 获取命令名（不含 / 前缀）
-     */
-    String getCommandName();
-
-    /**
-     * 获取命令参数列表
-     */
-    List<String> getArgs();
-
-    /**
-     * 按索引获取参数，越界返回 null
-     */
-    default String argAt(int index) {
-        List<String> args = getArgs();
-        return (args != null && index < args.size()) ? args.get(index) : null;
-    }
-
-    /**
-     * 参数数量
-     */
-    default int argCount() {
-        List<String> args = getArgs();
-        return args != null ? args.size() : 0;
-    }
-
-    /**
-     * 全部参数拼接为单个字符串
-     */
-    default String getArgsJoined() {
-        List<String> args = getArgs();
-        return args != null ? String.join(" ", args) : "";
-    }
-
+public interface CommandOutput {
     /**
      * 输出一行文本（不同端有不同的实现）
      */
@@ -111,7 +55,7 @@ public interface CommandContext {
      * 宿主统一经 {@code InputOutcome} 消费，因此三端不必再各自实现回调。
      *
      * @param prompt 任务正文；<b>为空表示续流</b>（如 {@code /continue}）
-     * @param model  命令声明的模型（可空，走会话级回退）
+     * @param model  命令声明的模型（可空，走本轮或会话级回退）
      */
     void requestAgentTask(@Nullable String prompt, @Nullable String model);
 
@@ -123,12 +67,12 @@ public interface CommandContext {
     }
 
     /**
-     * 命令回执文本
+     * 已缓冲的回执文本（经 {@code InputOutcome#getCommandOutput()} 交给宿主）
      * <p>
      * 采用即时写终端/直接推送的端（如 CLI）无需实现，返回 null 即可；
      * 缓冲式实现应返回已收集的全部回执行。
      */
-    default String getCommandOutput() {
+    default @Nullable String getText() {
         return null;
     }
 }
