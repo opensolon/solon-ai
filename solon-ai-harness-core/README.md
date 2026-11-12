@@ -35,6 +35,7 @@
 | 自己编排，接一个真产品 | [ENGINE-L1.md](docs/ENGINE-L1.md) 第一、二章 |
 | 加命令 / 子代理 | 第三章、第四章 |
 | 跑 goal / queue / steer / loop | §1.4（装配）+ 各插件 README |
+| 输出英文或多语言 | §1.5（国际化），细节见 [I18n.md](docs/I18n.md) |
 | 停 / 改 / 重排的干预闭环 | [ENGINE-L1](docs/ENGINE-L1.md) §3.5 |
 | 调优与定制 | 第五～八章（权限、配置、扩展、安全） |
 | 查结构 / 躲坑 | 第十章（模块）、第十一章（常见坑） |
@@ -201,6 +202,40 @@ HarnessEngine engine = HarnessEngine.of(ws, ".solon/").stateSource(stateSrc) /* 
 ```
 
 插件自带的命令（`/goal`、`/queue`、`/steer`、`/loop`）在 `onAttach` 时注册；`/queue`、`/steer` 忙时旁路执行，`/goal`、`/loop` 忙时进积压或被拒绝。运行期 `engine.addExtensionIfAbsent(...)` 只在 `runtimeMutable` 时可用（STANDALONE 缺省；SERVER 下抛 `IllegalStateException`）。
+
+### 1.5 国际化（语言）
+
+给模型和用户的文案（协议指令、工具返回文案、命令回执、HITL 理由、取消消息、内置子代理等）内置中文和英文。不配置时为中文，与 4.1 逐字一致。
+
+```java
+// 引擎实例的默认语言：一个引擎只服务一种界面语言时，配这里就够了
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
+        .locale(Locale.ENGLISH)
+        /* ... */
+        .build();
+
+// 单次输入指定语言（优先于引擎）：同一引擎服务多种语言时，每次输入带上用户的语言
+host.submit(tenant, sid, HarnessInput.of("list the files").locale(Locale.ENGLISH));      // L0
+engine.handle(HarnessInput.of(session, "list the files").locale(Locale.ENGLISH));        // L1
+
+// 全局默认语言（智能体、harness、talent 共用）
+AiI18n.setDefaultLocale(Locale.ENGLISH);
+```
+
+语言怎么定：
+
+| 场景 | 用哪个语言 |
+|---|---|
+| 一次输入 | `HarnessInput.locale` > 引擎 `locale` > `AiI18n` 全局默认（`engine.localeOf(input)`），受理时定一次，下传到这一轮的整条链路，不回写输入 |
+| 续流（`decide`、`resume(true)`、`/continue`） | 沿用原来那一轮的语言（会话重新加载后也一样）；续流输入显式带了语言时以输入为准 |
+| goal / loop 后台轮次、插件门面 | 引擎实例的语言 `engine.getLocale()` |
+| 命令 | `input.getLocale()`（即本次输入的生效语言），`description(Locale)` / `examples(Locale)` 按它输出 |
+| 宿主自己要按会话出文案 | `engine.localeOf(session)`；取消回执用 `InterruptPlan.cancelText(session)` |
+
+> 才能（Talent）不保存语言，需要时从请求里取：指令用 `prompt.locale()`，工具返回文案用工具方法末尾的 `String __locale` 参数（框架注入，不进 schema；直接调用工具方法时传 `null` 表示默认语言）。
+> 工具描述与参数说明只给模型看，不做国际化。
+
+资源包位置、扩展新语言（如加 `_ja.yml`）、覆盖文案、内置子代理多语言与测试，见 [docs/I18n.md](docs/I18n.md)。
 
 ---
 

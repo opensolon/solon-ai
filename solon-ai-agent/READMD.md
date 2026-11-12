@@ -299,7 +299,39 @@ public class AgentSessoinConfig {
 ```
 
 
-## 六、监控与调试
+## 六、国际化（语言）
+
+智能体面向模型和用户的文案（主提示词、团队协议、运行时提示、上下文压缩等）内置中文和英文，不配置时为中文。
+
+```java
+// 智能体上配置（Builder）
+ReActAgent agent = ReActAgent.of(chatModel).locale(Locale.ENGLISH).build();
+TeamAgent team = TeamAgent.of(chatModel).locale(Locale.ENGLISH).build();
+SimpleAgent simple = SimpleAgent.of(chatModel).locale(Locale.ENGLISH).build();
+
+// 单次请求指定（优先于智能体配置）
+agent.prompt("What's the weather in Beijing today?")
+    .options(o -> o.locale(Locale.ENGLISH))
+    .call();
+
+// 全局默认语言（智能体、harness、talent 共用）
+AgentI18n.setDefaultLocale(Locale.ENGLISH);
+```
+
+语言的决定顺序：
+
+```
+请求或智能体的 locale > 所在团队的语言（作为团队成员时继承） > 全局默认语言（中文）
+```
+
+* 团队成员没有显式设置语言时，继承团队的语言，所以给团队设一次，主管和成员都会切换。
+* 语言属于一轮：新任务用智能体配置的语言；续流（如 HITL 审批后继续）沿用原来那一轮的语言，会话从存储重新加载后也一样。
+* 自定义协议、Talent 等扩展要按请求语言输出：协议用方法参数里的 `locale`（如上面示例 4 的 `injectSupervisorInstruction(Locale locale, ...)`），Talent 用 `prompt.locale()`，工具方法声明末尾参数 `String __locale`（由框架注入，不进 schema）。
+* `finishMarker`、`Thought:` / `Action:` / `Final Answer:`、工具名、JSON 字段名等解析协议不做国际化；工具描述与参数说明只给模型看，也不做国际化。
+
+资源包位置、扩展新语言（如加 `react_ja.yml`）、覆盖个别文案、跨语言识别的标记与测试，见 [docs/I18n.md](docs/I18n.md)。
+
+## 七、监控与调试
 
 
 ### 性能监控
