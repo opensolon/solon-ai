@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.i18n.testkit.FrozenMessages;
 import org.noear.solon.ai.rag.RepositoryStorable;
 import org.noear.solon.ai.rag.util.QueryCondition;
 import org.noear.solon.flow.FlowContext;
@@ -108,7 +109,7 @@ public class I18nKeyScenarioTest {
             when(env.trace.getOptions()).thenReturn(options);
             env.respond("{\"role\":\"assistant\",\"content\":\"ok\"}");
 
-            String expected = AgentI18n.fmt(l, AgentI18nKeys.REACT_REASON_RETHINK, "turn", 1);
+            String expected = FrozenMessages.of(l).fmt(AgentI18nKeys.REACT_REASON_RETHINK, "turn", 1);
             String actual = null;
             for (ChatMessage m : env.workingMemory.getMessages()) {
                 if (expected.equals(m.getContent())) {
@@ -125,7 +126,7 @@ public class I18nKeyScenarioTest {
         for (Locale l : LOCALES) {
             ReActRuntimeI18nTest.ReasonEnv fix = new ReActRuntimeI18nTest.ReasonEnv(l);
             fix.respond("{\"role\":\"assistant\",\"content\":\"<think>hmm</think>\"}");
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.REACT_REASON_FORMAT_FIX, "turn", 1, "attempt", 1),
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.REACT_REASON_FORMAT_FIX, "turn", 1, "attempt", 1),
                     fix.workingMemory.getLastMessage().getContent());
 
             ReActRuntimeI18nTest.ReasonEnv exhausted = new ReActRuntimeI18nTest.ReasonEnv(l);
@@ -133,7 +134,7 @@ public class I18nKeyScenarioTest {
             exhausted.respond("{\"role\":\"assistant\"}");
             ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
             verify(exhausted.trace).setFinalAnswer(captor.capture());
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_REASON_EMPTY_EXHAUSTED), captor.getValue());
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_REASON_EMPTY_EXHAUSTED), captor.getValue());
         }
     }
 
@@ -163,10 +164,10 @@ public class I18nKeyScenarioTest {
 
         for (Locale l : LOCALES) {
             for (Map.Entry<LlmErrorEvent.Type, String> kv : httpKeys.entrySet()) {
-                assertText(l, AgentI18n.fmt(l, kv.getValue(), "code", 503), (String) http.invoke(null, l, 503, kv.getKey()));
+                assertText(l, FrozenMessages.of(l).fmt(kv.getValue(), "code", 503), (String) http.invoke(null, l, 503, kv.getKey()));
             }
             for (Map.Entry<LlmErrorEvent.Type, String> kv : errorKeys.entrySet()) {
-                assertText(l, AgentI18n.get(l, kv.getValue()), (String) other.invoke(null, l, kv.getKey()));
+                assertText(l, FrozenMessages.of(l).get(kv.getValue()), (String) other.invoke(null, l, kv.getKey()));
             }
         }
     }
@@ -177,14 +178,14 @@ public class I18nKeyScenarioTest {
     public void planTalent_edgeResults() {
         for (Locale l : LOCALES) {
             PlanTalent talent = ReActRuntimeI18nTest.planTalent(l);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_NOT_PLANNING), talent.update_plan_progress(1));
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_PLAN_RESULT_REVISE_NOT_INIT), talent.revise_plan(Collections.singletonList("x"), 1));
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_PLAN_RESULT_CREATE_IGNORED), talent.create_plan(Collections.singletonList("only")));
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_NOT_PLANNING), talent.update_plan_progress(1));
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_PLAN_RESULT_REVISE_NOT_INIT), talent.revise_plan(Collections.singletonList("x"), 1));
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_PLAN_RESULT_CREATE_IGNORED), talent.create_plan(Collections.singletonList("only")));
 
             talent.create_plan(Arrays.asList("a", "b"));
             String done = talent.update_plan_progress(3);
-            Assertions.assertTrue(done.contains(AgentI18n.get(l, AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_DONE)), done);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_PLAN_RESULT_REVISE_EMPTY), talent.revise_plan(Collections.emptyList(), 1));
+            Assertions.assertTrue(done.contains(FrozenMessages.of(l).get(AgentI18nKeys.REACT_PLAN_RESULT_PROGRESS_DONE)), done);
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_PLAN_RESULT_REVISE_EMPTY), talent.revise_plan(Collections.emptyList(), 1));
         }
     }
 
@@ -214,15 +215,15 @@ public class I18nKeyScenarioTest {
                     new HITLTask("c2", "delete", new HashMap<>(), "need")));
             ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
             verify(trace).setFinalAnswer(captor.capture());
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.REACT_HITL_PENDING_BATCH, "count", 2), captor.getValue());
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.REACT_HITL_PENDING_BATCH, "count", 2), captor.getValue());
 
             ToolExchanger skipped = new ToolExchanger("c1", "transfer", new HashMap<>());
             apply.invoke(hitl, hitlTrace(l), skipped, HITLDecision.skip(null), 2);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_HITL_SKIPPED), skipped.getResult());
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_HITL_SKIPPED), skipped.getResult());
 
             ToolExchanger rejected = new ToolExchanger("c2", "delete", new HashMap<>());
             apply.invoke(hitl, hitlTrace(l), rejected, HITLDecision.reject(null), 2);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.REACT_HITL_REJECTED), rejected.getResult());
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.REACT_HITL_REJECTED), rejected.getResult());
         }
     }
 
@@ -272,10 +273,10 @@ public class I18nKeyScenarioTest {
             String interceptor = DenyInterceptor.class.getSimpleName();
 
             c.coder.run(c.flow, null);
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.TEAM_RUN_SKIPPED, "interceptor", interceptor), TeamBaseI18nTest.lastRecord(c.trace));
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.TEAM_RUN_SKIPPED, "interceptor", interceptor), TeamBaseI18nTest.lastRecord(c.trace));
 
             new SupervisorTask(c.team.getConfig()).run(c.flow, null);
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.TEAM_SUPERVISOR_SKIPPED, "interceptor", interceptor), TeamBaseI18nTest.lastRecord(c.trace));
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.TEAM_SUPERVISOR_SKIPPED, "interceptor", interceptor), TeamBaseI18nTest.lastRecord(c.trace));
         }
     }
 
@@ -293,7 +294,7 @@ public class I18nKeyScenarioTest {
             flow.put(Agent.KEY_CURRENT_TEAM_TRACE_KEY, team.getConfig().getTraceKey());
 
             team.getConfig().getAgentMap().get("mute").run(flow, null);
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.TEAM_RUN_NO_CONTENT, "agent", "mute"), TeamBaseI18nTest.lastRecord(trace));
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.TEAM_RUN_NO_CONTENT, "agent", "mute"), TeamBaseI18nTest.lastRecord(trace));
         }
     }
 
@@ -314,7 +315,7 @@ public class I18nKeyScenarioTest {
 
         //与团队语言无关：所有已知语言的动词都参与识别
         for (Locale l : LOCALES) {
-            for (String item : AgentI18n.get(l, AgentI18nKeys.TEAM_SUPERVISOR_ASSIGN_VERBS).split("\\|")) {
+            for (String item : FrozenMessages.of(l).get(AgentI18nKeys.TEAM_SUPERVISOR_ASSIGN_VERBS).split("\\|")) {
                 Assertions.assertTrue(("|" + regex + "|").contains("|" + item.trim() + "|"), l + ": " + item + " not in " + regex);
             }
         }
@@ -332,11 +333,11 @@ public class I18nKeyScenarioTest {
             args.put("result", "api drafted");
             args.put("todo", "write docs");
             Object ret = TeamProtocolI18nTest.agentTools(c, c.reviewer).get(0).handle(args);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.PROTOCOL_BLACKBOARD_TOOL_UPDATED), String.valueOf(ret));
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.PROTOCOL_BLACKBOARD_TOOL_UPDATED), String.valueOf(ret));
 
             TeamProtocolI18nTest.agentRound(c, c.reviewer, "review ok");
             String prompt = TeamProtocolI18nTest.agentPrompt(c, c.reviewer, Prompt.of(ChatMessage.ofUser("continue")), l);
-            Assertions.assertTrue(prompt.contains(AgentI18n.get(l, AgentI18nKeys.PROTOCOL_BLACKBOARD_PROMPT_SNAPSHOT)), prompt);
+            Assertions.assertTrue(prompt.contains(FrozenMessages.of(l).get(AgentI18nKeys.PROTOCOL_BLACKBOARD_PROMPT_SNAPSHOT)), prompt);
         }
     }
 
@@ -352,19 +353,19 @@ public class I18nKeyScenarioTest {
             Map<String, Object> bid = new HashMap<>();
             bid.put("score", 80);
             bid.put("plan", "");
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_PLAN_REQUIRED),
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.PROTOCOL_CONTRACTNET_BID_TOOL_PLAN_REQUIRED),
                     String.valueOf(TeamProtocolI18nTest.agentTools(c, c.coder).get(0).handle(bid)));
 
             //第 2 轮招标后次数耗尽，且无人投标
             c.trace.setRoute(TeamAgent.ID_SUPERVISOR);
             supTools.get(0).handle(req);
             c.trace.setRoute(TeamAgent.ID_SUPERVISOR);
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_EXHAUSTED), String.valueOf(supTools.get(0).handle(req)));
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.PROTOCOL_CONTRACTNET_CALL_TOOL_EXHAUSTED), String.valueOf(supTools.get(0).handle(req)));
 
             c.trace.setRoute("reviewer");
             c.protocol.onSupervisorRouting(c.flow, c.trace, "reviewer");
             Assertions.assertEquals(Agent.ID_END, c.trace.getRoute());
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.PROTOCOL_CONTRACTNET_ROUTE_CANNOT_AWARD), c.trace.getFinalAnswer());
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.PROTOCOL_CONTRACTNET_ROUTE_CANNOT_AWARD), c.trace.getFinalAnswer());
         }
     }
 
@@ -374,8 +375,8 @@ public class I18nKeyScenarioTest {
     public void compress_hierarchicalUserData() throws Throwable {
         for (Locale l : LOCALES) {
             String userData = RuntimeRenderGoldenTest.compressUserData(new HierarchicalCompressionStrategy()::compress, l);
-            String noSummary = AgentI18n.get(l, AgentI18nKeys.COMPRESS_HIERARCHICAL_NO_SUMMARY);
-            String[] parts = AgentI18n.fmt(l, AgentI18nKeys.COMPRESS_HIERARCHICAL_USER_DATA, "summary", noSummary, "history", "\u0000").split("\u0000");
+            String noSummary = FrozenMessages.of(l).get(AgentI18nKeys.COMPRESS_HIERARCHICAL_NO_SUMMARY);
+            String[] parts = FrozenMessages.of(l).fmt(AgentI18nKeys.COMPRESS_HIERARCHICAL_USER_DATA, "summary", noSummary, "history", "\u0000").split("\u0000");
             Assertions.assertTrue(userData.startsWith(parts[0]) && userData.endsWith(parts[1]), l + ":\n" + userData);
             Assertions.assertEquals(AgentI18n.isChinese(l), CJK.matcher(userData).find(), userData);
         }
@@ -393,7 +394,7 @@ public class I18nKeyScenarioTest {
         for (Locale l : LOCALES) {
             String out = (String) m.invoke(new ContextCompressionInterceptor(), text.toString(), 3, l);
             Assertions.assertFalse(out.isEmpty(), l + "");
-            Assertions.assertTrue(AgentI18n.get(l, AgentI18nKeys.COMPRESS_INTERCEPTOR_TRUNCATED_SHORT).startsWith(out), l + ": " + out);
+            Assertions.assertTrue(FrozenMessages.of(l).get(AgentI18nKeys.COMPRESS_INTERCEPTOR_TRUNCATED_SHORT).startsWith(out), l + ": " + out);
         }
     }
 
@@ -405,9 +406,9 @@ public class I18nKeyScenarioTest {
         when(broken.search(any(QueryCondition.class))).thenThrow(new IOException("down"));
 
         for (Locale l : LOCALES) {
-            assertText(l, AgentI18n.fmt(l, AgentI18nKeys.COMPRESS_VECTOR_RECALL_NOT_FOUND, "query", "q"),
+            assertText(l, FrozenMessages.of(l).fmt(AgentI18nKeys.COMPRESS_VECTOR_RECALL_NOT_FOUND, "query", "q"),
                     new VectorStoreCompressionStrategy(empty).recall(l, "q", 3, "s1"));
-            assertText(l, AgentI18n.get(l, AgentI18nKeys.COMPRESS_VECTOR_RECALL_FAILED),
+            assertText(l, FrozenMessages.of(l).get(AgentI18nKeys.COMPRESS_VECTOR_RECALL_FAILED),
                     new VectorStoreCompressionStrategy(broken).recall(l, "q", 3, "s1"));
         }
     }

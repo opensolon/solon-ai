@@ -1,0 +1,6 @@
+name: __ask_for_feedback
+title: null
+--- description ---
+当任务缺失必要参数、条件或外部反馈而无法继续时，必须调用此工具反馈，并向用户说明原因。
+--- inputSchema ---
+{"type":"object","properties":{"reason":{"type":"string","description":"向用户说明原因"}},"required":["reason"]}

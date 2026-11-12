@@ -214,7 +214,7 @@ public class TeamLocaleInheritTest {
         assertNotNull(trace.getOriginalPrompt(), "trace should hold the original prompt");
         trace.getOriginalPrompt().attrs().put(AgentI18n.ATTR_LOCALE, old.toLanguageTag());
 
-        //续跑（不带 prompt）：本次仍用默认语言（中文），旧会话的语言应被自动登记
+        //续跑（不带 prompt）：沿用旧会话这一轮的语言，且该语言应被自动登记
         agent.prompt().session(session).call();
 
         assertTrue(AgentI18n.knownLocales().contains(old),

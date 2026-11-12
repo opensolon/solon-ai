@@ -1,0 +1,9 @@
+call: 已进入招标流程。
+bid: 标书已收录。
+--- bid tools ---
+name: __submit_proposal__
+title: 提交投标
+--- description ---
+提交你的执行计划和信心分。
+--- inputSchema ---
+{"type":"object","properties":{"plan":{"type":"string","description":"计划摘要"},"score":{"type":"integer","description":"信心分(1-100)"}},"required":["score","plan"]}

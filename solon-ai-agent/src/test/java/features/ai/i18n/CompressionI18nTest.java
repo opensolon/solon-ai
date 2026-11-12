@@ -16,6 +16,7 @@ import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatSession;
 import org.noear.solon.ai.chat.tool.MethodToolProvider;
+import org.noear.solon.ai.i18n.testkit.FrozenMessages;
 import org.noear.solon.annotation.Param;
 
 import java.util.ArrayList;
@@ -129,9 +130,9 @@ public class CompressionI18nTest {
 
             // 指令中的“无增量”标记与识别逻辑来自同一 key
             Assertions.assertTrue(new LLMCompressionStrategy().getSystemInstruction(en)
-                    .endsWith(AgentI18n.get(en, "compress.llm.empty_marker")));
+                    .endsWith(FrozenMessages.of(Locale.ENGLISH).get("compress.llm.empty_marker")));
             Assertions.assertTrue(new KeyInfoExtractionStrategy().getSystemInstruction(en)
-                    .contains(AgentI18n.get(en, "compress.keyinfo.empty_marker")));
+                    .contains(FrozenMessages.of(Locale.ENGLISH).get("compress.keyinfo.empty_marker")));
         }
 
         VectorStoreCompressionStrategy vs = new VectorStoreCompressionStrategy(null).locale(Locale.ENGLISH);
@@ -239,7 +240,7 @@ public class CompressionI18nTest {
 
         // 执行委托给原工具（空 query 直接返回提示，不访问向量库）
         Assertions.assertEquals("请提供具体的关键词以进行历史回溯。", zhVs.recall("", 3, "s1"));
-        Assertions.assertEquals(AgentI18n.get(Locale.ENGLISH, "compress.vector.recall.empty_query"), enVs.recall("", 3, "s1"));
+        Assertions.assertEquals(FrozenMessages.of(Locale.ENGLISH).get("compress.vector.recall.empty_query"), enVs.recall("", 3, "s1"));
         Assertions.assertEquals("[系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。",
                 zhVs.recall("q", 3, "bad id"));
         assertNoChinese(enVs.recall("q", 3, "bad id"), "recall.invalid_session");
@@ -258,7 +259,7 @@ public class CompressionI18nTest {
         Map<String, Object> args = new HashMap<>();
         args.put("query", "");
         args.put(ChatSession.ATTR_SESSIONID, "s1");
-        Assertions.assertEquals(AgentI18n.get(Locale.ENGLISH, "compress.vector.recall.empty_query"),
+        Assertions.assertEquals(FrozenMessages.of(Locale.ENGLISH).get("compress.vector.recall.empty_query"),
                 String.valueOf(enTool.handle(args)));
 
         args.put("query", "q");

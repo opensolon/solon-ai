@@ -36,6 +36,7 @@ import org.noear.solon.ai.chat.talent.Talent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolProvider;
 import org.noear.solon.ai.chat.tool.ToolSchemaUtil;
+import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RankEntity;
 import org.noear.solon.flow.*;
@@ -147,6 +148,29 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
         return this.call(prompt, session, null);
     }
 
+    /**
+     * 本轮的默认语言（请求显式指定的语言在其后生效，优先于它）
+     *
+     * <p>语言属于一轮，在一轮开始时定一次：</p>
+     * <ul>
+     *     <li>新任务：用智能体配置的语言，不沿用同一会话上一轮的语言</li>
+     *     <li>续流（空提示词）：沿用被中断那一轮的语言（见 {@link ReActTrace#getRunLocale()}），取不到时用智能体配置的语言</li>
+     * </ul>
+     *
+     * @return 智能体未配置语言时可能为 null（即全局默认语言）
+     */
+    Locale runLocaleOf(@Nullable ReActTrace trace, @Nullable Prompt prompt) {
+        if (trace != null && Prompt.isEmpty(prompt)) {
+            Locale locale = trace.getRunLocale();
+            if (locale != null) {
+                return locale;
+            }
+        }
+
+        ReActOptions defaults = config.getDefaultOptions();
+        return defaults.isLocaleExplicit() ? defaults.getLocale() : null;
+    }
+
     protected ReActTrace getTrace(FlowContext context) {
         ReActTrace trace = context.getAs(config.getTraceKey());
         if (trace == null) {
@@ -169,6 +193,11 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         if (options == null) {
             options = config.getDefaultOptions().copy();
+
+            if (parentTeamTrace == null) {
+                //本轮语言（与 ReActRequest 同一规则；团队成员不在此处理，由下方继承团队的语言）
+                options.setLocale(runLocaleOf(trace, prompt));
+            }
         }
 
         if (parentTeamTrace != null) {
@@ -183,6 +212,8 @@ public class ReActAgent implements Agent<ReActRequest, ReActResponse> {
 
         //添加必要的工具上下文
         options.getToolContext().put(ChatSession.ATTR_SESSIONID, session.getSessionId());
+        //请求语言：工具方法声明 String __locale 参数即可拿到（与 __cwd 一样由工具上下文注入）
+        options.getToolContext().put(AiI18n.ATTR_LOCALE, AiI18n.toTag(options.getLocale()));
 
         trace.prepare(config, options, session, protocol, config.getName());
 

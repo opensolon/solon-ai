@@ -50,7 +50,7 @@ public class TeamBaseI18nTest {
         }
     }
 
-    static Ctx build(TeamProtocolFactory factory, Locale locale) throws Exception {
+    public static Ctx build(TeamProtocolFactory factory, Locale locale) throws Exception {
         Ctx c = new Ctx();
         c.team = TeamAgent.of(null).name("i18n_base")
                 .protocol(factory)

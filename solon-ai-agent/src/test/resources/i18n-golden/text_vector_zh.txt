@@ -1,0 +1,12 @@
+description: 历史记忆回溯
+--- recall(empty) ---
+请提供具体的关键词以进行历史回溯。
+--- recall(bad session) ---
+[系统通知] 当前会话标识异常，无法进行历史回溯。请基于当前已知对话继续执行。
+--- tools ---
+name: recall_history
+title: 
+--- description ---
+回溯本会话中早前已归档的长记忆、历史细节或事实
+--- inputSchema ---
+{"type":"object","properties":{"limit":{"type":"integer","description":"返回记忆片段的数量","default":3},"query":{"type":"string","description":"检索关键词或核心短语"}},"required":["query","limit"]}

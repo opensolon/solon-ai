@@ -1,0 +1,26 @@
+description: Provides task decomposition, progress tracking, and plan revision for complex tasks. Suitable for long-running tasks that require multi-step collaboration.
+--- tools ---
+name: create_plan
+title: 
+--- description ---
+Initialize the execution plan. This is the first step in handling a complex task, used to break down all subsequent action steps.
+--- inputSchema ---
+{"type":"object","properties":{"steps":{"type":"array","items":{"type":"string"},"description":"A structured list of steps (each step should be an independent action description)."}},"required":["steps"]}
+
+===
+
+name: revise_plan
+title: 
+--- description ---
+Revise the remaining plan. Call this when the original plan is wrong or environment changes make the remaining steps infeasible.
+--- inputSchema ---
+{"type":"object","properties":{"from_index":{"type":"integer","description":"The step from which to start replacing (counted from 1)."},"new_steps":{"type":"array","items":{"type":"string"},"description":"The new list of remaining plan steps."}},"required":["new_steps","from_index"]}
+
+===
+
+name: update_plan_progress
+title: 
+--- description ---
+Update the plan progress. MUST be called when the current step is completed and you are ready to move to the next one.
+--- inputSchema ---
+{"type":"object","properties":{"next_plan_index":{"type":"integer","description":"The index of the next step (a number counted from 1)."}},"required":["next_plan_index"]}

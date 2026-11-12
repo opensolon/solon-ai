@@ -1,0 +1,2 @@
+--- [Confirmed Key Information] ---
+read a.txt

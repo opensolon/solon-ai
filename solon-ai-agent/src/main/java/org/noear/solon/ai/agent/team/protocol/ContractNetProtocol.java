@@ -61,15 +61,9 @@ public class ContractNetProtocol extends TeamProtocolBase {
     private final int maxBiddingRounds = 2;
 
     /**
-     * 内置的招标关键词（与资源文件 {@code protocol.contractnet.bidding_keywords} 合并使用；扩展语言请改资源文件）
+     * 招标工具名标记（不是语言文案；语言相关的招标关键词见资源文件 {@code protocol.contractnet.bidding_keywords}）
      */
-    protected static final List<String> BIDDING_KEYWORDS = Collections.unmodifiableList(Arrays.asList(
-            "招标",
-            "BIDDING",
-            "CALL FOR BIDS",
-            "CALL-FOR-BIDS",
-            "CALL_FOR_BIDS",
-            TOOL_CALL_BIDS.toUpperCase(Locale.ROOT)));
+    private static final String BIDDING_MARKER = TOOL_CALL_BIDS.toUpperCase(Locale.ROOT);
 
     public static class ContractState {
         private final Map<String, ONode> bids = new LinkedHashMap<>();
@@ -588,12 +582,10 @@ public class ContractNetProtocol extends TeamProtocolBase {
             return false;
         }
         String upper = decision.toUpperCase(Locale.ROOT);
-        for (String kw : BIDDING_KEYWORDS) {
-            if (upper.contains(kw)) {
-                return true;
-            }
+        if (upper.contains(BIDDING_MARKER)) {
+            return true;
         }
-        //资源文件中的关键词（合并所有已知语言；用户新增语言文件后自动生效）
+        //招标关键词来自资源文件（合并所有已知语言；用户新增语言文件后自动生效）
         for (String kw : AgentI18n.itemsOfAllLocales(AgentI18nKeys.PROTOCOL_CONTRACTNET_BIDDING_KEYWORDS)) {
             if (upper.contains(kw.toUpperCase(Locale.ROOT))) {
                 return true;

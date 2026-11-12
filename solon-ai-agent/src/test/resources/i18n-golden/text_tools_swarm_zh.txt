@@ -1,0 +1,6 @@
+name: __emerge_tasks__
+title: 涌现任务
+--- description ---
+当你发现需要拆解子任务或建议其他专家介入时调用。
+--- inputSchema ---
+{"type":"object","properties":{"agents":{"type":"string","description":"建议执行的专家名，多个用分号分隔"},"tasks":{"type":"string","description":"待办任务描述，多个用分号分隔"}},"required":["tasks","agents"]}

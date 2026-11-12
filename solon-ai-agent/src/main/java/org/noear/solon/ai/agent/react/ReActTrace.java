@@ -35,6 +35,7 @@ import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.flow.FlowContext;
+import org.noear.solon.lang.Nullable;
 import org.noear.solon.lang.Preview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -348,6 +349,18 @@ public class ReActTrace implements AgentTrace {
     @Override
     public Prompt getOriginalPrompt() {
         return originalPrompt;
+    }
+
+    /**
+     * 本轮的语言（一轮开跑时写入原始提示词，随会话快照保存）
+     *
+     * <p>语言属于一轮：续流（HITL 审批后继续、中断后恢复）不是新的一轮，据此沿用原来的语言。</p>
+     *
+     * @return 取不到时为 null（这一轮还没开跑过，或是升级前保存的旧会话）
+     * @since 4.2.0
+     */
+    public @Nullable Locale getRunLocale() {
+        return AgentI18n.localeOf(originalPrompt);
     }
 
     @Override

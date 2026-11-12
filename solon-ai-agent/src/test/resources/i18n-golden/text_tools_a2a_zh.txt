@@ -1,0 +1,6 @@
+name: __transfer_to__
+title: 任务移交
+--- description ---
+当你无法完成当前任务时，将其移交给更合适的专家。
+--- inputSchema ---
+{"type":"object","properties":{"memo":{"type":"string","description":"交接备忘：把需要下游专家继续处理的关键产出/结论写在这里。"},"state":{"type":"string","description":"业务状态 JSON。"},"target":{"type":"string","description":"目标专家名。必选范围: [{\"name\":\"reviewer\",\"role\":\"reviewer-role\",\"capabilities\":[\"review\",\"assistant\"],\"inputModes\":[\"text\"]}]"}},"required":["target","state","memo"]}

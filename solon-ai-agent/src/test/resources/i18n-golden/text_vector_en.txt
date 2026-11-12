@@ -1,0 +1,12 @@
+description: History memory recall
+--- recall(empty) ---
+Please provide specific keywords to recall history.
+--- recall(bad session) ---
+[System Notice] The current session identifier is invalid, so history cannot be recalled. Please continue based on the conversation known so far.
+--- tools ---
+name: recall_history
+title: 
+--- description ---
+Recall long-term memory, historical details or facts archived earlier in this session
+--- inputSchema ---
+{"type":"object","properties":{"limit":{"type":"integer","description":"Number of memory fragments to return","default":3},"query":{"type":"string","description":"Search keywords or key phrases"}},"required":["query","limit"]}

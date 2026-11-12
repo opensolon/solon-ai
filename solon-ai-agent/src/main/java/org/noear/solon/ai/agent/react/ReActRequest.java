@@ -101,6 +101,10 @@ public class ReActRequest implements AgentRequest<ReActRequest, ReActResponse> {
             options = agent.getConfig().getDefaultOptions().copy();
         }
 
+        //本轮语言：新任务不沿用上一轮的语言，续流沿用被中断那一轮的语言（会话重新加载后也一致）；
+        //请求显式指定的语言在下方 optionsAdjustor 中最后生效
+        options.setLocale(agent.runLocaleOf(trace, prompt));
+
         if (optionsAdjustor != null) {
             optionsAdjustor.accept(new ReActOptionsAmend(options));
         }

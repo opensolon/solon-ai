@@ -50,12 +50,6 @@ public class BlackboardProtocol extends HierarchicalProtocol {
     public static final String STATUS_COMPLETED = "COMPLETED";
 
     /**
-     * 内置的完成关键词（与资源文件 {@code protocol.blackboard.completed_keywords} 合并使用；扩展语言请改资源文件）
-     */
-    protected static final List<String> COMPLETED_KEYWORDS = Collections.unmodifiableList(
-            Arrays.asList("完成", "completed", "done", "finished"));
-
-    /**
      * 黑板状态机：管理共享数据与待办队列 (TODOs)
      *
      * <p>TODO 是自由文本任务描述，不是 Agent 名。完成语义：</p>
@@ -209,12 +203,7 @@ public class BlackboardProtocol extends HierarchicalProtocol {
                 return false;
             }
             String lower = text.toLowerCase(Locale.ROOT);
-            for (String kw : COMPLETED_KEYWORDS) {
-                if (lower.contains(kw)) {
-                    return true;
-                }
-            }
-            //资源文件中的关键词（合并所有已知语言；用户新增语言文件后自动生效）
+            //完成关键词来自资源文件（合并所有已知语言；用户新增语言文件后自动生效）
             for (String kw : AgentI18n.itemsOfAllLocales(AgentI18nKeys.PROTOCOL_BLACKBOARD_COMPLETED_KEYWORDS)) {
                 if (lower.contains(kw.toLowerCase(Locale.ROOT))) {
                     return true;

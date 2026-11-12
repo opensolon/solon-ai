@@ -1,0 +1,15 @@
+Error: Not currently in plan mode. Please execute the task directly.
+---
+Error: The plan has not been initialized and cannot be revised.
+---
+Success: The task logic is simple, so plan mode has been skipped. Execute directly and give the final answer; there is no need to call update_plan_progress.
+---
+Success: The plan has been initialized with 2 steps. Please start executing the first step.
+---
+Success: Plan progress updated. Next is step 2 - b
+---
+Success: All plan steps have been completed.
+---
+Feedback: No valid revision steps were provided; the plan remains unchanged.
+---
+Success: The plan has been restructured starting from step 2. Please continue according to the new plan.

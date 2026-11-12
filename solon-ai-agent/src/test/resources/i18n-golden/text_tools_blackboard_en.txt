@@ -1,0 +1,6 @@
+name: __sync_to_blackboard__
+title: Sync Blackboard
+--- description ---
+Sync findings, completed todos and future todos. Provide at least result or state.
+--- inputSchema ---
+{"type":"object","properties":{"completed_todo":{"type":"string","description":"Completed TODO text (semicolon/comma separated)"},"result":{"type":"string","description":"Key findings; mention completed TODO text if any"},"state":{"type":"string","description":"Detailed JSON state (todo/completed_todo/status)"},"todo":{"type":"string","description":"Suggested tasks for next turns; omit if none"}},"required":[]}

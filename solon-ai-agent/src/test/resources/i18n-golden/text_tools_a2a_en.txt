@@ -1,0 +1,6 @@
+name: __transfer_to__
+title: Transfer
+--- description ---
+When you are unable to complete the current task, hand it over to a more appropriate expert.
+--- inputSchema ---
+{"type":"object","properties":{"memo":{"type":"string","description":"Handover memo: put key findings/output the next expert should continue with."},"state":{"type":"string","description":"Persistent JSON state."},"target":{"type":"string","description":"Expert name. Options: [{\"name\":\"reviewer\",\"role\":\"reviewer-role\",\"capabilities\":[\"review\",\"assistant\"],\"inputModes\":[\"text\"]}]"}},"required":["target","state","memo"]}

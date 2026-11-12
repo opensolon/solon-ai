@@ -1,0 +1,6 @@
+name: __ask_for_feedback
+title: null
+--- description ---
+When the task cannot continue because required parameters, conditions, or external feedback are missing, you MUST call this tool to report it and explain the reason to the user.
+--- inputSchema ---
+{"type":"object","properties":{"reason":{"type":"string","description":"Explain the reason to the user"}},"required":["reason"]}

@@ -1,0 +1,26 @@
+description: 提供复杂任务的拆解、进度跟踪及计划修订能力。适用于需要多步协作的长链路任务。
+--- tools ---
+name: create_plan
+title: 
+--- description ---
+初始化执行计划。这是处理复杂任务的第一步，用于拆解后续所有行动步骤。
+--- inputSchema ---
+{"type":"object","properties":{"steps":{"type":"array","items":{"type":"string"},"description":"结构化的步骤列表（每步应为一个独立的动作描述）。"}},"required":["steps"]}
+
+===
+
+name: revise_plan
+title: 
+--- description ---
+修订后续计划。当发现原计划有误或环境变化导致后续步骤不可行时调用。
+--- inputSchema ---
+{"type":"object","properties":{"from_index":{"type":"integer","description":"从哪一步开始替换（从 1 开始）。"},"new_steps":{"type":"array","items":{"type":"string"},"description":"新的后续计划步骤列表。"}},"required":["new_steps","from_index"]}
+
+===
+
+name: update_plan_progress
+title: 
+--- description ---
+更新计划进度。完成当前步骤准备进入下一步时，必须调用。
+--- inputSchema ---
+{"type":"object","properties":{"next_plan_index":{"type":"integer","description":"下一个步骤索引（从 1 开始计数的数字）。"}},"required":["next_plan_index"]}

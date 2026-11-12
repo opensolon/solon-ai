@@ -1,0 +1,6 @@
+name: __call_for_bids__
+title: Call for Bids
+--- description ---
+Collect proposals from all experts when the best executor is not obvious.
+--- inputSchema ---
+{"type":"object","properties":{"requirement":{"type":"string","description":"Task requirements"}},"required":["requirement"]}

@@ -1,0 +1,6 @@
+name: __emerge_tasks__
+title: Emerge Tasks
+--- description ---
+Call this to decompose tasks or suggest other experts.
+--- inputSchema ---
+{"type":"object","properties":{"agents":{"type":"string","description":"Suggested agent names, separated by semicolons"},"tasks":{"type":"string","description":"Task descriptions, separated by semicolons"}},"required":["tasks","agents"]}

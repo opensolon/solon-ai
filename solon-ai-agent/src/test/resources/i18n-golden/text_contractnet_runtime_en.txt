@@ -1,0 +1,9 @@
+call: Bidding phase initiated.
+bid: Bid received.
+--- bid tools ---
+name: __submit_proposal__
+title: Submit Bid
+--- description ---
+Submit your execution plan and confidence score.
+--- inputSchema ---
+{"type":"object","properties":{"plan":{"type":"string","description":"Plan summary"},"score":{"type":"integer","description":"Confidence score(1-100)"}},"required":["score","plan"]}
