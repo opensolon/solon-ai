@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * loop_* 工具的成败标记：失败返回 {@link ToolResult#error(String)}（文本仍带 {@code ERROR: } 前缀给模型看），
- * 成功（含查询为空）不标记失败。文本与默认语言旧签名逐字一致。
+ * 成功（含查询为空）不标记失败。
  */
 class LoopTalentErrorFlagTest {
     private static final DateTimeFormatter AT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
@@ -79,12 +79,5 @@ class LoopTalentErrorFlagTest {
         assertOk(talent.loopControl("resume", taskId, "s1", null));
         assertOk(talent.loopControl("trigger", taskId, "s1", null));
         assertOk(talent.loopControl("stop", taskId, "s1", null));
-    }
-
-    @Test
-    void legacySignatureKeepsSameText() {
-        ToolResult r = talent.loopControl("restart", "any", "s1", null);
-
-        assertEquals(r.getContent(), talent.loopControl("restart", "any", "s1"));
     }
 }

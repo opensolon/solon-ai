@@ -35,8 +35,8 @@ public class TodoI18nScenarioTest {
         GoldenFiles.verify("todo_description_en", talent.description(null));
         GoldenFiles.verify("todo_tools", GoldenFiles.dumpTools(talent.getToolAry()));
         //未注入 __locale 时按默认语言
-        GoldenFiles.verify("todo_read_empty_en", talent.todoRead(cwd.toString(), "s1"));
-        GoldenFiles.verify("todo_write_pending_en", talent.todoWrite("- [x] a\n- [/] b\n- [ ] c", cwd.toString(), "s3"));
+        GoldenFiles.verify("todo_read_empty_en", talent.todoRead(cwd.toString(), "s1", null));
+        GoldenFiles.verify("todo_write_pending_en", talent.todoWrite("- [x] a\n- [/] b\n- [ ] c", cwd.toString(), "s3", null));
     }
 
     @Test
@@ -45,7 +45,7 @@ public class TodoI18nScenarioTest {
 
         GoldenFiles.verify("todo_description_zh", talent.description(null));
         GoldenFiles.verify("todo_tools", GoldenFiles.dumpTools(talent.getToolAry()));
-        GoldenFiles.verify("todo_read_empty_zh", talent.todoRead(cwd.toString(), "s1"));
+        GoldenFiles.verify("todo_read_empty_zh", talent.todoRead(cwd.toString(), "s1", null));
     }
 
     /**

@@ -169,14 +169,6 @@ public class LoopTalent extends AbsTalent {
         return ToolResult.success(root.toJson());
     }
 
-    /**
-     * 新增任务（默认语言）
-     */
-    public String loopAdd(String prompt, String at, Integer intervalMinutes, String cron, Boolean oneShot,
-                          Boolean runNow, String __sessionId) {
-        return loopAdd(prompt, at, intervalMinutes, cron, oneShot, runNow, __sessionId, null).getContent();
-    }
-
     // ==================== loop_list ====================
 
     /**
@@ -200,13 +192,6 @@ public class LoopTalent extends AbsTalent {
         }
         root.set("total", tasks.size());
         return ToolResult.success(root.toJson());
-    }
-
-    /**
-     * 查询任务（默认语言）
-     */
-    public String loopList(String __sessionId) {
-        return loopList(__sessionId, null).getContent();
     }
 
     // ==================== loop_control（stop/pause/resume/trigger 合一） ====================
@@ -239,13 +224,6 @@ public class LoopTalent extends AbsTalent {
             default:
                 return err(LoopI18n.fmt(locale, LoopI18nKeys.LOOP_TOOL_BAD_ACTION, "action", action));
         }
-    }
-
-    /**
-     * 控制任务（默认语言）
-     */
-    public String loopControl(String action, String taskId, String __sessionId) {
-        return loopControl(action, taskId, __sessionId, null).getContent();
     }
 
     private ToolResult doStop(String taskId, String __sessionId, Locale locale) {

@@ -312,10 +312,6 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     // --- 内置工具映射 ---
 
-    public Object searchApis(String keyword) {
-        return searchApis(keyword, null);
-    }
-
     /**
      * 搜索接口（__locale 由工具上下文注入）
      *
@@ -353,10 +349,6 @@ public class OpenApiGatewayTalent extends AbsTalent {
         return results;
     }
 
-    public String getApiDetail(String apiName) {
-        return getApiDetail(apiName, null);
-    }
-
     /**
      * 获取接口详情（__locale 由工具上下文注入）
      *
@@ -374,14 +366,6 @@ public class OpenApiGatewayTalent extends AbsTalent {
         } else {
             return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_MISSING, "name", apiName);
         }
-    }
-
-    public String callApi(String apiName,
-                          Map<String, Object> headerParams,
-                          Map<String, Object> pathParams,
-                          Map<String, Object> queryParams,
-                          Map<String, Object> bodyParams) throws IOException {
-        return callApi(apiName, headerParams, pathParams, queryParams, bodyParams, null);
     }
 
     /**

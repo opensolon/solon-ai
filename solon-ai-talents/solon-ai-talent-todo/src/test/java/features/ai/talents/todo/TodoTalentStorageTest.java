@@ -25,9 +25,9 @@ public class TodoTalentStorageTest {
         TodoTalent todo = new TodoTalent(source, "sessions");
 
         assertNull(todo.readTodo(null, "s1"));
-        assertTrue(todo.todoRead(null, "s1").contains("当前任务清单为空"));
+        assertTrue(todo.todoRead(null, "s1", null).contains("当前任务清单为空"));
 
-        String saved = todo.todoWrite("- [x] a\n- [ ] b", "/any/cwd", "s1");
+        String saved = todo.todoWrite("- [x] a\n- [ ] b", "/any/cwd", "s1", null);
         assertTrue(saved.contains("pending: 1"), saved);
         assertEquals("- [x] a\n- [ ] b\n", source.readStringOrNull("sessions/s1/TODO.md"));
         assertEquals("- [x] a\n- [ ] b\n", todo.readTodo("/other/cwd", "s1"), "数据源模式下清单属于会话，与 cwd 无关");

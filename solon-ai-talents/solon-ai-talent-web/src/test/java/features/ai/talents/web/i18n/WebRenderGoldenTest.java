@@ -87,13 +87,13 @@ public class WebRenderGoldenTest {
         out.put("web_codesearch_error" + suffix, errorOf(codeSearch, mcp(ToolResult.error("bad query"), null), tag));
         out.put("web_codesearch_error_empty" + suffix, errorOf(codeSearch, mcp(ToolResult.error(""), null), tag));
         setCodeSearchClient(mcp(new ToolResult(""), null));
-        out.put("web_codesearch_empty" + suffix, tag == null ? codeSearch.codesearch("q", null) : codeSearch.codesearch("q", null, tag));
+        out.put("web_codesearch_empty" + suffix, tag == null ? codeSearch.codesearch("q", null, null) : codeSearch.codesearch("q", null, tag));
 
         //驱动型：无结果 / 服务异常 / URL 无效 / 抓取失败
-        out.put("web_search_driver_empty" + suffix, tag == null ? searchEmpty.web_search("q") : searchEmpty.web_search("q", tag));
-        out.put("web_search_driver_fail" + suffix, tag == null ? searchFail.web_search("q") : searchFail.web_search("q", tag));
-        out.put("web_crawler_invalid" + suffix, tag == null ? crawlFail.crawl_url("ftp://x") : crawlFail.crawl_url("ftp://x", tag));
-        out.put("web_crawler_fail" + suffix, tag == null ? crawlFail.crawl_url("https://x") : crawlFail.crawl_url("https://x", tag));
+        out.put("web_search_driver_empty" + suffix, tag == null ? searchEmpty.web_search("q", null) : searchEmpty.web_search("q", tag));
+        out.put("web_search_driver_fail" + suffix, tag == null ? searchFail.web_search("q", null) : searchFail.web_search("q", tag));
+        out.put("web_crawler_invalid" + suffix, tag == null ? crawlFail.crawl_url("ftp://x", null) : crawlFail.crawl_url("ftp://x", tag));
+        out.put("web_crawler_fail" + suffix, tag == null ? crawlFail.crawl_url("https://x", null) : crawlFail.crawl_url("https://x", tag));
         return out;
     }
 
@@ -106,7 +106,7 @@ public class WebRenderGoldenTest {
     private String errorOf(CodeSearchTalent talent, McpClientProvider client, String tag) throws Exception {
         setCodeSearchClient(client);
         try {
-            return "<no error> " + (tag == null ? talent.codesearch("q", null) : talent.codesearch("q", null, tag));
+            return "<no error> " + (tag == null ? talent.codesearch("q", null, null) : talent.codesearch("q", null, tag));
         } catch (Throwable e) {
             return e.getClass().getSimpleName() + ": " + e.getMessage();
         }

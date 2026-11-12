@@ -69,7 +69,7 @@ public class LspToolTest {
     public void testGoToDefinition() throws Exception {
         System.out.println("[testGoToDefinition] tool=" + tool);
         assertNotNull(tool, "tool should not be null");
-        Document doc = (Document) tool.lsp("goToDefinition", "main.py", 4, 9, null, null);
+        Document doc = (Document) tool.lsp("goToDefinition", "main.py", 4, 9, null, null, null);
         assertNotNull(doc);
         assertEquals("goToDefinition", doc.getMetadata("operation"));
         String content = doc.getContent();
@@ -83,7 +83,7 @@ public class LspToolTest {
     @Test
     public void testFindReferences() throws Exception {
         assertNotNull(tool);
-        Document doc = (Document) tool.lsp("findReferences", "main.py", 1, 5, null, null);
+        Document doc = (Document) tool.lsp("findReferences", "main.py", 1, 5, null, null, null);
         assertNotNull(doc);
         assertEquals("findReferences", doc.getMetadata("operation"));
         String content = doc.getContent();
@@ -94,7 +94,7 @@ public class LspToolTest {
     @Test
     public void testHover() throws Exception {
         assertNotNull(tool);
-        Document doc = (Document) tool.lsp("hover", "main.py", 4, 9, null, null);
+        Document doc = (Document) tool.lsp("hover", "main.py", 4, 9, null, null, null);
         assertNotNull(doc);
         assertEquals("hover", doc.getMetadata("operation"));
         String content = doc.getContent();
@@ -105,7 +105,7 @@ public class LspToolTest {
     @Test
     public void testDocumentSymbol() throws Exception {
         assertNotNull(tool);
-        Document doc = (Document) tool.lsp("documentSymbol", "main.py", 1, 1, null, null);
+        Document doc = (Document) tool.lsp("documentSymbol", "main.py", 1, 1, null, null, null);
         assertNotNull(doc);
         assertEquals("documentSymbol", doc.getMetadata("operation"));
         String content = doc.getContent();
@@ -164,7 +164,7 @@ public class LspToolTest {
     public void testPathSecurityCheck() {
         assertNotNull(tool);
         assertThrows(SecurityException.class, () -> {
-            tool.lsp("goToDefinition", "../outside.java", 1, 1, null, null);
+            tool.lsp("goToDefinition", "../outside.java", 1, 1, null, null, null);
         });
     }
 
@@ -172,7 +172,7 @@ public class LspToolTest {
     public void testFileNotFound() {
         assertNotNull(tool);
         assertThrows(RuntimeException.class, () -> {
-            tool.lsp("goToDefinition", "NotExists.py", 1, 1, null, null);
+            tool.lsp("goToDefinition", "NotExists.py", 1, 1, null, null, null);
         });
     }
 
@@ -180,14 +180,14 @@ public class LspToolTest {
     public void testUnknownOperation() {
         assertNotNull(tool);
         assertThrows(IllegalArgumentException.class, () -> {
-            tool.lsp("unknownOperation", "main.py", 1, 1, null, null);
+            tool.lsp("unknownOperation", "main.py", 1, 1, null, null, null);
         });
     }
 
     @Test
     public void testNoLspServerConfigured() throws Exception {
         assertNotNull(tool);
-        Document doc = (Document) tool.lsp("hover", "readme.txt", 1, 1, null, null);
+        Document doc = (Document) tool.lsp("hover", "readme.txt", 1, 1, null, null, null);
         assertNotNull(doc);
         assertTrue(doc.getContent().contains("not supported by any LSP server"));
     }
@@ -205,7 +205,7 @@ public class LspToolTest {
         // 创建一个 .fake 文件
         Files.write(worktree.resolve("test.fake"), "hello".getBytes());
 
-        Document doc = (Document) fakeTool.lsp("hover", "test.fake", 1, 1, null, null);
+        Document doc = (Document) fakeTool.lsp("hover", "test.fake", 1, 1, null, null, null);
         assertNotNull(doc);
         String content = doc.getContent();
         // 应该提示命令未安装
@@ -226,7 +226,7 @@ public class LspToolTest {
 
         Files.write(worktree.resolve("test.bad"), "hello".getBytes());
 
-        Document doc = (Document) badTool.lsp("hover", "test.bad", 1, 1, null, null);
+        Document doc = (Document) badTool.lsp("hover", "test.bad", 1, 1, null, null, null);
         assertNotNull(doc);
         String content = doc.getContent();
         // 应该提示环境问题或启动失败（具体取决于 ls 的行为）
@@ -242,7 +242,7 @@ public class LspToolTest {
         Files.createDirectories(subdir);
         String subPy = "def sub_func():\n    pass\n";
         Files.write(subdir.resolve("sub.py"), subPy.getBytes("UTF-8"));
-        Document doc = (Document) tool.lsp("documentSymbol", "sub.py", 1, 1, subdir.toString(), null);
+        Document doc = (Document) tool.lsp("documentSymbol", "sub.py", 1, 1, subdir.toString(), null, null);
         assertNotNull(doc);
         assertEquals("documentSymbol", doc.getMetadata("operation"));
     }

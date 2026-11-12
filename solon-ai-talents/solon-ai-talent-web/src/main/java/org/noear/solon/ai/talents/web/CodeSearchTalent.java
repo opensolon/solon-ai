@@ -78,13 +78,6 @@ public class CodeSearchTalent extends AbsTalent {
     }
 
     /**
-     * 代码搜索（默认语言）
-     */
-    public String codesearch(String query, Integer numResultsObj) throws Throwable {
-        return codesearch(query, numResultsObj, null);
-    }
-
-    /**
      * 代码搜索（__locale 由工具上下文注入）
      *
      * @since 4.2

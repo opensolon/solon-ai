@@ -145,7 +145,7 @@ public class Petstore2ApiTest {
         openApiTalent.addApi(docUrl, baseUrl);
 
         // 搜索包含 pet 关键字的接口
-        Object result = openApiTalent.searchApis("pet");
+        Object result = openApiTalent.searchApis("pet", null);
         Assertions.assertNotNull(result);
 
         System.out.println("搜索 'pet' 结果: " + result);
@@ -156,7 +156,7 @@ public class Petstore2ApiTest {
         OpenApiGatewayTalent openApiTalent = new OpenApiGatewayTalent();
         openApiTalent.addApi(docUrl, baseUrl);
 
-        String detail = openApiTalent.getApiDetail("getPetById");
+        String detail = openApiTalent.getApiDetail("getPetById", null);
         Assertions.assertNotNull(detail);
         Assertions.assertTrue(detail.contains("getPetById"), "详情应包含接口名");
 
@@ -279,7 +279,7 @@ public class Petstore2ApiTest {
         Assertions.assertTrue(openApiTalent.hasApiSource(docUrl), "禁用的源应注册到管理表");
 
         // 2. 但工具不进入全局索引：搜索不到该源的工具
-        Object result = openApiTalent.searchApis("getPetById");
+        Object result = openApiTalent.searchApis("getPetById", null);
         Assertions.assertFalse(result.toString().contains("getPetById"), "禁用的源工具不应被激活");
     }
 }

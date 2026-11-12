@@ -84,7 +84,7 @@ class MountMaterializerTest {
         talent.setSandboxEnabled(false);
 
         // 直接执行 classpath 中物化出来的 shell 脚本，闭环验证 bash 的脚本执行能力。
-        String out = talent.bash("sh @cp/demo/scripts/run.sh", 30000, 20000, null);
+        String out = talent.bash("sh @cp/demo/scripts/run.sh", 30000, 20000, null, null).getContent();
         assertFalse(out.startsWith("错误"), out);
         assertTrue(out.contains("materialized-skill-script"), out);
 
@@ -243,9 +243,9 @@ class MountMaterializerTest {
 
         // 文件工具对用户级物化缓存强制拒绝（防 TOCTOU 篡改）。
         String cachePath = cacheRoot(work).toString();
-        assertThrows(SecurityException.class, () -> talent.ls(cachePath, false, false, null));
-        assertThrows(SecurityException.class, () -> talent.read(cachePath, null, null, null));
-        assertThrows(SecurityException.class, () -> talent.write(cachePath + "/hack.sh", "evil", null));
+        assertThrows(SecurityException.class, () -> talent.ls(cachePath, false, false, null, null).getContent());
+        assertThrows(SecurityException.class, () -> talent.read(cachePath, null, null, null, null).getContent());
+        assertThrows(SecurityException.class, () -> talent.write(cachePath + "/hack.sh", "evil", null, null).getContent());
     }
 
     @Test
@@ -260,9 +260,9 @@ class MountMaterializerTest {
         translate(talent, "cat @cp/demo/SKILL.md");
 
         String cachePath = cacheRoot(work).toString();
-        assertThrows(SecurityException.class, () -> talent.ls(cachePath, false, false, null));
-        assertThrows(SecurityException.class, () -> talent.read(cachePath, null, null, null));
-        assertThrows(SecurityException.class, () -> talent.write(cachePath + "/hack.sh", "evil", null));
+        assertThrows(SecurityException.class, () -> talent.ls(cachePath, false, false, null, null).getContent());
+        assertThrows(SecurityException.class, () -> talent.read(cachePath, null, null, null, null).getContent());
+        assertThrows(SecurityException.class, () -> talent.write(cachePath + "/hack.sh", "evil", null, null).getContent());
     }
 
     @Test

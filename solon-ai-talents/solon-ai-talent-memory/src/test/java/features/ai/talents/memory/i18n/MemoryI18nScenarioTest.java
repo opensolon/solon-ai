@@ -32,12 +32,12 @@ public class MemoryI18nScenarioTest {
 
         GoldenFiles.verify("memory_description_en", talent.description(null));
         GoldenFiles.verify("memory_tools", GoldenFiles.dumpTools(talent.getToolAry()));
-        //未注入 __locale 时按默认语言（旧签名）
-        GoldenFiles.verify("memory_extract_blank_key_en", talent.extract(" ", "x", 5, MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID));
-        GoldenFiles.verify("memory_search_blank_en", talent.search("", null, MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID));
-        GoldenFiles.verify("memory_recall_missing_en", talent.recall("nope", MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID));
-        GoldenFiles.verify("memory_consolidate_blank_key_en", talent.consolidate(null, " ", "x", MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID));
-        GoldenFiles.verify("memory_prune_missing_en", talent.prune("nope", MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID));
+        //__locale 为 null 时按默认语言
+        GoldenFiles.verify("memory_extract_blank_key_en", talent.extract(" ", "x", 5, null, MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID, null));
+        GoldenFiles.verify("memory_search_blank_en", talent.search("", null, MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID, null));
+        GoldenFiles.verify("memory_recall_missing_en", talent.recall("nope", MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID, null));
+        GoldenFiles.verify("memory_consolidate_blank_key_en", talent.consolidate(null, " ", "x", null, MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID, null));
+        GoldenFiles.verify("memory_prune_missing_en", talent.prune("nope", MemoryRenderGoldenTest.CWD, MemoryRenderGoldenTest.SID, null));
     }
 
     @Test

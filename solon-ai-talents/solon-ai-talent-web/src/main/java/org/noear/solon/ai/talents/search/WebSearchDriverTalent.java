@@ -65,13 +65,6 @@ public class WebSearchDriverTalent extends AbsTalent {
     }
 
     /**
-     * 联网搜索（默认语言）
-     */
-    public String web_search(String query) {
-        return web_search(query, null);
-    }
-
-    /**
      * 联网搜索（__locale 由工具上下文注入）
      *
      * @since 4.2

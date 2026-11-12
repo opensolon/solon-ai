@@ -117,7 +117,7 @@ public class TaskTalentSchedulingTest {
         tasks.add(task("no-such-agent-a", 1));
         tasks.add(task("no-such-agent-b", 2));
 
-        String out = engine.getTaskTalent().multitask(tasks, workspace.toString(), "session-x");
+        String out = engine.getTaskTalent().multitask(tasks, workspace.toString(), "session-x", null).getContent();
 
         assertTrue(out.contains("<index>1</index>"), "第 1 条应保留在外壳里: " + out);
         assertTrue(out.contains("<index>2</index>"), "第 2 条应保留在外壳里: " + out);

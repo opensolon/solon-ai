@@ -59,13 +59,13 @@ class TerminalTalentHarnessHomeTest {
         TerminalTalent talent = newTalent(ws, tmp.resolve("home"), ".solon/");
 
         SecurityException agents = assertThrows(SecurityException.class,
-                () -> talent.write(".solon/agents/evil.md", "x", ws.toString()));
+                () -> talent.write(".solon/agents/evil.md", "x", ws.toString(), null).getContent());
         assertTrue(agents.getMessage().contains("路径受保护"), agents.getMessage());
         assertThrows(SecurityException.class,
-                () -> talent.write(".solon/commands/evil.md", "x", ws.toString()));
+                () -> talent.write(".solon/commands/evil.md", "x", ws.toString(), null).getContent());
 
         // 同一目录下的其它子目录不受影响
-        talent.write(".solon/skills/ok.md", "ok", ws.toString());
+        talent.write(".solon/skills/ok.md", "ok", ws.toString(), null);
         assertTrue(Files.exists(ws.resolve(".solon/skills/ok.md")));
     }
 
@@ -75,7 +75,7 @@ class TerminalTalentHarnessHomeTest {
         TerminalTalent talent = new TerminalTalent(new MountManager(ws.toString()));
         assertEquals(".soloncode/", talent.getHarnessHome());
         assertThrows(SecurityException.class,
-                () -> talent.write(".soloncode/agents/evil.md", "x", ws.toString()));
+                () -> talent.write(".soloncode/agents/evil.md", "x", ws.toString(), null).getContent());
     }
 
     @Test

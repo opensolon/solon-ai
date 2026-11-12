@@ -296,7 +296,7 @@ public class GoalRenderGoldenTest {
                         locale == null ? null : locale.toLanguageTag())));
             }
         }
-        return normalize(talent.goal_update(status, sessionId, cwd));
+        return normalize(talent.goal_update(status, sessionId, cwd, null).getContent());
     }
 
     // ==================== 内置验证器（调用方传入的语言） ====================

@@ -106,7 +106,7 @@ public class OpenApiGatewayTalentTest {
                     .resolver(new TestApiResolver(baseUrl))
                     .addApi(baseUrl + "/openapi.json", baseUrl);
 
-            String result = talent.callApi("getUser", null, null, null, null);
+            String result = talent.callApi("getUser", null, null, null, null, null);
 
             assertTrue(result.contains("缺少必要的路径参数"));
             assertTrue(result.contains("/users/{id}"));
@@ -135,7 +135,7 @@ public class OpenApiGatewayTalentTest {
             Map<String, Object> queryParams = new HashMap<>();
             queryParams.put("verbose", true);
 
-            String result = talent.callApi("getUser", null, pathParams, queryParams, null);
+            String result = talent.callApi("getUser", null, pathParams, queryParams, null, null);
 
             assertEquals("{\"ok\":true}", result);
             assertEquals("/users/%E5%BC%A0%20%E4%B8%89%2Fa", requestPath.get());

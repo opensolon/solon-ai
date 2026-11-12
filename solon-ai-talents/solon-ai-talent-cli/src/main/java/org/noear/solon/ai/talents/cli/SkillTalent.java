@@ -236,16 +236,6 @@ public class SkillTalent extends AbsTalent {
         return tools;
     }
 
-    /** 便捷入口（非工具注册，供内部/测试直接调用）：无视野约束 */
-    public String skilllist() {
-        return skilllist(null, null);
-    }
-
-    /** 列出技能（默认语言） */
-    public String skilllist(List<String> _skills_selected, List<String> _skills_allowed) {
-        return skilllist(_skills_selected, _skills_allowed, null);
-    }
-
     @ToolMapping(name = "skilllist", description = "列出本地所有挂载点中的可用技能清单。")
     public String skilllist(List<String> _skills_selected, List<String> _skills_allowed, String __locale) {
         // _skills_selected / _skills_allowed 由 toolContext 隐式注入（未设置时为 null），模型不可见；
@@ -271,15 +261,6 @@ public class SkillTalent extends AbsTalent {
         return sb.toString();
     }
 
-    public String skillsearch(String query) {
-        return skillsearch(query, null, null);
-    }
-
-    /** 搜索技能（默认语言） */
-    public String skillsearch(String query, List<String> _skills_selected, List<String> _skills_allowed) {
-        return skillsearch(query, _skills_selected, _skills_allowed, null);
-    }
-
     @ToolMapping(name = "skillsearch", description = "在所有挂载点中搜索技能关键字。支持空格分隔多个词。")
     public String skillsearch(@Param("query") String query, List<String> _skills_selected, List<String> _skills_allowed,
                               String __locale) {
@@ -296,15 +277,6 @@ public class SkillTalent extends AbsTalent {
         sb.append("</skill_list>");
 
         return sb.toString();
-    }
-
-    public String skillread(String name) throws IOException {
-        return skillread(name, null);
-    }
-
-    /** 读取技能（默认语言） */
-    public String skillread(String name, List<String> _skills_allowed) throws IOException {
-        return skillread(name, _skills_allowed, null);
     }
 
     @ToolMapping(name = "skillread", description = "读取本地技能详细说明书。在选定技能后、开始执行具体任务前，必须调用此工具以获取具体的环境要求、参数规约及可用文件别名。")
@@ -405,11 +377,6 @@ public class SkillTalent extends AbsTalent {
             sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_PRELOADED_TITLE)).append("\n");
             sb.append(block).append("\n");
         }
-    }
-
-    /** 刷新技能（默认语言） */
-    public String skillrefresh() {
-        return skillrefresh(null);
     }
 
     @ToolMapping(name = "skillrefresh", description = "重新扫描所有挂载点，更新技能列表。")

@@ -205,10 +205,6 @@ public class ToolGatewayTalent extends AbsTalent {
         return super.getTools(prompt);
     }
 
-    public Object searchTools(String keyword) {
-        return searchTools(keyword, null);
-    }
-
     /**
      * 搜索业务工具（__locale 由工具上下文注入）
      *
@@ -240,10 +236,6 @@ public class ToolGatewayTalent extends AbsTalent {
         }
 
         return results;
-    }
-
-    public String getToolDetail(String name) {
-        return getToolDetail(name, null);
     }
 
     /**

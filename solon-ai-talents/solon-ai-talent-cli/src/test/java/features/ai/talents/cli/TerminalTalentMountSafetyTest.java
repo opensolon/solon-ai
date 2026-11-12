@@ -59,9 +59,9 @@ public class TerminalTalentMountSafetyTest {
         Files.write(agentsRoot.resolve("coder.md"), "agent".getBytes());
         TerminalTalent talent = talentWith(registerAgentMount(agentsRoot, true));
 
-        String listing = talent.ls("@user-agents", false, false, tempDir.toString());
+        String listing = talent.ls("@user-agents", false, false, tempDir.toString(), null).getContent();
         assertTrue(listing.contains("coder.md"), listing);
-        assertTrue(talent.read("@user-agents/coder.md", null, null, tempDir.toString()).contains("agent"));
+        assertTrue(talent.read("@user-agents/coder.md", null, null, tempDir.toString(), null).getContent().contains("agent"));
     }
 
     /**
@@ -74,8 +74,8 @@ public class TerminalTalentMountSafetyTest {
         TerminalTalent talent = talentWith(registerAgentMount(missingRoot, true));
 
         assertEquals("错误：路径不存在",
-                talent.ls("@user-agents", false, false, tempDir.toString()));
-        assertTrue(talent.read("@user-agents/coder.md", null, null, tempDir.toString())
+                talent.ls("@user-agents", false, false, tempDir.toString(), null).getContent());
+        assertTrue(talent.read("@user-agents/coder.md", null, null, tempDir.toString(), null).getContent()
                 .contains("文件不存在"));
     }
 
@@ -85,9 +85,9 @@ public class TerminalTalentMountSafetyTest {
         Path missingRoot = tempDir.resolve("lazy-agents");
         TerminalTalent talent = talentWith(registerAgentMount(missingRoot, true));
 
-        talent.write("@user-agents/sub/reviewer.md", "review", tempDir.toString());
+        talent.write("@user-agents/sub/reviewer.md", "review", tempDir.toString(), null);
         assertTrue(Files.exists(missingRoot.resolve("sub/reviewer.md")));
-        assertTrue(talent.read("@user-agents/sub/reviewer.md", null, null, tempDir.toString())
+        assertTrue(talent.read("@user-agents/sub/reviewer.md", null, null, tempDir.toString(), null).getContent()
                 .contains("review"));
     }
 
@@ -97,7 +97,7 @@ public class TerminalTalentMountSafetyTest {
         Path agentsRoot = Files.createDirectories(tempDir.resolve("agents"));
         TerminalTalent talent = talentWith(registerAgentMount(agentsRoot, false));
 
-        assertTrue(talent.read("@user-agents/a/b/c/ghost.md", null, null, tempDir.toString())
+        assertTrue(talent.read("@user-agents/a/b/c/ghost.md", null, null, tempDir.toString(), null).getContent()
                 .contains("文件不存在"));
     }
 
@@ -113,7 +113,7 @@ public class TerminalTalentMountSafetyTest {
 
             TerminalTalent talent = talentWith(registerAgentMount(agentsRoot, true));
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.read("@user-agents/leak/secret.md", null, null, tempDir.toString()));
+                    () -> talent.read("@user-agents/leak/secret.md", null, null, tempDir.toString(), null).getContent());
             // FileMountSource.resolveChecked（挂载层）或 TerminalSupport（终端层）任一层拦截即可
             assertTrue(ex.getMessage().contains("符号链接越界")
                     || ex.getMessage().contains("Symbolic link escapes"), ex.getMessage());
@@ -138,12 +138,12 @@ public class TerminalTalentMountSafetyTest {
 
             // FileMountSource 根路径已 normalize：写回外部目录（验证挂载层无法区分时终端层兜底）
             TerminalTalent talent = talentWith(registerAgentMount(missingRootThroughLink, true));
-            talent.write("@user-agents/x.md", "x", tempDir.toString());
+            talent.write("@user-agents/x.md", "x", tempDir.toString(), null);
             assertTrue(Files.exists(outside.resolve("agents/x.md")));
 
             // “..”逃逸路径在挂载层即被拒绝
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.read("@user-agents/../outside/secret.md", null, null, tempDir.toString()));
+                    () -> talent.read("@user-agents/../outside/secret.md", null, null, tempDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("escapes")
                     || ex.getMessage().contains("越界")
                     || ex.getMessage().contains("挂载范围"), ex.getMessage());
@@ -161,9 +161,9 @@ public class TerminalTalentMountSafetyTest {
         TerminalTalent talent = talentWith(registerAgentMount(missingRoot, true));
 
         assertThrows(SecurityException.class,
-                () -> talent.read("@user-agents/../escape.md", null, null, tempDir.toString()));
+                () -> talent.read("@user-agents/../escape.md", null, null, tempDir.toString(), null).getContent());
         assertThrows(Exception.class,
-                () -> talent.write("@user-agents/../../escape.md", "x", tempDir.toString()));
+                () -> talent.write("@user-agents/../../escape.md", "x", tempDir.toString(), null).getContent());
         assertFalse(Files.exists(tempDir.resolve("escape.md")));
         assertFalse(Files.exists(tempDir.getParent().resolve("escape.md")));
     }
@@ -177,11 +177,11 @@ public class TerminalTalentMountSafetyTest {
         Files.write(agentsRoot.resolve("nested/b.md"), "token-b".getBytes());
         TerminalTalent talent = talentWith(registerAgentMount(agentsRoot, false));
 
-        String glob = talent.glob("**/*.md", "@user-agents", tempDir.toString());
+        String glob = talent.glob("**/*.md", "@user-agents", tempDir.toString(), null).getContent();
         assertTrue(glob.contains("a.md"), glob);
         assertTrue(glob.contains("nested/b.md"), glob);
 
-        String grep = talent.grep("token", "@user-agents", null, tempDir.toString());
+        String grep = talent.grep("token", "@user-agents", null, tempDir.toString(), null).getContent();
         assertTrue(grep.contains("token-a"), grep);
         assertTrue(grep.contains("token-b"), grep);
     }
@@ -193,7 +193,7 @@ public class TerminalTalentMountSafetyTest {
         TerminalTalent talent = talentWith(registerAgentMount(agentsRoot, false));
 
         SecurityException ex = assertThrows(SecurityException.class,
-                () -> talent.write("@user-agents/new.md", "x", tempDir.toString()));
+                () -> talent.write("@user-agents/new.md", "x", tempDir.toString(), null).getContent());
         assertTrue(ex.getMessage().contains("只读挂载点"), ex.getMessage());
     }
 

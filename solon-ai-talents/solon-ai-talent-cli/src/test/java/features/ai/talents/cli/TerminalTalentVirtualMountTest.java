@@ -44,20 +44,20 @@ public class TerminalTalentVirtualMountTest {
                     .build());
             TerminalTalent terminal = new TerminalTalent(manager);
 
-            String listing = terminal.ls("@cp/demo", false, false, null);
+            String listing = terminal.ls("@cp/demo", false, false, null, null).getContent();
             assertTrue(listing.contains("SKILL.md"));
 
-            String content = terminal.read("@cp/demo/SKILL.md", null, null, null);
+            String content = terminal.read("@cp/demo/SKILL.md", null, null, null, null).getContent();
             assertTrue(content.contains("Demo classpath skill"));
 
-            String grep = terminal.grep("classpath", "@cp/demo", null, null);
+            String grep = terminal.grep("classpath", "@cp/demo", null, null, null).getContent();
             assertTrue(grep.contains("SKILL.md"));
 
-            String glob = terminal.glob("**/*.md", "@cp/demo", null);
+            String glob = terminal.glob("**/*.md", "@cp/demo", null, null).getContent();
             assertTrue(glob.contains("SKILL.md"));
 
             assertThrows(SecurityException.class,
-                    () -> terminal.write("@cp/demo/new.txt", "no", null));
+                    () -> terminal.write("@cp/demo/new.txt", "no", null, null).getContent());
         } finally {
             Files.walk(work).sorted(java.util.Comparator.reverseOrder())
                     .forEach(p -> p.toFile().delete());
@@ -74,10 +74,10 @@ public class TerminalTalentVirtualMountTest {
             manager.register(Mount.builder().alias("@local").type(MountType.FILES)
                     .source(FileMountSource.of(work)).writable(false).build());
             TerminalTalent terminal = new TerminalTalent(manager);
-            assertTrue(terminal.ls("@local", false, false, null).contains("\n"));
-            assertTrue(terminal.read("@local/a.txt", null, null, null).contains("hello\n"));
-            assertThrows(SecurityException.class, () -> terminal.write("@local/a.txt", "bad", null));
-            assertTrue(terminal.grep("world", "@local", null, null).contains("world"));
+            assertTrue(terminal.ls("@local", false, false, null, null).getContent().contains("\n"));
+            assertTrue(terminal.read("@local/a.txt", null, null, null, null).getContent().contains("hello\n"));
+            assertThrows(SecurityException.class, () -> terminal.write("@local/a.txt", "bad", null, null).getContent());
+            assertTrue(terminal.grep("world", "@local", null, null, null).getContent().contains("world"));
         } finally {
             Files.walk(work).sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
         }
@@ -99,13 +99,13 @@ public class TerminalTalentVirtualMountTest {
 
             source.changeOnReadClose = true;
             IOException conflict = assertThrows(IOException.class,
-                    () -> terminal.edit("@db/note.txt", Collections.singletonList(edit), null));
+                    () -> terminal.edit("@db/note.txt", Collections.singletonList(edit), null, null).getContent());
             assertTrue(conflict.getMessage().contains("version conflict"));
             assertEquals("newer", source.content);
 
             source.changeOnReadClose = false;
             edit.oldStr = "newer";
-            assertTrue(terminal.edit("@db/note.txt", Collections.singletonList(edit), null).contains("成功"));
+            assertTrue(terminal.edit("@db/note.txt", Collections.singletonList(edit), null, null).getContent().contains("成功"));
             assertEquals("edited", source.content);
         } finally {
             Files.delete(work);
@@ -133,12 +133,12 @@ public class TerminalTalentVirtualMountTest {
                     .source(source).writable(true).build());
             TerminalTalent terminal = new TerminalTalent(manager);
 
-            assertTrue(terminal.read("@mapped/note.txt", null, null, null).contains("original"));
+            assertTrue(terminal.read("@mapped/note.txt", null, null, null, null).getContent().contains("original"));
             TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
             edit.oldStr = "original";
             edit.newStr = "edited";
             edit.oldStrStartLine = 1;
-            assertTrue(terminal.edit("@mapped/note.txt", Collections.singletonList(edit), null).contains("成功"));
+            assertTrue(terminal.edit("@mapped/note.txt", Collections.singletonList(edit), null, null).getContent().contains("成功"));
             assertEquals("edited", source.content);
         } finally {
             Files.delete(work);
@@ -163,14 +163,14 @@ public class TerminalTalentVirtualMountTest {
             manager.register(Mount.builder().alias("@unknown").type(MountType.FILES)
                     .source(source).writable(true).build());
             TerminalTalent terminal = new TerminalTalent(manager);
-            assertTrue(terminal.read("@unknown/note.txt", null, null, null).contains("超过单文件读取上限"));
+            assertTrue(terminal.read("@unknown/note.txt", null, null, null, null).getContent().contains("超过单文件读取上限"));
             TerminalTalent.EditOp edit = new TerminalTalent.EditOp();
             edit.oldStr = "x";
             edit.newStr = "y";
             edit.oldStrStartLine = 1;
-            assertTrue(terminal.edit("@unknown/note.txt", Collections.singletonList(edit), null)
+            assertTrue(terminal.edit("@unknown/note.txt", Collections.singletonList(edit), null, null).getContent()
                     .contains("超过单文件读取上限"));
-            assertTrue(terminal.grep("x", "@unknown/note.txt", null, null)
+            assertTrue(terminal.grep("x", "@unknown/note.txt", null, null, null).getContent()
                     .contains("跳过 1 个超过单文件读取上限"));
         } finally {
             Files.delete(work);
@@ -188,10 +188,10 @@ public class TerminalTalentVirtualMountTest {
                     .source(source).writable(false).build());
             TerminalTalent terminal = new TerminalTalent(manager);
             terminal.setMaxCharacterLimit(18);
-            String firstPage = terminal.read("@text/note.txt", null, null, null);
+            String firstPage = terminal.read("@text/note.txt", null, null, null, null).getContent();
             assertTrue(firstPage.contains("offset=2"), firstPage);
             assertFalse(firstPage.contains("second"), firstPage);
-            assertTrue(terminal.read("@text/note.txt", 2, 1, null).contains("second"));
+            assertTrue(terminal.read("@text/note.txt", 2, 1, null, null).getContent().contains("second"));
         } finally {
             Files.delete(work);
         }

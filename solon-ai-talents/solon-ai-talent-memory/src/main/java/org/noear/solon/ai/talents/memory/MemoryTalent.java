@@ -268,20 +268,6 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * EXTRACT & UPDATE: 提取与覆盖（不带 scope 的重载，使用默认域）
-     */
-    public String extract(String key, String fact, int importance, String __cwd, String __sessionId) {
-        return extract(key, fact, importance, null, __cwd, __sessionId, null);
-    }
-
-    /**
-     * EXTRACT & UPDATE: 提取与覆盖（默认语言）
-     */
-    public String extract(String key, String fact, int importance, String scope, String __cwd, String __sessionId) {
-        return extract(key, fact, importance, scope, __cwd, __sessionId, null);
-    }
-
-    /**
      * EXTRACT & UPDATE: 提取与覆盖
      * 解决了记忆冲突与反思逻辑
      */
@@ -380,13 +366,6 @@ public class MemoryTalent extends AbsTalent {
             LOG.error("MemoryTalent extract error", e);
             return MemoryI18n.fmt(locale, MemoryI18nKeys.MEMORY_EXTRACT_ERROR, "error", e.getMessage());
         }
-    }
-
-    /**
-     * SEARCH: 语义搜索（作用域合并由方案内部完成）
-     */
-    public String search(String query, Integer topK, String __cwd, String __sessionId) {
-        return search(query, topK, __cwd, __sessionId, null);
     }
 
     /**
@@ -612,13 +591,6 @@ public class MemoryTalent extends AbsTalent {
     }
 
     /**
-     * RECALL: 精确召回（作用域探测由方案内部完成）
-     */
-    public String recall(String key, String __cwd, String __sessionId) {
-        return recall(key, __cwd, __sessionId, null);
-    }
-
-    /**
      * RECALL: 精确召回（__locale 由工具上下文注入）
      *
      * @since 4.2
@@ -652,20 +624,6 @@ public class MemoryTalent extends AbsTalent {
             LOG.warn("MemoryTalent recall error, key={}", key, e);
         }
         return MemoryI18n.fmt(locale, MemoryI18nKeys.MEMORY_RECALL_MISSING, "key", key);
-    }
-
-    /**
-     * CONSOLIDATE: 知识整合（不带 scope 的重载，使用默认域）
-     */
-    public String consolidate(List<String> oldKeys, String newKey, String insight, String __cwd, String __sessionId) {
-        return consolidate(oldKeys, newKey, insight, null, __cwd, __sessionId, null);
-    }
-
-    /**
-     * CONSOLIDATE: 知识整合（默认语言）
-     */
-    public String consolidate(List<String> oldKeys, String newKey, String insight, String scope, String __cwd, String __sessionId) {
-        return consolidate(oldKeys, newKey, insight, scope, __cwd, __sessionId, null);
     }
 
     /**
@@ -889,13 +847,6 @@ public class MemoryTalent extends AbsTalent {
         } catch (Exception e) {
             LOG.error("MemoryTalent consolidate sync index error, key={}", key, e);
         }
-    }
-
-    /**
-     * PRUNE: 记忆修剪（作用域全删由方案内部完成）
-     */
-    public String prune(String key, String __cwd, String __sessionId) {
-        return prune(key, __cwd, __sessionId, null);
     }
 
     /**

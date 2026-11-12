@@ -155,7 +155,7 @@ public class WindowsShellDetectAndBomTest {
             writeWithBom(workDir.resolve("a.md"), "# 标题\n正文\n");
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
 
-            String out = talent.read("a.md", null, null, workDir.toString());
+            String out = talent.read("a.md", null, null, workDir.toString(), null).getContent();
 
             assertTrue(out.contains("# 标题"), out);
             assertFalse(out.contains("\uFEFF"), "首行不应把 BOM 交给模型: " + out);
@@ -179,7 +179,7 @@ public class WindowsShellDetectAndBomTest {
             op.oldStrStartLine = 1;
             op.oldStr = "# 旧标题";
             op.newStr = "# 新标题";
-            String result = talent.edit("a.md", Collections.singletonList(op), workDir.toString());
+            String result = talent.edit("a.md", Collections.singletonList(op), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功"), result);
 
@@ -204,7 +204,7 @@ public class WindowsShellDetectAndBomTest {
             writeWithBom(workDir.resolve("a.md"), "package demo;\nclass A {}\n");
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
 
-            String out = talent.grep("^package", ".", "*.md", workDir.toString());
+            String out = talent.grep("^package", ".", "*.md", workDir.toString(), null).getContent();
 
             assertTrue(out.contains("a.md"), "行首锚定的正则应能命中带 BOM 文件的首行: " + out);
         } finally {
@@ -217,7 +217,7 @@ public class WindowsShellDetectAndBomTest {
         Path workDir = Files.createTempDirectory("solon-ai-bom-write");
         try {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            talent.write("a.md", "中文内容\n", workDir.toString());
+            talent.write("a.md", "中文内容\n", workDir.toString(), null);
 
             byte[] bytes = Files.readAllBytes(workDir.resolve("a.md"));
             assertFalse(bytes.length >= 3 && bytes[0] == (byte) 0xEF && bytes[1] == (byte) 0xBB,

@@ -95,8 +95,6 @@ public class TaskTalentErrorFlagTest {
         bad.add(HarnessFixtures.taskOp("no-such-b", 2));
         ToolResult all = talent.multitask(bad, ws.toString(), "s1", null);
         assertError(all);
-        // 默认语言旧签名逐字一致
-        assertEquals(all.getContent(), talent.multitask(bad, ws.toString(), "s1"));
     }
 
     /**
@@ -167,10 +165,8 @@ public class TaskTalentErrorFlagTest {
         assertOk(ok);
         assertTrue(ok.getContent().startsWith("[OK] "), ok.getContent());
 
-        // 默认语言旧签名（返回文本）：与新签名逐字一致
-        assertEquals(gen.generate("a2", "d", "sp", null, null, false, ws.toString(), "no-such-session", null).getContent(),
-                gen.generate("a2", "d", "sp", null, null, false, ws.toString(), "no-such-session"));
-        assertTrue(gen.generate("a2", "d", "sp", null, null, false, ws.toString(), "s1").startsWith("[OK] "));
+        // 全局持久化（saveToFile=true）不需要会话
+        assertOk(gen.generate("g1", "d", "sp", null, null, true, ws.toString(), null, null));
 
         // 工具注册路径
         Map<String, Object> args = new LinkedHashMap<>();
@@ -179,19 +175,6 @@ public class TaskTalentErrorFlagTest {
         args.put("systemPrompt", "sp");
         args.put("__sessionId", "s1");
         assertError(gen.getToolMap().get("generate").call(args));
-    }
-
-    /**
-     * 4.1.1 的 7 参签名（无会话）仍可调用：等同 8 参传 null 会话
-     */
-    @Test
-    @SuppressWarnings("deprecation")
-    public void generateLegacySignature() throws Throwable {
-        GenerateTalent gen = HarnessFixtures.engine(ws).getGenerateTalent();
-
-        assertEquals(gen.generate("a3", "d", "sp", null, null, false, ws.toString(), null),
-                gen.generate("a3", "d", "sp", null, null, false, ws.toString()));
-        assertTrue(gen.generate("g3", "d", "sp", null, null, true, ws.toString()).startsWith("[OK] "));
     }
 
     private static Object ctx(ReActTrace trace) throws Exception {

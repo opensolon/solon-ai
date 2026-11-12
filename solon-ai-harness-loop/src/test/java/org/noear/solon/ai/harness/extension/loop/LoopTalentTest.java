@@ -45,7 +45,7 @@ class LoopTalentTest {
 
     @Test
     void loopAddUsesDefaults() {
-        String result = talent.loopAdd("check deployment", null, null, null, null, null, "session-1");
+        String result = talent.loopAdd("check deployment", null, null, null, null, null, "session-1", null).getContent();
 
         LoopTask task = last("session-1");
         assertNotNull(task);
@@ -60,7 +60,7 @@ class LoopTalentTest {
 
     @Test
     void loopAddPassesCronAndRunNow() {
-        String result = talent.loopAdd("finish migration", null, 15, "0 */15 * * * ? *", null, true, "session-2");
+        String result = talent.loopAdd("finish migration", null, 15, "0 */15 * * * ? *", null, true, "session-2", null).getContent();
 
         LoopTask task = last("session-2");
         assertTrue(result.contains("taskId"));
@@ -72,7 +72,7 @@ class LoopTalentTest {
     @Test
     void loopAddAtConvertsToCronAndForcesOneShot() {
         LocalDateTime future = LocalDateTime.now().plusHours(3).withSecond(0).withNano(0);
-        String result = talent.loopAdd("evening report", future.format(AT_FORMAT), null, null, null, null, "session-1");
+        String result = talent.loopAdd("evening report", future.format(AT_FORMAT), null, null, null, null, "session-1", null).getContent();
 
         LoopTask task = last("session-1");
         assertNotNull(task);
@@ -86,20 +86,20 @@ class LoopTalentTest {
     @Test
     void loopAddRejectsPastAt() {
         String past = LocalDateTime.now().minusHours(1).format(AT_FORMAT);
-        assertTrue(talent.loopAdd("late task", past, null, null, null, null, "session-1").startsWith("ERROR:"));
+        assertTrue(talent.loopAdd("late task", past, null, null, null, null, "session-1", null).getContent().startsWith("ERROR:"));
         assertNull(last("session-1"));
     }
 
     @Test
     void loopAddRejectsMalformedAt() {
-        assertTrue(talent.loopAdd("bad at", "2026/09/05 18:00", null, null, null, null, "session-1").startsWith("ERROR:"));
+        assertTrue(talent.loopAdd("bad at", "2026/09/05 18:00", null, null, null, null, "session-1", null).getContent().startsWith("ERROR:"));
         assertNull(last("session-1"));
     }
 
     @Test
     void loopAddCronOneShot() {
         String cron = futureOneShotCron(LocalDateTime.now().plusDays(1).withSecond(0).withNano(0));
-        String result = talent.loopAdd("evening report", null, null, cron, true, null, "session-1");
+        String result = talent.loopAdd("evening report", null, null, cron, true, null, "session-1", null).getContent();
 
         LoopTask task = last("session-1");
         assertNotNull(task);
@@ -110,7 +110,7 @@ class LoopTalentTest {
 
     @Test
     void loopAddRejectsExpiredCron() {
-        String result = talent.loopAdd("stale one-shot", null, null, "0 0 18 5 9 ? 2020", true, null, "session-1");
+        String result = talent.loopAdd("stale one-shot", null, null, "0 0 18 5 9 ? 2020", true, null, "session-1", null).getContent();
         assertTrue(result.startsWith("ERROR:"));
         assertTrue(result.contains("无有效触发时刻"), result);
         assertNull(last("session-1"));
@@ -118,7 +118,7 @@ class LoopTalentTest {
 
     @Test
     void loopAddRejectsUnparsableCron() {
-        String result = talent.loopAdd("bad cron", null, null, "every day at 6", null, null, "session-1");
+        String result = talent.loopAdd("bad cron", null, null, "every day at 6", null, null, "session-1", null).getContent();
         assertTrue(result.startsWith("ERROR:"));
         assertTrue(result.contains("无法解析"), result);
         assertNull(last("session-1"));
@@ -126,22 +126,22 @@ class LoopTalentTest {
 
     @Test
     void loopAddRejectsOneShotWithoutCron() {
-        assertTrue(talent.loopAdd("bad one-shot", null, 10, null, true, null, "session-1").startsWith("ERROR:"));
+        assertTrue(talent.loopAdd("bad one-shot", null, 10, null, true, null, "session-1", null).getContent().startsWith("ERROR:"));
         assertNull(last("session-1"));
     }
 
     @Test
     void loopAddRejectsOneShotWithRunNow() {
         String future = LocalDateTime.now().plusHours(2).format(AT_FORMAT);
-        assertTrue(talent.loopAdd("conflict", future, null, null, null, true, "session-1").startsWith("ERROR:"));
+        assertTrue(talent.loopAdd("conflict", future, null, null, null, true, "session-1", null).getContent().startsWith("ERROR:"));
         assertNull(last("session-1"));
     }
 
     @Test
     void loopAddReportsSchedulerRejection() {
         talent = new LoopTalent(ops = scheduler(1));
-        talent.loopAdd("first", null, 10, null, null, null, "session-1");
-        String result = talent.loopAdd("over", null, 10, null, null, null, "session-1");
+        talent.loopAdd("first", null, 10, null, null, null, "session-1", null);
+        String result = talent.loopAdd("over", null, 10, null, null, null, "session-1", null).getContent();
         assertTrue(result.startsWith("ERROR:"));
         assertTrue(result.contains("Max tasks reached"), result);
     }
@@ -150,10 +150,10 @@ class LoopTalentTest {
 
     @Test
     void loopListReturnsTasksWithServerNow() {
-        talent.loopAdd("task a", null, 10, null, null, null, "session-1");
-        talent.loopAdd("task b", null, null, "0 */5 * * * ? *", null, null, "session-1");
+        talent.loopAdd("task a", null, 10, null, null, null, "session-1", null);
+        talent.loopAdd("task b", null, null, "0 */5 * * * ? *", null, null, "session-1", null);
 
-        String result = talent.loopList("session-1");
+        String result = talent.loopList("session-1", null).getContent();
 
         assertTrue(result.contains("task a"));
         assertTrue(result.contains("task b"));
@@ -165,17 +165,17 @@ class LoopTalentTest {
 
     @Test
     void loopListEmptySession() {
-        assertTrue(talent.loopList("no-such-session").contains("\"total\": 0"));
+        assertTrue(talent.loopList("no-such-session", null).getContent().contains("\"total\": 0"));
     }
 
     // ==================== loop_control ====================
 
     @Test
     void loopControlStopRemovesTaskFromCurrentSession() {
-        talent.loopAdd("check status", null, 10, null, null, null, "session-3");
+        talent.loopAdd("check status", null, 10, null, null, null, "session-3", null);
         String taskId = last("session-3").getId();
 
-        String result = talent.loopControl("stop", taskId, "session-3");
+        String result = talent.loopControl("stop", taskId, "session-3", null).getContent();
 
         assertTrue(result.contains("\"action\": \"stop\""));
         assertNull(ops.get("session-3", taskId));
@@ -183,57 +183,57 @@ class LoopTalentTest {
 
     @Test
     void loopControlStopReportsMissingTask() {
-        assertTrue(talent.loopControl("stop", "missing", "session-4").startsWith("ERROR:"));
+        assertTrue(talent.loopControl("stop", "missing", "session-4", null).getContent().startsWith("ERROR:"));
     }
 
     @Test
     void loopControlPauseResumeTogglesEnabled() {
-        talent.loopAdd("heartbeat", null, 10, null, null, null, "session-5");
+        talent.loopAdd("heartbeat", null, 10, null, null, null, "session-5", null);
         String taskId = last("session-5").getId();
 
-        assertTrue(talent.loopControl("pause", taskId, "session-5").contains("\"enabled\": false"));
+        assertTrue(talent.loopControl("pause", taskId, "session-5", null).getContent().contains("\"enabled\": false"));
         assertFalse(ops.get("session-5", taskId).isEnabled());
 
-        assertTrue(talent.loopControl("resume", taskId, "session-5").contains("\"enabled\": true"));
+        assertTrue(talent.loopControl("resume", taskId, "session-5", null).getContent().contains("\"enabled\": true"));
         assertTrue(ops.get("session-5", taskId).isEnabled());
 
-        talent.loopControl("resume", taskId, "session-5");
+        talent.loopControl("resume", taskId, "session-5", null);
         assertTrue(ops.get("session-5", taskId).isEnabled(), "已是目标状态时不得反向切换");
     }
 
     @Test
     void loopControlPauseReportsMissingTask() {
-        assertTrue(talent.loopControl("pause", "missing", "session-7").startsWith("ERROR:"));
+        assertTrue(talent.loopControl("pause", "missing", "session-7", null).getContent().startsWith("ERROR:"));
     }
 
     @Test
     void loopControlTriggerSubmitsExecution() {
-        talent.loopAdd("manual run", null, 10, null, null, null, "session-8");
+        talent.loopAdd("manual run", null, 10, null, null, null, "session-8", null);
         String taskId = last("session-8").getId();
 
-        assertTrue(talent.loopControl("trigger", taskId, "session-8").contains("\"submitted\": true"));
+        assertTrue(talent.loopControl("trigger", taskId, "session-8", null).getContent().contains("\"submitted\": true"));
     }
 
     @Test
     void loopControlTriggerRejectsDisabledTask() {
-        talent.loopAdd("paused run", null, 10, null, null, null, "session-9");
+        talent.loopAdd("paused run", null, 10, null, null, null, "session-9", null);
         String taskId = last("session-9").getId();
-        talent.loopControl("pause", taskId, "session-9");
+        talent.loopControl("pause", taskId, "session-9", null);
 
-        assertTrue(talent.loopControl("trigger", taskId, "session-9").startsWith("ERROR:"));
+        assertTrue(talent.loopControl("trigger", taskId, "session-9", null).getContent().startsWith("ERROR:"));
     }
 
     @Test
     void loopControlRejectsUnknownAction() {
-        String result = talent.loopControl("restart", "any", "session-10");
+        String result = talent.loopControl("restart", "any", "session-10", null).getContent();
         assertTrue(result.startsWith("ERROR:"));
         assertTrue(result.contains("stop/pause/resume/trigger"));
     }
 
     @Test
     void missingSessionIsRejected() {
-        assertTrue(talent.loopAdd("p", null, null, null, null, null, null).startsWith("ERROR:"));
-        assertTrue(talent.loopList("").startsWith("ERROR:"));
-        assertTrue(talent.loopControl("stop", "x", null).startsWith("ERROR:"));
+        assertTrue(talent.loopAdd("p", null, null, null, null, null, null, null).getContent().startsWith("ERROR:"));
+        assertTrue(talent.loopList("", null).getContent().startsWith("ERROR:"));
+        assertTrue(talent.loopControl("stop", "x", null, null).getContent().startsWith("ERROR:"));
     }
 }

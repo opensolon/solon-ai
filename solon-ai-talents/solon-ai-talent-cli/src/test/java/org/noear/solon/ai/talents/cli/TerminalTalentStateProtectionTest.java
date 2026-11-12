@@ -31,16 +31,16 @@ class TerminalTalentStateProtectionTest {
 
         TerminalTalent talent = newTalent(ws, tmp.resolve("home"));
         // 未设置时保持原有口径（可读）
-        assertTrue(talent.read(".solon/sessions/s1/TODO.md", null, null, ws.toString()).contains("secret"));
+        assertTrue(talent.read(".solon/sessions/s1/TODO.md", null, null, ws.toString(), null).getContent().contains("secret"));
 
         talent.setProtectedStatePaths(Arrays.asList("sessions", "memory/"));
         SecurityException r = assertThrows(SecurityException.class,
-                () -> talent.read(".solon/sessions/s1/TODO.md", null, null, ws.toString()));
+                () -> talent.read(".solon/sessions/s1/TODO.md", null, null, ws.toString(), null).getContent());
         assertTrue(r.getMessage().contains("路径受保护"), r.getMessage());
         assertThrows(SecurityException.class,
-                () -> talent.write(".solon/memory/x.md", "x", ws.toString()));
+                () -> talent.write(".solon/memory/x.md", "x", ws.toString(), null).getContent());
         // 其它子目录不受影响
-        talent.write(".solon/skills/ok.md", "ok", ws.toString());
+        talent.write(".solon/skills/ok.md", "ok", ws.toString(), null);
     }
 
     @Test
@@ -120,6 +120,6 @@ class TerminalTalentStateProtectionTest {
         assertEquals(CommandResult.Status.FAILED, r.getStatus());
         assertTrue(r.getText().contains("not bootstrapped"), r.getText());
         assertFalse(SandboxBootstrap.isReady(), "不得自行初始化进程级沙盒");
-        assertTrue(talent.bash("echo hi", 5_000, 100, null).contains("not bootstrapped"));
+        assertTrue(talent.bash("echo hi", 5_000, 100, null, null).getContent().contains("not bootstrapped"));
     }
 }

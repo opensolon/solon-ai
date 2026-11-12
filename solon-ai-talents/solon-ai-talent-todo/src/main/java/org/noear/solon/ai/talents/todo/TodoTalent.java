@@ -180,13 +180,6 @@ public class TodoTalent extends AbsTalent {
     }
 
     /**
-     * 读取清单（默认语言）
-     */
-    public String todoRead(String __cwd, String __sessionId) throws IOException {
-        return todoRead(__cwd, __sessionId, null);
-    }
-
-    /**
      * 读取清单（__locale 由工具上下文注入）
      *
      * @since 4.2
@@ -201,13 +194,6 @@ public class TodoTalent extends AbsTalent {
             return TodoI18n.get(locale, TodoI18nKeys.TODO_READ_EMPTY);
         }
         return content + buildProgressFooter(locale, content);
-    }
-
-    /**
-     * 写入清单（默认语言）
-     */
-    public String todoWrite(String todosMarkdown, String __cwd, String __sessionId) throws IOException {
-        return todoWrite(todosMarkdown, __cwd, __sessionId, null);
     }
 
     /**

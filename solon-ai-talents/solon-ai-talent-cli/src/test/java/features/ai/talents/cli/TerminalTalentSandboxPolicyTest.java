@@ -47,7 +47,7 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("sub/.bashrc", "evil", workDir.toString()));
+                    () -> talent.write("sub/.bashrc", "evil", workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("路径受保护"), ex.getMessage());
         } finally {
             deleteRecursively(workDir);
@@ -72,9 +72,9 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString()).contains("mounted"));
+            assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString(), null).getContent().contains("mounted"));
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("@pool/new.txt", "blocked", workDir.toString()));
+                    () -> talent.write("@pool/new.txt", "blocked", workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("只读挂载点"), ex.getMessage());
         } finally {
             deleteRecursively(workDir);
@@ -100,7 +100,7 @@ public class TerminalTalentSandboxPolicyTest {
             SandboxRuntimeConfig config = new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null);
             talent.setSandboxConfig(config);
 
-            talent.write("@pool/new.txt", "mounted write", workDir.toString());
+            talent.write("@pool/new.txt", "mounted write", workDir.toString(), null);
             assertTrue(new String(Files.readAllBytes(mountDir.resolve("new.txt"))).contains("mounted write"));
         } finally {
             deleteRecursively(workDir);
@@ -128,11 +128,11 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, fs, null, null, null, null, null, null, null, null, null, null, null));
 
             assertEquals(MountType.AGENTS, mountManager.getMount("@user-agents").getType());
-            assertTrue(talent.ls("@user-agents", false, false, workDir.toString()).contains("路径不存在"));
+            assertTrue(talent.ls("@user-agents", false, false, workDir.toString(), null).getContent().contains("路径不存在"));
 
-            talent.write("@user-agents/agent.md", "agent", workDir.toString());
+            talent.write("@user-agents/agent.md", "agent", workDir.toString(), null);
             assertTrue(Files.exists(missingAgentsDir.resolve("agent.md")));
-            assertTrue(talent.read("@user-agents/agent.md", null, null, workDir.toString()).contains("agent"));
+            assertTrue(talent.read("@user-agents/agent.md", null, null, workDir.toString(), null).getContent().contains("agent"));
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(mountParent);
@@ -165,7 +165,7 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            String result = talent.read("@pool1/note.txt", 1, null, workDir.toString());
+            String result = talent.read("@pool1/note.txt", 1, null, workDir.toString(), null).getContent();
             assertTrue(result.contains("pool1"), result);
             assertTrue(!result.contains("pool |"), result);
         } finally {
@@ -194,7 +194,7 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.read("@pool/note.txt", 1, null, workDir.toString()));
+                    () -> talent.read("@pool/note.txt", 1, null, workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("未知的挂载点")
                     || ex.getMessage().contains("挂载点已禁用"), ex.getMessage());
         } finally {
@@ -230,7 +230,7 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(config);
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("@pool/link-out/new.txt", "escape", workDir.toString()));
+                    () -> talent.write("@pool/link-out/new.txt", "escape", workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("符号链接越界"), ex.getMessage());
             assertTrue(!Files.exists(outsideDir.resolve("new.txt")));
         } finally {
@@ -256,7 +256,7 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("link-out/new.txt", "escape", workDir.toString()));
+                    () -> talent.write("link-out/new.txt", "escape", workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("路径越界"), ex.getMessage());
             assertTrue(!Files.exists(outsideDir.resolve("new.txt")));
         } finally {
@@ -282,7 +282,7 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString())
+            assertTrue(talent.read("@pool/note.txt", 1, null, workDir.toString(), null).getContent()
                     .contains("文件不存在"));
         } finally {
             deleteRecursively(workDir);
@@ -306,10 +306,10 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            String grepResult = talent.grep("outside-secret-token", ".", null, workDir.toString());
+            String grepResult = talent.grep("outside-secret-token", ".", null, workDir.toString(), null).getContent();
             assertTrue(!grepResult.contains("outside-secret-token"), grepResult);
 
-            String globResult = talent.glob("**/*.txt", ".", workDir.toString());
+            String globResult = talent.glob("**/*.txt", ".", workDir.toString(), null).getContent();
             assertTrue(!globResult.contains("linked-secret.txt"), globResult);
         } finally {
             deleteRecursively(workDir);
@@ -331,7 +331,7 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            assertThrows(SecurityException.class, () -> talent.write("safe-link", "evil", workDir.toString()));
+            assertThrows(SecurityException.class, () -> talent.write("safe-link", "evil", workDir.toString(), null).getContent());
             assertTrue("safe".equals(new String(Files.readAllBytes(workDir.resolve(".bashrc")))));
         } finally {
             deleteRecursively(workDir);
@@ -360,7 +360,7 @@ public class TerminalTalentSandboxPolicyTest {
             TerminalTalent talent = new TerminalTalent(mountManager);
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
-            assertThrows(SecurityException.class, () -> talent.write("@pool/safe-link", "evil", workDir.toString()));
+            assertThrows(SecurityException.class, () -> talent.write("@pool/safe-link", "evil", workDir.toString(), null).getContent());
             assertTrue("safe".equals(new String(Files.readAllBytes(pool.resolve(".bashrc")))));
         } finally {
             deleteRecursively(workDir);
@@ -416,7 +416,7 @@ public class TerminalTalentSandboxPolicyTest {
             assertFalse(instruction.contains("@user-agents"), instruction);
 
             // 但文件工具与运行时能力不受影响
-            assertTrue(talent.read("@user-agents/a.md", null, null, workDir.toString()).contains("agent"));
+            assertTrue(talent.read("@user-agents/a.md", null, null, workDir.toString(), null).getContent().contains("agent"));
         } finally {
             deleteRecursively(workDir);
             deleteRecursively(pool);
@@ -430,7 +430,7 @@ public class TerminalTalentSandboxPolicyTest {
             talent.setSandboxConfig(new SandboxRuntimeConfig(null, null, null, null, null, null, null, null, null, null, null, null, null));
 
             SecurityException ex = assertThrows(SecurityException.class,
-                    () -> talent.write("sub/.vscode/settings.json", "evil", workDir.toString()));
+                    () -> talent.write("sub/.vscode/settings.json", "evil", workDir.toString(), null).getContent());
             assertTrue(ex.getMessage().contains("路径受保护"), ex.getMessage());
             assertTrue(!Files.exists(workDir.resolve("sub/.vscode/settings.json")));
         } finally {

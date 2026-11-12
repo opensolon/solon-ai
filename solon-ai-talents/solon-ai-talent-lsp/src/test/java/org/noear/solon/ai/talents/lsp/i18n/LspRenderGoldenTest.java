@@ -65,7 +65,7 @@ public class LspRenderGoldenTest {
         //文件不存在
         try {
             if (locale == null) {
-                talent.lsp("hover", "src/NoSuch.java", 1, 1, null, "s1");
+                talent.lsp("hover", "src/NoSuch.java", 1, 1, null, "s1", null);
             } else {
                 talent.lsp("hover", "src/NoSuch.java", 1, 1, null, "s1", locale);
             }

@@ -144,7 +144,7 @@ class GoalSessionRemoveTest {
 
         // ① 本轮工具上下文带 __cwd：以它为准
         ext.create(sidIn(sessions, "s1"), GoalSpec.of("lint 一下").runNow(false));
-        String json = ext.getGoalTalent().goal_update("complete", "s1", project.toString());
+        String json = ext.getGoalTalent().goal_update("complete", "s1", project.toString(), null).getContent();
         assertTrue(json.contains("achieved"), json);
         assertEquals(Collections.singletonList(project.toString()), seen);
 
@@ -152,7 +152,7 @@ class GoalSessionRemoveTest {
         seen.clear();
         engine.setSessionCwd(engine.getSession("s2"), project.toString());
         ext.create(sidIn(sessions, "s2"), GoalSpec.of("lint 一下").runNow(false));
-        json = ext.getGoalTalent().goal_update("complete", "s2", null);
+        json = ext.getGoalTalent().goal_update("complete", "s2", null, null).getContent();
         assertTrue(json.contains("achieved"), json);
         assertEquals(Collections.singletonList(project.toString()), seen);
         assertNotEquals(engine.getWorkspace(), seen.get(0));

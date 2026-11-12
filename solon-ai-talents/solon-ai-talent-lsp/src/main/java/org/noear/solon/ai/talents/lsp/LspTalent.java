@@ -142,14 +142,6 @@ public class LspTalent extends AbsTalent {
     }
 
     /**
-     * 代码导航（默认语言）
-     */
-    public Document lsp(String operation, String filePath, Integer line, Integer character,
-                        String __cwd, String __sessionId) throws Exception {
-        return lsp(operation, filePath, line, character, __cwd, __sessionId, null);
-    }
-
-    /**
      * 代码导航（__locale 由工具上下文注入）
      *
      * <p>可以返回 Document（结果结构数据）或 String（给 llm 的提示）。除“文件不存在”外，其它返回文案原本就是英文。</p>

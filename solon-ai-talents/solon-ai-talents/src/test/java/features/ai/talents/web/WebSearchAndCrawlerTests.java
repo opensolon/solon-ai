@@ -22,7 +22,7 @@ public class WebSearchAndCrawlerTests {
         // 1. 基础搜索功能测试 (使用 Serper 驱动)
         WebSearchDriverTalent searchTalent = new WebSearchDriverTalent(WebSearchDriverTalent.SERPER, serperKey);
 
-        String result = searchTalent.web_search("Solon AI 框架最新进展");
+        String result = searchTalent.web_search("Solon AI 框架最新进展", null);
 
         System.out.println("[搜索结果]:\n" + result);
         Assertions.assertNotNull(result);
@@ -34,7 +34,7 @@ public class WebSearchAndCrawlerTests {
         // 2. 基础抓取功能测试 (使用 Jina 驱动)
         WebCrawlerDriverTalent crawlerTalent = new WebCrawlerDriverTalent(WebCrawlerDriverTalent.JINA, jinaKey);
 
-        String result = crawlerTalent.crawl_url("https://solon.noear.org/article/about");
+        String result = crawlerTalent.crawl_url("https://solon.noear.org/article/about", null);
 
         System.out.println("[抓取内容]:\n" + (result.length() > 500 ? result.substring(0, 500) + "..." : result));
         Assertions.assertNotNull(result);

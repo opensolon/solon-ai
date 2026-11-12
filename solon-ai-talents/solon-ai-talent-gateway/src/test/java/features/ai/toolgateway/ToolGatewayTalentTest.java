@@ -110,7 +110,7 @@ public class ToolGatewayTalentTest {
     @DisplayName("测试模糊搜索功能：关键词匹配")
     void testSearchTools() {
         // 搜索 "weather" 应该匹配到 "weather_report"
-        Object result = gatewayTalent.searchTools("weather");
+        Object result = gatewayTalent.searchTools("weather", null);
 
         assertTrue(result instanceof List);
         List<Map<String, String>> list = (List<Map<String, String>>) result;
@@ -118,7 +118,7 @@ public class ToolGatewayTalentTest {
         assertEquals("weather_report", list.get(0).get("tool_name"));
 
         // 搜索不存在的关键词
-        Object emptyResult = gatewayTalent.searchTools("unknown_keyword");
+        Object emptyResult = gatewayTalent.searchTools("unknown_keyword", null);
         assertTrue(emptyResult instanceof String);
         assertTrue(emptyResult.toString().contains("未找到"), "搜索为空时应返回未找到提示");
     }
@@ -126,7 +126,7 @@ public class ToolGatewayTalentTest {
     @Test
     @DisplayName("测试工具详情查询")
     void testGetToolDetail() {
-        String detail = gatewayTalent.getToolDetail("adder");
+        String detail = gatewayTalent.getToolDetail("adder", null);
 
         assertNotNull(detail);
         assertTrue(detail.contains("业务工具详情: adder"), "详情标题应包含业务工具详情");

@@ -1027,11 +1027,6 @@ public class TerminalTalent extends AbsTalent {
     // 模型若不知道本工具自带脚本承载能力，就会退化成先用 write 在工作区生成临时脚本再执行——
     // 那些文件落在工作区（沙盒下 write 到不了系统临时目录），会污染 git 状态与后续 glob/grep，
     // 且没有任何清理保证。此处只讲能力、不设禁令，让模型基于「更省事」自行选择正确路径。
-    /** 执行命令（默认语言） */
-    public String bash(String command, Integer timeout, Integer maxOutputChars, String __cwd) {
-        return bash(command, timeout, maxOutputChars, __cwd, null).getContent();
-    }
-
     /**
      * 执行命令
      *
@@ -1180,12 +1175,6 @@ public class TerminalTalent extends AbsTalent {
         return CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WINDOWS_PREPARE_FAILED, "error", ex.getMessage());
     }
 
-    /** 启动命令会话（默认语言） */
-    public String bashStart(String command, String workdir, Integer yieldTimeMs, Integer maxOutputChars,
-                            Integer hardTimeoutMs, String __cwd) throws IOException {
-        return bashStart(command, workdir, yieldTimeMs, maxOutputChars, hardTimeoutMs, __cwd, null).getContent();
-    }
-
     /**
      * 启动命令会话
      *
@@ -1254,17 +1243,11 @@ public class TerminalTalent extends AbsTalent {
         return snapshotResult(snapshot);
     }
 
-    /** 继续等待命令会话（4.1 签名） */
-    public String bashWait(String sessionId, String chars, Integer yieldTimeMs, Integer maxOutputChars) throws IOException {
-        return bashWait(sessionId, chars, yieldTimeMs, maxOutputChars, null).getContent();
-    }
-
     /**
      * 继续等待命令会话
      *
      * <p>被硬超时终止返回 {@link ToolResult#error(String)}；会话不存在等情况直接抛异常（框架按失败处理）。
-     * 输出是固定格式的会话快照，暂不随语言变化；末尾的 {@code __locale} 用于与 4.1 的 String 签名区分，
-     * 并与其它工具方法保持一致。</p>
+     * 输出是固定格式的会话快照，不随语言变化，所以不取 {@code __locale}。</p>
      */
     @ToolMapping(
             name = "bash_wait",
@@ -1272,8 +1255,7 @@ public class TerminalTalent extends AbsTalent {
     public ToolResult bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
                                @Param(value = "chars", required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
                                @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
-                               @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars,
-                               String __locale) throws IOException {
+                               @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
         TerminalSessionManager.CommandSnapshot snapshot =
                 bashSessionManager.writeStdin(sessionId, chars, yieldTimeMs, maxOutputChars);
         return snapshotResult(snapshot);
@@ -1302,11 +1284,6 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 2. 发现文件 ---
-    /** 列出目录（默认语言） */
-    public String ls(String path, Boolean recursive, Boolean showHidden, String __cwd) throws IOException {
-        return ls(path, recursive, showHidden, __cwd, null).getContent();
-    }
-
     /**
      * 列出目录
      *
@@ -1362,15 +1339,11 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 3. 读取内容 ---
-    /** 读取文件（默认语言） */
-    public String read(String filePath, Integer offset, Integer limit, String __cwd) throws IOException {
-        return read(filePath, offset, limit, __cwd, null).getContent();
-    }
-
     /**
      * 读取文件
      *
-     * <p>文件不存在、是目录、是二进制、超过虚拟文件上限、起始行越界返回 {@link ToolResult#error(String)}；
+     * <p>文件不存在、是二进制、起始行越界，以及虚拟来源的目录、超过上限返回 {@link ToolResult#error(String)}
+     * （本地目录读取直接抛 IO 异常，框架同样按失败处理）；
      * 空文件算成功。</p>
      */
     @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。")
@@ -1492,11 +1465,6 @@ public class TerminalTalent extends AbsTalent {
     // --- 4. 写入与编辑 ---
     // 「不用于临时脚本」写在此处而非 bash 描述里：误用的决策点发生在调用 write 的那一刻。
     // 沙盒下本工具只能写工作区，产出的脚本会进 git 状态且无人清理；多行脚本交给 bash 更省事。
-    /** 写入文件（默认语言） */
-    public String write(String filePath, String content, String __cwd) throws IOException {
-        return write(filePath, content, __cwd, null).getContent();
-    }
-
     /**
      * 写入文件
      *
@@ -1525,11 +1493,6 @@ public class TerminalTalent extends AbsTalent {
         return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", filePath), target));
     }
 
-
-    /** 编辑文件（默认语言；失败时以文本返回，不区分错误标记） */
-    public String edit(String filePath, List<EditOp> edits, String __cwd) throws IOException {
-        return edit(filePath, edits, __cwd, null).getContent();
-    }
 
     /**
      * 编辑文件
@@ -1636,11 +1599,6 @@ public class TerminalTalent extends AbsTalent {
     }
 
     // --- 5. 搜索工具 ---
-    /** 搜索内容（默认语言） */
-    public String grep(String pattern, String path, String include, String __cwd) throws IOException {
-        return grep(pattern, path, include, __cwd, null).getContent();
-    }
-
     /**
      * 搜索内容
      *
@@ -1748,11 +1706,6 @@ public class TerminalTalent extends AbsTalent {
         }
 
         return ToolResult.success(sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString());
-    }
-
-    /** 按模式搜索文件（默认语言） */
-    public String glob(String pattern, String path, String __cwd) throws IOException {
-        return glob(pattern, path, __cwd, null).getContent();
     }
 
     /**

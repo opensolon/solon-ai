@@ -46,32 +46,6 @@ public class GenerateTalent extends AbsTalent {
 
 
     /**
-     * 创建子代理（4.1.1 签名，无会话）
-     *
-     * <p>4.2 起 {@code saveToFile=false} 是会话级代理、必须有会话，经此签名调用会返回“无会话”错误；
-     * {@code saveToFile=true}（全局持久化）不受影响。</p>
-     *
-     * @deprecated 4.2，改用 {@link #generate(String, String, String, List, List, Boolean, String, String)}；4.3.0 删除
-     */
-    @Deprecated
-    public String generate(String name, String description, String systemPrompt,
-                           List<String> tools, List<String> skills, Boolean saveToFile,
-                           String __cwd) {
-        return generate(name, description, systemPrompt, tools, skills, saveToFile, __cwd, null);
-    }
-
-    /**
-     * 创建子代理（默认语言，返回文本；成败以文本前缀 {@code ERROR: } / {@code [OK] } 区分）
-     *
-     * @param __sessionId 会话 id（{@code saveToFile=false} 的会话级代理必需）
-     */
-    public String generate(String name, String description, String systemPrompt,
-                           List<String> tools, List<String> skills, Boolean saveToFile,
-                           String __cwd, String __sessionId) {
-        return generate(name, description, systemPrompt, tools, skills, saveToFile, __cwd, __sessionId, null).getContent();
-    }
-
-    /**
      * 创建子代理
      *
      * <p>失败返回 {@link ToolResult#error(String)}（文本带 {@code ERROR: } 前缀），成功返回

@@ -49,11 +49,11 @@ public class TerminalTalentCommandSessionTest {
                             50,
                             2_000,
                             10_000,
-                            workDir.toString());
+                            workDir.toString(), null).getContent();
             assertTrue(first.contains("Process running with session ID"), first);
             String sessionId = extractSessionId(first);
 
-            String second = skill.bashWait(sessionId, null, 2_000, 2_000);
+            String second = skill.bashWait(sessionId, null, 2_000, 2_000).getContent();
             assertTrue(second.contains("status: completed"), second);
             assertTrue(second.contains("end"), second);
         } finally {
@@ -70,12 +70,12 @@ public class TerminalTalentCommandSessionTest {
         try {
             TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
             String first = skill.bashStart(
-                    "read line; echo got:$line", null, 50, 2_000, 10_000, workDir.toString());
+                    "read line; echo got:$line", null, 50, 2_000, 10_000, workDir.toString(), null).getContent();
             assertTrue(first.contains("Process running with session ID"), first);
             String sessionId = extractSessionId(first);
 
             // read 内置命令需要换行才结束读取；write() 原样写字节不追加换行，与原 bash_stdin 行为一致
-            String second = skill.bashWait(sessionId, "hello\n", 2_000, 2_000);
+            String second = skill.bashWait(sessionId, "hello\n", 2_000, 2_000).getContent();
             assertTrue(second.contains("status: completed"), second);
             assertTrue(second.contains("got:hello"), second);
         } finally {

@@ -35,8 +35,8 @@ class SkillCatalogTest {
         assertNull(catalog.getDescriptor("demo"));
         assertNull(catalog.readContent("demo"));
         assertEquals(2, catalog.searchDescriptors("demo").size());
-        assertTrue(talent.skilllist().contains("@first/demo"));
-        assertTrue(talent.skilllist().contains("@second/demo"));
+        assertTrue(talent.skilllist(null, null, null).contains("@first/demo"));
+        assertTrue(talent.skilllist(null, null, null).contains("@second/demo"));
         SkillContent content = catalog.readContent("@first/demo");
         assertNotNull(content);
         assertTrue(content.getText().contains("First body"));
@@ -46,10 +46,10 @@ class SkillCatalogTest {
         catalog.disallowSkill("@first/demo");
         assertEquals(1, catalog.getSkillCount());
         assertNull(catalog.readContent("@first/demo"));
-        assertFalse(talent.skilllist().contains("@first/demo"));
-        assertTrue(talent.skilllist().contains("@second/demo"));
+        assertFalse(talent.skilllist(null, null, null).contains("@first/demo"));
+        assertTrue(talent.skilllist(null, null, null).contains("@second/demo"));
         assertFalse(talent.getInstruction(null).contains("@first/demo"));
-        assertFalse(talent.skillsearch("demo").contains("@first/demo"));
+        assertFalse(talent.skillsearch("demo", null, null, null).contains("@first/demo"));
         catalog.allowSkill("@first/demo");
         assertNotNull(catalog.readContent("@first/demo"));
     }

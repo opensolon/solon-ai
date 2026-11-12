@@ -74,14 +74,6 @@ public class GoalTalent extends AbsTalent {
     }
 
     /**
-     * 获取当前 goal 状态（默认语言）
-     */
-    public String goal_get(String __sessionId,
-                          String __cwd) {
-        return goal_get(__sessionId, __cwd, null);
-    }
-
-    /**
      * 获取当前 goal 状态（__locale 由工具上下文注入）
      */
     @ToolMapping(name = "goal_get",
@@ -132,15 +124,6 @@ public class GoalTalent extends AbsTalent {
         root.set("completionBudgetReport", null);
 
         return root.toJson();
-    }
-
-    /**
-     * 更新 goal 状态（默认语言）
-     */
-    public String goal_update(String status,
-                              String __sessionId,
-                              String __cwd) {
-        return goal_update(status, __sessionId, __cwd, null).getContent();
     }
 
     /**

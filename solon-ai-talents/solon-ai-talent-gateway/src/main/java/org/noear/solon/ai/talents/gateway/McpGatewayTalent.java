@@ -534,14 +534,6 @@ public class McpGatewayTalent extends AbsTalent {
 
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
-    public Object searchTools(String keyword) {
-        return searchTools(keyword, null, null);
-    }
-
-    public Object searchTools(String keyword, List<String> _mcps_allowed) {
-        return searchTools(keyword, _mcps_allowed, null);
-    }
-
     /**
      * 搜索 MCP 工具（__locale 由工具上下文注入）
      *
@@ -574,14 +566,6 @@ public class McpGatewayTalent extends AbsTalent {
         }
 
         return results;
-    }
-
-    public String getToolDetail(String name) {
-        return getToolDetail(name, null, null);
-    }
-
-    public String getToolDetail(String name, List<String> _mcps_allowed) {
-        return getToolDetail(name, _mcps_allowed, null);
     }
 
     /**

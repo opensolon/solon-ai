@@ -60,7 +60,7 @@ public class TaskTalentGuardTest {
             op.prompt = "x";
             op.description = "x";
 
-            String result = talent.task(op, "/tmp", "session-x");
+            String result = talent.task(op, "/tmp", "session-x", null).getContent();
 
             Assertions.assertNotNull(result);
             Assertions.assertTrue(result.startsWith("ERROR:"), "应返回 ERROR 字符串: " + result);
@@ -83,7 +83,7 @@ public class TaskTalentGuardTest {
             op.description = "x";
             tasks.add(op);
 
-            String result = talent.multitask(tasks, "/tmp", "session-x");
+            String result = talent.multitask(tasks, "/tmp", "session-x", null).getContent();
 
             Assertions.assertNotNull(result);
             Assertions.assertTrue(result.startsWith("ERROR:"), "应返回 ERROR 字符串: " + result);
@@ -104,7 +104,7 @@ public class TaskTalentGuardTest {
         op.prompt = "x";
         op.description = "x";
 
-        Assertions.assertThrows(NullPointerException.class, () -> talent.task(op, "/tmp", "session-x"),
+        Assertions.assertThrows(NullPointerException.class, () -> talent.task(op, "/tmp", "session-x", null).getContent(),
                 "无守卫标记时应越过守卫触达引擎（null 引擎抛 NPE 即为证据）");
     }
 }

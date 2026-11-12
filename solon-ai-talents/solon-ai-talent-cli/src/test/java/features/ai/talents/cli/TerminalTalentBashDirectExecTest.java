@@ -36,7 +36,7 @@ public class TerminalTalentBashDirectExecTest {
         Set<String> before = listSolonScriptNames(tmpDir);
 
         TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-        String result = talent.bash("echo direct-exec-ok; printf 'line2\\n'", 10_000, 64_000, workDir.toString());
+        String result = talent.bash("echo direct-exec-ok; printf 'line2\\n'", 10_000, 64_000, workDir.toString(), null).getContent();
 
         assertTrue(result.contains("direct-exec-ok"), "应直接执行命令, result=" + result);
         assertTrue(result.contains("line2") || result.contains("执行成功"), "应支持简单多语句, result=" + result);
@@ -57,7 +57,7 @@ public class TerminalTalentBashDirectExecTest {
 
         Files.write(workDir.resolve("marker.txt"), "x".getBytes());
         TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-        String result = talent.bash("test -f marker.txt && echo WORKDIR_OK", 10_000, 64_000, workDir.toString());
+        String result = talent.bash("test -f marker.txt && echo WORKDIR_OK", 10_000, 64_000, workDir.toString(), null).getContent();
 
         assertTrue(result.contains("WORKDIR_OK"), "工作目录语义应保持, result=" + result);
     }

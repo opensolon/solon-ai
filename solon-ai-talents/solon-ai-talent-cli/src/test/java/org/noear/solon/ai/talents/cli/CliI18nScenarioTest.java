@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import java.util.Locale;
 
 /**
- * 没有请求上下文的入口（旧签名、描述、异常消息）跟随默认语言；请求语言优先于默认语言
+ * 没有请求语言的入口（__locale 为 null、描述、异常消息）跟随默认语言；请求语言优先于默认语言
  */
 public class CliI18nScenarioTest {
     @AfterEach
@@ -34,14 +34,14 @@ public class CliI18nScenarioTest {
             GoldenFiles.verify("skill_description_en", skill.description(null));
             GoldenFiles.verify("clock_tools", GoldenFiles.dumpTools(new ClockTalent().getToolAry()));
 
-            //未注入 __locale 时按默认语言（旧签名）
+            //__locale 为 null 时按默认语言
             GoldenFiles.verify("terminal_validate_empty_en", terminal.validateCommand(""));
-            GoldenFiles.verify("terminal_read_missing_en", terminal.read("nope.txt", null, null, null));
-            GoldenFiles.verify("skill_search_none_en", skill.skillsearch("none"));
+            GoldenFiles.verify("terminal_read_missing_en", terminal.read("nope.txt", null, null, null, null).getContent());
+            GoldenFiles.verify("skill_search_none_en", skill.skillsearch("none", null, null, null));
 
             //向上抛出的权限异常：未绑定语言时用默认语言
             SecurityException e = Assertions.assertThrows(SecurityException.class,
-                    () -> terminal.read("/etc/hosts", null, null, null));
+                    () -> terminal.read("/etc/hosts", null, null, null, null).getContent());
             GoldenFiles.verify("terminal_read_absolute_en", "! " + e.getMessage());
         } finally {
             Files.deleteIfExists(work);
@@ -74,7 +74,7 @@ public class CliI18nScenarioTest {
     @Test
     public void testClockWeekday() {
         ClockTalent clock = new ClockTalent();
-        Assertions.assertTrue(clock.now().contains("星期"), clock.now());
+        Assertions.assertTrue(clock.now(null).contains("星期"), clock.now(null));
         Assertions.assertTrue(clock.now("zh-CN").contains("星期"));
         String en = clock.now("en");
         Assertions.assertTrue(en.matches(".*(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday).*"), en);

@@ -32,11 +32,6 @@ import java.util.Locale;
  */
 @Preview("3.9.1")
 public class ClockTalent extends AbsTalent {
-    /** 当前时间（默认语言） */
-    public String now() {
-        return now(null);
-    }
-
     /**
      * 当前时间（星期按请求语言输出；中文时与改造前一致）
      */

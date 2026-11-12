@@ -574,8 +574,8 @@ outcome.getRequest().stream().blockLast();
 `explicitAgent` 里都能解析到（统一入口 `engine.resolveAgent(session, name)`：先会话级，再引擎级）。
 
 ```java
-// 一行式：复用 general 定义改写（面向 LLM 的 generate 工具走的就是这条）
-engine.getGenerateTalent().generate(
+// 一行式：复用 general 定义改写（就是面向 LLM 的 generate 工具方法；返回 ToolResult，失败时 isError() 为 true）
+ToolResult result = engine.getGenerateTalent().generate(
         "code_reviewer",                        // name（仅字母数字_-）
         "代码审查专家",                          // description
         "你是一位严格的代码审查专家，只指出真实缺陷。",   // systemPrompt
@@ -583,7 +583,8 @@ engine.getGenerateTalent().generate(
         null,                                   // skills
         false,                                  // saveToFile：false = 仅本会话；true = 全局持久化
         engine.getWorkspace(),                  // __cwd
-        session.getSessionId());                // __sessionId（会话级代理必需）
+        session.getSessionId(),                 // __sessionId（会话级代理必需）
+        null);                                  // __locale：文案语言（null = 默认语言）
 
 // Builder 式（toolsAdd 收 List<String> 或 String...，不收 ToolName）
 AgentDefinition definition = AgentDefinition.builder()

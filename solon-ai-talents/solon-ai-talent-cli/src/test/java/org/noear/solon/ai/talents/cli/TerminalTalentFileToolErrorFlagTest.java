@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * read / ls / grep / glob / bash_start / bash_wait 的成败标记。
  *
  * <p>口径：没完成要做的事（路径不存在、二进制、起始行越界、拒绝执行、被硬超时终止）算失败；
- * 结果为空（空目录、空文件、未找到）算成功。文本一律不变（默认语言旧签名与新签名的 getContent 逐字相同）。</p>
+ * 结果为空（空目录、空文件、未找到）算成功。给模型的文本不变（由渲染快照保证）。</p>
  */
 public class TerminalTalentFileToolErrorFlagTest {
 
@@ -44,7 +44,6 @@ public class TerminalTalentFileToolErrorFlagTest {
 
             ToolResult missing = t.ls("no_such_dir", false, false, cwd, null);
             assertTrue(missing.isError(), missing.getContent());
-            assertEquals(t.ls("no_such_dir", false, false, cwd), missing.getContent());
 
             assertFalse(t.ls("empty", false, false, cwd, null).isError(), "空目录不算失败");
             assertFalse(t.ls(".", true, false, cwd, null).isError());
@@ -65,7 +64,6 @@ public class TerminalTalentFileToolErrorFlagTest {
 
             ToolResult missing = t.read("no_such.txt", null, null, cwd, null);
             assertTrue(missing.isError(), missing.getContent());
-            assertEquals(t.read("no_such.txt", null, null, cwd), missing.getContent());
 
             ToolResult binary = t.read("bin.dat", null, null, cwd, null);
             assertTrue(binary.isError(), binary.getContent());
@@ -77,7 +75,6 @@ public class TerminalTalentFileToolErrorFlagTest {
 
             ToolResult ok = t.read("a.txt", null, null, cwd, null);
             assertFalse(ok.isError());
-            assertEquals(t.read("a.txt", null, null, cwd), ok.getContent());
         } finally {
             deleteRecursively(workDir);
         }
@@ -94,14 +91,12 @@ public class TerminalTalentFileToolErrorFlagTest {
 
             ToolResult grepMissing = t.grep("hello", "no_such_dir", null, cwd, null);
             assertTrue(grepMissing.isError(), grepMissing.getContent());
-            assertEquals(t.grep("hello", "no_such_dir", null, cwd), grepMissing.getContent());
             assertTrue(t.grep("hello", "src;lib", null, cwd, null).isError(), "多路径拼接算失败");
             assertFalse(t.grep("not_exists_text", "src", null, cwd, null).isError(), "未找到结果不算失败");
             assertFalse(t.grep("hello", "src", null, cwd, null).isError());
 
             ToolResult globMissing = t.glob("**/*.txt", "no_such_dir", cwd, null);
             assertTrue(globMissing.isError(), globMissing.getContent());
-            assertEquals(t.glob("**/*.txt", "no_such_dir", cwd), globMissing.getContent());
             assertFalse(t.glob("**/*.java", "src", cwd, null).isError(), "未找到匹配文件不算失败");
             assertFalse(t.glob("*.txt", "src", cwd, null).isError());
         } finally {
@@ -118,7 +113,6 @@ public class TerminalTalentFileToolErrorFlagTest {
 
             ToolResult violation = t.bashStart("exit 3", null, 1000, 64000, 120000, cwd, null);
             assertTrue(violation.isError(), "安全校验拒绝算失败");
-            assertEquals(t.bashStart("exit 3", null, 1000, 64000, 120000, cwd), violation.getContent());
 
             ToolResult ok = t.bashStart("echo hi", null, 5000, 64000, 120000, cwd, null);
             assertFalse(ok.isError(), ok.getContent());
@@ -145,7 +139,7 @@ public class TerminalTalentFileToolErrorFlagTest {
             assertFalse(started.isError(), "仍在运行不算失败：" + started.getContent());
             String sessionId = sessionIdOf(started.getContent());
 
-            ToolResult waited = t.bashWait(sessionId, null, 3000, 64000, null);
+            ToolResult waited = t.bashWait(sessionId, null, 3000, 64000);
             assertTrue(waited.getContent().contains("hard_timeout: true"), waited.getContent());
             assertTrue(waited.isError(), "被硬超时终止算失败");
         } finally {

@@ -57,13 +57,6 @@ public class WebCrawlerDriverTalent extends AbsTalent {
     }
 
     /**
-     * 抓取网页（默认语言）
-     */
-    public String crawl_url(String url) {
-        return crawl_url(url, null);
-    }
-
-    /**
      * 抓取网页（__locale 由工具上下文注入）
      *
      * @since 4.2

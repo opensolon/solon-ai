@@ -70,9 +70,6 @@ class GoalTalentErrorFlagTest {
         ToolResult r = ext.getGoalTalent().goal_update("complete", "s1", workspace.toString(), null);
 
         assertError(r, "VALIDATION_FAILED");
-        // 默认语言旧签名逐字一致
-        ext.create(sid("s9"), GoalSpec.of("lint 一下").runNow(false));
-        assertEquals(r.getContent(), ext.getGoalTalent().goal_update("complete", "s9", workspace.toString()));
     }
 
     @Test

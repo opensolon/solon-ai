@@ -276,10 +276,6 @@ public class TaskTalent extends AbsTalent {
         sb.append("</session_agents>\n\n");
     }
 
-    public String task(SingleTaskOp taskSpec, String __cwd, String __sessionId) {
-        return task(taskSpec, __cwd, __sessionId, null).getContent();
-    }
-
     /**
      * 委派单一任务
      *
@@ -315,10 +311,6 @@ public class TaskTalent extends AbsTalent {
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
         String text = runTask(ctx, plan, false, Utils.uuid());
         return ctx.succeeded.get() > 0 ? ToolResult.success(text) : ToolResult.error(text);
-    }
-
-    public String multitask(List<MultiTaskOp> tasks, String __cwd, String __sessionId) {
-        return multitask(tasks, __cwd, __sessionId, null).getContent();
     }
 
     /**

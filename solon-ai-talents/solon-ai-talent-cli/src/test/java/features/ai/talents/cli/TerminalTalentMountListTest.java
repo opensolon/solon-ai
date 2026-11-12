@@ -144,7 +144,7 @@ public class TerminalTalentMountListTest {
             assertTrue(envs.get("BUILTIN").contains("mountlist-hidden-pool"), String.valueOf(envs));
 
             // 文件工具不受 visible 影响
-            assertTrue(talent.read("@builtin/bin.sh", null, null, null).contains("echo hi"));
+            assertTrue(talent.read("@builtin/bin.sh", null, null, null, null).getContent().contains("echo hi"));
         } finally {
             deleteRecursively(work);
             deleteRecursively(pool);

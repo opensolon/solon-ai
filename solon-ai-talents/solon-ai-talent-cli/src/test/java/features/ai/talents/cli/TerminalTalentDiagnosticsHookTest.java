@@ -45,7 +45,7 @@ public class TerminalTalentDiagnosticsHookTest {
                         + "<diagnostics file=\"demo.java\">\nERROR [1:1] boom\n</diagnostics>";
             });
 
-            String result = talent.write("demo.java", "class Demo {", null);
+            String result = talent.write("demo.java", "class Demo {", null, null).getContent();
 
             //写入结论仍在最前（诊断只是追加）
             assertTrue(result.startsWith("文件成功写入: demo.java"), result);
@@ -78,7 +78,7 @@ public class TerminalTalentDiagnosticsHookTest {
             edit.oldStr = "class Demo {";
             edit.newStr = "class demo {";
 
-            String result = talent.edit("demo.java", Arrays.asList(edit), null);
+            String result = talent.edit("demo.java", Arrays.asList(edit), null, null).getContent();
 
             assertTrue(result.startsWith("文件 demo.java 成功完成 1 处修改。"), result);
             assertTrue(result.contains("ERROR [1:7] bad name"), result);
@@ -95,14 +95,14 @@ public class TerminalTalentDiagnosticsHookTest {
 
             //无诊断（最常见：文件类型没有匹配的语言服务器）→ 输出与改造前完全一致
             talent.setFileDiagnosticsHook(p -> null);
-            assertEquals("文件成功写入: a.txt", talent.write("a.txt", "x", null));
+            assertEquals("文件成功写入: a.txt", talent.write("a.txt", "x", null, null).getContent());
 
             talent.setFileDiagnosticsHook(p -> "");
-            assertEquals("文件成功写入: b.txt", talent.write("b.txt", "x", null));
+            assertEquals("文件成功写入: b.txt", talent.write("b.txt", "x", null, null).getContent());
 
             //未接钩子时同样保持原样
             TerminalTalent bare = new TerminalTalent(new MountManager(workDir.toString()));
-            assertEquals("文件成功写入: c.txt", bare.write("c.txt", "x", null));
+            assertEquals("文件成功写入: c.txt", bare.write("c.txt", "x", null, null).getContent());
         } finally {
             deleteRecursively(workDir);
         }
@@ -117,7 +117,7 @@ public class TerminalTalentDiagnosticsHookTest {
                 throw new IllegalStateException("lsp server exploded");
             });
 
-            String result = talent.write("demo.java", "class Demo {}", null);
+            String result = talent.write("demo.java", "class Demo {}", null, null).getContent();
 
             assertEquals("文件成功写入: demo.java", result);
             assertTrue(Files.exists(workDir.resolve("demo.java")));
@@ -138,7 +138,7 @@ public class TerminalTalentDiagnosticsHookTest {
             AtomicReference<Path> warmed = new AtomicReference<>();
             talent.setFileWarmupHook(warmed::set);
 
-            String content = talent.read("demo.java", null, null, null);
+            String content = talent.read("demo.java", null, null, null, null).getContent();
 
             assertTrue(content.contains("class Demo {}"), content);
             assertNotNull(warmed.get());
@@ -148,7 +148,7 @@ public class TerminalTalentDiagnosticsHookTest {
             talent.setFileWarmupHook(p -> {
                 throw new IllegalStateException("warmup exploded");
             });
-            assertTrue(talent.read("demo.java", null, null, null).contains("class Demo {}"));
+            assertTrue(talent.read("demo.java", null, null, null, null).getContent().contains("class Demo {}"));
         } finally {
             deleteRecursively(workDir);
         }

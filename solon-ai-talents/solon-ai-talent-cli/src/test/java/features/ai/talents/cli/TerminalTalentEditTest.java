@@ -43,7 +43,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "target";
             edit.newStr = "changed";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("one", "target", "middle", "changed", "end"), Files.readAllLines(file));
@@ -65,7 +65,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "target";
             edit.newStr = "changed";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             assertEquals(Arrays.asList("one", "target", "middle", "target", "end"), Files.readAllLines(file));
@@ -88,7 +88,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "foo();\nbaz();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("foo();", "baz();"), Files.readAllLines(file));
@@ -115,7 +115,7 @@ public class TerminalTalentEditTest {
             second.newStr = "second";
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString());
+            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("top", "first", "inserted", "middle", "second", "bottom"), Files.readAllLines(file));
@@ -140,7 +140,7 @@ public class TerminalTalentEditTest {
             second.newStr = "c";
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString());
+            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("执行失败"));
             assertEquals(Arrays.asList("a", "b"), Files.readAllLines(file));
@@ -167,7 +167,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "    newBar();", "end"), Files.readAllLines(file));
@@ -190,7 +190,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("\t\tnewFoo();", "\tnewBar();", "end"), Files.readAllLines(file));
@@ -213,7 +213,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("\t  newFoo();", "  \tnewBar();", "end"), Files.readAllLines(file));
@@ -236,7 +236,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "  foo();\n  bar();";
             edit.newStr = "  newFoo();\n  newBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             // newStr 自带 2 空格缩进，应以用户为准
@@ -260,7 +260,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("header", "  newFoo();", "    newBar();", "footer"), Files.readAllLines(file));
@@ -283,7 +283,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();";
             edit.newStr = "newFoo();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "end"), Files.readAllLines(file));
@@ -306,7 +306,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "    newBar();", "end"), Files.readAllLines(file));
@@ -328,7 +328,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "replaced();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("prefix", "  replaced();", "suffix"), Files.readAllLines(file));
@@ -351,7 +351,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals("  newFoo();\n  newBar();", new String(Files.readAllBytes(file)));
@@ -374,7 +374,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             // \r\n 应被保留
@@ -401,7 +401,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             assertEquals(Arrays.asList("  foo();", "    baz();", "end"), Files.readAllLines(file));
@@ -423,7 +423,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();\nbaz();";
             edit.newStr = "replaced();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             assertEquals(Arrays.asList("  foo();", "end"), Files.readAllLines(file));
@@ -446,7 +446,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "  newBar();"), Files.readAllLines(file));
@@ -469,7 +469,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "  newBar();"), Files.readAllLines(file));
@@ -492,7 +492,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             assertEquals(Arrays.asList("  foo ();", "  bar();"), Files.readAllLines(file));
@@ -519,7 +519,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "target";
             edit.newStr = "changed";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             // 第 2 行被精确匹配替换，第 1 行保持不动
@@ -543,7 +543,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "newFoo();\nnewBar();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  newFoo();", "newBar();"), Files.readAllLines(file));
@@ -574,7 +574,7 @@ public class TerminalTalentEditTest {
             second.newStr = "p\nq";
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString());
+            String result = talent.edit("demo.txt", Arrays.asList(first, second), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("header", "  p", "  q", "middle", "    x", "    y", "footer"), Files.readAllLines(file));
@@ -601,7 +601,7 @@ public class TerminalTalentEditTest {
             loose.newStr = "y";
 
             TerminalTalent talent = new TerminalTalent(new MountManager(workDir.toString()));
-            String result = talent.edit("demo.txt", Arrays.asList(exact, loose), workDir.toString());
+            String result = talent.edit("demo.txt", Arrays.asList(exact, loose), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("x", "  y"), Files.readAllLines(file));
@@ -628,7 +628,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "int x = 1;\nbar();";
             edit.newStr = "int y = 2;\nbaz();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  int y = 2;", "  baz();"), Files.readAllLines(file));
@@ -651,7 +651,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "int x = 1;\nbar();";
             edit.newStr = "int y = 2;\nbaz();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  int y = 2;", "  baz();"), Files.readAllLines(file));
@@ -674,7 +674,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "int x = 2;\nbar();";
             edit.newStr = "int y = 2;\nbaz();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             assertEquals(Arrays.asList("  int  x  =  1;", "  baz();"), Files.readAllLines(file));
@@ -715,7 +715,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "x_nonexistent_99z";
             edit.newStr = "changed";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("预检查失败"));
             // 诊断应提到 "第 3 行"（因为 oldStrStartLine=3）
@@ -753,7 +753,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();";
             edit.newStr = "  bar();";  // 用户主动写了 2 空格
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("  bar();", "end"), Files.readAllLines(file));
@@ -780,7 +780,7 @@ public class TerminalTalentEditTest {
             // 第 2 行带 2 空格缩进，其余不带
             edit.newStr = "newFoo();\n  newBar();\nnewBaz();";
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("    newFoo();", "  newBar();", "    newBaz();", "end"), Files.readAllLines(file));
@@ -806,7 +806,7 @@ public class TerminalTalentEditTest {
             edit.oldStr = "foo();\nbar();";
             edit.newStr = "      newFoo();\n      newBar();";  // 6 空格，与原文件不同
 
-            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString());
+            String result = talent.edit("demo.txt", Collections.singletonList(edit), workDir.toString(), null).getContent();
 
             assertTrue(result.contains("成功完成"));
             assertEquals(Arrays.asList("      newFoo();", "      newBar();", "end"), Files.readAllLines(file));

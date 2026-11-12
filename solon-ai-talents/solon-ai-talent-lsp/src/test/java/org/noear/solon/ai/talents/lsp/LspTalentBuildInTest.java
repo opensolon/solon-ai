@@ -291,7 +291,7 @@ public class LspTalentBuildInTest {
                     "print(result)\n";
             Files.write(worktree.resolve("main.py"), mainPy.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.py", 4, 9, null, null);
+            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.py", 4, 9, null, null, null);
             assertNotNull(doc);
             assertEquals("goToDefinition", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -313,7 +313,7 @@ public class LspTalentBuildInTest {
                     "print(result)\n";
             Files.write(worktree.resolve("main.py"), mainPy.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("findReferences", "main.py", 1, 5, null, null);
+            Document doc = (Document) lspTalent.lsp("findReferences", "main.py", 1, 5, null, null, null);
             assertNotNull(doc);
             assertEquals("findReferences", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -333,7 +333,7 @@ public class LspTalentBuildInTest {
                     "print(result)\n";
             Files.write(worktree.resolve("main.py"), mainPy.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("hover", "main.py", 4, 9, null, null);
+            Document doc = (Document) lspTalent.lsp("hover", "main.py", 4, 9, null, null, null);
             assertNotNull(doc);
             assertEquals("hover", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -354,7 +354,7 @@ public class LspTalentBuildInTest {
                     "        pass\n";
             Files.write(worktree.resolve("symbols.py"), mainPy.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("documentSymbol", "symbols.py", 1, 1, null, null);
+            Document doc = (Document) lspTalent.lsp("documentSymbol", "symbols.py", 1, 1, null, null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -461,7 +461,7 @@ public class LspTalentBuildInTest {
             Path javaFile = javaWorktree.resolve("src/main/java/Hello.java");
             Files.write(javaFile, javaCode.getBytes("UTF-8"));
 
-            Document doc = (Document) javaLspTalent.lsp("documentSymbol", "src/main/java/Hello.java", 1, 1, null, null);
+            Document doc = (Document) javaLspTalent.lsp("documentSymbol", "src/main/java/Hello.java", 1, 1, null, null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -489,7 +489,7 @@ public class LspTalentBuildInTest {
             Files.write(javaFile, javaCode.getBytes("UTF-8"));
 
             // hover 在 add 方法调用处 (第4行，public 后面的 add)
-            Document doc = (Document) javaLspTalent.lsp("hover", "src/main/java/Calc.java", 4, 16, null, null);
+            Document doc = (Document) javaLspTalent.lsp("hover", "src/main/java/Calc.java", 4, 16, null, null, null);
             assertNotNull(doc);
             assertEquals("hover", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -521,7 +521,7 @@ public class LspTalentBuildInTest {
             Files.write(javaFile, javaCode.getBytes("UTF-8"));
 
             // goToDefinition: 在第10行 h.greet 处，定位到 greet 的定义
-            Document doc = (Document) javaLspTalent.lsp("goToDefinition", "src/main/java/Hello.java", 10, 22, null, null);
+            Document doc = (Document) javaLspTalent.lsp("goToDefinition", "src/main/java/Hello.java", 10, 22, null, null, null);
             assertNotNull(doc);
             assertEquals("goToDefinition", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -554,7 +554,7 @@ public class LspTalentBuildInTest {
             Files.write(javaFile, javaCode.getBytes("UTF-8"));
 
             // findReferences: 在第4行 greet 方法定义处
-            Document doc = (Document) javaLspTalent.lsp("findReferences", "src/main/java/Hello.java", 4, 19, null, null);
+            Document doc = (Document) javaLspTalent.lsp("findReferences", "src/main/java/Hello.java", 4, 19, null, null, null);
             assertNotNull(doc);
             assertEquals("findReferences", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -588,7 +588,7 @@ public class LspTalentBuildInTest {
                     ("{\"compilerOptions\": {\"target\": \"ES2020\", \"module\": \"commonjs\"}}")
                             .getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.ts", 5, 16, null, null);
+            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.ts", 5, 16, null, null, null);
             assertNotNull(doc);
             assertEquals("goToDefinition", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -611,7 +611,7 @@ public class LspTalentBuildInTest {
                     ("{\"compilerOptions\": {\"target\": \"ES2020\", \"module\": \"commonjs\"}}")
                             .getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("hover", "calc.ts", 5, 12, null, null);
+            Document doc = (Document) lspTalent.lsp("hover", "calc.ts", 5, 12, null, null, null);
             assertNotNull(doc);
             assertEquals("hover", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -635,7 +635,7 @@ public class LspTalentBuildInTest {
                     ("{\"compilerOptions\": {\"target\": \"ES2020\", \"module\": \"commonjs\"}}")
                             .getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("documentSymbol", "symbols.ts", 1, 1, null, null);
+            Document doc = (Document) lspTalent.lsp("documentSymbol", "symbols.ts", 1, 1, null, null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -658,7 +658,7 @@ public class LspTalentBuildInTest {
                     ("{\"compilerOptions\": {\"target\": \"ES2020\", \"module\": \"commonjs\"}}")
                             .getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("findReferences", "refs.ts", 1, 10, null, null);
+            Document doc = (Document) lspTalent.lsp("findReferences", "refs.ts", 1, 10, null, null, null);
             assertNotNull(doc);
             assertEquals("findReferences", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -681,7 +681,7 @@ public class LspTalentBuildInTest {
                     ("{\"compilerOptions\": {\"target\": \"ES2020\", \"module\": \"commonjs\", \"jsx\": \"react\"}}")
                             .getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("documentSymbol", "App.tsx", 1, 1, null, null);
+            Document doc = (Document) lspTalent.lsp("documentSymbol", "App.tsx", 1, 1, null, null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
             // 不论结果如何，至少不应抛异常（验证路由正确）
@@ -715,7 +715,7 @@ public class LspTalentBuildInTest {
                     "}\n";
             Files.write(worktree.resolve("src/main.rs"), rsCode.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("hover", "src/main.rs", 6, 18, null, null);
+            Document doc = (Document) lspTalent.lsp("hover", "src/main.rs", 6, 18, null, null, null);
             assertNotNull(doc);
             assertEquals("hover", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -749,7 +749,7 @@ public class LspTalentBuildInTest {
                     "}\n";
             Files.write(worktree.resolve("main.cpp"), cppCode.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.cpp", 9, 28, null, null);
+            Document doc = (Document) lspTalent.lsp("goToDefinition", "main.cpp", 9, 28, null, null, null);
             assertNotNull(doc);
             assertEquals("goToDefinition", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -771,7 +771,7 @@ public class LspTalentBuildInTest {
                     "};\n";
             Files.write(worktree.resolve("calc.cpp"), cppCode.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("documentSymbol", "calc.cpp", 1, 1, null, null);
+            Document doc = (Document) lspTalent.lsp("documentSymbol", "calc.cpp", 1, 1, null, null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
             String content = doc.getContent();
@@ -826,7 +826,7 @@ public class LspTalentBuildInTest {
         public void testPathSecurityCheck() throws Exception {
             Files.write(worktree.resolve("test.py"), "x = 1\n".getBytes("UTF-8"));
             assertThrows(SecurityException.class, () -> {
-                lspTalent.lsp("goToDefinition", "../outside.py", 1, 1, null, null);
+                lspTalent.lsp("goToDefinition", "../outside.py", 1, 1, null, null, null);
             });
         }
 
@@ -835,7 +835,7 @@ public class LspTalentBuildInTest {
         public void testUnknownOperation() throws Exception {
             Files.write(worktree.resolve("test.py"), "x = 1\n".getBytes("UTF-8"));
             assertThrows(IllegalArgumentException.class, () -> {
-                lspTalent.lsp("unknownOp", "test.py", 1, 1, null, null);
+                lspTalent.lsp("unknownOp", "test.py", 1, 1, null, null, null);
             });
         }
 
@@ -843,7 +843,7 @@ public class LspTalentBuildInTest {
         @DisplayName("文件不存在应抛 RuntimeException")
         public void testFileNotFound() {
             assertThrows(RuntimeException.class, () -> {
-                lspTalent.lsp("goToDefinition", "nonexistent.py", 1, 1, null, null);
+                lspTalent.lsp("goToDefinition", "nonexistent.py", 1, 1, null, null, null);
             });
         }
 
@@ -851,7 +851,7 @@ public class LspTalentBuildInTest {
         @DisplayName("无 LSP 服务器的扩展名应返回提示信息")
         public void testNoLspServerForExtension() throws Exception {
             Files.write(worktree.resolve("readme.txt"), "hello world".getBytes());
-            Document doc = (Document) lspTalent.lsp("hover", "readme.txt", 1, 1, null, null);
+            Document doc = (Document) lspTalent.lsp("hover", "readme.txt", 1, 1, null, null, null);
             assertNotNull(doc);
             assertTrue(doc.getContent().contains("not supported"),
                     "应提示文件类型不支持: " + doc.getContent());
@@ -865,7 +865,7 @@ public class LspTalentBuildInTest {
             String pyCode = "def sub_func():\n    pass\n";
             Files.write(subdir.resolve("sub.py"), pyCode.getBytes("UTF-8"));
 
-            Document doc = (Document) lspTalent.lsp("documentSymbol", "sub.py", 1, 1, subdir.toString(), null);
+            Document doc = (Document) lspTalent.lsp("documentSymbol", "sub.py", 1, 1, subdir.toString(), null, null);
             assertNotNull(doc);
             assertEquals("documentSymbol", doc.getMetadata("operation"));
         }
