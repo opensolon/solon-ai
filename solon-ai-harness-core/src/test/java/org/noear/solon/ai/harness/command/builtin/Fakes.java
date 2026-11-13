@@ -17,6 +17,8 @@ import java.util.Locale;
 /**
  * 命令层测试共享桩：最小命令输出（收集回执与任务意图），并按需构造对应的只读命令输入。
  * 命令已直连领域类，不再需要端口桩。公开给 session 域包下的命令测试共用。
+ *
+ * <p>插件模块用的是 solon-ai-harness-testkit 里的同名副本（本模块的测试不能依赖它，会形成循环依赖），修改时两处保持一致。</p>
  */
 public final class Fakes {
     private Fakes() {

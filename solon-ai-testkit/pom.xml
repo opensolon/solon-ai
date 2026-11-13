@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.noear</groupId>
+        <artifactId>solon-ai-parent</artifactId>
+        <version>4.2.0-SNAPSHOT</version>
+        <relativePath>../solon-ai-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>solon-ai-testkit</artifactId>
+    <name>${project.artifactId}</name>
+    <packaging>jar</packaging>
+    <description>solon-ai 内部测试工具（i18n 覆盖率 / lint / golden）：各模块以 scope=test 引入，不发布</description>
+
+    <properties>
+        <!-- 只供本仓库各模块测试使用，不发布 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-ai-core</artifactId>
+        </dependency>
+
+        <!-- 测试工具本身要用 JUnit 5（Assertions、@Test 等），所以是 compile；引用方以 scope=test 引入 -->
+        <dependency>
+            <groupId>org.noear</groupId>
+            <artifactId>solon-test</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- 发布（-P sonatype-oss-release）时，本模块的构件不进 central 发布包 -->
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <configuration>
+                        <excludeArtifacts>
+                            <artifact>${project.artifactId}</artifact>
+                        </excludeArtifacts>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

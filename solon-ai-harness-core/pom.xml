@@ -78,38 +78,13 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- 测试工具（i18n 覆盖率/lint/golden）：由 solon-ai-core 的 test-jar 提供 -->
+        <!-- 测试工具（i18n 覆盖率/lint/golden）：由 solon-ai-testkit 提供（内部模块，不发布） -->
         <dependency>
             <groupId>org.noear</groupId>
-            <artifactId>solon-ai-core</artifactId>
+            <artifactId>solon-ai-testkit</artifactId>
             <version>${project.version}</version>
-            <type>test-jar</type>
             <scope>test</scope>
         </dependency>
 
     </dependencies>
-
-    <build>
-        <plugins>
-            <!-- 测试替身（只含 command.builtin.Fakes）：插件模块以 type=test-jar、scope=test 引入，避免各自复制一份 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>testkit</id>
-                        <goals>
-                            <goal>test-jar</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>org/noear/solon/ai/harness/command/builtin/Fakes*</include>
-                            </includes>
-                            <skipIfEmpty>true</skipIfEmpty>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>
