@@ -45,6 +45,7 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.core.util.Assert;
@@ -287,7 +288,16 @@ final class InputPipeline {
             agentName = input.getSelectedAgent();
         }
 
-        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName);
+        // 本轮语言（见 resumedLocaleOf），先于代理构建确定。写进本轮 options 后随轨迹下传：
+        // 协议指令、才能指令与工具描述、工具参数 __locale、HITL 理由、子代理。
+        // 续流沿用被中断那一轮的语言时不显式设置，由智能体沿用。
+        final Locale resumedLocale = resumedLocaleOf(session, prompt, input, agentName);
+        final Locale runLocale = resumedLocale != null ? null : engine.localeOf(input);
+
+        // 选中的内置子代理按本轮实际语言取系统提示词（与委派子代理同一口径），
+        // 否则代理提示词与协议指令会中英混排。
+        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName,
+                resumedLocale != null ? resumedLocale : runLocale);
         ReActRequest request = engine.promptDo(prompt, targetAgent);
 
         if (session != null) {
@@ -298,9 +308,6 @@ final class InputPipeline {
         // 宿主 systemPrompt 为“整体替换”语义（与 AgentFactory 的主 agent 定义一致），需自带完整协议提示。
         // 语言由 locale 决定（模板不自带语言），所以提示词与协议指令不会中英混排。
         final String inputSystemPrompt = input.getSystemPrompt();
-        // 本轮语言（见 runLocaleOf）。写进本轮 options 后随轨迹下传：
-        // 协议指令、才能指令与工具描述、工具参数 __locale、HITL 理由、子代理。
-        final Locale runLocale = runLocaleOf(session, prompt, input, targetAgent);
 
         if (runLocale != null) {
             request.options(o -> o.locale(runLocale));
@@ -348,7 +355,7 @@ final class InputPipeline {
     }
 
     /**
-     * 本轮要显式设置的语言（null 表示不设，由智能体决定）
+     * 续流沿用的语言：被中断那一轮留下的语言（null 表示本轮按 {@link HarnessEngine#localeOf(HarnessInput)}）
      *
      * <p>语言属于一轮：</p>
      * <ul>
@@ -358,18 +365,20 @@ final class InputPipeline {
      *     那一轮没留下语言（升级前保存的旧会话或从未跑过）时，才用引擎语言。</li>
      * </ul>
      *
-     * <p>读的是这次续流实际要接着跑的那个代理的轨迹。</p>
+     * <p>读的是这次续流实际要接着跑的那个代理的轨迹（解析不到的代理名回落主代理，
+     * 与 {@link HarnessEngine#getAgentOrMain} 一致）。代理还没构建：它的提示词语言取决于这里的结果。</p>
      */
-    private @Nullable Locale runLocaleOf(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                         HarnessInput input, ReActAgent targetAgent) {
-        if (session != null && input.getLocale() == null && Prompt.isEmpty(prompt)) {
-            ReActTrace trace = targetAgent.getTrace(session);
-            if (trace != null && trace.getRunLocale() != null) {
-                return null;
-            }
+    private @Nullable Locale resumedLocaleOf(@Nullable AgentSession session, @Nullable Prompt prompt,
+                                             HarnessInput input, @Nullable String agentName) {
+        if (session == null || input.getLocale() != null || Prompt.isEmpty(prompt) == false) {
+            return null;
         }
 
-        return engine.localeOf(input);
+        AgentDefinition definition = engine.resolveAgent(session, agentName);
+        ReActTrace trace = TraceUtil.getAgentTrace(session,
+                definition == null ? engine.getMainAgent().name() : definition.getName());
+
+        return trace == null ? null : trace.getRunLocale();
     }
 
 

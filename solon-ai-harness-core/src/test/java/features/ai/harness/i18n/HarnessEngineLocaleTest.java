@@ -3,6 +3,8 @@ package features.ai.harness.i18n;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActTrace;
@@ -32,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 引擎实例的默认语言：输入指定的优先，没有时用引擎的，并下传到本轮的整条链路
@@ -236,6 +239,87 @@ public class HarnessEngineLocaleTest {
 
         ReActRequest request = zh.resume(zh.getMainAgent()).session(session);
         assertEquals(Locale.ENGLISH, optionsOf(request).getLocale());
+    }
+
+    // ==================== 选中的内置子代理：提示词跟着本轮语言 ====================
+
+    static final String GIT_SUMMARY_EN = "You are a professional Git commit message assistant.";
+
+    /**
+     * selectedAgent 指定内置子代理（如宿主的「生成提交摘要」）：系统提示词按本轮语言取，
+     * 与协议指令同一语言（此前始终是中文提示词配英文协议）
+     */
+    @Test
+    public void testSelectedBuiltinAgentFollowsRunLocale() throws Exception {
+        HarnessEngine plain = HarnessFixtures.engine(workspace.resolve("plain"));
+        String zhPrompt = plain.resolveAgent(null, "git-summary").getSystemPrompt();
+
+        InputOutcome en = plain.handle(HarnessInput.of(plain.getSession("g1"), "diff")
+                .selectedAgent("git-summary").locale(Locale.ENGLISH));
+        try {
+            assertTrue(systemPromptOf(en).startsWith(GIT_SUMMARY_EN), systemPromptOf(en));
+            assertEquals(Locale.ENGLISH, optionsOf(en).getLocale());
+        } finally {
+            en.discard();
+        }
+
+        InputOutcome zh = plain.handle(HarnessInput.of(plain.getSession("g2"), "diff")
+                .selectedAgent("git-summary").locale(Locale.CHINA));
+        try {
+            assertEquals(zhPrompt, systemPromptOf(zh));
+        } finally {
+            zh.discard();
+        }
+
+        //输入不带语言：用引擎的
+        HarnessEngine byEngine = HarnessFixtures.builder(workspace.resolve("en")).locale(Locale.ENGLISH).build();
+        InputOutcome engineLocale = byEngine.handle(HarnessInput.of(byEngine.getSession("g3"), "diff")
+                .selectedAgent("git-summary"));
+        try {
+            assertTrue(systemPromptOf(engineLocale).startsWith(GIT_SUMMARY_EN), systemPromptOf(engineLocale));
+        } finally {
+            engineLocale.discard();
+        }
+
+        //主代理不受影响（没有语言版本）
+        InputOutcome main = plain.handle(HarnessInput.of(plain.getSession("g4"), "hi").locale(Locale.ENGLISH));
+        try {
+            assertSame(plain.getMainAgent(), HarnessFixtures.get(main.getRequest(), "agent"));
+        } finally {
+            main.discard();
+        }
+    }
+
+    /**
+     * 续流选中的内置子代理：输入不带语言时，提示词跟被中断那一轮的语言走（读该代理自己的轨迹）
+     */
+    @Test
+    public void testSelectedBuiltinAgentResumeKeepsRunLocale() throws Exception {
+        HarnessEngine zh = HarnessFixtures.builder(workspace.resolve("zh")).locale(Locale.CHINA).build();
+        AgentSession session = zh.getSession("g5");
+        session.getContext().put(zh.getAgentOrMain(session, "git-summary").getConfig().getTraceKey(),
+                ranIn(Locale.ENGLISH, false));
+        //主代理的轨迹是中文：不能读错代理
+        putMainTrace(zh, session, ranIn(Locale.CHINA, false));
+
+        InputOutcome outcome = zh.handle(HarnessInput.of(session, null).selectedAgent("git-summary").resume(true));
+        try {
+            assertTrue(systemPromptOf(outcome).startsWith(GIT_SUMMARY_EN), systemPromptOf(outcome));
+            assertEquals(Locale.ENGLISH, optionsOf(outcome).getLocale(), "resume locale");
+        } finally {
+            outcome.discard();
+        }
+    }
+
+    /**
+     * 本轮代理的系统提示词（AgentFactory 写入的定义正文）
+     */
+    @SuppressWarnings("unchecked")
+    static String systemPromptOf(InputOutcome outcome) throws Exception {
+        ReActAgent agent = (ReActAgent) HarnessFixtures.get(outcome.getRequest(), "agent");
+        AgentSystemPrompt<ReActTrace> prompt = (AgentSystemPrompt<ReActTrace>)
+                HarnessFixtures.get(agent.getConfig().getDefaultOptions(), "systemPrompt");
+        return prompt.getSystemPrompt(new ReActTrace());
     }
 
     /**

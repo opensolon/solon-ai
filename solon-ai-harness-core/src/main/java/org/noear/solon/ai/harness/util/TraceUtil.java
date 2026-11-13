@@ -6,6 +6,7 @@ import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 
 /**
  * 会话轨迹（ReActTrace）读取工具
@@ -51,6 +52,24 @@ public final class TraceUtil {
             //主代理
             trace = session.getContext().get(TRACE_KEY_MAIN);
         }
+
+        return trace instanceof ReActTrace ? (ReActTrace) trace : null;
+    }
+
+    /**
+     * 指定代理的轨迹（只看这个代理，不回落选中代理或主代理）
+     *
+     * @param agentName 代理名（空为主代理）
+     * @return 该代理还没有轨迹时为 null
+     * @since 4.2.0
+     */
+    public static @Nullable ReActTrace getAgentTrace(@Nullable AgentSession session, @Nullable String agentName) {
+        if (session == null) {
+            return null;
+        }
+
+        Object trace = session.getContext().get(Assert.isEmpty(agentName)
+                ? TRACE_KEY_MAIN : HarnessAttrs.LEGACY_TRACE_PREFIX + agentName);
 
         return trace instanceof ReActTrace ? (ReActTrace) trace : null;
     }

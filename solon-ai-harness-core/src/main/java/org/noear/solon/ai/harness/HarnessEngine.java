@@ -1924,7 +1924,18 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public ReActAgent getAgentOrMain(@Nullable AgentSession session, String agentName) {
-        AgentDefinition definition = resolveAgent(session, agentName);
+        return getAgentOrMain(session, agentName, null);
+    }
+
+    /**
+     * 会话感知、按语言的代理（内置子代理按语言取描述与系统提示词）：先查本会话的会话级子代理，
+     * 再查引擎级；都没有时回落主代理。
+     *
+     * @param locale 语言（null 为默认语言）
+     * @since 4.2.0
+     */
+    public ReActAgent getAgentOrMain(@Nullable AgentSession session, String agentName, @Nullable Locale locale) {
+        AgentDefinition definition = localizeAgent(resolveAgent(session, agentName), locale);
         if (definition == null) {
             return getMainAgent();
         }

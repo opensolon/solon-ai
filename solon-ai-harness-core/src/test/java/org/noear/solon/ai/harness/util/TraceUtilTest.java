@@ -90,6 +90,28 @@ class TraceUtilTest {
     }
 
     @Test
+    void agentTraceIsExactWithoutFallback() {
+        AgentSession session = InMemoryAgentSession.of();
+        ReActTrace mainTrace = new ReActTrace();
+        ReActTrace agentTrace = new ReActTrace();
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, mainTrace);
+        session.getContext().put("__git-summary", agentTrace);
+        SessionSelections.setAgent(session, "frontend");
+        session.getContext().put("__frontend", new ReActTrace());
+
+        assertSame(agentTrace, TraceUtil.getAgentTrace(session, "git-summary"));
+        // 空名字是主代理
+        assertSame(mainTrace, TraceUtil.getAgentTrace(session, null));
+        assertSame(mainTrace, TraceUtil.getAgentTrace(session, ""));
+        // 不回落选中代理或主代理
+        assertNull(TraceUtil.getAgentTrace(session, "explore"));
+        assertNull(TraceUtil.getAgentTrace(null, "git-summary"));
+
+        session.getContext().put("__bad", "不是 trace");
+        assertNull(TraceUtil.getAgentTrace(session, "bad"));
+    }
+
+    @Test
     void traceKeysMainConstant() {
         assertEquals("__main", TraceUtil.TRACE_KEY_MAIN);
     }
