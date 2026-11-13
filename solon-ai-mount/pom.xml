@@ -60,26 +60,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <!-- 发布来源契约套件（只含 testkit 包）：第三方 MountSource 实现以 type=test-jar 引入并继承 MountSourceContract -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>testkit</id>
-                        <goals>
-                            <goal>test-jar</goal>
-                        </goals>
-                        <configuration>
-                            <includes>
-                                <include>org/noear/solon/ai/mount/testkit/**</include>
-                            </includes>
-                            <skipIfEmpty>true</skipIfEmpty>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
