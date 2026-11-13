@@ -3,7 +3,6 @@ package features.ai.harness.i18n;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActRequest;
@@ -291,7 +290,90 @@ public class HarnessEngineLocaleTest {
     }
 
     /**
-     * 续流选中的内置子代理：输入不带语言时，提示词跟被中断那一轮的语言走（读该代理自己的轨迹）
+     * 同一会话先英文后中文（如界面中途切换语言）：第二轮从上一轮的 options 起步（模板一并沿用），
+     * 提示词仍跟本轮语言走；第二轮被中断后不带语言续流，沿用中文。
+     * （此前第二轮协议是中文、提示词仍是英文，续流同样混排，重启后才恢复）
+     */
+    @Test
+    public void testSelectedBuiltinAgentFollowsLocaleSwitchInSameSession() throws Exception {
+        HarnessEngine plain = HarnessFixtures.engine(workspace.resolve("plain"));
+        AgentSession session = plain.getSession("g6");
+        String zhPrompt = plain.resolveAgent(null, "git-summary").getSystemPrompt();
+
+        InputOutcome first = plain.handle(HarnessInput.of(session, "diff1")
+                .selectedAgent("git-summary").locale(Locale.ENGLISH));
+        ReActOptions firstOptions;
+        try {
+            firstOptions = optionsOf(first);
+            assertTrue(HarnessFixtures.renderSystemPrompt(firstOptions).startsWith(GIT_SUMMARY_EN));
+        } finally {
+            first.discard();
+        }
+        ranWith(plain, session, "git-summary", firstOptions, Locale.ENGLISH);
+
+        InputOutcome second = plain.handle(HarnessInput.of(session, "diff2")
+                .selectedAgent("git-summary").locale(Locale.CHINA));
+        ReActOptions secondOptions;
+        try {
+            secondOptions = optionsOf(second);
+            assertEquals(Locale.CHINA, secondOptions.getLocale());
+            assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(secondOptions));
+        } finally {
+            second.discard();
+        }
+        ranWith(plain, session, "git-summary", secondOptions, Locale.CHINA);
+
+        InputOutcome resumed = plain.handle(HarnessInput.of(session, null).selectedAgent("git-summary").resume(true));
+        try {
+            assertNotNull(resumed.getRequest(), "should resume: " + resumed);
+            ReActOptions options = optionsOf(resumed);
+            assertEquals(Locale.CHINA, options.getLocale(), "resume locale");
+            assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(options));
+        } finally {
+            resumed.discard();
+        }
+    }
+
+    /**
+     * 宿主不经 handle、直接取代理发请求：语言只给在请求上，提示词也跟它走
+     * （此前协议是英文、提示词仍是中文）。同一个代理实例在不同语言的请求上各自正确。
+     */
+    @Test
+    public void testDirectAgentFollowsRequestLocale() throws Exception {
+        HarnessEngine plain = HarnessFixtures.engine(workspace.resolve("plain"));
+        ReActAgent agent = plain.getAgentOrMain(null, "git-summary");
+
+        ReActOptions en = optionsOf(agent.prompt(Prompt.of("diff")).options(o -> o.locale(Locale.ENGLISH)));
+        assertEquals(Locale.ENGLISH, en.getLocale());
+        assertTrue(HarnessFixtures.renderSystemPrompt(en).startsWith(GIT_SUMMARY_EN), HarnessFixtures.renderSystemPrompt(en));
+
+        ReActOptions zh = optionsOf(agent.prompt(Prompt.of("diff")).options(o -> o.locale(Locale.CHINA)));
+        assertEquals(plain.resolveAgent(null, "git-summary").getSystemPrompt(), HarnessFixtures.renderSystemPrompt(zh));
+    }
+
+    /**
+     * 引擎配了语言：直接取代理、请求不带语言时，协议指令与提示词都按引擎语言
+     * （此前引擎语言只在经 handle 时生效，直接用代理是全局默认的中文）。请求显式给的语言仍优先。
+     */
+    @Test
+    public void testDirectAgentUsesEngineLocale() throws Exception {
+        HarnessEngine en = HarnessFixtures.builder(workspace.resolve("en")).locale(Locale.ENGLISH).build();
+
+        ReActOptions sub = optionsOf(en.getAgentOrMain(null, "git-summary").prompt(Prompt.of("diff")));
+        assertEquals(Locale.ENGLISH, sub.getLocale());
+        assertTrue(HarnessFixtures.renderSystemPrompt(sub).startsWith(GIT_SUMMARY_EN), HarnessFixtures.renderSystemPrompt(sub));
+
+        assertEquals(Locale.ENGLISH, optionsOf(en.getMainAgent().prompt(Prompt.of("hi"))).getLocale());
+
+        ReActOptions zh = optionsOf(en.getAgentOrMain(null, "git-summary").prompt(Prompt.of("diff"))
+                .options(o -> o.locale(Locale.CHINA)));
+        assertEquals(Locale.CHINA, zh.getLocale());
+        assertEquals(en.resolveAgent(null, "git-summary").getSystemPrompt(), HarnessFixtures.renderSystemPrompt(zh));
+    }
+
+    /**
+     * 续流选中的内置子代理：输入不带语言时，提示词跟被中断那一轮的语言走（读该代理自己的轨迹）；
+     * 会话重新加载后（轨迹没有 options）一样
      */
     @Test
     public void testSelectedBuiltinAgentResumeKeepsRunLocale() throws Exception {
@@ -312,14 +394,24 @@ public class HarnessEngineLocaleTest {
     }
 
     /**
-     * 本轮代理的系统提示词（AgentFactory 写入的定义正文）
+     * 本轮实际发给模型的代理提示词：按请求初始化后的 options 渲染
+     * （与执行时同一条路径，包括从上一轮 options 起步的情形）
      */
-    @SuppressWarnings("unchecked")
     static String systemPromptOf(InputOutcome outcome) throws Exception {
-        ReActAgent agent = (ReActAgent) HarnessFixtures.get(outcome.getRequest(), "agent");
-        AgentSystemPrompt<ReActTrace> prompt = (AgentSystemPrompt<ReActTrace>)
-                HarnessFixtures.get(agent.getConfig().getDefaultOptions(), "systemPrompt");
-        return prompt.getSystemPrompt(new ReActTrace());
+        return HarnessFixtures.renderSystemPrompt(optionsOf(outcome));
+    }
+
+    /**
+     * 模拟这一轮已经跑过（同一进程内）：该代理的轨迹带着这一轮的 options 与语言
+     */
+    private static void ranWith(HarnessEngine engine, AgentSession session, String agentName,
+                                ReActOptions options, Locale locale) throws Exception {
+        ReActTrace trace = new ReActTrace();
+        HarnessFixtures.set(trace, "options", options);
+        Prompt prompt = Prompt.of("diff");
+        prompt.locale(locale);
+        HarnessFixtures.set(trace, "originalPrompt", prompt);
+        session.getContext().put(engine.getAgentOrMain(session, agentName).getConfig().getTraceKey(), trace);
     }
 
     /**

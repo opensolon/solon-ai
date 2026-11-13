@@ -18,6 +18,7 @@ package org.noear.solon.ai.harness.agent;
 import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,11 +43,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>只替换描述与正文（系统提示词）；工具、权限等其余元数据始终以基础文件为准，各语言行为一致。
  * 只作用于内置挂载提供的代理：工作区 / 用户挂载的同名代理原样使用。</p>
  *
+ * <p>不产出“某语言的定义副本”：正文在每轮推理时按本轮语言取（见 {@code AgentFactory}），
+ * 同一个代理实例在不同语言的轮次上各自正确；描述只用于展示（子代理清单、补全、设置页）。</p>
+ *
  * @author noear
  * @since 4.2
  */
+@Internal
 public final class BuiltinAgentI18n {
     private static final Logger LOG = LoggerFactory.getLogger(BuiltinAgentI18n.class);
+
+    /**
+     * 内置子代理所在挂载的别名
+     */
+    public static final String MOUNT_ALIAS = "@harness-agents";
 
     /**
      * 语言版本所在的类路径目录
@@ -62,42 +72,59 @@ public final class BuiltinAgentI18n {
     }
 
     /**
-     * 取指定语言的定义（没有对应语言文件、或不是内置代理时原样返回）
-     *
-     * @param definition        定义（null 原样返回）
-     * @param locale            语言（null 为默认语言）
-     * @param builtinMountAlias 内置挂载别名（带不带 {@code @} 均可）
+     * 是否为内置挂载提供的定义（只有它们有语言版本）
      */
-    public static AgentDefinition localize(@Nullable AgentDefinition definition, @Nullable Locale locale,
-                                           String builtinMountAlias) {
-        if (definition == null || isSameAlias(definition.getMountAlias(), builtinMountAlias) == false) {
-            return definition;
+    public static boolean isBuiltin(@Nullable AgentDefinition definition) {
+        if (definition == null || definition.getMountAlias() == null) {
+            return false;
+        }
+        return strip(definition.getMountAlias()).equals(strip(MOUNT_ALIAS));
+    }
+
+    /**
+     * 指定语言的描述（没有对应语言文件、或不是内置代理时为定义自己的描述）
+     *
+     * @param definition 定义（null 返回 null）
+     * @param locale     语言（null 为默认语言）
+     */
+    public static @Nullable String descriptionOf(@Nullable AgentDefinition definition, @Nullable Locale locale) {
+        if (definition == null) {
+            return null;
+        }
+
+        Markdown variant = variantOf(definition, locale);
+        return variant == null || variant.getDescription() == null ? definition.getDescription() : variant.getDescription();
+    }
+
+    /**
+     * 指定语言的正文（系统提示词；没有对应语言文件、或不是内置代理时为定义自己的正文）
+     *
+     * @param definition 定义（null 返回 null）
+     * @param locale     语言（null 为默认语言）
+     */
+    public static @Nullable String systemPromptOf(@Nullable AgentDefinition definition, @Nullable Locale locale) {
+        if (definition == null) {
+            return null;
+        }
+
+        Markdown variant = variantOf(definition, locale);
+        return variant == null ? definition.getSystemPrompt() : variant.getContent();
+    }
+
+    /**
+     * 内置定义在该语言下的语言版本（中文、非内置、或没有语言文件时为 null，即用基础文件）
+     */
+    private static @Nullable Markdown variantOf(AgentDefinition definition, @Nullable Locale locale) {
+        if (isBuiltin(definition) == false) {
+            return null;
         }
 
         Locale resolved = AiI18n.resolve(locale);
         if (AiI18n.isChinese(resolved)) {
-            return definition;
+            return null;
         }
 
-        Markdown variant = variantOf(definition.getName(), resolved);
-        if (variant == null) {
-            return definition;
-        }
-
-        AgentDefinition copy = definition.copy();
-        copy.setMountAlias(definition.getMountAlias());
-        if (variant.getDescription() != null) {
-            copy.getMetadata().setDescription(variant.getDescription());
-        }
-        copy.setSystemPrompt(variant.getContent());
-        return copy;
-    }
-
-    private static boolean isSameAlias(@Nullable String alias, String builtin) {
-        if (alias == null) {
-            return false;
-        }
-        return strip(alias).equals(strip(builtin));
+        return variantOf(definition.getName(), resolved);
     }
 
     private static String strip(String alias) {

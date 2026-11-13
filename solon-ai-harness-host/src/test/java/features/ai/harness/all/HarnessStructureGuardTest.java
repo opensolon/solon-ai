@@ -213,7 +213,9 @@ class HarnessStructureGuardTest {
      */
     private static final List<String> DEPRECATED_ALLOWED = Arrays.asList(
             "HarnessEngine.java#public ReActRequest prompt(",
-            "HarnessEngine.java#public ReActRequest resume(");
+            "HarnessEngine.java#public ReActRequest resume(",
+            // 4.1.1 已发布：不认会话级子代理，改用会话感知版
+            "HarnessEngine.java#public ReActAgent getAgentOrMain(String ");
 
     @Test
     void noDeprecatedInMainCode() throws IOException {

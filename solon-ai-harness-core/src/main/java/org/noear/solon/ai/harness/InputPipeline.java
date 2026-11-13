@@ -18,7 +18,6 @@ package org.noear.solon.ai.harness;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
-import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
 import org.noear.solon.ai.harness.scope.InputScope;
@@ -45,7 +44,6 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
-import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.core.util.Assert;
@@ -288,16 +286,7 @@ final class InputPipeline {
             agentName = input.getSelectedAgent();
         }
 
-        // 本轮语言（见 resumedLocaleOf），先于代理构建确定。写进本轮 options 后随轨迹下传：
-        // 协议指令、才能指令与工具描述、工具参数 __locale、HITL 理由、子代理。
-        // 续流沿用被中断那一轮的语言时不显式设置，由智能体沿用。
-        final Locale resumedLocale = resumedLocaleOf(session, prompt, input, agentName);
-        final Locale runLocale = resumedLocale != null ? null : engine.localeOf(input);
-
-        // 选中的内置子代理按本轮实际语言取系统提示词（与委派子代理同一口径），
-        // 否则代理提示词与协议指令会中英混排。
-        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName,
-                resumedLocale != null ? resumedLocale : runLocale);
+        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName);
         ReActRequest request = engine.promptDo(prompt, targetAgent);
 
         if (session != null) {
@@ -309,12 +298,17 @@ final class InputPipeline {
         // 语言由 locale 决定（模板不自带语言），所以提示词与协议指令不会中英混排。
         final String inputSystemPrompt = input.getSystemPrompt();
 
-        if (runLocale != null) {
-            request.options(o -> o.locale(runLocale));
+        // 本轮语言：只写输入自带的。没带时由智能体定（ReActAgent#runLocaleOf）：新任务用代理的默认语言
+        // （即引擎语言，见 AgentFactory），续流（HITL 审批后继续、resume、/continue）沿用被中断那一轮的语言。
+        // 语言写进本轮 options 后随轨迹下传：代理提示词、协议指令、才能指令与工具描述、工具参数 __locale、
+        // HITL 理由、子代理，都在推理时按它取，所以不会中英混排。
+        final Locale inputLocale = input.getLocale();
+        if (inputLocale != null) {
+            request.options(o -> o.locale(inputLocale));
         }
 
         if (Assert.isNotEmpty(inputSystemPrompt)) {
-            // 只换文本：语言仍由下面的 locale 决定（模板不自带语言）
+            // 只换文本：语言仍由本轮 locale 决定（模板不自带语言）
             request.options(o -> o.systemPrompt(trace -> inputSystemPrompt));
         }
 
@@ -353,34 +347,6 @@ final class InputPipeline {
 
         return request;
     }
-
-    /**
-     * 续流沿用的语言：被中断那一轮留下的语言（null 表示本轮按 {@link HarnessEngine#localeOf(HarnessInput)}）
-     *
-     * <p>语言属于一轮：</p>
-     * <ul>
-     *     <li>新任务：输入指定的优先，没有时用引擎实例的语言（{@link HarnessEngine#localeOf(HarnessInput)}）；</li>
-     *     <li>续流（HITL 审批后继续、resume、/continue）：不是新的一轮。输入指定了语言就用输入的；
-     *     没指定就不设，由智能体沿用被中断那一轮的语言（会话重新加载后也一样）。
-     *     那一轮没留下语言（升级前保存的旧会话或从未跑过）时，才用引擎语言。</li>
-     * </ul>
-     *
-     * <p>读的是这次续流实际要接着跑的那个代理的轨迹（解析不到的代理名回落主代理，
-     * 与 {@link HarnessEngine#getAgentOrMain} 一致）。代理还没构建：它的提示词语言取决于这里的结果。</p>
-     */
-    private @Nullable Locale resumedLocaleOf(@Nullable AgentSession session, @Nullable Prompt prompt,
-                                             HarnessInput input, @Nullable String agentName) {
-        if (session == null || input.getLocale() != null || Prompt.isEmpty(prompt) == false) {
-            return null;
-        }
-
-        AgentDefinition definition = engine.resolveAgent(session, agentName);
-        ReActTrace trace = TraceUtil.getAgentTrace(session,
-                definition == null ? engine.getMainAgent().name() : definition.getName());
-
-        return trace == null ? null : trace.getRunLocale();
-    }
-
 
     /**
      * 作用域预检（受理之前、锁外）：确定本轮作用域并写回输入；不通过时返回拒绝结局（不占位、不入积压）。

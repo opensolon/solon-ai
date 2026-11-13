@@ -2,6 +2,8 @@ package features.ai.harness.i18n;
 
 import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSystemPrompt;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActOptions;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -87,6 +89,28 @@ public final class HarnessFixtures {
         ReActTrace trace = new ReActTrace();
         set(trace, "options", options);
         return trace;
+    }
+
+    /**
+     * 按 options 自己的语言渲染其中的系统提示词模板（与推理时一致：模板只读 trace.getOptions()）。
+     * 传请求初始化后的 options，得到的就是这一轮实际发给模型的代理提示词。
+     */
+    @SuppressWarnings("unchecked")
+    public static String renderSystemPrompt(ReActOptions options) throws Exception {
+        AgentSystemPrompt<ReActTrace> template = (AgentSystemPrompt<ReActTrace>) get(options, "systemPrompt");
+        ReActTrace trace = new ReActTrace();
+        set(trace, "options", options);
+        return template.getSystemPrompt(trace);
+    }
+
+    /**
+     * 按指定语言渲染代理的系统提示词模板（同一个代理实例在不同语言的轮次上）
+     */
+    @SuppressWarnings("unchecked")
+    public static String renderSystemPrompt(ReActAgent agent, Locale locale) throws Exception {
+        AgentSystemPrompt<ReActTrace> template = (AgentSystemPrompt<ReActTrace>)
+                get(agent.getConfig().getDefaultOptions(), "systemPrompt");
+        return template.getSystemPrompt(trace(locale, false));
     }
 
     /**

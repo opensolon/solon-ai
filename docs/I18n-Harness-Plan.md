@@ -108,5 +108,5 @@ harness-core 在 H4 改动 `Command` / `HelpCommand` 后全量回归：698 例 3
 - 工具描述与参数说明留在注解里，不进资源（见 D2）。
 - 工具方法末尾加 `String __locale`（不带 `@Param`，不进 schema），用 `AiI18n.toLocale(__locale)` 转换；原来的公开签名保留为不带注解的重载（传 null，即默认语言）。（2026-11-12 更正：这些重载只有测试在用，已全部删除，见 UPDATE_LOG「工具方法删除兼容重载」。）
 - 原本就是英文的返回文案（websearch / webfetch 的错误、lsp 的服务器提示、`TODO saved.`）保持不变。
-- 内置子代理（`agents/*.md`）：基础文件是中文版兼兜底；其它语言放 `META-INF/solon/ai/harness/agents-i18n/<name>_<lang>[_<COUNTRY>].md`（不在内置挂载扫描目录里，避免重复注册），只替换 description 与正文，工具等元数据以基础文件为准；查找顺序 语言_国家 → 语言 → en；只作用于内置挂载的定义，工作区 / 用户挂载与运行时注册的同名定义原样使用。入口 `HarnessEngine.localizeAgent(def, locale)` 与 `getAgentBuilderOrNil(session, name, model, locale)`。
+- 内置子代理（`agents/*.md`）：基础文件是中文版兼兜底；其它语言放 `META-INF/solon/ai/harness/agents-i18n/<name>_<lang>[_<COUNTRY>].md`（不在内置挂载扫描目录里，避免重复注册），只替换 description 与正文，工具等元数据以基础文件为准；查找顺序 语言_国家 → 语言 → en；只作用于内置挂载的定义，工作区 / 用户挂载与运行时注册的同名定义原样使用。正文在每轮推理时按本轮语言取（`AgentFactory` 装的提示词模板读 `trace.getOptions().getLocale()`），取代理的方法不带语言；描述用于展示，入口 `HarnessEngine.getAgentDescription(def, locale)`。
 - 测试：`XxxRenderGoldenTest`（testZh / testZhExplicit / testEn）、`XxxI18nLintTest`（`I18nLint`）、`XxxI18nCoverageTest`（`I18nKeyCoverage`，新增行为用例类要登记）。生成英文快照只跑 en 方法：`-Dtest='Xxx#testEn' -Dgolden.update=true`（多个类用逗号分隔），避免覆写中文基线。

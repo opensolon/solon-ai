@@ -15,7 +15,9 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.ai.agent.AgentSystemPrompt;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.scope.ScopeGuardInterceptor;
@@ -76,7 +78,13 @@ public class AgentFactory {
         }, t -> engine.getExtensions().stream().anyMatch(e -> e.getToolNames().contains(t)), engine::isScopeRequired));
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {
-            builder.systemPrompt(r -> agentDefinition.getSystemPrompt());
+            builder.systemPrompt(systemPromptOf(agentDefinition));
+        }
+
+        // 引擎语言就是代理的默认语言：不经 handle、直接用代理的请求不带语言时也按它。
+        // 引擎语言只在 Builder 上设置、构建后不变，缓存的主代理不会过期。
+        if (engine.getLocale() != null) {
+            builder.locale(engine.getLocale());
         }
 
         if (Assert.isNotEmpty(engine.getWorkspace())) {
@@ -134,6 +142,21 @@ public class AgentFactory {
         });
 
         return builder;
+    }
+
+    /**
+     * 系统提示词模板：内置子代理在每轮推理时按本轮语言取正文（{@link BuiltinAgentI18n}），其它定义原样使用。
+     *
+     * <p>语言不在构建时定：会话有上一轮轨迹时，智能体从上一轮的 options 起步（模板一并沿用），
+     * 只有语言按本轮重定；模板自己不带语言，提示词才会与协议指令始终同一语言（见 {@code AgentSystemPrompt}）。</p>
+     */
+    private static AgentSystemPrompt<ReActTrace> systemPromptOf(AgentDefinition definition) {
+        if (BuiltinAgentI18n.isBuiltin(definition)) {
+            return trace -> BuiltinAgentI18n.systemPromptOf(definition,
+                    trace.getOptions() == null ? null : trace.getOptions().getLocale());
+        }
+
+        return trace -> definition.getSystemPrompt();
     }
 
     private static void toolAddDo(HarnessEngine engine, ReActAgent.Builder builder, TerminalTalentProxy terminalTalentProxy, AgentDefinition.Metadata metadata, String toolName, boolean isMain) {

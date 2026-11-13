@@ -109,7 +109,7 @@ public class HarnessEngine {
     private static final Logger LOG = LoggerFactory.getLogger(HarnessEngine.class);
 
     public final static String ATTR_CWD = HarnessAttrs.LEGACY_CWD;
-    private static final String BUILTIN_AGENT_MOUNT = "@harness-agents";
+    private static final String BUILTIN_AGENT_MOUNT = BuiltinAgentI18n.MOUNT_ALIAS;
     private static final String BUILTIN_AGENT_PATH = "META-INF/solon/ai/harness/agents/";
 
     /**
@@ -1914,6 +1914,13 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * 弃用但不能删掉（向下兼容需要）：不认会话级子代理（{@code generate} 建的），会回落主代理。
+     *
+     * @deprecated 4.2.0 {@link #getAgentOrMain(AgentSession, String)}（没有会话传 null）；
+     * 只要名字时用 {@link #resolveAgent(AgentSession, String)}，不必构建代理
+     */
+    @Deprecated
     public ReActAgent getAgentOrMain(String agentName) {
         return getAgentOrMain(null, agentName);
     }
@@ -1921,21 +1928,13 @@ public class HarnessEngine {
     /**
      * 会话感知版：先查本会话的会话级子代理，再查引擎级；都没有时回落主代理。
      *
+     * <p>取代理不带语言：语言属于一轮。内置子代理的提示词在推理时按本轮语言取，
+     * 本轮语言是请求上的 {@code options.locale}，不给时为引擎语言（{@link Builder#locale(Locale)}）。</p>
+     *
      * @since 4.2.0
      */
     public ReActAgent getAgentOrMain(@Nullable AgentSession session, String agentName) {
-        return getAgentOrMain(session, agentName, null);
-    }
-
-    /**
-     * 会话感知、按语言的代理（内置子代理按语言取描述与系统提示词）：先查本会话的会话级子代理，
-     * 再查引擎级；都没有时回落主代理。
-     *
-     * @param locale 语言（null 为默认语言）
-     * @since 4.2.0
-     */
-    public ReActAgent getAgentOrMain(@Nullable AgentSession session, String agentName, @Nullable Locale locale) {
-        AgentDefinition definition = localizeAgent(resolveAgent(session, agentName), locale);
+        AgentDefinition definition = resolveAgent(session, agentName);
         if (definition == null) {
             return getMainAgent();
         }
@@ -1950,28 +1949,16 @@ public class HarnessEngine {
         return AgentFactory.create(this, definition, sessionModel);
     }
 
-    public ReActAgent.Builder getAgentBuilderOrNil(String agentName, String sessionModel) {
-        return getAgentBuilderOrNil(null, agentName, sessionModel);
-    }
-
     /**
      * 会话感知的子代理构建器（先查本会话的会话级子代理，再查引擎级）
      *
-     * @since 4.2.0
-     */
-    public ReActAgent.Builder getAgentBuilderOrNil(@Nullable AgentSession session, String agentName, String sessionModel) {
-        return getAgentBuilderOrNil(session, agentName, sessionModel, null);
-    }
-
-    /**
-     * 会话感知、按语言的子代理构建器（内置子代理按语言取描述与系统提示词）
+     * <p>与 {@link #getAgentOrMain(AgentSession, String)} 一样不带语言：语言给在请求上。</p>
      *
-     * @param locale 语言（null 为默认语言）
+     * @return 不存在时为 null
      * @since 4.2.0
      */
-    public ReActAgent.Builder getAgentBuilderOrNil(@Nullable AgentSession session, String agentName, String sessionModel,
-                                                   @Nullable Locale locale) {
-        AgentDefinition definition = localizeAgent(resolveAgent(session, agentName), locale);
+    public ReActAgent.Builder getAgentBuilderOrNull(@Nullable AgentSession session, String agentName, String sessionModel) {
+        AgentDefinition definition = resolveAgent(session, agentName);
         if (definition == null) {
             return null;
         }
@@ -1980,13 +1967,17 @@ public class HarnessEngine {
     }
 
     /**
-     * 取子代理定义的语言版本：只作用于内置子代理（见 {@link BuiltinAgentI18n}），其它定义原样返回
+     * 子代理在指定语言下的描述（给人看的清单、补全、设置页用）。
      *
-     * @param locale 语言（null 为默认语言）
+     * <p>只有内置子代理有语言版本（见 {@link BuiltinAgentI18n}），其它定义为自己的描述。
+     * 系统提示词不必取：它在推理时按本轮语言自动切换。</p>
+     *
+     * @param definition 定义（null 返回 null）
+     * @param locale     语言（null 为默认语言）
      * @since 4.2.0
      */
-    public AgentDefinition localizeAgent(@Nullable AgentDefinition definition, @Nullable Locale locale) {
-        return BuiltinAgentI18n.localize(definition, locale, BUILTIN_AGENT_MOUNT);
+    public @Nullable String getAgentDescription(@Nullable AgentDefinition definition, @Nullable Locale locale) {
+        return BuiltinAgentI18n.descriptionOf(definition, locale);
     }
 
     /**

@@ -438,11 +438,11 @@ public class HarnessRenderGoldenTest {
         List<AgentDefinition> agents = new ArrayList<>(engine.getAgentManager().getAgents());
         //隐藏的内置代理不在列表里，单独取
         agents.add(engine.getAgentManager().getAgent("git-summary"));
-        for (AgentDefinition agent0 : agents) {
-            //委派时按父代理语言取内置子代理的语言版本
-            AgentDefinition agent = engine.localizeAgent(agent0, locale);
+        for (AgentDefinition agent : agents) {
+            //描述按请求语言取；正文在推理时按本轮语言取（渲染构建出的代理，与运行时同一条路径）
             out.put("agent_" + agent.getName().replace('-', '_') + suffix,
-                    "description: " + agent.getDescription() + "\n--- systemPrompt ---\n" + agent.getSystemPrompt());
+                    "description: " + engine.getAgentDescription(agent, locale) + "\n--- systemPrompt ---\n"
+                            + HarnessFixtures.renderSystemPrompt(engine.getAgentBuilder(agent).build(), locale));
         }
     }
 }

@@ -230,8 +230,7 @@ public class TaskTalent extends AbsTalent {
         sb.append(HarnessI18n.get(locale, HarnessI18nKeys.TASK_INSTRUCTION_AGENTS_TITLE)).append("\n");
         sb.append("<available_agents>\n");
         for (AgentDefinition agent : engine.getAgentManager().getAgents()) {
-            agent = engine.localizeAgent(agent, locale);
-            sb.append(String.format("  - \"%s\": %s\n", agent.getName(), agent.getDescription()));
+            sb.append(String.format("  - \"%s\": %s\n", agent.getName(), engine.getAgentDescription(agent, locale)));
         }
         sb.append("</available_agents>\n\n");
 
@@ -246,7 +245,7 @@ public class TaskTalent extends AbsTalent {
      * 补充列出本会话的会话级子代理（{@code generate(saveToFile=false)} 的产物）。
      *
      * <p>按 prompt 携带的会话 ID 现查会话：清单只对创建它的会话可见，其它会话的请求查不到，自然不列；
-     * 与委派时的解析（{@link HarnessEngine#getAgentBuilderOrNil}）同一来源，不再经请求上下文转递。</p>
+     * 与委派时的解析（{@link HarnessEngine#getAgentBuilderOrNull}）同一来源，不再经请求上下文转递。</p>
      */
     private void appendSessionAgents(Prompt prompt, Locale locale, StringBuilder sb) {
         if (prompt == null) {
@@ -409,9 +408,9 @@ public class TaskTalent extends AbsTalent {
         final ReActAgent.Builder agentBuilder;
 
         try {
-            // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级
-            // 内置子代理按父代理的语言取提示词
-            agentBuilder = engine.getAgentBuilderOrNil(session, op.agent_name, sessionModel, locale);
+            // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级。
+            // 内置子代理的提示词在推理时按本轮语言取，子请求继承父代理的语言（见 applyScope）
+            agentBuilder = engine.getAgentBuilderOrNull(session, op.agent_name, sessionModel);
         } catch (Throwable e) {
             // 名称存在但定义加载失败：同样只废这一条
             return new TaskPlan(op, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_ERROR_LOAD_FAILED,

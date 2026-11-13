@@ -40,9 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -187,43 +185,52 @@ public class HarnessI18nScenarioTest {
     }
 
     /**
-     * 内置子代理按语言分文件：中文用基础文件（原对象）；英文只替换描述与正文；未知语言落回英文；非内置定义不动
+     * 内置子代理按语言分文件：中文用基础文件；英文只替换描述与正文；未知语言落回英文；非内置定义不动。
+     * 描述经 {@code getAgentDescription} 取；正文在推理时按本轮语言取，同一个代理实例在各语言的轮次上各自正确。
      */
     @Test
-    public void testBuiltinAgentLocalized() {
+    public void testBuiltinAgentLocalized() throws Exception {
         HarnessEngine engine = HarnessFixtures.engine(workspace);
         AgentDefinition base = engine.resolveAgent(null, "explore");
+        String zhDescription = base.getDescription();
+        String zhPrompt = base.getSystemPrompt();
+        assertTrue(zhPrompt.startsWith("您是一位全域信息探索专家"), zhPrompt);
 
-        assertSame(base, engine.localizeAgent(base, null));
-        assertSame(base, engine.localizeAgent(base, Locale.CHINA));
-        assertSame(base, engine.localizeAgent(base, Locale.TRADITIONAL_CHINESE));
-
-        AgentDefinition en = engine.localizeAgent(base, Locale.ENGLISH);
-        assertNotSame(base, en);
-        assertEquals("explore", en.getName());
-        assertTrue(en.getDescription().startsWith("Exploration expert"), en.getDescription());
-        assertTrue(en.getSystemPrompt().startsWith("You are an exploration expert"), en.getSystemPrompt());
-        //工具等元数据以基础文件为准
-        assertEquals(base.getMetadata().getTools(), en.getMetadata().getTools());
-        assertEquals(base.getMountAlias(), en.getMountAlias());
-        //不改基础定义
-        assertTrue(base.getSystemPrompt().startsWith("您是一位全域信息探索专家"));
-
+        //描述
+        assertEquals(zhDescription, engine.getAgentDescription(base, null));
+        assertEquals(zhDescription, engine.getAgentDescription(base, Locale.CHINA));
+        assertEquals(zhDescription, engine.getAgentDescription(base, Locale.TRADITIONAL_CHINESE));
+        String enDescription = engine.getAgentDescription(base, Locale.ENGLISH);
+        assertTrue(enDescription.startsWith("Exploration expert"), enDescription);
         //未知语言、带国家的英文：落回英文版本
-        assertEquals(en.getSystemPrompt(), engine.localizeAgent(base, Locale.JAPANESE).getSystemPrompt());
-        assertEquals(en.getSystemPrompt(), engine.localizeAgent(base, Locale.US).getSystemPrompt());
+        assertEquals(enDescription, engine.getAgentDescription(base, Locale.JAPANESE));
+        assertEquals(enDescription, engine.getAgentDescription(base, Locale.US));
+        assertNull(engine.getAgentDescription(null, Locale.ENGLISH));
+
+        //正文：同一个代理实例按每轮的语言渲染
+        ReActAgent agent = engine.getAgentBuilder(base).build();
+        String enPrompt = HarnessFixtures.renderSystemPrompt(agent, Locale.ENGLISH);
+        assertTrue(enPrompt.startsWith("You are an exploration expert"), enPrompt);
+        assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(agent, Locale.CHINA));
+        assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(agent, Locale.TRADITIONAL_CHINESE));
+        assertEquals(enPrompt, HarnessFixtures.renderSystemPrompt(agent, Locale.JAPANESE));
+        assertEquals(enPrompt, HarnessFixtures.renderSystemPrompt(agent, Locale.US));
+        //不改基础定义
+        assertEquals(zhPrompt, base.getSystemPrompt());
+        assertEquals(zhDescription, base.getDescription());
 
         //非内置（运行时注册 / 工作区挂载的同名定义）不替换
         AgentDefinition custom = base.copy();
         custom.setMountAlias("@workspace-agents");
-        assertSame(custom, engine.localizeAgent(custom, Locale.ENGLISH));
+        assertEquals(zhDescription, engine.getAgentDescription(custom, Locale.ENGLISH));
+        assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(engine.getAgentBuilder(custom).build(), Locale.ENGLISH));
         AgentDefinition runtime = base.copy();
-        assertSame(runtime, engine.localizeAgent(runtime, Locale.ENGLISH));
-        assertNull(engine.localizeAgent(null, Locale.ENGLISH));
+        assertEquals(zhDescription, engine.getAgentDescription(runtime, Locale.ENGLISH));
+        assertEquals(zhPrompt, HarnessFixtures.renderSystemPrompt(engine.getAgentBuilder(runtime).build(), Locale.ENGLISH));
 
         //隐藏的内置代理同样有语言版本
         AgentDefinition git = engine.resolveAgent(null, "git-summary");
-        assertTrue(engine.localizeAgent(git, Locale.ENGLISH).getSystemPrompt()
+        assertTrue(HarnessFixtures.renderSystemPrompt(engine.getAgentBuilder(git).build(), Locale.ENGLISH)
                 .startsWith("You are a professional Git commit message assistant."));
     }
 
