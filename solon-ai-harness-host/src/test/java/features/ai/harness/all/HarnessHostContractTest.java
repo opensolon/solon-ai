@@ -61,7 +61,7 @@ class HarnessHostContractTest {
     // ==================== 夹具 ====================
 
     /** 记录型输出通道 */
-    static final class RecordingSink implements HostSink {
+    static class RecordingSink implements HostSink {
         final List<String> replies = new CopyOnWriteArrayList<>();
         final List<HostInput> replyInputs = new CopyOnWriteArrayList<>();
         final List<HostRun> started = new CopyOnWriteArrayList<>();
@@ -314,6 +314,47 @@ class HarnessHostContractTest {
             assertEquals("b", dispatched.getInput().getOrigin().getChannel(), "续发的一轮按当初排队那条的来源投递");
             await(() -> engine.status(session).isOccupied() == false, "全部结束后会话空闲");
             assertEquals(0, engine.getExtension(QueueExtension.class).get().pendingSize(session));
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    /**
+     * 续发空档的可观测性：一轮结束时队列里还有待执行条目，`engine.isIdle` 必须为 false。
+     *
+     * <p>这是宿主「还要不要占住用户」的唯一正确口径——`isBusy() || isAdmitting()` 在
+     * 「上一轮 finished 到续发下一轮 open」之间会短暂全假，宿主要么漏判、要么自造静默窗口。</p>
+     */
+    @Test
+    void isIdleStaysFalseWhileBacklogPending() throws Exception {
+        HarnessEngine engine = engine();
+        AgentSession session = engine.getSession("s1");
+        List<Boolean> idleAtFinished = new CopyOnWriteArrayList<>();
+        List<Integer> pendingAtFinished = new CopyOnWriteArrayList<>();
+        RecordingSink sink = new RecordingSink() {
+            @Override
+            public void runFinished(HostRun run, RunOutcome outcome) {
+                super.runFinished(run, outcome);
+                idleAtFinished.add(engine.isIdle(session));
+                pendingAtFinished.add(engine.getExtension(QueueExtension.class).get().pendingSize(session));
+            }
+        };
+        ManualExecutor executor = new ManualExecutor();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(executor).build();
+        try {
+            assertEquals(Disposition.STARTED,
+                    host.submit("t", "s1", HarnessInput.of("first").origin(InputOrigin.channel("a"))).getDisposition());
+            assertEquals(Disposition.DEFERRED,
+                    host.submit("t", "s1", HarnessInput.of("second").origin(InputOrigin.channel("b"))).getDisposition());
+
+            assertTrue(executor.runNext(5_000));
+            await(() -> sink.finished.size() == 1, "第一条结束");
+            assertTrue(executor.runNext(30_000), "第一条结束后应自动续发第二条");
+            await(() -> sink.finished.size() == 2, "第二条结束");
+
+            assertTrue(pendingAtFinished.get(0) > 0, "第一条结束时队列里仍有续发条目");
+            assertFalse(idleAtFinished.get(0),
+                    "有积压时 isIdle 必须为 false：宿主用 isIdle 判断「还要不要占住用户」，不需要静默窗口");
         } finally {
             engine.shutdown();
         }

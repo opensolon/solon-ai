@@ -48,6 +48,24 @@ solon-ai harness 的**宿主骨架（L0）**：把「受理 → 开流 → 终�
 
 三个对象的分工：`HostInput` 是**一次输入**（来源、文本、受理结果），`HostRun` 是这次输入开出的**一轮运行**（0 或 1 个，`run.getInput()` 指回输入），`RunOutcome` 是这一轮的**终态**（恰好一个）。
 
+### 1.1 会话状态：先读引擎，不要自拼
+
+宿主几乎都要回答“现在还能不能接新输入”、“还要不要占住用户”这类问题。答案都已在引擎里，**不要自己拼 `isBusy()` / `isAdmitting()` 的组合**：口径一旦漏项（典型是漏掉积压续发），表现是“偶发、难复现”的错误。
+
+`engine.status(session)` 返回 `SessionStatus` 快照（核心事实一次读全），下表的方法都在这一层或 `HarnessEngine` 上：
+
+| 你要回答的问题 | 用什么 | 不要拿它做什么 |
+|---|---|---|
+| 有轮次正在跑？跑几个？ | `status.isBusy()`、`status.getActiveRunCount()` | 不含审批挂起：别用它判断“能不能接新输入” |
+| 已受理、运行流还没登记？ | `status.isAdmitting()` | 单看它会漏掉已在跑的轮次 |
+| 有卡等用户审批？几张？ | `status.hasPendingHitl()`、`status.getPendingHitlCount()` | — |
+| **能不能接新输入？** | `status.isOccupied()` | 这是唯一正确口径（受理窗口、在跑、挂起卡都算占用） |
+| **还会不会有轮次跑起来？（含积压续发）** | `engine.isIdle(session)` | 审批挂起时它也是 `false`：终端宿主问审批前要先看 `hasPendingHitl()` |
+| 这条斜杠命令能否在任务运行中被受理？ | `engine.isRunnableWhenBusy(input)` | 它只回答“忙时是否放行”，不回答“空闲时能否启动任务” |
+| 整台引擎能否回收？ | `engine.isQuiescent()`、`engine.getActiveRunCount()` | 引擎池按它回收，不是按会话状态 |
+
+其中 `engine.isIdle(session)` 是关键的一条：它的口径是「不占用 **且** 没有积压能力报告待执行输入」。**一轮结束到续发下一轮开出之间，`isBusy()` 与 `isAdmitting()` 会短暂全假，而 `isIdle()` 仍为 `false`**（队列里那条还没被领取）。所以终端、桌面这类“占住输入直到全部结束”的宿主，直接用 `isIdle()` 即可，**不要自造静默窗口**去兜底。
+
 ---
 
 ## 2. 依赖与装配
@@ -1167,6 +1185,14 @@ submit ─┬─ 会话不存在 / 非持有 / 主体不符 ── rejected / no
 | 管理态操作后自己再 drain | 多余（框架已自动续发） | 什么都不用做 |
 | 同一引擎挂多个入口都用 `programRuns(true)` | 后台轮次被错误的入口执行、跑掉别人会话的积压 | `programRuns(sid -> ...)` 划分范围，或 `programRuns(false)` |
 | 在 `SessionAdmin` 里期待鉴权 | 框架不做鉴权 | 在控制器 / 拦截器层先鉴权 |
+| 自己拼 `isBusy() || isAdmitting()` 判“全部轮次已结束” | 续发空档里两个都为假：终端提前回到提示符、并发控制失效 | `engine.isIdle(session)`（见 §1.1）；审批挂起另行判 `hasPendingHitl()` |
+
+### 12.1 已知限制
+
+1. **执行器重叠只在 goal 里有告警**。`goal` 发现同一会话被多个通道执行器认领时会 `WARN`（日志含 `host claim predicates are NOT mutually exclusive`，测试口 `overlapWarnCount`）；`loop` **不检测重叠**，只会在无人认领时记一条 `[Loop] no executor claimed session`。两个插件的 `addExecutor(channel, claim, handler)` 签名相同，宿主登记 `loop` 执行器时要自己保证谓词互斥。
+2. **goal 的重叠告警按“命中通道组合”去重、键集上限 64**：同一组合只警一次（防批量路径刷屏），超过 64 种组合后新组合不再告警也不计数（防病态注册撑爆内存）。极端谓词爆炸场景会漏报。
+3. **同一个引擎上只应该挂一个 host**。多个 host 共享同一引擎不会报错，但 `programRuns` 的归属由先登记者决定，另一个会静默拿不到后台轮次。多入口请用同一个 host + 谓词划分范围。
+
 
 ---
 
