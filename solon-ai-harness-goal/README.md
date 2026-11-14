@@ -578,7 +578,11 @@ public class ImGoalHost {
 
     /** 进程启动：按状态来源的活跃索引恢复调度（只挂调度，不立即跑） */
     public void onStartup() {
-        goal.recover();
+        try {
+            goal.recover();
+        } catch (IOException e) {
+            // 索引一时读不了：不是「没有活跃 goal」，退避后重试
+        }
     }
 
     private void reply(InputOrigin origin, String text) { /* 按 origin 回投渠道 */ }
@@ -755,7 +759,12 @@ GoalStatus st = engine.status(session).get(GoalExtension.STATUS_GOAL); // 无 go
 ```java
 // 推荐：按状态来源下的活跃索引 goal/active/ 恢复，无需宿主枚举会话
 // （已不存在或已非活跃的会话在首次到期时自动注销；多节点共用来源时，非持有节点的轮次被 not_owner 拒绝）
-int n = goal.recover();
+// 列表读失败抛 IOException：那是「这次没读到」而不是「没有活跃 goal」，要退避重试（读失败当成空会把恢复静默丢掉）
+try {
+    int n = goal.recover();
+} catch (IOException e) {
+    // 退避后重试；期间 goal 仍在会话快照里，不会丢
+}
 
 // 或：只恢复本入口负责的会话（HarnessHost 就是按 programRuns 的谓词这样调）
 int k = goal.recover(sid -> sid.startsWith("web-"));
@@ -1001,7 +1010,7 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 | `resume(sessionId)` | `HarnessResult<Void>` | 管理（`/goal resume` 同路径） | `PAUSED` / `BLOCKED`，否则 `CONFLICT` |
 | `trigger(sessionId)` | `HarnessResult<Void>` | 管理 | 仅活跃态；扩展停用 `DISABLED` |
 | `remove(sessionId)` | `HarnessResult<Void>` | 管理（`/goal clear` 同路径） | 先摘调度再清除；无 goal `NOT_FOUND` |
-| `recover()` / `recover(sessionFilter)` | `int` | 运维 | 按 `goal/active/` 索引恢复（可按会话过滤），只挂调度不立即跑 |
+| `recover()` / `recover(sessionFilter)` | `int` | 运维 | 按 `goal/active/` 索引恢复（可按会话过滤），只挂调度不立即跑；索引读失败抛 `IOException`（要让宿主退避重试，不能当成「没有活跃 goal」） |
 | `recover(sessionIds, statusReader)` | `int` | 运维 | 实际挂上调度的会话数 |
 | `hasActiveGoals()` | `boolean` | 运维 | 是否仍有 goal 在调度（闲置回收判定） |
 | `hasScheduler()` | `boolean` | 运维 | 是否装配了调度器 |

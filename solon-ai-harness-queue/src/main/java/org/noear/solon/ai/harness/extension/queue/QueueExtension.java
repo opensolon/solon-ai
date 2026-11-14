@@ -16,10 +16,15 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.spi.InputBacklog;
 import org.noear.solon.ai.harness.session.OwnerCheck;
 import org.noear.solon.ai.harness.session.SessionStatus;
+import org.noear.solon.lang.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -31,7 +36,7 @@ import java.util.function.Predicate;
  * <p>装配后宿主只需掌握一个时机：任务终态续发。首选 {@link #drainLoop}（自动套领取循环 +
  * 三态终止），单条控制用 {@link #claimNext}；二者都把「一次领取」封成 {@link QueueClaim}，
  * 代际快照与终态收口归 harness（handler 返回 true 时内核当场收口，异步启动时由流终态的 {@code RunTicket#settle} 收口）。
- * 启动恢复用 {@link #isPersisted} 探测后直接 drain。</p>
+ * 重启恢复用 {@link #recover}（按积压索引逐个续发）。</p>
  *
  * <p>历史上曾有一组「异步 drain + 宿主自管代际」的接口
  * （{@code drainOne(runner, false)} / {@code ack} / {@code generation} /
@@ -46,12 +51,18 @@ import java.util.function.Predicate;
  * （引擎忙态受理与先进先出、空闲判定、steer 残留转排队都经它）；覆写 {@link #contributeSessionStatus} 贡献
  * 自有事实键 {@link #STATUS_PENDING}；
  * 覆写 {@link #onSessionInterrupt}（用户停止时先清队列再停流）；派发事务登记在核心槽位 {@code RunDispatch}。
- * 队列存在会话属性里，随会话一起消失，无需覆写 {@code onSessionRemove}。</p>
+ * 队列存在会话属性里，随会话一起消失；会话之外只有积压索引（{@link #INDEX_PATH}），由 {@link #onSessionRemove} 注销。</p>
+ *
+ * <p><b>实例上有什么</b>：队列的事实都在会话上；本实例只持有引擎与索引目录。{@code /queue} 命令与门面都按挂接的那个引擎
+ * 维护索引，所以一个实例同一时刻只服务一个运行中的引擎（见 {@link #onAttach}）。本扩展不覆写 {@code isQuiescent}：
+ * 积压在会话快照与索引里，引擎回收不会丢，重建时的恢复会续发；卡住的积压不该挡住回收。</p>
  *
  * @author noear
  * @since 3.9.4
  */
 public class QueueExtension extends AbsHarnessExtension implements InputBacklog {
+    private static final Logger LOG = LoggerFactory.getLogger(QueueExtension.class);
+
     /**
      * 会话状态事实：待执行的排队任务数（不含正在执行的那条；= {@link #pendingSize}）。
      *
@@ -73,8 +84,8 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
     private QueueExtension(Limits limits) {
         this.limits = limits;
-        // 命令写队列后回到本扩展同步积压索引（与门面同一口径）
-        this.queueCommand = new QueueCommand(limits, this::syncIndex);
+        // 命令写队列也经本扩展维护积压索引（与门面同一口径）
+        this.queueCommand = new QueueCommand(limits, this);
     }
 
     /** @since 4.2.0 */
@@ -141,24 +152,94 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
     private volatile HarnessEngine engine;
     private volatile QueueIndex index;
 
+    /**
+     * 挂到引擎上：注册 /queue 命令，引擎有状态来源时建立积压索引。
+     *
+     * @throws IllegalStateException 本实例已绑在另一个未关闭的引擎上（命令与门面会把会话的标记写进最后挂接的那个引擎的状态来源）；
+     *                               前一个引擎关闭后可以再挂（如引擎池回收后重建）
+     */
     @Override
     public void onAttach(HarnessEngine engine) {
+        bindEngine(engine);
         this.engine = engine;
         this.index = engine.getStateSource() == null ? null : new QueueIndex(engine.getStateSource(), INDEX_PATH);
         engine.getCommandRegistry().register(queueCommand);
     }
 
+    /** 挂接的引擎已关闭：不再领取、续发与恢复（也不查归属——查归属会重新认领 shutdown 刚释放的租约） */
+    private boolean isEngineClosed() {
+        HarnessEngine e = engine;
+        return e != null && e.isClosed();
+    }
+
     /**
-     * 重启恢复用：可能有积压的会话（索引是超集——入队时登记，观察到队列已空时注销）。
+     * 重启恢复：按积压索引逐个交给 {@code drain} 续发（进程重启、引擎被池回收后重建时各调一次；
+     * L0 的 {@code HarnessHost} 首次取到引擎时自动调用）。
      *
-     * <p>宿主对这些会话各调一次续发即可，不需要枚举会话目录；HarnessHost 首次绑定引擎时会自动做。
-     * 未挂接或引擎没有状态来源时返回空。</p>
+     * <p>逐条处理，死标记在同一遍里清掉（运行期没删成的标记靠它收敛，索引不随历史增长）：</p>
+     * <ul>
+     *   <li>过滤不命中：跳过，标记原样留给负责它的入口；</li>
+     *   <li>会话不归本节点：跳过（先查归属，再加载会话）；</li>
+     *   <li>会话已不存在（存储层清理、没经 {@code engine.removeSession} 删除等）：注销标记；</li>
+     *   <li>其余交给 {@code drain}：队列其实已空的，由续发领取落空（{@link QueueClaimStatus#NO_TASK}）时注销。</li>
+     * </ul>
      *
+     * <p>会话查询与 {@code drain} 都在调用线程上执行——会话存储依赖租户上下文的宿主，要在该上下文里调用。
+     * 单个会话出错只记告警，不影响其余；整遍处理完记一行汇总（列出、续发、清掉的死标记、跳过、失败与耗时），
+     * 索引规模与列举耗时按它观察。未挂接、已停用、引擎已关闭或没有状态来源时什么都不做；中途引擎关闭则停止。</p>
+     *
+     * @param sessionFilter 会话过滤（null = 全部）
+     * @param drain         续发（宿主自己的 {@link #drainLoop} 包装）
+     * @return 交给 drain 的会话数
+     * @throws IOException 索引列举失败（不能当成「没有积压」，宿主应退避重试）
      * @since 4.2.0
      */
-    public List<String> pendingSessions() {
+    public int recover(@Nullable Predicate<String> sessionFilter, Consumer<AgentSession> drain) throws IOException {
         QueueIndex i = index;
-        return i == null ? Collections.<String>emptyList() : i.read();
+        HarnessEngine e = engine;
+        if (i == null || e == null || drain == null || isEnabled() == false || e.isClosed()) {
+            return 0;
+        }
+        long start = System.currentTimeMillis();
+        List<String> sessionIds = i.list();
+        int drained = 0;
+        int removed = 0;
+        int skipped = 0;
+        int failed = 0;
+        for (String sessionId : sessionIds) {
+            if (e.isClosed()) {
+                // 引擎中途关闭：剩下的留给新引擎的恢复（再查归属会重新认领刚释放的租约）
+                break;
+            }
+            if (sessionFilter != null && sessionFilter.test(sessionId) == false) {
+                skipped++;
+                continue;
+            }
+            try {
+                if (e.checkOwner(sessionId).isOwned() == false) {
+                    skipped++;
+                    continue;
+                }
+                AgentSession session = e.getSessionOrNull(sessionId);
+                if (session == null) {
+                    // 会话已不在了：标记是死的
+                    if (i.unmark(sessionId)) {
+                        removed++;
+                    }
+                    continue;
+                }
+                drain.accept(session);
+                drained++;
+            } catch (Throwable ex) {
+                failed++;
+                LOG.warn("Queue backlog recover failed for '{}': {}", sessionId, ex.toString());
+            }
+        }
+        if (sessionIds.isEmpty() == false) {
+            LOG.info("Queue backlog recover: listed={}, drained={}, removed={}, skipped={}, failed={}, elapsedMs={}",
+                    sessionIds.size(), drained, removed, skipped, failed, System.currentTimeMillis() - start);
+        }
+        return drained;
     }
 
     /**
@@ -170,26 +251,76 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     public void markPending(String sessionId) {
         QueueIndex i = index;
-        if (i != null) {
+        if (i != null && sessionId != null) {
             i.mark(sessionId);
         }
     }
 
-    /** 入队成功后登记、队列已空时注销（门面与 /queue 命令共用） */
-    private void syncIndex(AgentSession session) {
-        QueueIndex i = index;
-        if (i == null || session == null) {
+    /**
+     * 按队列当前状态同步积压索引（入队、取消、清空、中断、收口、领取落空之后；门面与 /queue 命令共用）。
+     *
+     * <p>判定与读写都在会话锁内（与队列本身同一把锁）：「判定队列已空」和「删标记」之间插不进一次入队，
+     * 否则刚写的标记会被删掉，而之后不会有人再写。入队不走这里，走 {@link #enqueueIndexed}（先写标记再入队）。
+     * 状态来源慢时，写 / 删标记与队列写快照受同样的影响（同在这把锁里）。</p>
+     * <ul>
+     *   <li>有任务（含运行中）：每次都写标记，并清掉会话上的「已确认注销」；</li>
+     *   <li>没有任务：会话上没有「已确认注销」时删标记，删成功才记上——此后到下次入队之前不再碰磁盘
+     *       （每轮结束都会走到这里，而绝大多数会话从没排过队）；删失败不记，下次再删。</li>
+     * </ul>
+     */
+    void syncIndex(AgentSession session) {
+        if (session == null || session.getSessionId() == null) {
             return;
         }
-        if (QueueStore.hasItems(session)) {
-            i.mark(session.getSessionId());
-        } else {
-            i.unmark(session.getSessionId());
+        String sessionId = session.getSessionId();
+        QueueIndex i = index;
+        synchronized (session.attrs()) {
+            if (QueueStore.hasItems(session)) {
+                session.attrs().remove(QueueAttrs.QUEUE_UNMARKED);
+                if (i != null) {
+                    i.mark(sessionId);
+                }
+            } else if (i != null && Boolean.TRUE.equals(session.attrs().get(QueueAttrs.QUEUE_UNMARKED)) == false
+                    && i.unmark(sessionId)) {
+                session.attrs().put(QueueAttrs.QUEUE_UNMARKED, Boolean.TRUE);
+            }
         }
     }
 
+    /**
+     * 入队并登记积压索引（门面、忙时积压与 {@code /queue} 命令共用）：先写标记、再入队，二者在会话锁内一次完成。
+     *
+     * <p>顺序反过来（入队先存快照、再写标记）时，两步之间进程崩溃会留下「有积压、没标记」：重启恢复碰不到它，
+     * 要等该会话下次有输入才续发。没入成且之前队列为空时，尽量把刚写的标记删掉（删不掉也无妨：索引允许多记，
+     * 下次领取落空或恢复时清掉）。</p>
+     *
+     * @param enqueue 入队动作（返回队列位置或导入条数；失败为 0 或负数）
+     * @return {@code enqueue} 的返回值
+     */
+    int enqueueIndexed(AgentSession session, IntSupplier enqueue) {
+        QueueIndex i = index;
+        if (session == null || session.getSessionId() == null || i == null) {
+            return enqueue.getAsInt();
+        }
+        String sessionId = session.getSessionId();
+        synchronized (session.attrs()) {
+            boolean wasEmpty = QueueStore.hasItems(session) == false;
+            session.attrs().remove(QueueAttrs.QUEUE_UNMARKED);
+            i.mark(sessionId);
+            int result = enqueue.getAsInt();
+            if (result <= 0 && wasEmpty && i.unmark(sessionId)) {
+                session.attrs().put(QueueAttrs.QUEUE_UNMARKED, Boolean.TRUE);
+            }
+            return result;
+        }
+    }
+
+    /** 会话被永久删除：注销积压索引（只删这一条；不取会话；清理类，不判开关）。 */
     @Override
     public void onSessionRemove(HarnessEngine engine, String sessionId) {
+        if (sessionId == null) {
+            return;
+        }
         QueueIndex i = index;
         if (i != null) {
             i.unmark(sessionId);
@@ -232,11 +363,9 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         }
         String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
         // 输入快照：技能 / MCP 视野、终端标记与显式作用域随积压保存，续发时还原（解析所得的作用域不存，续发时重新解析）
-        int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), null, input.getSelectedModel(),
-                agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
-        if (position > 0) {
-            syncIndex(session);
-        }
+        int position = enqueueIndexed(session, () -> QueueStore.enqueue(session, input.getText(), input.getOrigin(), null,
+                input.getSelectedModel(), agent, input.getAttrs(), QueueItem.snapshotOf(input),
+                limits.maxSize, limits.maxTextLength));
         return position > 0 ? position : -1;
     }
 
@@ -313,10 +442,10 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             return owner;
         }
         String agent = input.getExplicitAgent() != null ? input.getExplicitAgent() : input.getSelectedAgent();
-        int position = QueueStore.enqueue(session, input.getText(), input.getOrigin(), id, input.getSelectedModel(),
-                agent, input.getAttrs(), QueueItem.snapshotOf(input), limits.maxSize, limits.maxTextLength);
+        int position = enqueueIndexed(session, () -> QueueStore.enqueue(session, input.getText(), input.getOrigin(), id,
+                input.getSelectedModel(), agent, input.getAttrs(), QueueItem.snapshotOf(input),
+                limits.maxSize, limits.maxTextLength));
         if (position > 0) {
-            syncIndex(session);
             return HarnessResult.ok(position);
         }
         switch (position) {
@@ -371,15 +500,24 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      * <p>{@code canAccept} 在领取权的<b>同一把会话锁内</b>求值，途中不存在「刚判完空闲、领取前已被占」的窗口，
      * 宿主不需要再写 {@code synchronized (session.attrs())} 与代际复核。只想「领到队空为止」的宿主用 {@link #drainLoop}。</p>
      *
+     * <p>挂接的引擎已关闭时返回 {@link QueueClaimStatus#NO_TASK}，不领取、不查归属：队列原样留在会话快照与索引里，
+     * 由新引擎的恢复续发。</p>
+     *
      * @param canAccept 现在能不能接（null = 不预判）；false 时不消耗队列项、不占领取权
      * @since 4.2.0
      */
     public QueueClaimStatus claimNext(AgentSession session, Predicate<AgentSession> canAccept,
                                 QueueClaimHandler handler) {
-        if (isEnabled() == false || owned(session) == false) {
+        if (isEnabled() == false || isEngineClosed() || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
         }
-        return QueueStore.claimNext(session, canAccept, handler);
+        QueueClaimStatus status = QueueStore.claimNext(session, canAccept, handler);
+        if (status == QueueClaimStatus.NO_TASK || QueueStore.hasItems(session) == false) {
+            // 领取落空（队列已空则注销，有项但这会儿领不了则补写标记），或这一条已同步完成、队列全空：按现状同步。
+            // 异步启动的那条还在运行时不碰索引（收口也不碰）：下次领取落空或恢复时再注销
+            syncIndex(session);
+        }
+        return status;
     }
 
     /**
@@ -396,7 +534,11 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      *   <li>{@code canDrain} 返回 false（会话忙/被占）——返回上一次状态；</li>
      *   <li>领取结果为 {@link QueueClaimStatus#START_FAILED}——任务已回队首，<b>不立即重试</b>；</li>
      *   <li>领取结果为 {@link QueueClaimStatus#NO_TASK}（队空）；</li>
-     *   <li>启动成功后队列已无待执行项（运行中的那条不占容量，不必再发）。</li>
+     *   <li>启动成功后队列已无待执行项（运行中的那条不占容量，不必再发）；</li>
+     *   <li>挂接的引擎已关闭（进入时已关闭则不领取、不查归属，返回 NO_TASK）。宿主的 handler 遇到引擎已关闭
+     *       （{@code RejectReason.ENGINE_CLOSED}）或会话已不归本节点（{@code NOT_OWNER}）的拒绝应当抛出：输入本身没问题，
+     *       这条回到队首（START_FAILED）由新引擎 / 持有节点续发，而不是被当作同步完成确认掉。其余拒绝（如作用域解析不到）
+     *       跟着这条输入走，按已处理返回 true：放回队首会挡住后面所有输入（队列先进先出）。</li>
      * </ul>
      *
      * <p>与 {@link #claimNext} 的关系：本方法是它的循环包装，语义完全一致。
@@ -411,7 +553,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
      */
     public QueueClaimStatus drainLoop(AgentSession session, Predicate<AgentSession> canDrain,
                                 QueueClaimHandler handler) {
-        if (isEnabled() == false || session == null || handler == null || owned(session) == false) {
+        if (isEnabled() == false || session == null || handler == null || isEngineClosed() || owned(session) == false) {
             return QueueClaimStatus.NO_TASK;
         }
 
@@ -424,11 +566,15 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
             if (canDrain != null && !canDrain.test(session)) {
                 return last;
             }
+            if (isEngineClosed()) {
+                // 上一条启动之后引擎关闭了：剩下的留在队列里，由新引擎的恢复续发
+                return last;
+            }
 
             QueueClaimStatus status = QueueStore.claimNext(session, canDrain, handler);
             if (status != QueueClaimStatus.STARTED) {
                 if (status == QueueClaimStatus.NO_TASK) {
-                    // 队列已空（运行中的那条也已收口）：注销索引
+                    // 领取落空：队列已空则注销，有项但这会儿领不了则补写标记
                     syncIndex(session);
                 }
                 return status;
@@ -436,6 +582,11 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
 
             last = status;
             if (QueueStore.pendingSize(session) <= 0) {
+                if (QueueStore.hasItems(session) == false) {
+                    // 最后一条已同步完成（handler 返回 true）、队列全空：顺手注销。异步启动的那条还在运行时不碰索引，
+                    // 它的这一轮结束后宿主再续发时领取落空、在上面注销
+                    syncIndex(session);
+                }
                 return last;
             }
         }
@@ -487,8 +638,7 @@ public class QueueExtension extends AbsHarnessExtension implements InputBacklog 
         if (owner != null) {
             return owner;
         }
-        int imported = QueueStore.importItems(session, rows, limits.maxSize);
-        syncIndex(session);
+        int imported = enqueueIndexed(session, () -> QueueStore.importItems(session, rows, limits.maxSize));
         return HarnessResult.ok(imported);
     }
 

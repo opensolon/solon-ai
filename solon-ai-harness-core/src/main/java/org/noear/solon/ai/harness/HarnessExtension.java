@@ -115,6 +115,9 @@ import java.util.Collections;
  *         可重入锁且对尚未构建的主代理会跳过重建），但不要在钩子里长期阻塞。</li>
  *     <li><b>埋点边界</b>：{@link #onInput} / {@link #onRequestAssemble} 只覆盖经引擎入口
  *         （{@code handle} / {@code prompt}）的流量；宿主绕过引擎直接调代理实例不会触发。</li>
+ *     <li><b>一个实例挂几个引擎</b>：持有引擎状态的扩展（命令回调、调度器、索引绑着某个引擎）一个引擎一个实例，
+ *         继承 {@link AbsHarnessExtension} 的在 {@link #onAttach} 开头调用 {@code bindEngine}（前一个引擎未关闭时抛出，
+ *         关闭后可以换绑；从运行中的引擎上 {@code removeExtension} 不算解绑）；无状态扩展可以共用一个实例挂到多个引擎上。</li>
  * </ul>
  *
  * @author noear
@@ -134,9 +137,12 @@ public interface HarnessExtension extends AiSwitchable {
      * 注册挂载与外部连接、建调度器、预注册会话监听器。</p>
      *
      * <p><b>注意</b>：不判 {@code isEnabled()}——停用的扩展也要完成装配；
-     * 抛出异常会让引擎构建 <i>fail-fast</i>（不会静默吞掉）。
+     * 抛出异常会让引擎构建 <i>fail-fast</i>（不会静默吞掉）：引擎对在它之前已挂接的扩展回调 {@link #onDetach}、
+     * 关闭自己后再抛出；{@code addExtension} 里抛出时该扩展不留在引擎上。两种情况都不会对抛出的那个扩展回调
+     * {@link #onDetach}——它在抛出前建出的资源要自己清理。
      * 同一实例重复 {@code extensionAdd} / {@code addExtension} 只算一次（引擎按引用查重），不会重复回调；
-     * 同类的不同实例各自挂载（按类型去重用 {@code addExtensionIfAbsent}）。一个实例只应挂到一个引擎上。</p>
+     * 同类的不同实例各自挂载（按类型去重用 {@code addExtensionIfAbsent}）。
+     * 持有引擎状态的扩展一个引擎一个实例（见类注释「一个实例挂几个引擎」）。</p>
      *
      * @param engine 引擎（此刻已装配完毕）
      * @since 4.2.0（原名 {@code initialize}）
@@ -151,8 +157,10 @@ public interface HarnessExtension extends AiSwitchable {
      * <p><b>调用点</b>：{@code HarnessEngine.removeExtension(...)}——在扩展已从引擎列表移除之后回调，
      * 此时它不会再收到任何 {@link #onInput} / {@link #onRequestAssemble}；
      * 另由 {@code HarnessEngine.shutdown()} 在引擎释放时对<b>所有</b>仍挂着的扩展回调一次
-     * （逐个 try/catch，单个扩展的清理异常不会打断其余扩展与执行器回收）。
-     * {@code null} 直接返回；移除一个<b>本就不在列表里</b>的实例时回调仍会发生（不校验成员身份）。</p>
+     * （逐个 try/catch，单个扩展的清理异常不会打断其余扩展与执行器回收）；构建半途失败时只回调已挂接成功的扩展。
+     * 移除一个<b>不在本引擎上</b>的实例（按引用判断）时不回调。
+     * 换绑过引擎的实例仍可能收到旧引擎迟到的回调（旧引擎关闭后再 {@code removeExtension}），
+     * 继承 {@link AbsHarnessExtension} 的用 {@code isBoundTo(engine)} 忽略它。</p>
      *
      * <p><b>典型用途</b>：注销/停止本扩展在 {@link #onAttach} 里创建的引擎级资源，
      * 尤其是<b>引擎外部</b>的持有者（如 JVM 单例调度器里的 job、独立的线程池、长连接）。

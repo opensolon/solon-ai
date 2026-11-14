@@ -24,6 +24,7 @@ import org.noear.solon.scheduling.ScheduledAnno;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -130,8 +131,15 @@ class GoalScheduler {
         this.indexDir = source == null ? null : source.normalize(dir);
     }
 
-    /** 读取索引中的会话（无索引或读失败返回空） */
-    List<String> readIndex() {
+    /**
+     * 读取索引中的会话（按 sessionId 排序；无索引或目录不存在时为空）。
+     *
+     * <p>读失败抛出而不是返回空：调用方要区分「没有活跃 goal」和「这次没读到」，后者应当重试
+     * （状态来源的实现抛出的非受检异常也按读失败处理）。跳过「.」开头的原子写临时文件与解码失败的条目。</p>
+     *
+     * @throws IOException 列举失败
+     */
+    List<String> readIndex() throws IOException {
         MountSource source = indexSource;
         if (source == null) {
             return Collections.emptyList();
@@ -142,15 +150,21 @@ class GoalScheduler {
             }
             List<String> ids = new ArrayList<>();
             for (MountEntry e : source.list(indexDir)) {
-                if (e.isDirectory() == false) {
-                    ids.add(URLDecoder.decode(e.getName(), "UTF-8"));
+                String name = e.getName();
+                // 「.」开头的是原子写留下的临时文件：真实标记的前导点已编码为 %2E，不会以「.」开头
+                if (e.isDirectory() || name == null || name.startsWith(".")) {
+                    continue;
+                }
+                try {
+                    ids.add(URLDecoder.decode(name, "UTF-8"));
+                } catch (IllegalArgumentException ignore) {
+                    // 不是本索引写出的文件名：跳过，不让一个坏条目挡住整次恢复
                 }
             }
             Collections.sort(ids);
             return ids;
-        } catch (Throwable e) {
-            LOG.warn("Goal index read failed: {}", e.getMessage());
-            return Collections.emptyList();
+        } catch (RuntimeException e) {
+            throw new IOException("Goal index read failed: " + e, e);
         }
     }
 

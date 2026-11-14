@@ -420,8 +420,8 @@ public class AdminController {
 
 回收规则：
 
-- 引擎池按 `idleTtl` 回收**空闲且静默**的引擎（`engine.isQuiescent()`：无执行中的请求，且所有扩展都静默）；
-- **有活跃 goal 或启用中的 loop 任务的引擎不会被回收**，它们需要引擎活着才能继续跑；
+- 引擎池按 `idleTtl` 回收**空闲且静默**的引擎（`engine.isQuiescent()`：没有正在跑的轮次、没有「已受理但流还没打开」的输入，且所有扩展都静默）；
+- **有活跃 goal 或启用中的 loop 任务的引擎不会被回收**，它们需要引擎活着才能继续跑；queue 的积压在会话快照与索引里，引擎回收不会丢（重建时的恢复续发），所以 queue 不参与静默判定；
 - 满额（`maxEngines`，软上限）时先回收最久未用的静默引擎；仍满则按 `whenFull(FullPolicy, fullWait)`：`REJECT`（缺省，抛 `IllegalStateException`）或 `WAIT`（等 `fullWait` 后再拒绝）；
 - `engine.shutdown()` 幂等：回调扩展 `onDetach`、关闭引擎私有的子代理执行器、LSP 进程与 MCP 连接、释放会话租约；之后的 `handle` 返回 `REJECTED(engine_closed)`；
 - 引擎池是懒建的：进程重启后，没人访问的租户不会自动创建引擎。接了 `HarnessHost` 用 `host.warmup(tenants)` 预热有后台工作的租户（单个租户失败只记日志）；不接骨架时逐个 `pool.get(key)`；

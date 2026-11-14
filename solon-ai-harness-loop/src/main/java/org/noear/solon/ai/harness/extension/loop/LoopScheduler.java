@@ -151,6 +151,11 @@ final class LoopScheduler {
         }
     }
 
+    /** 清掉已登记的执行器（扩展换绑到新引擎时：它们捕获的是前一个引擎） */
+    void clearExecutors() {
+        executors.clear();
+    }
+
     // ==================== 任务注册 ====================
 
     /**

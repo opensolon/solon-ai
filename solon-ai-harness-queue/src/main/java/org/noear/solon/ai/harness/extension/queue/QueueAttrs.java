@@ -45,4 +45,11 @@ final class QueueAttrs {
      * 队列领取标记（claimNext 期间的原子占位，方法返回即释放）
      */
     static final String QUEUE_CLAIM = "session.queue.claim";
+
+    /**
+     * 积压索引已确认注销（运行态，不持久化）：本会话对象观察到队列为空且标记已删成功，
+     * 此后到下次入队之前不再去删标记。挂在会话上而不是扩展实例上——会话换节点、重新加载时
+     * 拿到的是新对象，不会带着过期的判断。
+     */
+    static final String QUEUE_UNMARKED = "session.queue.unmarked";
 }

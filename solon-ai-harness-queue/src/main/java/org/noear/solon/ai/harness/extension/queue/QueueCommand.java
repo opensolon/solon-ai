@@ -28,7 +28,7 @@ import org.noear.solon.lang.Nullable;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.function.Consumer;
+import java.util.function.IntSupplier;
 
 /**
  * /queue 命令 - 排队：把消息挂起，等当前任务结束后自动作为新任务发送。
@@ -60,21 +60,23 @@ import java.util.function.Consumer;
 class QueueCommand extends AbsCommand {
     /** 实例上限（由所属 QueueExtension 注入） */
     final QueueExtension.Limits limits;
-    /** 队列变更回调（所属扩展同步积压索引；null = 不维护索引，仅单测用） */
-    private final Consumer<AgentSession> onChanged;
+    /** 所属扩展（维护积压索引，与门面同一口径）；null = 不维护索引，仅单测用 */
+    @Nullable
+    private final QueueExtension owner;
 
     QueueCommand() {
         this(QueueExtension.Limits.DEFAULT, null);
     }
 
-    QueueCommand(QueueExtension.Limits limits, Consumer<AgentSession> onChanged) {
+    QueueCommand(QueueExtension.Limits limits, @Nullable QueueExtension owner) {
         this.limits = limits;
-        this.onChanged = onChanged;
+        this.owner = owner;
     }
 
+    /** 清空、取消之后同步积压索引 */
     private void changed(AgentSession session) {
-        if (onChanged != null) {
-            onChanged.accept(session);
+        if (owner != null) {
+            owner.syncIndex(session);
         }
     }
 
@@ -154,13 +156,14 @@ class QueueCommand extends AbsCommand {
             return;
         }
 
-        int n = QueueStore.enqueue(session, next.getText(), next.getOrigin(), null, next.getSelectedModel(),
-                next.getSelectedAgent(), next.getAttrs(), QueueItem.snapshotOf(next),
+        // 先登记积压索引、再入队（与门面同一口径，见 QueueExtension#enqueueIndexed）
+        IntSupplier enqueue = () -> QueueStore.enqueue(session, next.getText(), next.getOrigin(), null,
+                next.getSelectedModel(), next.getSelectedAgent(), next.getAttrs(), QueueItem.snapshotOf(next),
                 limits.maxSize, limits.maxTextLength);
+        int n = owner != null ? owner.enqueueIndexed(session, enqueue) : enqueue.getAsInt();
         if (n < 0) {
             output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_FULL, "max", limits.maxSize));
         } else {
-            changed(session);
             output.println(QueueI18n.fmt(input.getLocale(), QueueI18nKeys.COMMAND_QUEUE_ENQUEUED, "position", n));
         }
     }

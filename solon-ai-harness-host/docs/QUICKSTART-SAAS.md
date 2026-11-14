@@ -289,7 +289,7 @@ goal 的完成证据由框架判定：只数成功、且不是内部工具（goa
 
 | 配置 | 说明 |
 |---|---|
-| `executor(Executor)` | 开流动作在哪里执行，缺省 Reactor `boundedElastic`；Agent 管道的同步部分在这里跑 |
+| `executor(Executor)` | 开流动作在哪里执行，缺省 Reactor `boundedElastic`；Agent 管道的同步部分在这里跑。一轮会占满一个执行器任务：给执行器包一层信号量即可限制同时在跑的轮次（写法见 README 7.4） |
 | `wrap(BiFunction<String, Runnable, Runnable>)` | 包装框架代跑的动作（开流、续发、后台轮次）：注入 MDC、日志作用域、租户上下文 |
 
 sink 回调可能在任意线程上执行，实现需线程安全；回调抛出的异常只记日志，不影响运行。

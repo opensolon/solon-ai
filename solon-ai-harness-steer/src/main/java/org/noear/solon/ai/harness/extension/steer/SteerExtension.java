@@ -118,8 +118,15 @@ public class SteerExtension extends AbsHarnessExtension {
         return new Builder();
     }
 
+    /**
+     * 挂到引擎上：注册 /steer 命令。
+     *
+     * <p>一个实例同一时刻只服务一个运行中的引擎（缺省忙判定与插话转排队都走挂接的那个引擎）：
+     * 前一个引擎已关闭时换绑，未关闭时抛 {@link IllegalStateException}。</p>
+     */
     @Override
     public void onAttach(HarnessEngine engine) {
+        bindEngine(engine);
         this.engine = engine;
         engine.getCommandRegistry().register(steerCommand);
     }

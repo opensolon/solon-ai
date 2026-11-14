@@ -143,8 +143,19 @@ public class LoopExtension extends AbsHarnessExtension {
 
     // ==================== 钩子 ====================
 
+    /**
+     * 挂到引擎上：绑定调度器、注册命令、加载存储里的任务。
+     *
+     * <p>一个实例同一时刻只服务一个未关闭的引擎：前一个引擎已关闭时换绑——为前一个引擎登记的执行器
+     * 捕获的是旧引擎，一并丢弃（旧 job 已在 {@link #onDetach} 里卸掉）；前一个引擎未关闭时抛 {@link IllegalStateException}。</p>
+     */
     @Override
     public void onAttach(HarnessEngine engine) {
+        HarnessEngine previous = bindEngine(engine);
+        if (previous != null && previous != engine) {
+            // 换绑到新引擎：为前一个引擎登记的执行器捕获的是旧引擎，一并丢弃
+            scheduler.clearExecutors();
+        }
         this.engine = engine;
         scheduler.bindEngine(engine);
         if (engineStateDir != null && engine.getStateSource() != null) {
@@ -206,10 +217,15 @@ public class LoopExtension extends AbsHarnessExtension {
         return hasActiveTasks() == false;
     }
 
-    /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转），存储记录保留。 */
+    /**
+     * 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转），存储记录保留。
+     * 只认绑定的那个引擎：换绑之后，旧引擎迟到的回调不卸新引擎上的任务。
+     */
     @Override
     public void onDetach(HarnessEngine engine) {
-        scheduler.unloadAll();
+        if (isBoundTo(engine)) {
+            scheduler.unloadAll();
+        }
     }
 
     /**

@@ -39,6 +39,7 @@ import org.noear.solon.scheduling.simple.JobManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Locale;
@@ -158,12 +159,20 @@ public class GoalExtension extends AbsHarnessExtension {
 
     // ==================== 钩子 ====================
 
+    /**
+     * 挂到引擎上：装配运行态、调度与命令。
+     *
+     * <p>一个实例同一时刻只服务一个未关闭的引擎：前一个引擎已关闭时换绑，运行态与调度器按新引擎重建
+     * （旧调度器已在 {@link #onDetach} 里卸掉 job）；前一个引擎未关闭时抛 {@link IllegalStateException}。</p>
+     */
     @Override
     public void onAttach(HarnessEngine engine) {
-        if (goalRuntime != null) {
+        if (bindEngine(engine) == engine) {
+            // 同一引擎上再次挂接（removeExtension 之后再 addExtension）：沿用原有装配（与此前一致）
             return;
         }
         this.engine = engine;
+        this.goalScheduler = null;
         // 验证器在本轮会话工作目录下执行（由 goal_update 传入，不再固定为引擎工作区）
         // 服务端模式缺省不注册内置构建/测试验证器（它们会在宿主上跑模型写的构建脚本），
         // 且「无法判定」按未通过处理；本地编码模式保持原有体验
@@ -233,10 +242,13 @@ public class GoalExtension extends AbsHarnessExtension {
         return hasActiveGoals() == false;
     }
 
-    /** 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转）；会话里的 goal 记录保留。 */
+    /**
+     * 卸载全部 job（JobManager 是 JVM 单例，不卸则带着已废引擎空转）；会话里的 goal 记录保留。
+     * 只认绑定的那个引擎：换绑之后，旧引擎迟到的回调不卸新引擎的调度。
+     */
     @Override
     public void onDetach(HarnessEngine engine) {
-        if (goalScheduler != null) {
+        if (isBoundTo(engine) && goalScheduler != null) {
             goalScheduler.close();
         }
     }
@@ -510,9 +522,10 @@ public class GoalExtension extends AbsHarnessExtension {
      * 在首拍时自动注销。多节点共用状态来源时，非持有节点的轮次会被 {@code not_owner} 拒绝并跳过。
      *
      * @return 挂上调度的会话数
+     * @throws IOException 索引列举失败（不能当成「没有活跃 goal」，宿主应退避重试）
      * @since 4.2.0
      */
-    public int recover() {
+    public int recover() throws IOException {
         return recover((Predicate<String>) null);
     }
 
@@ -522,9 +535,10 @@ public class GoalExtension extends AbsHarnessExtension {
      *
      * @param sessionFilter 会话过滤（null = 全部）
      * @return 挂上调度的会话数
+     * @throws IOException 索引列举失败（不能当成「没有活跃 goal」，宿主应退避重试）
      * @since 4.2.0
      */
-    public int recover(@Nullable Predicate<String> sessionFilter) {
+    public int recover(@Nullable Predicate<String> sessionFilter) throws IOException {
         if (goalScheduler == null || isEnabled() == false) {
             return 0;
         }

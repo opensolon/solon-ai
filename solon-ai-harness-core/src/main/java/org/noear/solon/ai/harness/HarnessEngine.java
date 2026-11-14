@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
@@ -343,17 +344,23 @@ public class HarnessEngine {
         return taskTalent;
     }
 
-    /** 经本引擎装配、正在执行的请求数（stream 订阅期间 / call 执行期间） */
+    /** 经本引擎装配、正在执行的请求数（stream 从订阅到本轮 afterRun 回调执行完 / call 执行期间） */
     private final AtomicInteger activeRuns = new AtomicInteger();
+    /** 已受理、尚未开流的请求所持的受理占位（释放、超时或被中断清除后失效，判定时顺带清掉） */
+    private final Set<AdmissionGate.Hold> admissions = ConcurrentHashMap.newKeySet();
 
     /**
-     * 是否静默（可安全回收）：没有正在执行的请求，且所有扩展都没有需要本引擎继续存活的后台工作
+     * 是否静默（可安全回收）：没有已受理、尚未结束的请求，且所有扩展都没有需要本引擎继续存活的后台工作
      * （见 {@link HarnessExtension#isQuiescent}，如活跃的 goal、定时任务）。供宿主按空闲回收引擎（如 host 模块的引擎池）。
+     *
+     * <p>「尚未结束」从受理算起（{@code handle} 返回 TASK、宿主还没订阅时已算），到本轮经
+     * {@code InputOutcome#afterRun} 登记的回调执行完为止：回调里续发积压时，引擎不会在两轮之间的空档里被回收。
+     * 宿主拿到 TASK 既不订阅也不 {@code discard} 时，最多挡一个占位时限（{@code admissionTimeoutMs}）。</p>
      *
      * @since 4.2.0
      */
     public boolean isQuiescent() {
-        if (activeRuns.get() > 0) {
+        if (activeRuns.get() > 0 || hasLiveAdmission()) {
             return false;
         }
 
@@ -371,8 +378,21 @@ public class HarnessEngine {
         return true;
     }
 
+    /** 是否有已受理、尚未开流的请求（顺带清掉已失效的占位登记） */
+    private boolean hasLiveAdmission() {
+        boolean live = false;
+        for (Iterator<AdmissionGate.Hold> it = admissions.iterator(); it.hasNext(); ) {
+            if (it.next().getAsBoolean()) {
+                live = true;
+            } else {
+                it.remove();
+            }
+        }
+        return live;
+    }
+
     /**
-     * 正在执行的请求数
+     * 正在执行的请求数（流式请求从订阅算起，到本轮 afterRun 回调执行完为止）
      *
      * @since 4.2.0
      */
@@ -393,15 +413,22 @@ public class HarnessEngine {
      * <p>执行器线程为守护线程，不调用也不会阻塞 JVM 退出；
      * 需要回收线程时（如测试、长驻进程中的引擎热替换）显式调用。</p>
      *
-     * <p>本方法幂等：重复调用只是重复回调 onDetach（各实现应保持幂等）与重复 shutdown 执行器。</p>
+     * <p>本方法幂等：只有第一次调用会回调 onDetach 与回收资源，之后的调用直接返回。</p>
      */
     public void shutdown() {
+        shutdown(options.getExtensions());
+    }
+
+    /**
+     * 关闭并回收资源：只对给定的扩展回调 onDetach（正常关闭时是全部扩展，构建半途失败时只有已挂接成功的那些）。
+     */
+    private void shutdown(List<HarnessExtension> attached) {
         if (closed.compareAndSet(false, true) == false) {
             return; // 幂等
         }
 
         // 不判 isEnabled()：清理不得被开关阻止（与 removeExtension 同口径）
-        for (HarnessExtension extension : options.getExtensions()) {
+        for (HarnessExtension extension : attached) {
             try {
                 extension.onDetach(this);
             } catch (Throwable e) {
@@ -1590,6 +1617,8 @@ public class HarnessEngine {
 
     /**
      * 动态挂载一个扩展（同一实例已挂载时直接跳过，不会二次回调 {@code onAttach}；同类的另一个实例照常添加）。
+     *
+     * <p>{@code onAttach} 抛出时（如实例已绑在另一个未关闭的引擎上）原样抛出，扩展不留在本引擎上，也不回调它的 {@code onDetach}。</p>
      */
     public void addExtension(HarnessExtension extension) {
         assertMutable("addExtension");
@@ -1603,7 +1632,13 @@ public class HarnessEngine {
 
         //与构造器对称：动态添加的扩展也要触发初始化（此刻引擎已装配完毕，任意引擎方法都安全）。
         //嵌套调用安全：agentLock 可重入，且 mainAgent 尚未构建时重建分支会跳过。
-        extension.onAttach(this);
+        try {
+            extension.onAttach(this);
+        } catch (Throwable e) {
+            //挂不上就不留：留在表里会被当成本引擎的扩展使用（getExtension、忙时积压），关闭时还会回调它的 onDetach
+            options.getExtensions().removeIf(x -> x == extension);
+            throw e;
+        }
 
         rebuildMainAgentIfBuilt();
     }
@@ -1619,7 +1654,9 @@ public class HarnessEngine {
     }
 
     /**
-     * 动态移除一个扩展
+     * 动态移除一个扩展（按引用；不在本引擎上的实例什么都不做，不回调 {@code onDetach}）。
+     *
+     * <p>只摘扩展表：它在 {@code onAttach} 里注册的命令仍留在命令表里（命令表不支持注销）。</p>
      */
     public void removeExtension(HarnessExtension extension) {
         assertMutable("removeExtension");
@@ -1627,7 +1664,9 @@ public class HarnessEngine {
             return;
         }
 
-        options.getExtensions().remove(extension);
+        if (options.getExtensions().removeIf(x -> x == extension) == false) {
+            return;
+        }
         extension.onDetach(this);
 
         // 重建 mainAgent 以应用变更，使用 agentLock 保证线程安全
@@ -2105,7 +2144,7 @@ public class HarnessEngine {
 
         // 与 targetAgent.prompt(prompt) 等价（ReActAgent 内部即 new ReActRequest(agent, prompt)），
         // 换成能携带受理占位的子类：handle 受理的 TASK 由请求自己在开流时释放占位。
-        return new AdmittedRequest(targetAgent, prompt, activeRuns)
+        return new AdmittedRequest(targetAgent, prompt, activeRuns, admissions)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
@@ -2831,8 +2870,17 @@ public class HarnessEngine {
 
             HarnessEngine engine = new HarnessEngine(options);
 
-            for (HarnessExtension extension : options.getExtensions()) {
-                extension.onAttach(engine);
+            List<HarnessExtension> attached = new ArrayList<>();
+            try {
+                for (HarnessExtension extension : options.getExtensions()) {
+                    extension.onAttach(engine);
+                    attached.add(extension);
+                }
+            } catch (Throwable e) {
+                // 半途失败：这个引擎不会交给调用方，没人能关闭它——在这里关。只对已挂接成功的扩展回调 onDetach
+                // （抛出的那个不回调），再回收引擎资源；已绑定到它的扩展实例随引擎关闭可以换绑（如重试构建）
+                engine.shutdown(attached);
+                throw e;
             }
 
             // 运行期不可改全局配置时，注册表在扩展挂载完成后封口（绕过 getter 直接注册同样被拒绝）

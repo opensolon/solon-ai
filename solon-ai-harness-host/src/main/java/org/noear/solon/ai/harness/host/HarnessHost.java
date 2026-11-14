@@ -43,6 +43,7 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,6 +57,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -93,7 +95,7 @@ import java.util.function.Predicate;
  *   <li>审批决策与续流一次完成，过期卡回调 {@link HostSink#hitlExpired}、未齐备时推送剩余未决卡；</li>
  *   <li>{@code engine_closed}（引擎刚被池回收）自动换新引擎重试一次；</li>
  *   <li>goal / loop 的后台轮次与用户轮次走同一条链（推流事件、终态、续发、可被停止）；
- *       首次取到引擎时依次登记执行器、恢复 goal 调度、按 queue 积压索引续发；</li>
+ *       首次取到引擎时依次登记执行器、恢复 goal 调度、按 queue 积压索引续发（请求路径上转后台，不阻塞该请求）；</li>
  *   <li>DEBUG 日志按轮次 id（{@link HostRun#getId()}）记录每轮的 open / reply / prepare / stream / cancel / finished。</li>
  * </ul>
  *
@@ -190,13 +192,19 @@ public final class HarnessHost {
      * <p>包内可见：绕过本类直接取引擎会让这些引擎上的后台轮次不经过 {@link HostSink}、结束后也不续发积压。</p>
      */
     HarnessEngine engine(String tenant) {
+        return engine(tenant, false);
+    }
+
+    /**
+     * @param warmup 是否预热（积压恢复在调用线程上做完；请求路径上转后台，不让首个取引擎的请求等全部积压会话逐个加载）
+     */
+    private HarnessEngine engine(String tenant, boolean warmup) {
         Objects.requireNonNull(tenant, "tenant");
         HarnessEngine engine = Objects.requireNonNull(engines.apply(tenant), "engine");
         if (bound.add(engine) && programRuns) {
             // 不接管后台工作的骨架也不恢复：否则与别的入口共用引擎时，会在本入口跑掉不属于它的会话积压
             bindProgramRuns(tenant, engine);
-            recoverGoals(tenant, engine);
-            recoverBacklog(tenant, engine);
+            recover(tenant, engine, warmup);
         }
         return engine;
     }
@@ -205,8 +213,9 @@ public final class HarnessHost {
      * 预热：逐个取引擎（单个失败只记日志）。
      *
      * <p>重启后要恢复后台工作的租户用本方法：首次取到某个引擎时，框架依次登记后台执行器、
-     * 按 goal 活跃索引恢复调度、按 queue 积压索引续发（任何入口首次用到该租户时也会做同样的事，
-     * 本方法只是把它提前）。宿主的旧数据迁移没有顺序要求。</p>
+     * 按 goal 活跃索引恢复调度、按 queue 积压索引续发。任何入口首次用到该租户时也会做同样的事，
+     * 区别只在积压续发：本方法在调用线程上（套 {@link Builder#wrap}）逐个续发完再返回（索引读失败时转后台退避重试），
+     * 请求路径上则整个转到后台、不阻塞该请求。宿主的旧数据迁移没有顺序要求。</p>
      *
      * @return 成功的数量
      */
@@ -215,7 +224,7 @@ public final class HarnessHost {
         if (tenants != null) {
             for (String tenant : tenants) {
                 try {
-                    engine(tenant);
+                    engine(tenant, true);
                     ok++;
                 } catch (Throwable e) {
                     LOG.warn("[HarnessHost] warmup failed: {}", tenant, e);
@@ -982,6 +991,10 @@ public final class HarnessHost {
                 admitting.add(adm);
                 try {
                     InputOutcome outcome = c.engine.handle(in);
+                    if (outcome.getKind() == InputOutcome.Kind.REJECTED && requeueOnReject(outcome.getRejectReason())) {
+                        // 抛出让这条回到队首（START_FAILED，drainLoop 随之停止），见 requeueOnReject
+                        throw new IllegalStateException("queued input not admitted: " + outcome.getRejectReason().code());
+                    }
                     SubmitResult r = route(c, outcome, item.getOrigin(), item.getText(), item, in, null, true, adm);
                     // 开了流 = 异步启动（终态由 RunTicket.settle 收口）；其余结局已同步完成
                     return r.getDisposition() != Disposition.STARTED;
@@ -992,6 +1005,19 @@ public final class HarnessHost {
         } catch (Throwable e) {
             LOG.warn("[HarnessHost] drain failed: {}/{}", c.tenant, c.session.getSessionId(), e);
         }
+    }
+
+    /**
+     * 续发的那条被拒时要不要放回队首：引擎已关闭（被池回收 / 强制移除）、会话已不归本节点（租约被别的节点拿走）——
+     * 输入本身没问题，由新引擎的恢复 / 持有节点续发即可。交给 route 会把它当成同步完成确认掉，
+     * drainLoop 接着领的每一条也会这样被吃光。
+     *
+     * <p>其余拒绝照常经 route 回调 {@link HostSink#rejected} 并确认消费。实际只剩作用域解析不到 / 主体不符：
+     * 续发的一轮是程序派发，受理不会因忙或待审批拒绝它。作用域解析不到可能是暂时的，但放回队首的话，
+     * 持续失败会挡住后面所有输入（队列先进先出，新输入都排在它后面），不如交给宿主提示用户重发。</p>
+     */
+    private static boolean requeueOnReject(@Nullable RejectReason reason) {
+        return reason == RejectReason.ENGINE_CLOSED || reason == RejectReason.NOT_OWNER;
     }
 
     // ==================== 后台轮次（goal / loop） ====================
@@ -1015,42 +1041,110 @@ public final class HarnessHost {
     }
 
     /**
-     * 先登记执行器再恢复：反过来，刚恢复的轮次可能走插件缺省执行器（不经 sink、不续发）。幂等。
-     * 只恢复后台轮次过滤命中的会话：同一引擎上挂了多个宿主时，别的入口的 goal 不该由本骨架恢复后落到缺省执行器上。
+     * 读索引失败后的重试间隔（毫秒）：第 n 档是第 n 次后台尝试之前的等待；档位用完后按最后一档一直重试，
+     * 直到读成功或引擎关闭。不设次数上限：重试只是列一次目录，开销小；放弃之后 goal 就一直停着——它只在创建、
+     * resume、trigger 与按索引恢复时挂调度，会话后续的输入不会把它续上。
+     *
+     * <p>本策略属于 L0 宿主：换宿主（不接 {@link HarnessHost}）时由宿主自己定。</p>
      */
-    private void recoverGoals(String tenant, HarnessEngine engine) {
-        try {
-            engine.getExtension(GoalExtension.class).ifPresent(goal -> goal.recover(programFilter));
-        } catch (Throwable e) {
-            LOG.warn("[HarnessHost] goal recover failed: {}", tenant, e);
+    private static final long[] RECOVER_RETRY_DELAYS_MS = {0L, 2_000L, 8_000L, 32_000L};
+
+    /** 按索引恢复的一次尝试（goal / queue 共用）：读索引失败抛 {@link IOException}，由 {@link #recoverInBackground} 退避重试 */
+    private interface IndexRecovery {
+        void recover() throws IOException;
+    }
+
+    /**
+     * 首次绑定引擎时恢复后台工作（进程重启、引擎被池回收后重建都走这里）：先按 goal 活跃索引恢复调度
+     * （只挂 job、不立即跑），再按 queue 积压索引续发。须在 {@link #bindProgramRuns} 之后：反过来，刚恢复的轮次可能走
+     * 插件缺省执行器（不经 sink、不续发）。只恢复后台轮次过滤命中的会话（同一引擎上挂了多个宿主时各自恢复各自的）；
+     * 归属检查、死标记清理在插件里。
+     *
+     * <ul>
+     *   <li>goal 在调用线程上做：只读索引、挂调度，不碰会话。请求路径上不套 {@link Builder#wrap}——套了会在内层收尾时
+     *       清掉请求线程自己的上下文；预热线程上没有租户上下文，套上。</li>
+     *   <li>queue 的会话查询与续发都可能依赖租户上下文，一律套 wrap（整段套一次，内部直接 {@link #drain}，
+     *       不再逐个套：嵌套的内层收尾可能清掉外层设的上下文）。上下文缺失时会话查不到，恢复会把活会话的标记
+     *       当成死标记删掉。预热时在调用线程上做完再返回；请求路径上转后台，不让首个取引擎的请求等全部积压会话逐个加载。</li>
+     *   <li>读索引失败：转后台按 {@link #RECOVER_RETRY_DELAYS_MS} 退避重试（后台一律套 wrap）。</li>
+     * </ul>
+     *
+     * @param warmup 是否预热（{@link #warmup} 调用）
+     */
+    private void recover(String tenant, HarnessEngine engine, boolean warmup) {
+        GoalExtension goal = engine.getExtension(GoalExtension.class).orElse(null);
+        if (goal != null) {
+            IndexRecovery recovery = () -> goal.recover(programFilter);
+            if (recoverOnce(tenant, engine, "goal", recovery, warmup) == false) {
+                recoverInBackground(tenant, engine, "goal", recovery, 1);
+            }
+        }
+
+        QueueExtension queue = engine.getExtension(QueueExtension.class).orElse(null);
+        if (queue != null) {
+            IndexRecovery recovery = () -> queue.recover(programFilter, session -> drain(new Ctx(tenant, engine, session)));
+            if (warmup == false) {
+                recoverInBackground(tenant, engine, "queue", recovery, 0);
+            } else if (recoverOnce(tenant, engine, "queue", recovery, true) == false) {
+                recoverInBackground(tenant, engine, "queue", recovery, 1);
+            }
         }
     }
 
     /**
-     * 按 queue 积压索引续发（进程重启、引擎被池回收后重建都走这里）。只续发后台轮次过滤命中的会话
-     * （同一引擎上挂了多个宿主时，各自恢复各自的会话）；非持有节点在 drain 里被归属检查挡下。
+     * 在 boundedElastic 上按 {@link #RECOVER_RETRY_DELAYS_MS} 的档位试一次（套 wrap），读失败则安排下一档。
+     *
+     * <p>不用 {@link Builder#executor}：它管的是一轮一轮的运行，恢复不是一轮；恢复续发出来的那些轮次仍照常经执行器执行
+     * （并发上限同样由执行器决定）。</p>
+     *
+     * @param attempt 档位（0 = 立即；最后一档之后一直用最后一档）
      */
-    private void recoverBacklog(String tenant, HarnessEngine engine) {
-        try {
-            QueueExtension queue = engine.getExtension(QueueExtension.class).orElse(null);
-            if (queue == null) {
-                return;
+    private void recoverInBackground(String tenant, HarnessEngine engine, String what, IndexRecovery recovery,
+                                     int attempt) {
+        int last = RECOVER_RETRY_DELAYS_MS.length - 1;
+        long delayMs = RECOVER_RETRY_DELAYS_MS[Math.min(attempt, last)];
+        Runnable task = () -> {
+            if (recoverOnce(tenant, engine, what, recovery, true) == false) {
+                recoverInBackground(tenant, engine, what, recovery, Math.min(attempt + 1, last));
             }
-            for (String sessionId : queue.pendingSessions()) {
-                if (programFilter != null && programFilter.test(sessionId) == false) {
-                    continue;
-                }
-                if (engine.checkOwner(sessionId).isOwned() == false) {
-                    continue;
-                }
-                AgentSession session = engine.getSessionOrNull(sessionId);
-                if (session != null) {
-                    drainWrapped(new Ctx(tenant, engine, session));
-                }
+        };
+        try {
+            if (delayMs > 0) {
+                Schedulers.boundedElastic().schedule(task, delayMs, TimeUnit.MILLISECONDS);
+            } else {
+                Schedulers.boundedElastic().schedule(task);
             }
         } catch (Throwable e) {
-            LOG.warn("[HarnessHost] backlog recover failed: {}", tenant, e);
+            LOG.warn("[HarnessHost] {} recover not scheduled: {}", what, tenant, e);
         }
+    }
+
+    /**
+     * 一次按索引恢复的尝试（引擎已关闭则跳过）。
+     *
+     * @param wrapped 是否套 {@link Builder#wrap}（取舍见 {@link #recover}）
+     * @return 是否不必再试：读索引成功，或引擎已关闭（单个会话的失败由插件记告警，不算读失败）
+     */
+    private boolean recoverOnce(String tenant, HarnessEngine engine, String what, IndexRecovery recovery,
+                                boolean wrapped) {
+        if (engine.isClosed()) {
+            return true;
+        }
+        AtomicBoolean readFailed = new AtomicBoolean();
+        Runnable body = () -> {
+            try {
+                recovery.recover();
+            } catch (IOException e) {
+                readFailed.set(true);
+                LOG.warn("[HarnessHost] {} index read failed, will retry: {}: {}", what, tenant, e.toString());
+            }
+        };
+        try {
+            (wrapped ? wrap.apply(tenant, body) : body).run();
+        } catch (Throwable e) {
+            LOG.warn("[HarnessHost] {} recover failed: {}", what, tenant, e);
+        }
+        return readFailed.get() == false;
     }
 
     /**

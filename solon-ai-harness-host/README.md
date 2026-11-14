@@ -791,7 +791,7 @@ public class AdminController {
 
 ## 6. 后台态：goal / loop 自己跑
 
-`HarnessHost` 首次取到某个引擎时自动做三件事：为 goal / loop 登记执行器（通道名 `host`）→ 按 goal 活跃索引恢复调度 → 按 queue 积压索引续发。之后 goal / loop 的每一轮都与用户轮次**走同一条链**：
+`HarnessHost` 首次取到某个引擎时自动做三件事：为 goal / loop 登记执行器（通道名 `host`）→ 按 goal 活跃索引恢复调度 → 按 queue 积压索引续发（`QueueExtension#recover`，顺带清掉会话已不存在的死标记）。积压续发一律整段套在 `wrap` 里（会话存储依赖租户上下文时，上下文缺失会把活会话当成已删除）：请求路径上转到后台（boundedElastic），不阻塞触发它的那个请求；`warmup` 在调用线程上做完。索引读失败时转后台退避重试（2、8 秒，之后每 32 秒一次），直到读成功或引擎关闭——不设次数上限：goal 只在创建、resume、trigger 与按索引恢复时挂调度，放弃重试它就一直停着。这套重试属于 L0 宿主，不接 `HarnessHost` 的宿主自己定。续发出来的轮次仍经 `executor` 开流，并发上限由它决定。之后 goal / loop 的每一轮都与用户轮次**走同一条链**：
 
 | 方面 | 后台轮次的表现 |
 |---|---|
@@ -859,7 +859,7 @@ final class HostBootstrap {
 }
 ```
 
-- `warmup` 逐个取引擎，单个失败只记日志，返回成功数。**不要绕过 host 自己取引擎**：那样这些引擎上的后台轮次不经过 sink，结束后也不续发。
+- `warmup` 逐个取引擎，单个失败只记日志，返回成功数；积压续发在 `warmup` 里同步做完。不预热时由首个用到该租户的请求触发，积压续发转后台，那个请求不等。**不要绕过 host 自己取引擎**：那样这些引擎上的后台轮次不经过 sink，结束后也不续发。
 - 引擎被池回收后再次用到时会重建，框架对新实例重新做一遍「登记执行器 → 恢复 goal → 续发积压」。回收瞬间撞上的请求（`engine_closed`）框架自动换新引擎重试一次。
 
 ### 7.2 会话的开通与删除
@@ -897,10 +897,30 @@ public Result<Void> delete(String tenant, String sid, Context ctx) {
 
 | 配置 | 说明 |
 |---|---|
-| `executor(Executor)` | 开流动作在哪里执行，缺省 Reactor `boundedElastic`；Agent 管道的同步部分（含 `prepare`）在这里跑 |
+| `executor(Executor)` | 开流动作在哪里执行，缺省 Reactor `boundedElastic`；Agent 管道的同步部分（含 `prepare`）在这里跑。**一轮会占满一个执行器任务**（内部同步跑完才返回），所以给它包一层限流就能控「同时在跑的轮次」（见下） |
 | `wrap((tenant, task) -> ...)` | 包装框架代跑的动作（开流、续发、后台轮次）：注入 MDC、日志作用域、租户上下文 |
 
 排查问题时打开 `org.noear.solon.ai.harness.host.HarnessHost` 的 DEBUG 日志：按轮次 id（`HostRun.getId()`）记录每轮的 open / reply / prepare / stream / cancel / finished。
+
+需要给同时运行的轮次设上限（SaaS 的保护手段，框架不预设立场）时，给执行器包一层信号量：
+
+```java
+Semaphore permits = new Semaphore(8);   // 同时最多 8 轮
+HarnessHost host = HarnessHost.builder()
+        .engines(tenant -> engine(tenant))
+        .sink(sink)
+        .executor(task -> workPool.execute(() -> {   // workPool 的线程数不是并发上限：许可才是
+            permits.acquireUninterruptibly();
+            try {
+                task.run();
+            } finally {
+                permits.release();
+            }
+        }))
+        .build();
+```
+
+释放必须在 `task.run()` 返回之后：一轮（流终止、收尾与回调都执行完）到那时才返回（`HarnessHostLifecycleTest#executorTaskReturnsOnlyAfterTheRunFinished` 守护）。拿许可放在 `try` 外面、不可中断：等许可时被中断的话，没拿到却在 `finally` 里还会让上限越来越松；跳过 `task.run()` 则这一轮既不开流也没有终态，受理占位要等到时限才失效。用 `workPool.execute` 而不是 `CompletableFuture.runAsync`：后者会把任务里的异常吞进没人读的 future。重启恢复也经这个执行器开流，与用户轮次共用同一额度；只想限恢复阶段的突发，就让积压恢复走自己的信号量，而不是给 `recover` 传宿主的 `drain`。
 
 ### 7.5 测试
 

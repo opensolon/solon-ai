@@ -118,7 +118,7 @@ class GoalSchedulerTickTest {
     }
 
     @Test
-    void activeIndexSurvivesRestartAndRecoverReschedules() {
+    void activeIndexSurvivesRestartAndRecoverReschedules() throws Exception {
         Path home = workspace.resolve("home");
         GoalExtension ext1 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine e1 = HarnessEngine.of(workspace.toString(), home.toString())
@@ -153,7 +153,7 @@ class GoalSchedulerTickTest {
     }
 
     @Test
-    void recoverWithFilterOnlyReschedulesClaimedSessions() {
+    void recoverWithFilterOnlyReschedulesClaimedSessions() throws Exception {
         Path home = workspace.resolve("home");
         GoalExtension ext1 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine e1 = HarnessEngine.of(workspace.toString(), home.toString())
@@ -190,7 +190,7 @@ class GoalSchedulerTickTest {
     }
 
     @Test
-    void indexFromTwoNodesSharingStateSourceDoesNotOverwrite() {
+    void indexFromTwoNodesSharingStateSourceDoesNotOverwrite() throws Exception {
         Path home = workspace.resolve("home");
         GoalExtension n1 = GoalExtension.builder().jobManager(jobManager()).build();
         GoalExtension n2 = GoalExtension.builder().jobManager(jobManager()).build();

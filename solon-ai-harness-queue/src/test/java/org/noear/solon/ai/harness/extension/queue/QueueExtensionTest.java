@@ -157,5 +157,6 @@ class QueueExtensionTest {
         assertEquals("session.queue.inFlight", QueueAttrs.QUEUE_IN_FLIGHT);
         assertEquals("session.queue.generation", QueueAttrs.QUEUE_GENERATION);
         assertEquals("session.queue.claim", QueueAttrs.QUEUE_CLAIM);
+        assertEquals("session.queue.unmarked", QueueAttrs.QUEUE_UNMARKED);
     }
 }

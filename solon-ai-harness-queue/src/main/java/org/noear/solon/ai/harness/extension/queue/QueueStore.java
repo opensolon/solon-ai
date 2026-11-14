@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Session 级唯一排队队列。Web、IM、CLI 只共享此队列，source 仅为元数据。
@@ -189,7 +190,7 @@ final class QueueStore {
      * 领取前后各判一次忙态（那样两次判定之间必然存在一个窗口，只能靠宿主再补一层锁 + 
      * 代际复核去堵）。谓词为 false 时<b>不消耗队列项、不占领取权</b>。</p>
      */
-    public static boolean tryClaim(AgentSession session, java.util.function.Predicate<AgentSession> canAccept) {
+    public static boolean tryClaim(AgentSession session, Predicate<AgentSession> canAccept) {
         if (session == null) return false;
         synchronized (session.attrs()) {
             if (Boolean.TRUE.equals(session.attrs().get(ATTR_CLAIM))) return false;
@@ -414,7 +415,7 @@ final class QueueStore {
      * 领取队首一条并交给 handler，附带「现在能不能接」的原子谓词。
      *
      * <p>{@code canAccept} 与领取权占位在同一把锁内完成（见
-     * {@link #tryClaim(AgentSession, java.util.function.Predicate)}），因此宿主无须再在
+     * {@link #tryClaim(AgentSession, Predicate)}），因此宿主无须再在
      * 领取前后自建 synchronized 块与忙态复核。</p>
      *
      * <p>领取成功后把 claim 登记为跨线程存活的派发事务：handler 返回 false（异步启动）
@@ -424,7 +425,7 @@ final class QueueStore {
      *
      * @return STARTED / NO_TASK / START_FAILED
      */
-    public static QueueClaimStatus claimNext(AgentSession session, java.util.function.Predicate<AgentSession> canAccept,
+    public static QueueClaimStatus claimNext(AgentSession session, Predicate<AgentSession> canAccept,
                                        QueueClaimHandler handler) {
         if (session == null || handler == null || !tryClaim(session, canAccept)) return QueueClaimStatus.NO_TASK;
         QueueItem item = poll(session);

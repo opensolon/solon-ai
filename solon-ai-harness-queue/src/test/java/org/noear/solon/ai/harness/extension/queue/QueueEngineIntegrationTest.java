@@ -16,8 +16,10 @@ import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.InterruptPlan;
 import reactor.core.Disposable;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -258,30 +260,33 @@ class QueueEngineIntegrationTest {
         assertEquals(1, QueueStore.pendingSize(session));
     }
 
+    /** 积压索引里的会话（直接列举引擎状态来源里的索引目录） */
+    private static List<String> indexed(HarnessEngine engine) throws IOException {
+        return new QueueIndex(engine.getStateSource(), QueueExtension.INDEX_PATH).list();
+    }
+
     @Test
-    void queueCommandMaintainsBacklogIndexLikeFacade() {
+    void queueCommandMaintainsBacklogIndexLikeFacade() throws IOException {
         HarnessEngine engine = engine();
-        QueueExtension queue = engine.getExtension(QueueExtension.class).get();
         AgentSession session = InMemoryAgentSession.of("cmd-s1");
 
         engine.handle(HarnessInput.of(session, "/queue 第一条"));
         engine.handle(HarnessInput.of(session, "/queue 第二条"));
-        assertEquals(Collections.singletonList("cmd-s1"), queue.pendingSessions(), "命令入队即登记积压索引");
+        assertEquals(Collections.singletonList("cmd-s1"), indexed(engine), "命令入队即登记积压索引");
 
         // 重启：新引擎、新扩展实例，共用同一状态来源，从索引里读得到
         HarnessEngine restarted = engine();
-        assertEquals(Collections.singletonList("cmd-s1"),
-                restarted.getExtension(QueueExtension.class).get().pendingSessions(), "重启后索引仍在");
+        assertEquals(Collections.singletonList("cmd-s1"), indexed(restarted), "重启后索引仍在");
 
         engine.handle(HarnessInput.of(session, "/queue cancel 1"));
-        assertEquals(Collections.singletonList("cmd-s1"), queue.pendingSessions(), "还有一条：索引保留");
+        assertEquals(Collections.singletonList("cmd-s1"), indexed(engine), "还有一条：索引保留");
 
         engine.handle(HarnessInput.of(session, "/queue clear"));
-        assertTrue(queue.pendingSessions().isEmpty(), "命令清空后注销索引");
+        assertTrue(indexed(engine).isEmpty(), "命令清空后注销索引");
     }
 
     @Test
-    void queueCommandKeepsIndexWhileItemIsRunning() {
+    void queueCommandKeepsIndexWhileItemIsRunning() throws IOException {
         HarnessEngine engine = engine();
         QueueExtension queue = engine.getExtension(QueueExtension.class).get();
         AgentSession session = InMemoryAgentSession.of("cmd-s2");
@@ -290,7 +295,7 @@ class QueueEngineIntegrationTest {
         QueueStore.poll(session);
 
         engine.handle(HarnessInput.of(session, "/queue clear"));
-        assertEquals(Collections.singletonList("cmd-s2"), queue.pendingSessions(),
+        assertEquals(Collections.singletonList("cmd-s2"), indexed(engine),
                 "运行中的那条未收口：索引不注销（超集口径）");
     }
 

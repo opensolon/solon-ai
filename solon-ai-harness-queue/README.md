@@ -76,12 +76,13 @@ sequenceDiagram
 
 | 核心契约 | 本插件的实现 |
 |---|---|
-| `spi.InputBacklog#offer(session, HarnessInput)` | 由引擎 `handle` 在忙时调用（宿主不必调）；保存正文、来源（null 时按 `InputOrigin.NONE`）、`selectedModel`、子代理（explicitAgent 优先，否则 selectedAgent）、宿主域属性 `getAttrs()` 与输入快照；受开关控制，返回位置（从 1 计）或 `-1`（满 / 超长 / 停用，引擎据此返回 `REJECTED("backlog_unavailable")`）；成功时登记积压索引 |
+| `spi.InputBacklog#offer(session, HarnessInput)` | 由引擎 `handle` 在忙时调用（宿主不必调）；保存正文、来源（null 时按 `InputOrigin.NONE`）、`selectedModel`、子代理（explicitAgent 优先，否则 selectedAgent）、宿主域属性 `getAttrs()` 与输入快照；受开关控制，返回位置（从 1 计）或 `-1`（满 / 超长 / 停用，引擎据此返回 `REJECTED("backlog_unavailable")`）；先登记积压索引、再入队（见 6.3） |
 | `spi.InputBacklog#hasPending` | `pendingSize(session) > 0`，事实口径，不受开关影响；引擎 `handle` 受理判定的先进先出与 `isIdle` 依赖它 |
 | `HarnessExtension#contributeSessionStatus` | 贡献 `QueueExtension.STATUS_PENDING`（待执行数） |
 | `HarnessExtension#onSessionInterrupt` | 清空待执行、作废运行中那条的登记并递增代际（清理类，不判开关）；这是「作废全部」的唯一入口，门面不单独提供 |
 | `HarnessExtension#onSessionRemove` | 注销该会话的积压索引（队列本体存在会话里，随会话一起消失） |
-| `HarnessExtension#onAttach` | 注册 `/queue` 命令；引擎有状态来源时建立积压索引（`INDEX_PATH = "queue/pending"`） |
+| `HarnessExtension#isQuiescent` | 不覆写（缺省 true）：积压在会话快照与索引里，引擎回收不会丢，重建时的恢复会续发；卡住的积压（启动失败回队首、已停用）不该挡住回收。「本轮已受理、续发还没开出下一轮」的空档由引擎自己计入（见核心 `HarnessEngine#isQuiescent`） |
+| `HarnessExtension#onAttach` | 注册 `/queue` 命令；引擎有状态来源时建立积压索引（`INDEX_PATH = "queue/pending"`）；同一实例已绑在另一个未关闭的引擎上时抛 `IllegalStateException`（一个引擎一个实例，前一个引擎关闭后可以换绑；从运行中的引擎上 `removeExtension` 不算解绑；规则来自 `AbsHarnessExtension#bindEngine`） |
 | `spi.RunDispatch` | `QueueClaim` 实现，领取成功即登记到核心槽位，收口即注销 |
 
 ## 二、依赖
@@ -110,7 +111,7 @@ sequenceDiagram
 | 自动续发 | 当前一轮结束后（登记在运行句柄注销之后），以及回执、排队、审批、空输入、管理态操作之后，骨架自动 drain 积压 |
 | 续发那一轮的投递 | 按**当初排队那条消息自己的 `origin`** 投递；`input.isDispatched()` 为 true，`input.getQueueItem()` 是那一项；`getSelectedModel()` / `getSelectedAgent()` / `getAttrs()` 是排队时保存的值；`Builder.input(...)` 同样作用于续发输入 |
 | 收口 | 开了流的续发轮次在流终态经 `RunTicket` 收口，其余结局当场收口；开流前失败会 `discard` 并收口派发 |
-| 重启恢复 | 首次取到某个引擎时按 queue 积压索引（`pendingSessions()`）续发；只续发 `programRuns` 过滤命中、且本节点持有的会话（见 [host README §6](../solon-ai-harness-host/README.md)） |
+| 重启恢复 | 首次取到某个引擎时按 queue 积压索引续发（`recover`，顺带清掉死标记）；只续发 `programRuns` 过滤命中、且本节点持有的会话。请求路径上转后台、不阻塞该请求，`warmup` 在调用线程上做完；索引读失败时退避重试（见 [host README §6](../solon-ai-harness-host/README.md)） |
 | 管理态续发 | `host.admin(tenant).call(sid, QueueExtension.class, ...)` 成功后自动续发，入队、置顶后会话空闲就立即执行，不用手动 drain（见 [host README §5](../solon-ai-harness-host/README.md)） |
 | 停止 | `host.interrupt(tenant, sid)` 等价 `INTERRUPT_ALL`：清空队列再停流；`RunHandle.cancel()`（及 SSE 断开）只停这一轮、保留排队，结束后续发下一条；`admin.interrupt(sid, InterruptMode.CANCEL_STREAM)` 同样保留排队 |
 
@@ -642,17 +643,32 @@ int pending = engine.status(session).get(QueueExtension.STATUS_PENDING); // 不�
 
 **用 L0 时**：骨架首次取到引擎时按积压索引自动续发，宿主什么都不用写（见第三章）。
 
-**自己接线（L1）时**：引擎有状态来源（`getStateSource()`）时，插件在其下 `queue/pending`（`QueueExtension.INDEX_PATH`）维护积压索引，每个可能有积压的会话一个空标记文件。索引是超集：门面 `enqueue`、`offer` 与 `/queue <消息>` 入队成功时登记，`cancelItem` / `clearPending` / `importItems` / `/queue cancel` / `/queue clear` / 中断清空后按队列是否为空同步（运行中的那条也算），`drainLoop` 观察到队空（`NO_TASK`）时注销，会话删除时注销。启动时据此续发，不需要枚举会话目录：
+**自己接线（L1）时**：引擎有状态来源（`getStateSource()`）时，插件在其下 `queue/pending`（`QueueExtension.INDEX_PATH`）维护积压索引，每个可能有积压的会话一个空标记文件。索引是超集（有积压一定有标记，有标记不一定有积压），全部在会话锁内维护：
+
+- **入队**（门面 `enqueue`、忙时积压 `offer`、`/queue` 入队、`importItems`）：先写标记、再入队。入队保存会话快照的那一刻标记已在，两步之间进程崩溃不会留下「有积压、没标记」；没入成且队列原本为空时尽量删掉刚写的标记。
+- **减少**（`cancelItem` / `clearPending` / `/queue cancel|clear`、中断清空）与 **领取落空**（`claimNext` / `drainLoop` 返回 `NO_TASK`，或最后一条同步完成、队列全空）：队列仍有任务（运行中的那条也算）时补写标记；队空时删标记，删成功后在会话上记一笔，之后到下次入队之前不再碰磁盘（每轮结束都会走到这里，绝大多数会话从没排过队，每个会话对象只在第一次真删一次）；删失败不记，下次再删。
+- **异步启动的那条收口**（流终态 `settle`）不碰索引：L0 每轮结束都会续发，领取落空时注销；L1 再次 `claimNext` 落空同理；都没发生时由 `recover` 兜底清掉。
+- **会话删除**：注销。
+
+状态来源慢（数据库 / HTTP 实现）时，写 / 删标记与队列写快照受同样的影响：两者同在会话锁里。
+
+插件不在内存里保存索引目录的副本：多节点共用状态来源时目录是共享事实，会话换节点后同一个标记会被不同节点先后写入和删除，进程内的副本必然过期。「这次能不能不碰磁盘」的判断跟队列一起挂在会话上。本插件不参与引擎池的静默判定：积压在快照与索引里，引擎回收不会丢。
+
+**引擎关闭后**：`claimNext` / `drainLoop` / `recover` 直接返回（`NO_TASK` / 0），不领取、不查归属（查归属会重新认领 `shutdown` 刚释放的租约）。续发的 handler 领到一条后引擎才关闭时，`handle` 会返回 `REJECTED(engine_closed)`：**handler 应当抛出**，这条回到队首（`START_FAILED`，`drainLoop` 随之停止），而不是把拒绝当成同步完成返回 true——那样这条会被确认消费，剩下的每一条也会这样被吃光。积压与标记都留在会话里，由新引擎的 `recover` 续发；不调 `recover` 的宿主要等该会话下次有输入。领到之后会话已不归本节点（`REJECTED(not_owner)`，租约被别的节点拿走）同样抛出，由持有节点续发。其余拒绝（实际只剩作用域解析不到 / 主体不符：程序派发的一轮不会因忙或待审批被拒）跟着这条输入走，按已处理返回 true 并告诉用户：放回队首的话，持续失败会挡住后面所有输入（队列先进先出，新输入都排在它后面）。L0 骨架已按此处理。
+
+启动时用 `recover` 续发，不需要枚举会话目录：
 
 ```java
-for (String sid : queue.pendingSessions()) {        // 未挂接或引擎没有状态来源时为空
-    if (engine.checkOwner(sid).isOwned() == false) continue;   // 多节点：只续发本节点持有的
-    AgentSession session = engine.getSessionOrNull(sid);       // 只查不建
-    if (session != null) {
-        host.drain(session);   // 首次访问时自动从快照恢复；上次进程 RUNNING 的项回到队首并重置为 PENDING
-    }
+try {
+    // 逐条：过滤 → 查归属（非本节点持有的跳过）→ 只查不建地加载会话 → 交给 drain
+    // 会话已不存在的注销标记；队列其实已空的，由 drainLoop 的 NO_TASK 注销
+    int resumed = queue.recover(null, host::drain);   // 第一个参数是会话过滤（null = 全部）
+} catch (IOException e) {
+    // 索引读不了：不是「没有积压」，退避后重试
 }
 ```
+
+会话查询与 `drain` 都在调用线程上执行：会话存储依赖租户上下文时，在该上下文里调用。积压会话很多时不要放在请求线程上同步跑（L0 的请求路径就是转到后台的）。上次进程 RUNNING 的项在首次访问时从快照恢复，回到队首并重置为 PENDING。每次恢复处理完记一行 INFO 汇总（`listed` 列出 / `drained` 续发 / `removed` 清掉的死标记 / `skipped` 过滤或非本节点 / `failed` / `elapsedMs`），索引规模与列举耗时按它观察；单个平铺目录与不分页列举适合「同时有积压的会话」在万级以内的规模。
 
 门面、`/queue` 命令与忙时积压都会自动登记，正常使用不用管索引。只有索引上线之前的存量数据没有索引，对这类会话可用 `queue.markPending(sessionId)` 补登（幂等），或用快照探测：
 
@@ -811,6 +827,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).g
 | `QUEUE_IN_FLIGHT` | `session.queue.inFlight` | `session.attrs()` | 当前运行中的队列项 |
 | `QUEUE_GENERATION` | `session.queue.generation` | `session.attrs()` | 清空代际，中断回调 `onSessionInterrupt` 加一 |
 | `QUEUE_CLAIM` | `session.queue.claim` | `session.attrs()` | 领取权占位，`claimNext` 调用栈内存活，返回即释放 |
+| `QUEUE_UNMARKED` | `session.queue.unmarked` | `session.attrs()` | 积压索引已确认注销：队空且标记已删成功，到下次入队前不再删标记；会话重新加载时自然消失 |
 | 核心 `HarnessAttrs.RUN_DISPATCH` | `session.run.dispatch` | `session.attrs()` | **跨线程存活的派发事务**（`QueueClaim`，实现 `RunDispatch`），到流终态收口才清；槽位由核心持有，本插件只是登记方之一 |
 
 派发槽位尤其不要自己读写：它的两个判定（`isOnDispatchThread` / `isCurrent`）语义不同，自己实现极易混淆（见 5.4）。
@@ -850,7 +867,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).g
 - **RUNNING 回到队首**：投影中 `RUNNING` 的项只说明上一个进程领取过，重建时重置为 `PENDING`、清空 `claimedAt`，并排在其余待执行项之前。重启后它会被重新执行一次。
 - **非法行丢弃**：文本为空的行在恢复时被跳过；恢复时只按绝对上限（1000000 字符）防御，实例上限在入队时校验。
 - **落盘格式**：持久化键为 `id`、`text`、来源字段（`source` / `sourceUserId` / `replyTarget` / `messageId`）、`status`、`createdAt`，以及非空时的 `claimedAt`、`model`、`selectedAgent`、`attrs`、`input`（输入快照）。`status` 仍写枚举名字符串（`PENDING` / `RUNNING`）。旧数据里的顶层 `reasoningEffort` / `thinkingMode` 读取时并入 `attrs`，`hasFiles` 忽略。持久化格式与展示用 `toMap()` 相互独立。
-- **积压索引**：状态来源下 `queue/pending` 目录，每会话一个空标记文件（文件名为编码后的 sessionId），只用于重启后找到要续发的会话；多个节点共用状态来源时各写各的文件（见 6.3）。
+- **积压索引**：状态来源下 `queue/pending` 目录，每会话一个空标记文件（文件名为编码后的 sessionId），只用于重启后找到要续发的会话；插件不在内存里保存目录副本，多节点共用状态来源时会话换节点也不会漏记；死标记在下次观察到队空或 `recover` 时清掉（见 6.3）。
 - **代际不持久化**：代际、领取权、派发登记只存在于内存。
 - **会话删除**：队列存在会话中，随会话一起消失；积压索引在 `onSessionRemove` 时注销。
 
@@ -874,7 +891,7 @@ if (Boolean.TRUE.equals(engine.interrupt(session, InterruptMode.INTERRUPT_ALL).g
 | `promote(session, itemId)` | `HarnessResult<Void>` | 否 | 管理 | 置顶一条待执行；`NOT_FOUND` 同上 |
 | `clearPending(session)` | `HarnessResult<Integer>` | 否 | 管理 | 清空待执行（不动运行中那条、不递增代际），值为清掉的条数 |
 | `importItems(session, rows)` | `HarnessResult<Integer>` | 否 | 运维 | 旧数据迁移，值为实际导入条数 |
-| `pendingSessions()` | `List<String>` | — | 运维 | 积压索引中的会话（超集）；未挂接或没有状态来源时为空。L0 骨架首次取到引擎时自动使用 |
+| `recover(sessionFilter, drain)` | `int` | 是 | 运维 | 重启恢复：按索引逐条查归属、加载会话、交给 `drain`，会话已不存在的注销标记；返回交给 drain 的会话数，索引读失败抛 `IOException`，引擎已关闭时返回 0；处理完记一行汇总。L0 骨架首次取到引擎时自动使用 |
 | `markPending(sessionId)` | `void` | — | 运维 | 为索引上线前的存量积压补登索引（幂等）；门面、`/queue` 命令与忙时积压已自动登记 |
 | `static isPersisted(FlowContext)` | `boolean` | — | 运维 | 快照中是否有队列投影 |
 | `getMaxSize()` | `int` | — | — | 本实例的待执行条数上限（缺省 `20`） |

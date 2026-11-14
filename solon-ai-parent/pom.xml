@@ -23,7 +23,7 @@
         <apache.pdfbox.version>2.0.30</apache.pdfbox.version>
         <apache.poi.version>5.4.0</apache.poi.version>
         <commonmark.version>0.21.0</commonmark.version>
-        <jsoup.version>1.18.3</jsoup.version>
+        <jsoup.version>1.24.1</jsoup.version>
         <flexmark.version>0.50.50</flexmark.version>
         <lsp4j.version>0.20.1</lsp4j.version>
         <lucene.version>8.11.4</lucene.version>
