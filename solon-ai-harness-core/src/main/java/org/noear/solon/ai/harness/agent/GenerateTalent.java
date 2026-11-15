@@ -78,7 +78,7 @@ public class GenerateTalent extends AbsTalent {
                     "- `websearch`，互联网通用搜索\n" +
                     "- `codesearch`，互联网代码仓库搜索\n" +
                     "- `*`，全量授权") List<String> tools,
-            @Param(name = "skills", description = "子代理具备的特定专家能力标识列表", required = false) List<String> skills,
+            @Param(name = "skills", description = "该子代理要用的已安装技能标识（技能清单里的 name，如 @user-skills/xxx）。用到该子代理时只显示这些技能并预加载正文；不是能力标签，不要自造", required = false) List<String> skills,
             @Param(name = "saveToFile", description = "是否持久化。true：写入工作区代理目录，所有会话可用（通用、可复用的专家角色）；false：仅当前会话可用（临时任务助手）。", defaultValue = "false", required = false) Boolean saveToFile,
             String __cwd,
             String __sessionId,

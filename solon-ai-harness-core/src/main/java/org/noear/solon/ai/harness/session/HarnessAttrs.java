@@ -99,6 +99,25 @@ public final class HarnessAttrs {
      */
     public static final String SESSION_AGENTS = "session.agents";
 
+    /**
+     * 会话级技能视野（值为 {@code List<String>}，技能标识清单；会话上下文，随快照持久化）。
+     *
+     * <p>{@code null}/空表示不限制。读写走 {@code HarnessEngine#getSessionSkills} / {@code setSessionSkills}
+     * （静态场景用 {@link SessionSelections}）。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final String SESSION_SKILLS = "session.skill.selected";
+
+    /**
+     * 会话级 MCP 视野（值为 {@code List<String>}，服务名清单；会话上下文，随快照持久化）。
+     *
+     * <p>{@code null}/空表示不限制。读写走 {@code HarnessEngine#getSessionMcps} / {@code setSessionMcps}。</p>
+     *
+     * @since 4.2.0
+     */
+    public static final String SESSION_MCPS = "session.mcp.selected";
+
     // ========== 历史例外键（早于 session.* 规约，已落盘/已发布，键值不可改）==========
 
     /**

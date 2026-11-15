@@ -46,6 +46,7 @@ import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.FluxSink;
@@ -245,7 +246,7 @@ public class TaskTalent extends AbsTalent {
      * 补充列出本会话的会话级子代理（{@code generate(saveToFile=false)} 的产物）。
      *
      * <p>按 prompt 携带的会话 ID 现查会话：清单只对创建它的会话可见，其它会话的请求查不到，自然不列；
-     * 与委派时的解析（{@link HarnessEngine#getAgentBuilderOrNull}）同一来源，不再经请求上下文转递。</p>
+     * 与委派时的解析（{@link HarnessEngine#resolveAgent}）同一来源，不再经请求上下文转递。</p>
      */
     private void appendSessionAgents(Prompt prompt, Locale locale, StringBuilder sb) {
         if (prompt == null) {
@@ -373,11 +374,21 @@ public class TaskTalent extends AbsTalent {
         final ReActAgent.Builder agentBuilder;
         /** 非空表示任务定义本身不可用，直接回该文案 */
         final String invalidReason;
+        /** 子代理自己声明的技能 / MCP（null = 未声明，继承父代理的选择；见 {@link AgentSelections}） */
+        final List<String> ownSkills;
+        final List<String> ownMcps;
 
         TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason) {
+            this(op, agentBuilder, invalidReason, null, null);
+        }
+
+        TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason,
+                 @Nullable List<String> ownSkills, @Nullable List<String> ownMcps) {
             this.op = op;
             this.agentBuilder = agentBuilder;
             this.invalidReason = invalidReason;
+            this.ownSkills = ownSkills;
+            this.ownMcps = ownMcps;
         }
     }
 
@@ -405,12 +416,19 @@ public class TaskTalent extends AbsTalent {
     }
 
     private TaskPlan preparePlan(AgentSession session, MultiTaskOp op, String sessionModel, Locale locale) {
+        final AgentDefinition definition;
         final ReActAgent.Builder agentBuilder;
+        final List<String> ownSkills;
+        final List<String> ownMcps;
 
         try {
             // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级。
+            // 先取定义再构建（与 getAgentBuilderOrNull 等价）：子代理自己声明的技能 / MCP 也从这份定义取。
             // 内置子代理的提示词在推理时按本轮语言取，子请求继承父代理的语言（见 applyScope）
-            agentBuilder = engine.getAgentBuilderOrNull(session, op.agent_name, sessionModel);
+            definition = engine.resolveAgent(session, op.agent_name);
+            agentBuilder = definition == null ? null : engine.getAgentBuilder(definition, sessionModel);
+            ownSkills = AgentSelections.skillsOf(engine, definition);
+            ownMcps = AgentSelections.mcpsOf(engine, definition);
         } catch (Throwable e) {
             // 名称存在但定义加载失败：同样只废这一条
             return new TaskPlan(op, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_ERROR_LOAD_FAILED,
@@ -422,8 +440,7 @@ public class TaskTalent extends AbsTalent {
             return new TaskPlan(op, null, unknownAgentReason(op, locale));
         }
 
-
-        return new TaskPlan(op, agentBuilder, null);
+        return new TaskPlan(op, agentBuilder, null, ownSkills, ownMcps);
     }
 
     private static String unknownAgentReason(MultiTaskOp op, Locale locale) {
@@ -550,7 +567,7 @@ public class TaskTalent extends AbsTalent {
         private final AtomicBoolean rateLimited;
         private final AtomicBoolean timedOut;
         private final AtomicBoolean upstreamUnavailable;
-        /** 父代理本次生效的技能 / MCP 视野（子代理必须继承，否则父子行为不一致） */
+        /** 父代理本次生效的技能 / MCP 视野（子代理没有声明自己的技能 / MCP 时继承，否则父子行为不一致） */
         private final List<String> skillsSelected;
         private final List<String> mcpsSelected;
         /** 父请求的作用域（强制边界与租户模型，子代理必须继承，否则可经委派绕过） */
@@ -580,16 +597,24 @@ public class TaskTalent extends AbsTalent {
             this.locale = parentTrace.getOptions().getLocale();
         }
 
-        /** 把继承到的视野与语言写进子代理的选项 */
-        private void applyScope(ReActOptionsAmend options) {
+        /**
+         * 把视野与语言写进子代理的选项：子代理自己声明了技能 / MCP 就用自己的，没有才继承父代理的
+         * （不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域（强制边界）照旧继承，最后写入。
+         *
+         * @param ownSkills 子代理声明的技能（null = 未声明）
+         * @param ownMcps   子代理声明的 MCP 服务（null = 未声明）
+         */
+        private void applyScope(ReActOptionsAmend options, @Nullable List<String> ownSkills, @Nullable List<String> ownMcps) {
             options.locale(locale);
 
-            if (skillsSelected.isEmpty() == false) {
-                options.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, skillsSelected);
+            final List<String> skills = ownSkills != null ? ownSkills : skillsSelected;
+            if (skills.isEmpty() == false) {
+                options.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, skills);
             }
 
-            if (mcpsSelected.isEmpty() == false) {
-                options.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, mcpsSelected);
+            final List<String> mcps = ownMcps != null ? ownMcps : mcpsSelected;
+            if (mcps.isEmpty() == false) {
+                options.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, mcps);
             }
 
             if (scope != null) {
@@ -692,7 +717,7 @@ public class TaskTalent extends AbsTalent {
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
-                            ctx.applyScope(o);
+                            ctx.applyScope(o, plan.ownSkills, plan.ownMcps);
 
                             for (HarnessExtension extension : engine.getExtensions()) {
                                 if (extension.isEnabled()) {
@@ -713,7 +738,7 @@ public class TaskTalent extends AbsTalent {
                         .options(o -> {
                             o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
                             o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
-                            ctx.applyScope(o);
+                            ctx.applyScope(o, plan.ownSkills, plan.ownMcps);
 
                             for (HarnessExtension extension : engine.getExtensions()) {
                                 if (extension.isEnabled()) {

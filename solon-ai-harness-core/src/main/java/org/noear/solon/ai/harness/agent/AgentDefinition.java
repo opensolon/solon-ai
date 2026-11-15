@@ -200,11 +200,17 @@ public class AgentDefinition {
         @Preview("4.0.4")
         private List<PermissionRule> permissionRules = new ArrayList<>();
 
-        // ---- 以下为兼容 Claude Code 代理格式的保留字段：只做解析与回写，引擎暂不据此改变行为 ----
-        // （skills 由 GenerateTalent 回填；其余字段原样保留，避免读改写时丢失用户配置）
+        // ---- 声明的技能 / MCP（只记名字）：用到该智能体时转成本轮的选择 ----
+        // 与 HarnessInput#selectedSkill / #selectedMcp 同一语义（收窄可见范围 + 预加载技能正文），输入里的显式选择优先。
+        // 生效条件：tools 展开后含 skill / mcp 且未被禁用；失效的名字剔除，全部失效视为未声明（见 AgentSelections）。
+        // skills 写技能标识（@mount/name，或短名）；mcpServers 写 MCP 服务的配置名（不支持内联定义）。
 
         private List<String> skills;
         private List<String> mcpServers;
+
+        // ---- 以下为兼容 Claude Code 代理格式的保留字段：只做解析与回写，引擎暂不据此改变行为 ----
+        // （原样保留，避免读改写时丢失用户配置）
+
         private Object hooks;          // 暂不解析
         private String memory;         // user, project, local
         private Boolean background;

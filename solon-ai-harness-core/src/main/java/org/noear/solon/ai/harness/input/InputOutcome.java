@@ -357,9 +357,9 @@ public final class InputOutcome {
     }
 
     /**
-     * 本次生效的技能视野（未指定、非消息路径或续流时返回空集合）
+     * 本次生效的技能视野（未指定且目标智能体未声明、非消息路径或续流时返回空集合）
      * <p>
-     * 从 Prompt attrs 派生（输入事实），供宿主在 UI 上展示「本次可见范围」，
+     * 从 Prompt attrs 派生（输入事实，含从目标智能体的 {@code skills} 声明转来的），供宿主在 UI 上展示「本次可见范围」，
      * 也是排查「选了没反应」的最便宜可观测点。
      */
     public List<String> getSelectedSkills() {
@@ -367,7 +367,7 @@ public final class InputOutcome {
     }
 
     /**
-     * 本次生效的 MCP 服务视野（未指定、非消息路径或续流时返回空集合）
+     * 本次生效的 MCP 服务视野（口径同 {@link #getSelectedSkills()}，声明来自智能体的 {@code mcpServers}）
      */
     public List<String> getSelectedMcps() {
         return McpGatewayTalent.getSelected(prompt);

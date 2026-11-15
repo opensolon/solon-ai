@@ -324,8 +324,15 @@ public class SkillTalent extends AbsTalent {
 
     /**
      * 与 {@code DefaultSkillCatalog#find} 同口径的匹配：完整 id / 短名 / 无前缀写入时的 @id
+     *
+     * <p>视野收窄（技能清单、skilllist / skillsearch）与可用名单都按它判定；公开给引擎与宿主复用
+     * （如检查智能体声明的技能名是否还对得上技能），免得两处口径不一致。</p>
+     *
+     * @param descriptor 技能描述
+     * @param selected   技能标识列表（完整 id、带或不带 {@code @} 前缀、短名）
+     * @since 4.2.0
      */
-    private static boolean matchesSelected(SkillDescriptor descriptor, List<String> selected) {
+    public static boolean matchesSelected(SkillDescriptor descriptor, List<String> selected) {
         String id = descriptor.getId();
         String name = descriptor.getName();
 

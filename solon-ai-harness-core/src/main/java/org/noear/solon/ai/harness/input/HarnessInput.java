@@ -93,11 +93,11 @@ public final class HarnessInput {
     /**
      * 本次请求显式选中的技能（标识支持 aliasPath / {@code @aliasPath} / 唯一短名）。
      * <p>
-     * null 表示不限制（沿用全量技能目录）。空数组归一为 null：
-     * 「传空数组」与「不传」等价，避免误把全部技能关掉；要禁用技能请直接禁用技能 Talent。
+     * null 表示未指定：新消息上由引擎按目标智能体的声明补上（定义里的 {@code skills}），没有声明则不限制。
+     * 空数组归一为 null：「传空数组」与「不传」等价，避免误把全部技能关掉；要禁用技能请直接禁用技能 Talent。
      */
     private List<String> selectedSkills;
-    /** 本次请求显式选中的 MCP 服务名；null 表示不限制（沿用全部已注册服务） */
+    /** 本次请求显式选中的 MCP 服务名；null 表示未指定（新消息上按目标智能体的 {@code mcpServers} 声明补上，没有声明则不限制） */
     private List<String> selectedMcps;
 
     private InputScope scope;
@@ -483,7 +483,10 @@ public final class HarnessInput {
     }
 
     /**
-     * 本次输入是否显式指定了技能视野（区分「未指定」与「指定了但被归一为空」）
+     * 本次输入是否指定了技能视野。
+     *
+     * <p>传空会归一为未指定（见 {@link #selectedSkill}），所以这里为 true 时选择必然非空。引擎在新消息上按目标智能体的声明
+     * 补上选择后，它同样为 true（{@code engine.handle} 会就地修改传入的输入；经宿主骨架提交时改的是副本）。</p>
      */
     public boolean hasSkillSelection() {
         return selectedSkills != null;
@@ -497,7 +500,7 @@ public final class HarnessInput {
     }
 
     /**
-     * 本次输入是否显式指定了 MCP 视野
+     * 本次输入是否指定了 MCP 视野（口径同 {@link #hasSkillSelection()}）
      */
     public boolean hasMcpSelection() {
         return selectedMcps != null;
@@ -566,7 +569,11 @@ public final class HarnessInput {
      * 解析口径统一交给 {@code SkillCatalog}；不存在的名称会被忽略（不抛异常），
      * 以免一个过期技能名打死整轮对话。</p>
      *
-     * <p>不调用本方法 = 不限制；调用但传空 = 重置为不限制。</p>
+     * <p>不调用本方法 = 用会话级选择（{@code HarnessEngine#getSessionSkills}），会话也没设才用目标智能体的声明
+     * （定义里的 {@code skills}），都没有才不限制；调用但传空与不调用等价。
+     * 选择只管本轮：下一条新消息不沿用（改会话级选择才能长期生效）；续流沿用被中断那一轮的选择。</p>
+     *
+     * <p>选择是「视野」不是权限：模型仍可经 {@code skillread} 点名读取范围外的技能；强制边界用 {@link #scope}。</p>
      *
      */
     public HarnessInput selectedSkill(@Nullable String... names) {
@@ -577,7 +584,11 @@ public final class HarnessInput {
     /**
      * 本次请求生效的 MCP 服务视野（按 {@code addMcpServer} 时的配置名匹配）
      *
-     * <p>不调用本方法 = 不限制（全部已注册服务可见）；调用但传空 = 重置为不限制。</p>
+     * <p>不调用本方法 = 用会话级选择（{@code HarnessEngine#getSessionMcps}），会话也没设才用目标智能体的声明
+     * （定义里的 {@code mcpServers}），都没有才不限制（全部已注册服务可见）；
+     * 调用但传空与不调用等价。轮次边界与 {@link #selectedSkill} 相同。</p>
+     *
+     * <p>选择是「视野」不是权限：模型仍可经 {@code call_tool} 点名调用范围外的工具；强制边界用 {@link #scope}。</p>
      *
      */
     public HarnessInput selectedMcp(@Nullable String... names) {

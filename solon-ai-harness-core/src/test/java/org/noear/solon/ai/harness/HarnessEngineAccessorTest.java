@@ -598,6 +598,7 @@ class HarnessEngineAccessorTest {
             "addExtension", "removeExtension", "setExtensionEnabled",
             "addExtensionIfAbsent", "removeSession" /* HarnessPluginContractTest */,
             "setSessionCwd", "setSessionCwdIfAbsent", "setSessionModel", "setSessionAgent",
+            "setSessionSkills", "setSessionMcps",
             "setSessionPrincipal", "rebindSessionPrincipal" /* SaasContractTest */,
             "disallowSkill", "allowSkill", "disallowSkillReset");
 
@@ -663,12 +664,21 @@ class HarnessEngineAccessorTest {
         // 未设置
         assertNull(e.getSessionModel(session));
         assertNull(e.getSessionAgent(session));
+        assertNull(e.getSessionSkills(session));
+        assertNull(e.getSessionMcps(session));
 
         // 设置后读回
         e.setSessionModel(session, "gpt-4o");
         e.setSessionAgent(session, "coder");
+        e.setSessionSkills(session, Arrays.asList("alpha", "beta"));
+        e.setSessionMcps(session, Arrays.asList("m1"));
         assertEquals("gpt-4o", e.getSessionModel(session));
         assertEquals("coder", e.getSessionAgent(session));
+        assertEquals(Arrays.asList("alpha", "beta"), e.getSessionSkills(session));
+        assertEquals(Arrays.asList("m1"), e.getSessionMcps(session));
+        // 静态读开口同口径
+        assertEquals(Arrays.asList("alpha", "beta"), SessionSelections.skillsOf(session));
+        assertEquals(Arrays.asList("m1"), SessionSelections.mcpsOf(session));
 
         // 静态读开口与实例门面必须同口径（供拿不到引擎实例的工具使用）
         assertEquals("gpt-4o", SessionSelections.modelOf(session));
@@ -677,8 +687,12 @@ class HarnessEngineAccessorTest {
         // 空串 / null / 空白 ⇒ 清除，且读回统一为 null（不是 ""）
         e.setSessionModel(session, "");
         e.setSessionAgent(session, "   ");
+        e.setSessionSkills(session, java.util.Collections.<String>emptyList());
+        e.setSessionMcps(session, null);
         assertNull(e.getSessionModel(session), "空串必须等同未设置，不能读出 \"\"");
         assertNull(e.getSessionAgent(session), "空白必须等同未设置");
+        assertNull(e.getSessionSkills(session), "空集合必须等同未设置");
+        assertNull(e.getSessionMcps(session), "null 必须等同未设置");
 
         // 回到主代理 / 默认模型
         e.setSessionModel(session, "gpt-4o");
@@ -688,7 +702,11 @@ class HarnessEngineAccessorTest {
         // 会话为 null 时全部是空操作，不得抛
         assertNull(e.getSessionModel(null));
         assertNull(e.getSessionAgent(null));
+        assertNull(e.getSessionSkills(null));
+        assertNull(e.getSessionMcps(null));
         e.setSessionModel(null, "x");
         e.setSessionAgent(null, "x");
+        e.setSessionSkills(null, Arrays.asList("x"));
+        e.setSessionMcps(null, Arrays.asList("x"));
     }
 }

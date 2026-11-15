@@ -72,6 +72,12 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
         .trimContent(false);                           // 剥提及后不去空白
 ```
 
+> **技能 / MCP 的会话级选择**（`HarnessEngine#setSessionSkills` / `setSessionMcps`，键
+> `session.skill.selected` / `session.mcp.selected`）：与模型、子代理同构，随快照持久化，
+> 之后该会话每一轮新消息自动回退到它。口径为 **输入显式选择 → 会话选择 → 目标智能体的声明 → 不限制**；
+> 会话选择里的失效名会被剔除，全部失效按「不限制」处理（不回退声明，避免在用户不知情时换一套视野）。
+> 续流沿用被中断那一轮的选择，不重新回退。
+
 `InputAttachments` 两条通道：`media(MediaBlock)` 作为多模态输入进入消息内容（块支持 base64
 与 url 两种形态，已落盘时把相对路径写在 `block.filePath(...)` 上）；`reference(path)` 以 `[附件: path]`
 前缀告知模型，由 Agent 自行读取。**引擎不落盘**——由宿主保存到工作区后再交来结果。
@@ -80,8 +86,8 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 |---|---|
 | `selectedModel(String)` | 显式模型，优先于会话级选择，再回退默认模型 |
 | `selectedAgent(String)` | 选择器兜底子代理 |
-| `selectedSkill(String...)` | 本次请求的技能视野（收窄技能清单 + 预加载选中技能正文） |
-| `selectedMcp(String...)` | 本次请求的 MCP 服务视野（按 `addMcpServer` 的配置名匹配） |
+| `selectedSkill(String...)` | 本次请求的技能视野（收窄技能清单 + 预加载选中技能正文）；优先级：输入显式 > 会话级 > 智能体声明 |
+| `selectedMcp(String...)` | 本次请求的 MCP 服务视野（按 `addMcpServer` 的配置名匹配），优先级同上 |
 | `explicitAgent(String)` | 请求体显式指定，**优先级最高**（桌面端用） |
 | `attachments(InputAttachments)` | 附件装配结果（多媒体块 + 文件引用） |
 | `media(MediaBlock)` | 追加多媒体块（便捷写法） |
@@ -120,9 +126,11 @@ HarnessInput.of(session, "用那个技能查一下订单表")
 
 | 写法 | 含义 |
 |---|---|
-| 不调用 | 不限制，沿用全量目录 / 全部已注册服务 |
-| 传空数组 | **等价于不调用**（归一为不限制），避免序列化空列表时把资源全关掉 |
+| 不调用 | 用目标智能体的声明（见下文「智能体声明」）；没有声明则不限制，沿用全量目录 / 全部已注册服务 |
+| 传空数组 | **等价于不调用**，避免序列化空列表时把资源全关掉 |
 | 传名称 | 收窄到这些项；trim + 去重保序，返回值不可变 |
+
+**选择只管本轮**：下一条新消息不沿用（请求选项从上一轮复制，引擎在新消息上每轮「写入或清除」）；续流（`resume(true)`、HITL 审批后继续、`/continue`）沿用被中断那一轮的选择。宿主要让选择在会话内保持，需自己记住并在每条消息上传。
 
 两个容易误解的点：
 
@@ -136,9 +144,34 @@ HarnessInput.of(session, "用那个技能查一下订单表")
 
 > **`skillread` 故意不受视野限制**：被选技能的 `SKILL.md` 里引用另一个技能时，限制读取会直接断链。视野是「模型无需搜索就能看到什么」，不是权限边界。
 
-MCP 侧另有一处执行侧校验：`call_tool` 是中转入口，模型可能绕过 `getTools` 的过滤直接点名未选中的服务，因此它在执行前会比对视野并拒绝越界调用（`工具 'x' 不在本次选中的 MCP 服务范围内`）。
+> **`call_tool` 同样不按视野拦截**：它是点名调用的中转入口，模型点名未选中服务的工具时照常执行（`search_tools` / `get_tool_detail` 也只按强制边界过滤）。需要硬隔离时用请求级作用域（`HarnessInput#scope`，写入 `_mcps_allowed` / `_skills_allowed`）：名单外的项按「不存在」处理，且与视野取交集。
 
-**穿透范围**：子代理（`task` / `multitask`）与命令触发的二段任务会**继承**父级视野。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
+**穿透范围**：子代理（`task` / `multitask`）自己声明了技能 / MCP 就用自己的，没有声明才**继承**父级视野（不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域照旧继承。命令触发的二段任务带上本轮的显式选择（`HarnessInput#derive`）。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
+
+#### 智能体声明：定义里的 `skills` / `mcpServers`
+
+智能体定义只记名字，用到该智能体时引擎把它们转成本轮的选择，与 `selectedSkill` / `selectedMcp` 同一语义（收窄 + 预加载）：
+
+```markdown
+---
+name: reporter
+description: 写投资报告
+tools: ["read", "skill", "mcp"]
+skills: ["@user-skills/investment-report"]
+mcpServers: ["mysql"]
+---
+```
+
+| 场景 | 处理 |
+|---|---|
+| 新消息选中该智能体（`selectedAgent`、`@提及`、程序轮次） | 输入没有显式选择时，把声明写回输入（`hasSkillSelection()` 随之为 true；经宿主骨架提交时改的是副本） |
+| 输入里有显式选择（宿主传的、扩展在 `onInput` 里设的、积压还原的） | 显式优先，技能与 MCP 各自判定 |
+| 被 `task` / `multitask` 委派 | 子代理的声明优先于父级视野 |
+| 续流 | 不补，沿用被中断那一轮 |
+
+生效条件：`tools` 分组展开后含 `skill` / `mcp`（`*` 含 skill 不含 mcp，`**` 都含），且智能体与引擎都没有禁用它。不存在的名字（MCP 还有已停用的服务）直接剔除；**全部失效时视为未声明**（只记一条 debug 日志）——否则视野会收窄成空。解析口径在 `agent.AgentSelections`（`skillsOf` / `mcpsOf` / `hasTool`），宿主需要展示「该智能体实际生效什么」时直接调它。
+
+与 Claude Code 的差异：Claude Code 的 `skills` 只预加载、不收窄，`mcpServers` 支持内联定义；这里两者都是「收窄 + 预加载」，`mcpServers` 只写已配置服务的名字。
 
 ### 1.3 `InputOutcome`：处置态
 

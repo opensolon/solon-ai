@@ -44,6 +44,7 @@ import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.session.SessionSelections;
 import org.noear.solon.ai.harness.spi.RunDispatch;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
+import org.noear.solon.ai.harness.agent.AgentSelections;
 import org.noear.solon.ai.talents.cli.*;
 import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.core.util.Assert;
@@ -211,7 +212,7 @@ final class InputPipeline {
                 //3) 宿主显式传 resume —— 只写决策的批量场景不自作主张。
                 rememberEffectiveAgent(session, agentName);
                 return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                        assembleRequest(session, null, input, agentName, scope), true);
+                        assembleRequest(session, null, input, resolveTarget(session, agentName, input), scope), true);
             }
 
             //未续流的两种情形都归入 HITL，由宿主按 isHitlApplied / getPendingHitlCount 决定后续动作。
@@ -227,7 +228,7 @@ final class InputPipeline {
                     ? input.getExplicitAgent() : effectiveAgentOf(session);
             rememberEffectiveAgent(session, agentName);
             return InputOutcome.task(null, agentName, resolveSessionModelName(session, input.getSelectedModel()),
-                    assembleRequest(session, null, input, agentName, scope));
+                    assembleRequest(session, null, input, resolveTarget(session, agentName, input), scope));
         }
 
         if (Assert.isEmpty(input.getText()) && !attachments.hasAny()) {
@@ -265,28 +266,113 @@ final class InputPipeline {
             }
         }
 
-        // ========== 5. Prompt 构建 ==========
+        // ========== 5. 智能体声明的技能 / MCP 转给输入 + Prompt 构建 ==========
+        //目标代理只解析一次：取声明与构建代理用同一份定义（挂载目录里的定义不缓存，每次现读）。
+        //必须早于 Prompt 构建：用户消息上记的选择与执行生效的选择是同一份。
+        final AgentDefinition targetDef = resolveTarget(session, agentName, input);
+        applySelections(input, targetDef, session);
+
         Prompt prompt = buildInputPrompt(text, attachments, input.getOrigin().getChannel(), agentName, input);
 
         // ========== 6. 请求装配 ==========
         String modelName = resolveSessionModelName(session, input.getSelectedModel());
         rememberEffectiveAgent(session, agentName);
         return InputOutcome.task(prompt, agentName, modelName,
-                assembleRequest(session, prompt, input, agentName, scope));
+                assembleRequest(session, prompt, input, targetDef, scope));
+    }
+
+    /**
+     * 本轮目标代理的定义（null = 主代理）：名字为空时回落选择器传入的名字；
+     * 先查本会话的会话级子代理，再查引擎级（见 {@link HarnessEngine#resolveAgent}）。
+     */
+    @Nullable
+    private AgentDefinition resolveTarget(@Nullable AgentSession session, @Nullable String agentName, HarnessInput input) {
+        return engine.resolveAgent(session, Assert.isNotEmpty(agentName) ? agentName : input.getSelectedAgent());
+    }
+
+    /**
+     * 技能 / MCP 视野转给本轮输入：只在输入没有显式选择时补。
+     *
+     * <p>优先级：<b>输入显式选择 → 会话级选择 → 目标智能体的声明 → 不限制</b>。
+     * 会话级选择长期生效（随快照持久化），是「像选模型一样固定住」的实现层；
+     * 显式选择含宿主传入的、扩展在 {@code onInput} 里设置的、积压还原的。</p>
+     *
+     * <p>只在新消息上调用：续流沿用被中断那一轮的选择。积压在受理时就已保存输入（早于这里），
+     * 只存显式选择；命令派生的输入也在这之前生成，各自按自己的会话与目标代理再补。
+     * 失效名的处理见 {@link AgentSelections}。</p>
+     */
+    private void applySelections(HarnessInput input, @Nullable AgentDefinition targetDef, @Nullable AgentSession session) {
+        if (input.hasSkillSelection() == false) {
+            List<String> skills = skillSelectionOf(session, targetDef);
+            if (skills != null) {
+                input.selectedSkill(skills.toArray(new String[0]));
+            }
+        }
+
+        if (input.hasMcpSelection() == false) {
+            List<String> mcps = mcpSelectionOf(session, targetDef);
+            if (mcps != null) {
+                input.selectedMcp(mcps.toArray(new String[0]));
+            }
+        }
+    }
+
+    /**
+     * 本轮的技能视野：会话选择优先（已失效的剔除）；会话没设才看目标智能体的声明。
+     *
+     * <p>会话选择全部失效时按「不限制」处理，<b>不再回退声明</b>：会话选择是用户的显式意图，
+     * 回退会在用户不知情时把视野换成另一套（与「失效即视为未发生」相比，不限制更不会被误读成权限变更）。</p>
+     */
+    @Nullable
+    private List<String> skillSelectionOf(@Nullable AgentSession session, @Nullable AgentDefinition targetDef) {
+        final List<String> sessionNames = session == null ? null : engine.getSessionSkills(session);
+        if (sessionNames == null) {
+            return AgentSelections.skillsOf(engine, targetDef);
+        }
+
+        final List<String> valid = AgentSelections.filterSkills(engine, sessionNames);
+        if (valid.isEmpty()) {
+            LOG.debug("Session {} selects skills {}, but none is available; no restriction",
+                    session.getSessionId(), sessionNames);
+            return null;
+        }
+
+        return valid;
+    }
+
+    /**
+     * 本轮的 MCP 视野（口径同 {@link #skillSelectionOf}）。
+     */
+    @Nullable
+    private List<String> mcpSelectionOf(@Nullable AgentSession session, @Nullable AgentDefinition targetDef) {
+        final List<String> sessionNames = session == null ? null : engine.getSessionMcps(session);
+        if (sessionNames == null) {
+            return AgentSelections.mcpsOf(engine, targetDef);
+        }
+
+        final List<String> valid = AgentSelections.filterMcps(engine, sessionNames);
+        if (valid.isEmpty()) {
+            LOG.debug("Session {} selects MCP servers {}, but none is available; no restriction",
+                    session.getSessionId(), sessionNames);
+            return null;
+        }
+
+        return valid;
     }
 
     /**
      * 装配一轮请求（会话、技能/连接选择、会话工作目录、生效模型）。
+     *
+     * @param prompt    新消息的提示词；null 表示续流
+     * @param targetDef 目标代理定义（{@link #resolveTarget} 的结果；null 为主代理）
      */
     private ReActRequest assembleRequest(@Nullable AgentSession session, @Nullable Prompt prompt,
                                   HarnessInput input,
-                                  @Nullable String agentName,
+                                  @Nullable AgentDefinition targetDef,
                                   @Nullable InputScope scope) {
-        if(Assert.isEmpty(agentName)){
-            agentName = input.getSelectedAgent();
-        }
-
-        final ReActAgent targetAgent = engine.getAgentOrMain(session, agentName);
+        // 与 engine.getAgentOrMain(session, name) 等价：解析不到定义时回落主代理
+        final ReActAgent targetAgent = targetDef == null
+                ? engine.getMainAgent() : engine.getAgentBuilder(targetDef).build();
         ReActRequest request = engine.promptDo(prompt, targetAgent);
 
         if (session != null) {
@@ -312,12 +398,25 @@ final class InputPipeline {
             request.options(o -> o.systemPrompt(trace -> inputSystemPrompt));
         }
 
-        if (Assert.isNotEmpty(input.getSelectedSkills())) {
+        // 技能 / MCP 视野：新消息每轮「写入或清除」——请求选项从上一轮复制（ReActRequest#init），
+        // 只写不清会把上一轮的选择带到本轮（违背「不传 = 不限制」）。续流（prompt 为 null）不清，
+        // 沿用被中断那一轮的选择。扩展在 onRequestAssemble 里写的视野会被这里覆盖：要改选择请在 onInput 里改输入。
+        //
+        // 已知边界：续流靠「上一轮复制的选项」，会话从存储重新加载后轨迹里的 options 是空的（transient），
+        // 这时续流既不读输入也不读声明，视野退回不限制（fail-open，不是静默变窄）。不补声明是有意的：
+        // 补了会覆盖被中断那一轮的选择（那时也无法判断复制过来的选项里有没有）。
+        // 见 AgentDeclaredSelectionTest#resumeAfterReloadFallsBackToUnrestricted。
+        final boolean newTurn = prompt != null;
+        if (input.hasSkillSelection()) {
             request.options(o -> o.toolContextPut(SkillTalent.CTX_SKILLS_SELECTED, input.getSelectedSkills()));
+        } else if (newTurn) {
+            request.options(o -> o.toolContext().remove(SkillTalent.CTX_SKILLS_SELECTED));
         }
 
-        if (Assert.isNotEmpty(input.getSelectedMcps())) {
+        if (input.hasMcpSelection()) {
             request.options(o -> o.toolContextPut(McpGatewayTalent.CTX_MCPS_SELECTED, input.getSelectedMcps()));
+        } else if (newTurn) {
+            request.options(o -> o.toolContext().remove(McpGatewayTalent.CTX_MCPS_SELECTED));
         }
 
 

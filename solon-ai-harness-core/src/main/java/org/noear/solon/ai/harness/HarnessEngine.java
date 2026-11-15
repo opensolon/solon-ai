@@ -791,7 +791,7 @@ public class HarnessEngine {
         return options.getDeployMode();
     }
 
-    // ========== 会话级选择项（模型 / 子代理）门面 ==========
+    // ========== 会话级选择项（模型 / 子代理 / 技能视野 / MCP 视野）门面 ==========
     //
     // 与 getSessionCwd/setSessionCwd 对称：会话级选择是引擎与宿主共用的口径，
     // 宿主一律走本组方法（存储键已收为 SessionSelections 的私有实现）。
@@ -840,6 +840,50 @@ public class HarnessEngine {
      */
     public void setSessionAgent(@Nullable AgentSession session, @Nullable String name) {
         SessionSelections.setAgent(session, name);
+    }
+
+    /**
+     * 会话级技能视野（未设置返回 {@code null}，表示不限制）。
+     *
+     * <p>口径：输入显式选择 → 会话选择 → 目标智能体的 {@code skills} 声明 → 不限制。
+     * 本方法只读第二层，已失效的技能标识（已卸载 / 不可访问）原样返回，由引擎在装配时剔除。</p>
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public List<String> getSessionSkills(@Nullable AgentSession session) {
+        return SessionSelections.skillsOf(session);
+    }
+
+    /**
+     * 设置会话级技能视野；{@code null}/空 表示清除（回退目标智能体的声明，再回退不限制）。
+     *
+     * <p>会话级选择长期生效（随快照持久化，重启后仍在），不是只作用于下一轮；
+     * 与模型、子代理的选择同一口径。宿主写到会话后应调 {@code session.updateSnapshot()} 落盘。</p>
+     *
+     * @since 4.2.0
+     */
+    public void setSessionSkills(@Nullable AgentSession session, @Nullable Collection<String> names) {
+        SessionSelections.setSkills(session, names);
+    }
+
+    /**
+     * 会话级 MCP 视野（未设置返回 {@code null}，表示不限制）。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public List<String> getSessionMcps(@Nullable AgentSession session) {
+        return SessionSelections.mcpsOf(session);
+    }
+
+    /**
+     * 设置会话级 MCP 视野；{@code null}/空 表示清除（口径同 {@link #setSessionSkills}）。
+     *
+     * @since 4.2.0
+     */
+    public void setSessionMcps(@Nullable AgentSession session, @Nullable Collection<String> names) {
+        SessionSelections.setMcps(session, names);
     }
 
     public String getSystemPrompt() {
@@ -2223,6 +2267,11 @@ public class HarnessEngine {
      * <p>宿主取流只有一条路径：{@code outcome.getRequest().stream()}。回执读
      * {@code outcome.getCommandOutput()}，两者的先后顺序与订阅时机均由宿主掌握
      * （各端时序要求不同：CLI 即时写终端、Web 要求流门复位早于回执、桌面需要序号回放）。</p>
+     *
+     * <p><b>会就地修改传入的输入</b>：新消息上按目标智能体的声明（{@code skills} / {@code mcpServers}）
+     * 把选择补到 {@code input} 上（只有输入未显式选择时），所以返回后 {@code input.getSelectedSkills()}
+     * 可能就是本轮生效值。同一个实例不应重试重提——重提时那些值会被当成显式选择；经宿主骨架
+     * （{@code HarnessHost}）提交时改的是 {@code copyFor} 的副本，调用方手里的对象不变。</p>
      *
      * @param input 输入上下文（含命令上下文工厂，为空时使用缓冲式默认实现）
      */
