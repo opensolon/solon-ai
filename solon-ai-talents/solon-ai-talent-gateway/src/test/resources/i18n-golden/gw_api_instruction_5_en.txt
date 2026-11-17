@@ -5,9 +5,9 @@ There are many business APIs, so **dynamic routing** is enabled. Strictly follow
 - **Step 3 (Execute)**: Execute it with `call_api`.
 
 ### Available business API list (by group):
-- **Group: 订单** -> [api4, getorder]
+- **Group: 订单** -> [getOrder, api4]
 - **Group: 文件** -> [upload, api5]
-- **Group: General APIs** -> [createorder]
+- **Group: General APIs** -> [createOrder]
 
 > Tip: group names and API names carry semantic hints; once you pick a target, always check its details first.
 

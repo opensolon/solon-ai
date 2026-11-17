@@ -6,8 +6,8 @@ There are many business APIs, so **dynamic routing** is enabled. Strictly follow
 
 ### Available business APIs (summary by group):
 - **Group: [订单]**:
-  - `api4`: 接口 api4 (GET /api/ok)
   - `getOrder`: 接口 getOrder (GET /api/orders/{id})
+  - `api4`: 接口 api4 (GET /api/ok)
 - **Group: [文件]**:
   - `upload`: 接口 upload (POST /api/files)
 - **Group: [General APIs]**:

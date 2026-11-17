@@ -21,12 +21,12 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18n;
 import org.noear.solon.ai.talents.gateway.i18n.OpenApiGatewayI18nKeys;
 import org.noear.solon.ai.talents.gateway.openapi.*;
 import org.noear.solon.ai.talents.gateway.openapi.resolver.OpenApiResolver;
-import org.noear.solon.ai.util.RetryUtil;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
@@ -35,7 +35,7 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.Duration;
 import java.util.*;
@@ -43,28 +43,57 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
- * OpenAPI 网关：支持分组与四阶段自动发现模式。
+ * OpenAPI 网关：按 OpenAPI(Swagger) 文档接入 REST 接口，支持四种自动发现模式。
  *
- * 逻辑档位：
- * 1. FULL: 数量 <= dynamicThreshold。平铺所有 OpenAPI 的完整定义。
- * 2. SUMMARY: 数量 <= listThreshold。展示分组、名称、描述及 Endpoint。
- * 3. LIST: 数量 <= searchThreshold。仅展示分组及接口名列表。
- * 4. SEARCH: 数量 > searchThreshold。强制搜索。
+ * <p>模式按接口数切换：
+ * <ol>
+ *   <li>FULL (直接调用): 接口数 &lt;= dynamicThreshold。完整接口定义写进指令，只暴露 call_api。</li>
+ *   <li>SUMMARY (摘要): 接口数 &lt;= listThreshold。按分组展示名称、描述及 Endpoint。</li>
+ *   <li>LIST (名字): 接口数 &lt;= searchThreshold。仅展示分组及接口名列表。</li>
+ *   <li>SEARCH (搜索): 接口数 &gt; searchThreshold。强制搜索。</li>
+ * </ol>
  *
- * 注意：不能有同名同方式接口
+ * <p>两个层次：开发者按「接口源」（一份文档，以 docUrl 为键）增删与刷新；模型看到的「分组」是接口的第一个
+ * tag（没有 tag 时归入默认分组），与接口源无关。接口按名字（大小写不敏感）定位，不同接口源不能有同名接口
+ * （后加的替换先加的）。
+ *
+ * <p>索引写时复制：增删、刷新只在新的一版完整建好后才替换，调用中的线程不会看到工具暂时消失。
  *
  * @author noear
  * @since 3.9.1
- * @since 3.9.5
  */
 @Preview("3.9.1")
 public class OpenApiGatewayTalent extends AbsTalent {
     private static final Logger LOG = LoggerFactory.getLogger(OpenApiGatewayTalent.class);
 
-    private final Map<String, Map<String, ApiTool>> categoryTools = new ConcurrentHashMap<>();
-    private final Map<String, ApiTool> allTools = new ConcurrentHashMap<>();
+    static final String TOOL_SEARCH = "search_apis";
+    static final String TOOL_DETAIL = "get_api_detail";
+    static final String TOOL_CALL = "call_api";
 
-    // ApiSource 的运行时注册表
+    // search_apis 单次最多列出的接口数
+    private static final int SEARCH_LIMIT = 10;
+
+    /** 工具索引（写时复制：每次修改都换一个新的不可变实例） */
+    private static final class Index {
+        static final Index EMPTY = new Index(Collections.emptyMap(), Collections.emptyMap());
+
+        // 分组名 -> (接口名小写 -> 接口)
+        final Map<String, Map<String, ApiTool>> categories;
+        // 接口名小写 -> 接口
+        final Map<String, ApiTool> all;
+
+        Index(Map<String, Map<String, ApiTool>> categories, Map<String, ApiTool> all) {
+            this.categories = categories;
+            this.all = all;
+        }
+    }
+
+    private volatile Index index = Index.EMPTY;
+    // 接口源 docUrl -> 该源当前生效的接口（停用的源不在这里）；只在 indexLock 内读写
+    private final Map<String, List<ApiTool>> sourceTools = new LinkedHashMap<>();
+    private final Object indexLock = new Object();
+
+    // 接口源的运行时注册表（含停用的源）
     private final Map<String, ApiSourceClient> sourceProviderMap = new ConcurrentHashMap<>();
 
     private ApiResolver resolver = OpenApiResolver.getInstance();
@@ -77,13 +106,24 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     private int maxContextLength = 8000;
 
-    private int maxRetries = 3;
+    private volatile int maxRetries = 3;
+    private volatile long retryDelayMs = 1000L;
 
+    /**
+     * call_api 的重试配置（总尝试次数与初始退避）。
+     *
+     * <p>只在请求确定没有送达时重试（连接被拒、域名解析失败、连接超时等）。读超时、传输中断时请求可能已经执行，
+     * 对创建类等非幂等接口重发会重复执行，不重试，交给模型看到报错后自行决定。
+     */
     public OpenApiGatewayTalent retryConfig(int maxRetries, long retryDelayMs) {
         this.maxRetries = Math.max(1, maxRetries);
+        this.retryDelayMs = Math.max(100, retryDelayMs);
         return this;
     }
 
+    /**
+     * call_api 的重试次数（语义同 {@link #retryConfig(int, long)}）
+     */
     public OpenApiGatewayTalent retryConfig(int maxRetries) {
         this.maxRetries = Math.max(1, maxRetries);
         return this;
@@ -91,21 +131,33 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     // --- 配置方法 ---
 
+    /**
+     * FULL（直接调用）模式的接口数上限（缺省 8）：不超过它时完整接口定义写进指令
+     */
     public OpenApiGatewayTalent dynamicThreshold(int dynamicThreshold) {
         this.dynamicThreshold = dynamicThreshold;
         return this;
     }
 
+    /**
+     * SUMMARY（摘要）模式的接口数上限（缺省 30）：不超过它时按分组列出名称、描述与 Endpoint
+     */
     public OpenApiGatewayTalent listThreshold(int listThreshold) {
         this.listThreshold = listThreshold;
         return this;
     }
 
+    /**
+     * LIST（只列名字）模式的接口数上限（缺省 100）：不超过它时只列接口名，超过则进入 SEARCH（搜索）模式
+     */
     public OpenApiGatewayTalent searchThreshold(int searchThreshold) {
         this.searchThreshold = searchThreshold;
         return this;
     }
 
+    /**
+     * call_api 返回内容的最大字符数（缺省 8000，超出截断并标注）
+     */
     public OpenApiGatewayTalent maxContextLength(int length) {
         this.maxContextLength = length;
         return this;
@@ -131,30 +183,33 @@ public class OpenApiGatewayTalent extends AbsTalent {
     }
 
     /**
-     * 添加 OpenAPI 组
+     * 添加接口源
      *
-     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
-     * @param apiBaseUrl 实际接口执行基地址
+     * @param docUrl     OpenAPI 定义地址（http/https，经 HTTP GET 拉取）
+     * @param apiBaseUrl 实际接口执行基地址（调用时以它为准）
      */
     public OpenApiGatewayTalent addApi(String docUrl, String apiBaseUrl) {
         return addApi(docUrl, apiBaseUrl, null);
     }
 
     /**
-     * 添加 OpenAPI 组
+     * 添加接口源
      *
-     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
-     * @param apiBaseUrl 实际接口执行基地址
+     * @param docUrl     OpenAPI 定义地址（http/https，经 HTTP GET 拉取）
+     * @param apiBaseUrl 实际接口执行基地址（调用时以它为准）
+     * @param headers    拉取文档与调用接口时都带上的请求头
      */
     public OpenApiGatewayTalent addApi(String docUrl, String apiBaseUrl, Map<String, String> headers) {
         return addApi(docUrl, apiBaseUrl, headers, null);
     }
 
     /**
-     * 添加 OpenAPI 组
+     * 添加接口源
      *
-     * @param docUrl     OpenAPI 定义地址 (http://... 或 classpath:...)
-     * @param apiBaseUrl 实际接口执行基地址
+     * @param docUrl        OpenAPI 定义地址（http/https，经 HTTP GET 拉取）
+     * @param apiBaseUrl    实际接口执行基地址（调用时以它为准）
+     * @param headers       拉取文档与调用接口时都带上的请求头
+     * @param authenticator 认证器（拉取文档时也会调用，此时 tool 参数为 null）
      */
     public OpenApiGatewayTalent addApi(String docUrl, String apiBaseUrl, Map<String, String> headers, ApiAuthenticator authenticator) {
         ApiSource source = new ApiSource();
@@ -168,64 +223,87 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
 
     /**
-     * 添加 API 组
+     * 添加接口源（docUrl 相同的源已存在时整体替换；新文档加载完成后才替换，期间旧接口仍可用）
      *
      * @param apiSource 接口源
      */
     public OpenApiGatewayTalent addApi(ApiSource apiSource) {
-        // 同名已存在则先移除（幂等，不存在的 name 是空操作）
-        removeApi(apiSource.getDocUrl());
-
-        try {
-            loadApiFromDefinition(apiSource);
-        } catch (Throwable e) {
-            LOG.error("Failed to load OpenAPI from: {}", apiSource.getDocUrl() , e);
+        if (apiSource == null || Utils.isEmpty(apiSource.getDocUrl())) {
+            return this;
         }
 
+        String docUrl = apiSource.getDocUrl();
+        ApiSourceClient provider = new ApiSourceClient(apiSource, resolver, defaultAuthenticator, defaultTimeout);
+
+        // 停用的源只登记到管理表，不进工具索引
+        if (apiSource.isEnabled() == false) {
+            sourceProviderMap.put(docUrl, provider);
+            putSourceTools(docUrl, null);
+            LOG.info("OpenAPI source '{}' is disabled, registered to management only", docUrl);
+            return this;
+        }
+
+        List<ApiTool> tools;
+        try {
+            tools = new ArrayList<>(provider.getToolsActivated());
+        } catch (Throwable e) {
+            // 单个源的解析失败（含 Error）不应打断整个网关；替换语义下该源没有可用接口
+            LOG.error("Failed to load OpenAPI from: {}", docUrl, e);
+            tools = null;
+        }
+
+        sourceProviderMap.put(docUrl, provider);
+        putSourceTools(docUrl, tools);
         return this;
     }
 
     /**
-     * 移除 OpenAPI 组
+     * 移除接口源（连同它的接口）
      *
-     * @param docUrl OpenAPI 定义地址 (http://... 或 classpath:...)
+     * @param docUrl OpenAPI 定义地址
      */
     public OpenApiGatewayTalent removeApi(String docUrl) {
         if (Utils.isEmpty(docUrl)) {
             return this;
         }
 
-        // 找出所有属于该 docUrl 的工具名称
-        List<String> removedNames = new ArrayList<>();
-        for (Map.Entry<String, ApiTool> entry : allTools.entrySet()) {
-            ApiTool tool = entry.getValue();
-            if (tool.getSource() != null && docUrl.equals(tool.getSource().getDocUrl())) {
-                removedNames.add(entry.getKey());
-            }
-        }
-
-        // 从 allTools 中批量移除
-        for (String name : removedNames) {
-            allTools.remove(name);
-        }
-
-        // 从 categoryTools 中移除
-        for (Map.Entry<String, Map<String, ApiTool>> catEntry : categoryTools.entrySet()) {
-            Map<String, ApiTool> catTools = catEntry.getValue();
-            catTools.keySet().removeAll(removedNames);
-            if (catTools.isEmpty()) {
-                categoryTools.remove(catEntry.getKey());
-            }
-        }
-
-        // 从 sourceProviderMap 中移除
         sourceProviderMap.remove(docUrl);
+        int removed = putSourceTools(docUrl, null);
 
-        if (!removedNames.isEmpty()) {
-            LOG.info("OpenApiTalent: Removed {} tools from {}", removedNames.size(), docUrl);
+        if (removed > 0) {
+            LOG.info("OpenApiTalent: Removed {} tools from {}", removed, docUrl);
         }
 
         return this;
+    }
+
+    /**
+     * 换上某个源的接口并重建索引（tools 为 null 或空表示该源没有生效的接口）
+     *
+     * @return 该源原有的接口数
+     */
+    private int putSourceTools(String docUrl, List<ApiTool> tools) {
+        synchronized (indexLock) {
+            List<ApiTool> old = (tools == null || tools.isEmpty())
+                    ? sourceTools.remove(docUrl)
+                    : sourceTools.put(docUrl, tools);
+
+            Map<String, ApiTool> all = new LinkedHashMap<>();
+            for (List<ApiTool> list : sourceTools.values()) {
+                for (ApiTool tool : list) {
+                    all.put(tool.getName().toLowerCase(), tool);
+                }
+            }
+
+            Map<String, Map<String, ApiTool>> categories = new LinkedHashMap<>();
+            all.forEach((key, tool) -> categories.computeIfAbsent(tool.getCategory(), k -> new LinkedHashMap<>()).put(key, tool));
+
+            Map<String, Map<String, ApiTool>> frozen = new LinkedHashMap<>();
+            categories.forEach((cat, map) -> frozen.put(cat, Collections.unmodifiableMap(map)));
+            index = new Index(Collections.unmodifiableMap(frozen), Collections.unmodifiableMap(all));
+
+            return old == null ? 0 : old.size();
+        }
     }
 
 
@@ -247,25 +325,26 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return allTools.size() > 0;
+        return index.all.size() > 0;
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         final Locale locale = AiI18n.localeOf(prompt);
-        final int size = allTools.size();
+        final Index idx = index;
+        final int size = idx.all.size();
         StringBuilder sb = new StringBuilder();
         sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_TITLE, "count", size)).append("\n");
 
         if (size <= dynamicThreshold) {
             // --- 模式 1: FULL ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_FULL)).append("\n");
-            sb.append(formatApiDocs(allTools.values(), locale));
+            sb.append(formatApiDocs(idx.all.values(), locale));
 
         } else if (size <= listThreshold) {
             // --- 模式 2: SUMMARY ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SUMMARY)).append("\n");
-            categoryTools.forEach((cat, tools) -> {
+            idx.categories.forEach((cat, tools) -> {
                 sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SUMMARY_GROUP,
                         "category", categoryOf(cat, locale))).append("\n");
                 tools.values().forEach(t ->
@@ -274,10 +353,10 @@ public class OpenApiGatewayTalent extends AbsTalent {
                 );
             });
         } else if (size <= searchThreshold) {
-            // --- 模式 3: LIST ---
+            // --- 模式 3: LIST（按原名显示） ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST)).append("\n");
-            categoryTools.forEach((cat, tools) -> {
-                String names = String.join(", ", tools.keySet());
+            idx.categories.forEach((cat, tools) -> {
+                String names = tools.values().stream().map(ApiTool::getName).collect(Collectors.joining(", "));
                 sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST_GROUP,
                         "category", categoryOf(cat, locale), "names", names)).append("\n");
             });
@@ -294,17 +373,17 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        int size = allTools.size();
+        int size = index.all.size();
 
-        //内置工具按请求语言本地化
+        // 中转工具（描述是固定文本，不随请求语言变化；指令与返回文案按请求语言）
         Collection<FunctionTool> tools = super.getTools(prompt);
 
         if (size <= dynamicThreshold) {
-            return tools.stream().filter(t -> "call_api".equals(t.name())).collect(Collectors.toList());
+            return tools.stream().filter(t -> TOOL_CALL.equals(t.name())).collect(Collectors.toList());
         }
 
         if (size <= listThreshold) {
-            return tools.stream().filter(t -> !"search_apis".equals(t.name())).collect(Collectors.toList());
+            return tools.stream().filter(t -> !TOOL_SEARCH.equals(t.name())).collect(Collectors.toList());
         }
 
         return tools;
@@ -313,27 +392,22 @@ public class OpenApiGatewayTalent extends AbsTalent {
     // --- 内置工具映射 ---
 
     /**
-     * 搜索接口（__locale 由工具上下文注入）
+     * 搜索接口（__locale 由工具上下文注入）。结果为列表（每项含 api_name、category、description、endpoint），最多 10 条。
      *
      * @since 4.2
      */
-    @ToolMapping(name = "search_apis", description = "通过关键词在 API 库中搜索匹配的接口。支持多关键词空格分隔（如：'订单 查询'），按 AND 逻辑匹配")
+    @ToolMapping(name = TOOL_SEARCH, description = "通过关键词在 API 库中搜索匹配的接口。支持多关键词空格分隔（如：'订单 查询'），按 AND 逻辑匹配")
     public Object searchApis(@Param("keyword") String keyword, String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
-        if (Utils.isEmpty(keyword)) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_BLANK);
+        String[] keys = GatewaySupport.keywordsOf(keyword);
+        if (keys.length == 0) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_BLANK);
 
-        // 按空格及常见分隔符拆分关键词
-        String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
-
-        List<Map<String, String>> results = allTools.values().stream()
-                .filter(t -> {
-                    String content = (t.getName() + " " + t.getDescription() + " " + t.getPath()).toLowerCase();
-                    // 多词 AND 匹配
-                    return Arrays.stream(keys).allMatch(content::contains);
-                })
-                .limit(10)
+        List<Map<String, String>> results = index.all.values().stream()
+                // 多词 AND 匹配
+                .filter(t -> GatewaySupport.containsAll(t.getName() + " " + t.getDescription() + " " + t.getPath(), keys))
+                .limit(SEARCH_LIMIT)
                 .map(t -> {
-                    Map<String, String> map = new HashMap<>();
+                    Map<String, String> map = new LinkedHashMap<>();
                     map.put("api_name", t.getName());
                     map.put("category", categoryOf(t.getCategory(), locale));
                     map.put("description", t.getDescription());
@@ -343,7 +417,7 @@ public class OpenApiGatewayTalent extends AbsTalent {
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
-            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_NONE, "keyword", keyword);
+            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_SEARCH_NONE, "keyword", keyword.trim());
         }
 
         return results;
@@ -354,12 +428,12 @@ public class OpenApiGatewayTalent extends AbsTalent {
      *
      * @since 4.2
      */
-    @ToolMapping(name = "get_api_detail", description = "根据接口名称获取完整的参数定义（Header/Path/Query/Body Schema）及返回值结构")
+    @ToolMapping(name = TOOL_DETAIL, description = "根据接口名称获取完整的参数定义（Header/Path/Query/Body Schema）及返回值结构")
     public String getApiDetail(@Param("api_name") String apiName, String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
-        if (Utils.isEmpty(apiName)) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_BLANK);
+        if (Utils.isBlank(apiName)) return OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_BLANK);
 
-        ApiTool tool = allTools.get(apiName.trim().toLowerCase());
+        ApiTool tool = index.all.get(apiName.trim().toLowerCase());
 
         if (tool != null) {
             return formatApiDocs(Collections.singletonList(tool), locale);
@@ -369,24 +443,31 @@ public class OpenApiGatewayTalent extends AbsTalent {
     }
 
     /**
-     * 调用接口（__locale 由工具上下文注入）
+     * 调用接口（__locale 由工具上下文注入）。
+     *
+     * <p>调用本身的失败（名字为空、未找到、缺路径参数、请求异常）返回报错结果（isError），客户端据此标红；
+     * 接口返回的内容（含 4xx/5xx 的响应体）按正常结果给出，超过 maxContextLength 截断并标注。
      *
      * @since 4.2
      */
-    @ToolMapping(name = "call_api", description = "根据接口名称执行 REST API 调用。需提供 api_name 及对应参数（path_params、query_params、body_params）")
-    public String callApi(
+    @ToolMapping(name = TOOL_CALL, description = "根据接口名称执行 REST API 调用。需提供 api_name 及对应参数（path_params、query_params、body_params）")
+    public ToolResult callApi(
             @Param("api_name") String apiName,
             @Param("header_params") Map<String, Object> headerParams,
             @Param("path_params") Map<String, Object> pathParams,
             @Param("query_params") Map<String, Object> queryParams,
             @Param("body_params") Map<String, Object> bodyParams,
-            String __locale) throws IOException {
+            String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
 
-        ApiTool tool = allTools.get(apiName.trim().toLowerCase());
+        if (Utils.isBlank(apiName)) {
+            return ToolResult.error(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_DETAIL_BLANK));
+        }
+
+        ApiTool tool = index.all.get(apiName.trim().toLowerCase());
 
         if (tool == null) {
-            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_MISSING, "name", apiName);
+            return ToolResult.error(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_MISSING, "name", apiName));
         }
 
         String baseUrl = tool.getBaseUrl();
@@ -394,11 +475,40 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
         // 如果 finalPath 依然包含 {xxx}，说明 AI 漏传了 pathSchema 中定义的必填路径参数
         if (finalPath.contains("{") && finalPath.contains("}")) {
-            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_PATH, "path", finalPath);
+            return ToolResult.error(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_PATH, "path", finalPath));
         }
 
-        // 构建请求对象
-        HttpUtils http = HttpUtils.http(baseUrl + finalPath);
+        // 6. 执行并处理响应
+        try {
+            HttpUtils http = buildRequest(tool, baseUrl + finalPath, headerParams, queryParams, bodyParams);
+
+            LOG.debug("OpenApiTalent calling: {} {} (api: {})", tool.getMethod(), baseUrl + finalPath, apiName);
+
+            String result = GatewaySupport.callWithRetry(maxRetries, retryDelayMs,
+                    () -> http.exec(tool.getMethod()).bodyAsString());
+
+            // 结果截断处理，防止撑爆 AI 上下文
+            if (result != null && result.length() > maxContextLength) {
+                return ToolResult.success(result.substring(0, maxContextLength) + "... [Data truncated]");
+            }
+
+            return ToolResult.success(Utils.isEmpty(result) ? "Success: OpenAPI executed, but returned an empty response." : result);
+        } catch (Throwable e) {
+            LOG.warn("OpenAPI Call Failed: {} - {}", tool.getName(), e.getMessage());
+            String errorMsg = e.getMessage() != null ? e.getMessage()
+                    : OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_RESPONSE);
+            return ToolResult.error(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_ERROR, "error", errorMsg));
+        }
+    }
+
+    // --- 私有辅助 ---
+
+    /** 构建请求：超时、Header（模型给的 → 源配置 → 认证器，后者覆盖前者）、Query、Body */
+    private HttpUtils buildRequest(ApiTool tool, String url,
+                                   Map<String, Object> headerParams,
+                                   Map<String, Object> queryParams,
+                                   Map<String, Object> bodyParams) {
+        HttpUtils http = HttpUtils.http(url);
 
         if (tool.getSource() != null && tool.getSource().getTimeout() != null) {
             http.timeout(HttpTimeout.of(tool.getSource().getTimeout()));
@@ -406,31 +516,28 @@ public class OpenApiGatewayTalent extends AbsTalent {
             http.timeout(HttpTimeout.of(defaultTimeout));
         }
 
-        // 2. Header 参数设置
+        // Header 参数
         if (Assert.isNotEmpty(headerParams)) {
             http.headers(headerParams);
         }
 
-        // 3. 认证处理
-
+        // 源配置的 Header 与认证（放在模型给的之后，模型不能覆盖认证信息）
         if (tool.getSource() != null && Assert.isNotEmpty(tool.getSource().getHeaders())) {
             http.headers(tool.getSource().getHeaders());
         }
 
         if (tool.getSource() != null && tool.getSource().getAuthenticator() != null) {
             tool.getSource().getAuthenticator().apply(http, tool);
-        } else {
-            if (defaultAuthenticator != null) {
-                defaultAuthenticator.apply(http, tool);
-            }
+        } else if (defaultAuthenticator != null) {
+            defaultAuthenticator.apply(http, tool);
         }
 
-        // 4. Query 参数设置 (URL 查询参数)
+        // Query 参数 (URL 查询参数)
         if (Assert.isNotEmpty(queryParams)) {
             http.data(queryParams);
         }
 
-        // 5. Body 参数设置
+        // Body 参数
         if (Assert.isNotEmpty(bodyParams)) {
             if (tool.isMultipart()) {
                 // 表单或多部分对象提交
@@ -441,35 +548,16 @@ public class OpenApiGatewayTalent extends AbsTalent {
             }
         }
 
-        // 6. 执行并处理响应
-        try {
-            LOG.debug("OpenApiTalent calling: {} {} (api: {})", tool.getMethod(), baseUrl + finalPath, apiName);
-
-            String result = RetryUtil.callWithRetry(maxRetries, () -> http.exec(tool.getMethod()).bodyAsString());
-
-            // 结果截断处理，防止撑爆 AI 上下文
-            if (result != null && result.length() > maxContextLength) {
-                return result.substring(0, maxContextLength) + "... [Data truncated]";
-            }
-
-            return Utils.isEmpty(result) ? "Success: OpenAPI executed, but returned an empty response." : result;
-        } catch (Exception e) {
-            LOG.warn("OpenAPI Call Failed: {} - {}", tool.getName(), e.getMessage());
-            String errorMsg = e.getMessage() != null ? e.getMessage()
-                    : OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_NO_RESPONSE);
-            return OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_CALL_ERROR, "error", errorMsg);
-        }
+        return http;
     }
-
-    // --- 私有辅助 ---
 
     private String replacePathParams(ApiTool tool, Map<String, Object> pathParams) {
         String finalPath = tool.getPath();
-     
+
         if (Assert.isEmpty(tool.getPathSchema())) {
             return finalPath;
         }
-     
+
         ONode pathSchema = ONode.ofJson(tool.getPathSchema());
         ONode required = pathSchema.get("required");
         if (required.isArray()) {
@@ -481,78 +569,50 @@ public class OpenApiGatewayTalent extends AbsTalent {
                 }
             }
         }
-     
+
         return finalPath;
     }
-     
+
     private String encodePathValue(Object value) {
         try {
             return URLEncoder.encode(String.valueOf(value), "UTF-8").replace("+", "%20");
-        } catch (java.io.UnsupportedEncodingException e) {
+        } catch (UnsupportedEncodingException e) {
             return String.valueOf(value);
         }
     }
 
-     
-    /**
-     * 从 ApiSource 创建 Provider 并加载 API 定义，然后同步到全局索引
-     */
-    private void loadApiFromDefinition(ApiSource source) throws IOException {
-        // 1. 创建 Provider（自主加载能力）
-        ApiSourceClient provider = new ApiSourceClient(source, resolver, defaultAuthenticator, defaultTimeout);
-
-        // 2. 注册 provider（无论 enabled 与否都注册到管理表）
-        sourceProviderMap.put(source.getDocUrl(), provider);
-
-        // 3. disabled 时仅注册管理，不加入 categoryTools 和 allTools
-        if (source.isEnabled() == false) {
-            LOG.info("OpenAPI server '{}' is disabled, registered to management only", source.getDocUrl());
-            return;
-        }
-
-        // 4. 将过滤后的工具同步到全局索引
-        for (ApiTool tool : provider.getToolsActivated()) {
-            String nameLower = tool.getName().toLowerCase();
-            this.allTools.put(nameLower, tool);
-            String cat = tool.getCategory();
-            this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
-        }
-    }
-
-    // ========== 查询（供 HarnessEngine 及前端使用） ==========
+    // ========== 查询（供宿主与前端使用） ==========
 
     /**
-     * 按 docUrl 获取 ApiSourceClient
+     * 按 docUrl 获取接口源的运行时客户端（含停用的源；可读全量接口、调整 allowed/disallowed 名单，改完调 {@link #refreshApi(String)}）
      */
     public ApiSourceClient getApiSource(String docUrl) {
-        return sourceProviderMap.get(docUrl);
+        return docUrl == null ? null : sourceProviderMap.get(docUrl);
     }
 
     /**
-     * 是否包含指定 docUrl 的 API 源
+     * 是否包含指定 docUrl 的接口源（含停用的源）
      */
     public boolean hasApiSource(String docUrl) {
-        return sourceProviderMap.containsKey(docUrl);
+        return docUrl != null && sourceProviderMap.containsKey(docUrl);
     }
 
     // ========== 刷新（权限变更后重新加载） ==========
 
     /**
-     * 刷新指定 API 源（allowedTools/disallowedTools 变更后调用）
-     *
-     * <p>采用影子交换策略（参照 McpGatewayTalent.refreshMcpServer）
-     * <p>如果是权限变更场景，可传 reloadDefinition=false，仅重新过滤即可；
-     * <p>如果需要重新拉取远程文档，可传 reloadDefinition=true
+     * 刷新指定接口源（allowedTools / disallowedTools 或启用状态变更后调用），只重新过滤，不重新拉取文档
      */
     public OpenApiGatewayTalent refreshApi(String docUrl) {
         return refreshApi(docUrl, false);
     }
 
     /**
-     * 刷新指定 API 源
+     * 刷新指定接口源。
      *
-     * @param docUrl            API 定义地址
-     * @param reloadDefinition  是否重新从远程拉取定义文档（false=仅重新过滤权限）
+     * <p>先建好新的一版接口再整体替换，调用中的线程不会看到接口暂时消失；重新拉取文档失败时保留原有接口。
+     *
+     * @param docUrl           API 定义地址
+     * @param reloadDefinition 是否重新从远程拉取定义文档（false=仅按名单重新过滤）
      */
     public OpenApiGatewayTalent refreshApi(String docUrl, boolean reloadDefinition) {
         if (Utils.isEmpty(docUrl)) {
@@ -564,33 +624,34 @@ public class OpenApiGatewayTalent extends AbsTalent {
             return this;
         }
 
-        // disabled: 只从工具索引移除，保留 provider（不关闭连接）
+        // disabled: 只从工具索引移除，保留 provider
         if (provider.getSource().isEnabled() == false) {
-            removeToolsFromGlobalIndex(docUrl);
+            int removed = putSourceTools(docUrl, null);
+            if (removed > 0) {
+                LOG.info("OpenApiTalent: Source {} is disabled, removed {} tools from index", docUrl, removed);
+            }
             return this;
         }
 
-        if (reloadDefinition) {
-            // 完全刷新：强制重新加载远程文档，再同步到全局索引
-            removeToolsFromGlobalIndex(docUrl);
-            try {
+        List<ApiTool> tools;
+        try {
+            if (reloadDefinition) {
+                // 拉取失败会抛出，原有缓存不变
                 provider.reloadApi();
-                syncToolsToGlobalIndex(provider);
-            } catch (Throwable e) {
-                // 与 addApi 一致：单个源的解析失败（含 Error）不应打断整个网关
-                LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
             }
-        } else {
-            // 权限刷新：rawTools 缓存未变，只需从全局索引移除旧工具，再用新的权限过滤重新同步
-            removeToolsFromGlobalIndex(docUrl);
-            syncToolsToGlobalIndex(provider);
+            tools = new ArrayList<>(provider.getToolsActivated());
+        } catch (Throwable e) {
+            // 与 addApi 一致：单个源的解析失败（含 Error）不应打断整个网关；保留原有接口
+            LOG.error("OpenApiTalent: Failed to refresh API from {}", docUrl, e);
+            return this;
         }
 
+        putSourceTools(docUrl, tools);
         return this;
     }
 
     /**
-     * 刷新所有 API 源
+     * 刷新所有接口源（只重新过滤）
      */
     public OpenApiGatewayTalent refreshApiAll() {
         for (String docUrl : new ArrayList<>(sourceProviderMap.keySet())) {
@@ -600,44 +661,6 @@ public class OpenApiGatewayTalent extends AbsTalent {
     }
 
     // ========== 私有辅助 ==========
-
-    /**
-     * 从全局索引中移除指定 docUrl 的工具（不移除 provider）
-     */
-    private void removeToolsFromGlobalIndex(String docUrl) {
-        List<String> removedNames = new ArrayList<>();
-        for (Map.Entry<String, ApiTool> entry : allTools.entrySet()) {
-            ApiTool tool = entry.getValue();
-            if (tool.getSource() != null && docUrl.equals(tool.getSource().getDocUrl())) {
-                removedNames.add(entry.getKey());
-            }
-        }
-        for (String name : removedNames) {
-            allTools.remove(name);
-        }
-        for (Map.Entry<String, Map<String, ApiTool>> catEntry : categoryTools.entrySet()) {
-            Map<String, ApiTool> catTools = catEntry.getValue();
-            catTools.keySet().removeAll(removedNames);
-            if (catTools.isEmpty()) {
-                categoryTools.remove(catEntry.getKey());
-            }
-        }
-        if (!removedNames.isEmpty()) {
-            LOG.info("OpenApiTalent: Removed {} tools from global index for {}", removedNames.size(), docUrl);
-        }
-    }
-
-    /**
-     * 将 provider 过滤后的工具同步到全局索引
-     */
-    private void syncToolsToGlobalIndex(ApiSourceClient provider) {
-        for (ApiTool tool : provider.getToolsActivated()) {
-            String nameLower = tool.getName().toLowerCase();
-            this.allTools.put(nameLower, tool);
-            String cat = tool.getCategory();
-            this.categoryTools.computeIfAbsent(cat, k -> new ConcurrentHashMap<>()).put(nameLower, tool);
-        }
-    }
 
     private String formatApiDocs(Collection<ApiTool> tools, Locale locale) {
         StringBuilder sb = new StringBuilder();

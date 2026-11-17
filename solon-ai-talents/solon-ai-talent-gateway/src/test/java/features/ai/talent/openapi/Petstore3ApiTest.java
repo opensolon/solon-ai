@@ -286,7 +286,9 @@ public class Petstore3ApiTest {
         Assertions.assertTrue(openApiTalent.hasApiSource(docUrl), "禁用的源应注册到管理表");
 
         // 2. 但工具不进入全局索引：搜索不到该源的工具
+        // （未找到时的提示会复述关键词，所以按结果类型判断：命中时返回列表）
         Object result = openApiTalent.searchApis("getPetById", null);
-        Assertions.assertFalse(result.toString().contains("getPetById"), "禁用的源工具不应被激活");
+        Assertions.assertFalse(result instanceof List, "禁用的源工具不应被激活");
+        Assertions.assertFalse(openApiTalent.isSupported(null), "禁用的源不应提供工具");
     }
 }

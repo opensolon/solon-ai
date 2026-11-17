@@ -16,16 +16,16 @@ gateway.tool.instruction.summary: |-
   ### Mode: Dynamic discovery (summary)
   There are many tools, so follow this flow:
   - **Step 1 (Pick)**: Choose the tool name from the "Available business tools" below by its description.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 2 (Details)**: Call `get_biz_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_biz_tool`.
 
   #### Available business tools:
 gateway.tool.instruction.list: |-
   ### Mode: Dynamic discovery (list)
   The tool library is large, so only names are shown. Follow this flow:
-  - **Step 1 (Shortlist)**: Infer the function from the names in the "Tool list" below, or search with `search_tools`.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 1 (Shortlist)**: Infer the function from the names in the "Tool list" below, or search with `search_biz_tools`.
+  - **Step 2 (Details)**: Call `get_biz_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_biz_tool`.
 
   #### Available business tool list (by group):
 gateway.tool.instruction.list_tip: |-
@@ -33,11 +33,11 @@ gateway.tool.instruction.list_tip: |-
 gateway.tool.instruction.search: |-
   ### Mode: Search discovery
   The business tool library is huge and the list is collapsed. Follow this flow:
-  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 1 (Search)**: First use `search_biz_tools` to find matching tools by keywords.
+  - **Step 2 (Details)**: Call `get_biz_tool_detail` to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_biz_tool`.
 
-  > **Note**: Do not guess tool names. Search by keywords, e.g. search_tools('finance').
+  > **Note**: Do not guess tool names. Search by keywords, e.g. search_biz_tools('finance').
 
 # ---- relay tool results ----
 gateway.tool.search.blank: |-
@@ -60,3 +60,5 @@ gateway.tool.call.missing: |-
   Error: business tool '{name}' was not found
 gateway.tool.call.error: |-
   Execution error: {error}
+gateway.tool.call.args_invalid: |-
+  Error: tool_args must be a JSON object (values keyed by parameter name). Parameter schema of business tool '{name}':

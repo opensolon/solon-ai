@@ -1,4 +1,4 @@
-name: call_tool
+name: call_biz_tool
 --- description ---
 代理执行特定的业务工具
 --- inputSchema ---
@@ -6,7 +6,7 @@ name: call_tool
 
 ===
 
-name: get_tool_detail
+name: get_biz_tool_detail
 --- description ---
 获取指定业务工具的完整参数 Schema
 --- inputSchema ---
@@ -14,8 +14,8 @@ name: get_tool_detail
 
 ===
 
-name: search_tools
+name: search_biz_tools
 --- description ---
-搜索业务工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）
+搜索业务工具。支持多个关键词用空格隔开（如：'杭州 旅游'）
 --- inputSchema ---
 {"type":"object","properties":{"keyword":{"type":"string","description":""}},"required":["keyword"]}

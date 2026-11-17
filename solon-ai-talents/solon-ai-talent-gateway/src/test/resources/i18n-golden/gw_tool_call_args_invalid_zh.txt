@@ -1,0 +1,4 @@
+错误：tool_args 必须是 JSON 对象（按参数名给值）。业务工具 'tool_1' 的参数定义如下： 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```

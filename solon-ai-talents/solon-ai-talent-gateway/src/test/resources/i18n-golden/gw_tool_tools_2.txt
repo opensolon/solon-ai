@@ -1,4 +1,4 @@
-name: call_tool
+name: call_biz_tool
 --- description ---
 代理执行特定的业务工具
 --- inputSchema ---
@@ -6,7 +6,7 @@ name: call_tool
 
 ===
 
-name: get_tool_detail
+name: get_biz_tool_detail
 --- description ---
 获取指定业务工具的完整参数 Schema
 --- inputSchema ---

@@ -116,7 +116,12 @@ public class GatewayRenderGoldenTest {
         if (tag != null) {
             args.put(AiI18n.ATTR_LOCALE, tag);
         }
-        return t.getToolMap().get("call_tool").call(args);
+        return t.getToolMap().get(name(t)).call(args);
+    }
+
+    /** 网关的中转调用工具名 */
+    static String name(AbsTalent t) {
+        return t instanceof ToolGatewayTalent ? "call_biz_tool" : "call_tool";
     }
 
     // ---------------- tool gateway ----------------
@@ -289,6 +294,16 @@ public class GatewayRenderGoldenTest {
         return text(callTool(t, tag, name));
     }
 
+    static String toolCallRaw(ToolGatewayTalent t, String tag, String name, Object toolArgs) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        args.put("tool_name", name);
+        args.put("tool_args", toolArgs);
+        if (tag != null) {
+            args.put(AiI18n.ATTR_LOCALE, tag);
+        }
+        return text(t.getToolMap().get("call_biz_tool").call(args));
+    }
+
     static String mcpSearch(McpGatewayTalent t, String tag, String keyword) {
         return text(t.searchTools(keyword, null, null, tag));
     }
@@ -334,7 +349,7 @@ public class GatewayRenderGoldenTest {
     }
 
     static String apiCall(OpenApiGatewayTalent t, String tag, String name, Map<String, Object> path) throws Exception {
-        return t.callApi(name, null, path, null, null, tag);
+        return text(t.callApi(name, null, path, null, null, tag));
     }
 
     static Map<String, String> renderOf(String tag, String suffix) throws Throwable {
@@ -360,6 +375,7 @@ public class GatewayRenderGoldenTest {
         out.put("gw_tool_call_blank" + suffix, toolCall(tg, tag, ""));
         out.put("gw_tool_call_missing" + suffix, toolCall(tg, tag, "nope"));
         out.put("gw_tool_call_error" + suffix, toolCall(tg, tag, "boom_1"));
+        out.put("gw_tool_call_args_invalid" + suffix, toolCallRaw(tg, tag, "tool_1", "[1]"));
 
         // ---- mcp gateway ----
         if (tag == null) {

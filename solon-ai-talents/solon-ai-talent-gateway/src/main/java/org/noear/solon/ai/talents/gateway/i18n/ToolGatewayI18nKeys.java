@@ -45,5 +45,6 @@ public final class ToolGatewayI18nKeys {
     public static final String GATEWAY_TOOL_DETAIL_MISSING = "gateway.tool.detail.missing";
     public static final String GATEWAY_TOOL_CALL_MISSING = "gateway.tool.call.missing";
     public static final String GATEWAY_TOOL_CALL_ERROR = "gateway.tool.call.error";
+    public static final String GATEWAY_TOOL_CALL_ARGS_INVALID = "gateway.tool.call.args_invalid";
 }
 

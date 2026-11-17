@@ -1,0 +1,4 @@
+Error: tool_args must be a JSON object (values keyed by parameter name). Parameter schema of business tool 'tool_1': 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```

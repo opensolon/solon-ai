@@ -6,8 +6,8 @@
 
 ### 可用业务接口清单 (按业务分组摘要):
 - **分组: [订单]**:
-  - `api4`: 接口 api4 (GET /api/ok)
   - `getOrder`: 接口 getOrder (GET /api/orders/{id})
+  - `api4`: 接口 api4 (GET /api/ok)
 - **分组: [文件]**:
   - `upload`: 接口 upload (POST /api/files)
 - **分组: [常规接口]**:

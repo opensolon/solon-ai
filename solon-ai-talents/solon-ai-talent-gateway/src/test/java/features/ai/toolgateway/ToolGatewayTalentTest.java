@@ -60,15 +60,15 @@ public class ToolGatewayTalentTest {
 
         // 断言：业务工具被物理屏蔽，只剩下网关管理工具
         assertFalse(tools.stream().anyMatch(t -> t.name().equals("adder")));
-        assertTrue(tools.stream().anyMatch(t -> t.name().equals("call_tool")));
-        // SUMMARY 模式下不过滤 search_tools，但 SUMMARY 不提供它（因为清单已展示）
-        assertFalse(tools.stream().anyMatch(t -> t.name().equals("search_tools")),
-                "SUMMARY 模式下应过滤掉 search_tools");
+        assertTrue(tools.stream().anyMatch(t -> t.name().equals("call_biz_tool")));
+        // SUMMARY 模式下不过滤 search_biz_tools，但 SUMMARY 不提供它（因为清单已展示）
+        assertFalse(tools.stream().anyMatch(t -> t.name().equals("search_biz_tools")),
+                "SUMMARY 模式下应过滤掉 search_biz_tools");
 
         String instruction = gatewayTalent.getInstruction(Prompt.of(""));
         assertTrue(instruction.contains("可用业务工具清单"), "SUMMARY模式应展示工具清单摘要");
         assertTrue(instruction.contains("动态发现 (摘要)"), "应标明动态发现摘要模式");
-        assertTrue(instruction.contains("get_tool_detail"), "应引导AI走详情查询流程");
+        assertTrue(instruction.contains("get_biz_tool_detail"), "应引导AI走详情查询流程");
     }
 
     @Test
@@ -80,15 +80,15 @@ public class ToolGatewayTalentTest {
 
         Collection<FunctionTool> tools = gatewayTalent.getTools(Prompt.of(""));
 
-        // 断言：LIST 模式提供完整中转工具集（包含 search_tools）
-        assertTrue(tools.stream().anyMatch(t -> t.name().equals("call_tool")));
-        assertTrue(tools.stream().anyMatch(t -> t.name().equals("search_tools")),
-                "LIST 模式应提供 search_tools");
+        // 断言：LIST 模式提供完整中转工具集（包含 search_biz_tools）
+        assertTrue(tools.stream().anyMatch(t -> t.name().equals("call_biz_tool")));
+        assertTrue(tools.stream().anyMatch(t -> t.name().equals("search_biz_tools")),
+                "LIST 模式应提供 search_biz_tools");
 
         String instruction = gatewayTalent.getInstruction(Prompt.of(""));
         assertTrue(instruction.contains("动态发现 (列表)"), "LIST 模式应标明动态发现列表模式");
-        assertTrue(instruction.contains("search_tools"), "应引导使用 search_tools");
-        assertTrue(instruction.contains("get_tool_detail"), "应引导走详情查询流程");
+        assertTrue(instruction.contains("search_biz_tools"), "应引导使用 search_biz_tools");
+        assertTrue(instruction.contains("get_biz_tool_detail"), "应引导走详情查询流程");
     }
 
     @Test
@@ -102,7 +102,7 @@ public class ToolGatewayTalentTest {
 
         // 断言：清单被折叠
         assertTrue(instruction.contains("搜索发现"), "SEARCH模式应提示搜索发现");
-        assertTrue(instruction.contains("search_tools"), "应强调使用搜索工具");
+        assertTrue(instruction.contains("search_biz_tools"), "应强调使用搜索工具");
         assertTrue(instruction.contains("清单已折叠"), "SEARCH模式应提示清单已折叠");
     }
 
