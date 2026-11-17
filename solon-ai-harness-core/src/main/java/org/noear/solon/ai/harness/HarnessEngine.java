@@ -1129,17 +1129,26 @@ public class HarnessEngine {
         }
     }
 
+    /**
+     * 修改 MCP 重试次数：与构建期同口径，同时作用于 MCP 网关与基于 MCP 的网页搜索、代码搜索。
+     */
     public void setMcpRetries(Integer mcpRetries) {
         if (mcpRetries != null) {
             options.setMcpRetries(mcpRetries);
             mcpGatewayTalent.retryConfig(mcpRetries);
+            codeSearchTalent.retryConfig(mcpRetries);
+            websearchTalent.retryConfig(mcpRetries);
         }
     }
 
+    /**
+     * 修改 API 重试次数：与构建期同口径，同时作用于 OpenAPI 网关与网页抓取。
+     */
     public void setApiRetries(Integer apiRetries) {
         if (apiRetries != null) {
             options.setApiRetries(apiRetries);
             openApiGatewayTalent.retryConfig(apiRetries);
+            webfetchTalent.retryConfig(apiRetries);
         }
     }
 

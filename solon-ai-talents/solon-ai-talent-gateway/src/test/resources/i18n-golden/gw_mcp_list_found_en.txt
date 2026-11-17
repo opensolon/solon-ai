@@ -1,1 +1,5 @@
-{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}, {tool_name=mcp_3, tool_description=MCP 工具 3}]}
+### MCP server: alpha (2 tools)
+
+#### Tools (pass server_name "alpha" to call_tool):
+- `mcp_1(q?: string)`: MCP 工具 1
+- `mcp_3(q?: string)`: MCP 工具 3

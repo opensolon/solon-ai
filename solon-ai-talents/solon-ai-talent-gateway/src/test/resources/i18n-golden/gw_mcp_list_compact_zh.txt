@@ -1,0 +1,6 @@
+### MCP服务: alpha（共 2 个工具）
+
+#### 工具（调用 call_tool 时 server_name 传 "alpha"）:
+> 工具较多，描述已缩短；需要完整描述时用 keyword 缩小到 1 个以内，或用 get_tool_detail 查看。
+- `mcp_1(q?: string)`: MCP 工具 1
+- `mcp_3(q?: string)`: MCP 工具 3

@@ -1,11 +1,12 @@
 ## MCP Tool Discovery (6 tools in total)
 ### Mode: Server catalog
-The MCP tool library is huge, so only the server catalog is listed below. Follow this flow:
-- **Step 1 (Pick a server)**: Choose a server from the "MCP server catalog" below by its description, then call `list_server_tools` (with server_name, optionally a keyword to filter) to see its tools; or use `search_tools` to search across servers by keywords.
-- **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
-- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
+MCP tools are organized by server, and only the server catalog is listed below. Follow this flow:
+- **Step 1 (Pick a server)**: Choose a server from the "MCP server catalog" by its description, then call `list_server_tools` (with server_name, optionally a keyword to filter) to see its tools, parameter signatures and usage notes.
+- **Step 2 (Execute)**: Build the arguments from the signature and submit the execution with `call_tool` (with server_name, tool_name and tool_args). If the signature contains object, any or array, or ends with …, first check the full parameter schema with `get_tool_detail`.
+
+> If the catalog does not tell you which server to use, search across servers by keywords with `search_tools` first instead of listing the tools of every server.
 
 #### MCP server catalog:
-- **alpha** (2 tools): includes mcp_1, mcp_3
-- **beta** (2 tools): includes mcp_2, mcp_4
+- **alpha** (2 tools, no description): `mcp_1, mcp_3`
+- **beta** (2 tools, no description): `mcp_2, mcp_4`
 - **weather** (2 tools): 天气查询 与预报

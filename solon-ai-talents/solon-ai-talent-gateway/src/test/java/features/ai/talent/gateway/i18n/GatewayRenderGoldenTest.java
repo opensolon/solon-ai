@@ -133,6 +133,14 @@ public class GatewayRenderGoldenTest {
                 });
     }
 
+    /** 参数不对时返回 isError 的工具（模拟 MCP 服务端的参数校验失败） */
+    static FunctionTool invalidTool() {
+        return new FunctionToolDesc("strict")
+                .description("参数严格的工具")
+                .inputSchema("{\"type\":\"object\",\"properties\":{\"date\":{\"type\":\"string\",\"description\":\"yyyy-MM-dd\"}},\"required\":[\"date\"]}")
+                .doHandle(args -> ToolResult.error("invalid date"));
+    }
+
     static ToolGatewayTalent toolGateway(int count) {
         ToolGatewayTalent talent = new ToolGatewayTalent().dynamicThreshold(1).listThreshold(2).searchThreshold(3).retryConfig(1);
         for (int i = 1; i <= count; i++) {
@@ -145,6 +153,7 @@ public class GatewayRenderGoldenTest {
 
     static class FakeProvider extends McpClientProvider {
         private final List<FunctionTool> tools;
+        private String instructions;
 
         FakeProvider(List<FunctionTool> tools) {
             this(tools, null);
@@ -159,6 +168,17 @@ public class GatewayRenderGoldenTest {
             this.tools = tools;
         }
 
+        /** 模拟握手时服务端下发的 instructions */
+        FakeProvider instructions(String instructions) {
+            this.instructions = instructions;
+            return this;
+        }
+
+        @Override
+        public String getServerInstructions() {
+            return instructions;
+        }
+
         @Override
         public Collection<FunctionTool> getToolsActivated() {
             return tools;
@@ -170,7 +190,7 @@ public class GatewayRenderGoldenTest {
     }
 
     static McpGatewayTalent mcpGateway(int count) {
-        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(1).listThreshold(2).searchThreshold(3).retryConfig(1, 100);
+        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(1).listThreshold(2).retryConfig(1, 100);
         List<FunctionTool> alpha = new ArrayList<>();
         List<FunctionTool> beta = new ArrayList<>();
         for (int i = 1; i <= count; i++) {
@@ -294,6 +314,17 @@ public class GatewayRenderGoldenTest {
         return text(t.getToolMap().get("call_tool").call(args));
     }
 
+    static String mcpCallRaw(McpGatewayTalent t, String tag, String server, String name, Object toolArgs) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        args.put("server_name", server);
+        args.put("tool_name", name);
+        args.put("tool_args", toolArgs);
+        if (tag != null) {
+            args.put(AiI18n.ATTR_LOCALE, tag);
+        }
+        return text(t.getToolMap().get("call_tool").call(args));
+    }
+
     static String apiSearch(OpenApiGatewayTalent t, String tag, String keyword) {
         return text(t.searchApis(keyword, tag));
     }
@@ -348,11 +379,52 @@ public class GatewayRenderGoldenTest {
         catalog.addMcpServer("weather", new FakeProvider(Arrays.asList(tool("forecast", "天气预报"), tool("now", "实时天气")), "天气查询\n与预报"));
         out.put("gw_mcp_instruction_catalog_desc" + suffix, catalog.getInstruction(prompt));
 
+        // 服务目录：只有 instructions 时取第一句当描述
+        McpGatewayTalent noted = mcpGateway(4);
+        noted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue"), tool("list_issues", "列出 Issue")))
+                .instructions("Use this server to manage GitHub issues. Always call list_issues before create_issue.\n\nRate limit: 60/min."));
+        out.put("gw_mcp_instruction_catalog_noted" + suffix, noted.getInstruction(prompt));
+        // 直接调用模式：服务使用说明写进指令
+        McpGatewayTalent fullNoted = new McpGatewayTalent().retryConfig(1, 100);
+        fullNoted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue")))
+                .instructions("用于管理 GitHub Issue。\n创建前先查重。"));
+        out.put("gw_mcp_instruction_full_noted" + suffix, fullNoted.getInstruction(prompt));
+        // 摘要模式：签名 + 单行描述，服务使用说明写进指令
+        McpGatewayTalent summaryNoted = new McpGatewayTalent().dynamicThreshold(1).retryConfig(1, 100);
+        summaryNoted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue\n\n参数见 schema"), invalidTool()), "管理 GitHub Issue")
+                .instructions("创建前先查重。\n每分钟最多 60 次。"));
+        out.put("gw_mcp_instruction_summary_noted" + suffix, summaryNoted.getInstruction(prompt));
+
         McpGatewayTalent mg = mcpGateway(4);
-        mg.addMcpServer("gamma", new FakeProvider(Arrays.asList(tool("boom_2", "会失败的工具"), tool("dup", "同名工具 gamma"))));
+        mg.addMcpServer("gamma", new FakeProvider(Arrays.asList(tool("boom_2", "会失败的工具"), tool("dup", "同名工具 gamma"),
+                invalidTool())));
         mg.addMcpServer("delta", new FakeProvider(Collections.singletonList(tool("dup", "同名工具 delta"))));
+        List<FunctionTool> bulk = new ArrayList<>();
+        for (int i = 1; i <= 12; i++) {
+            bulk.add(tool("bulk_" + i, "批量工具 " + i));
+        }
+        mg.addMcpServer("many", new FakeProvider(bulk));
+        mg.addMcpServer("weather", new FakeProvider(Arrays.asList(tool("forecast", "天气预报"), tool("now", "实时天气")), "天气查询")
+                .instructions("城市名用中文。\n\n预报最多 7 天。"));
         out.put("gw_mcp_search_blank" + suffix, mcpSearch(mg, tag, ""));
         out.put("gw_mcp_search_none" + suffix, mcpSearch(mg, tag, "不存在"));
+        out.put("gw_mcp_search_found" + suffix, mcpSearch(mg, tag, "mcp"));
+        out.put("gw_mcp_search_more" + suffix, mcpSearch(mg, tag, "bulk"));
+        out.put("gw_mcp_search_noted" + suffix, mcpSearch(mg, tag, "天气"));
+        out.put("gw_mcp_detail_noted" + suffix, mcpDetail(mg, tag, "weather", "now"));
+        out.put("gw_mcp_call_invalid" + suffix, mcpCall(mg, tag, "gamma", "strict"));
+        out.put("gw_mcp_call_args_invalid" + suffix, mcpCallRaw(mg, tag, "gamma", "strict", "[1]"));
+        out.put("gw_mcp_list_noted" + suffix, mcpList(mg, tag, "weather", null));
+        out.put("gw_mcp_list_matched" + suffix, mcpList(mg, tag, "many", "bulk_1"));
+        // 使用说明超长：只快照结尾两行（截断点与注明）
+        StringBuilder longNotes = new StringBuilder();
+        for (int i = 0; i < 500; i++) {
+            longNotes.append("abcd ");
+        }
+        mg.addMcpServer("verbose", new FakeProvider(Collections.singletonList(tool("v", "说明很长的服务"))).instructions(longNotes.toString()));
+        String verbose = mcpList(mg, tag, "verbose", null);
+        verbose = verbose.substring(0, verbose.lastIndexOf("\n\n"));
+        out.put("gw_mcp_instructions_truncated" + suffix, verbose.substring(verbose.lastIndexOf("abcd")));
         out.put("gw_mcp_detail_blank" + suffix, mcpDetail(mg, tag, "alpha", ""));
         out.put("gw_mcp_detail_found" + suffix, mcpDetail(mg, tag, "alpha", "mcp_1"));
         out.put("gw_mcp_detail_missing" + suffix, mcpDetail(mg, tag, "beta", "nope"));
@@ -365,7 +437,10 @@ public class GatewayRenderGoldenTest {
         out.put("gw_mcp_list_missing" + suffix, mcpList(mg, tag, "ghost", null));
         out.put("gw_mcp_list_none" + suffix, mcpList(mg, tag, "alpha", "不存在"));
         out.put("gw_mcp_list_found" + suffix, mcpList(mg, tag, "ALPHA", null));
-        out.put("gw_mcp_list_truncated" + suffix, mcpList(mg.listToolsLimit(1), tag, "alpha", null));
+        // 超过 listToolsLimit 只列签名；再超过其 5 倍才截断
+        mg.listToolsLimit(1);
+        out.put("gw_mcp_list_compact" + suffix, mcpList(mg, tag, "alpha", null));
+        out.put("gw_mcp_list_truncated" + suffix, mcpList(mg, tag, "many", null));
 
         // ---- openapi gateway ----
         if (tag == null) {

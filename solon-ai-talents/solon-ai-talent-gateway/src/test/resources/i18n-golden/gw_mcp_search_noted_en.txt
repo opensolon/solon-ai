@@ -1,0 +1,5 @@
+Found 2 MCP tools matching '天气' (each line: [server name] `tool signature`: description):
+- [weather] `forecast(q?: string)`: 天气预报
+- [weather] `now(q?: string)`: 实时天气
+
+> These MCP servers provide usage notes: weather. Read them with `list_server_tools` before using a server for the first time.

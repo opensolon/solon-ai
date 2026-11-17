@@ -1,1 +1,11 @@
-{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}], tip=仅列出前 1 个（共 2 个），请用 keyword 缩小范围。}
+### MCP服务: many（共 12 个工具）
+
+#### 工具（调用 call_tool 时 server_name 传 "many"）:
+> 工具较多，描述已缩短；需要完整描述时用 keyword 缩小到 1 个以内，或用 get_tool_detail 查看。
+- `bulk_1(q?: string)`: 批量工具 1
+- `bulk_2(q?: string)`: 批量工具 2
+- `bulk_3(q?: string)`: 批量工具 3
+- `bulk_4(q?: string)`: 批量工具 4
+- `bulk_5(q?: string)`: 批量工具 5
+
+> 仅列出前 5 个（共 12 个），请用 keyword 缩小范围。

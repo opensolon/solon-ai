@@ -1,1 +1,5 @@
-{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}, {tool_name=mcp_3, tool_description=MCP 工具 3}]}
+### MCP服务: alpha（共 2 个工具）
+
+#### 工具（调用 call_tool 时 server_name 传 "alpha"）:
+- `mcp_1(q?: string)`: MCP 工具 1
+- `mcp_3(q?: string)`: MCP 工具 3

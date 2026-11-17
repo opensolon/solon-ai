@@ -1,0 +1,7 @@
+### MCP服务: many（共 12 个工具，匹配 'bulk_1' 的有 4 个）
+
+#### 工具（调用 call_tool 时 server_name 传 "many"）:
+- `bulk_1(q?: string)`: 批量工具 1
+- `bulk_10(q?: string)`: 批量工具 10
+- `bulk_11(q?: string)`: 批量工具 11
+- `bulk_12(q?: string)`: 批量工具 12

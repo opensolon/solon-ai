@@ -1,12 +1,11 @@
 ## MCP Tool Discovery (2 tools in total)
 ### Mode: Dynamic discovery (summary)
-There are many tools, so follow this flow:
+There are many tools, so only their parameter signatures and brief descriptions are listed below. Follow this flow:
 - **Step 1 (Pick)**: Choose the server and tool from the "Available MCP tools" below by its description.
-- **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
-- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
+- **Step 2 (Execute)**: Build the arguments from the signature and submit the execution with `call_tool` (with server_name, tool_name and tool_args). If the signature contains object, any or array, or ends with …, first check the full parameter schema with `get_tool_detail`.
 
-#### Available MCP tools (grouped by server):
+#### Available MCP tools (grouped by server; each line: `tool signature`: description):
 - **[alpha]**:
-  - `mcp_1`: MCP 工具 1
+  - `mcp_1(q?: string)`: MCP 工具 1
 - **[beta]**:
-  - `mcp_2`: MCP 工具 2
+  - `mcp_2(q?: string)`: MCP 工具 2

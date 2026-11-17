@@ -1,0 +1,6 @@
+Error: tool_args must be a JSON object (keyed by parameter name), not an array, a number or malformed JSON.
+
+The parameter definition of MCP tool gamma/strict is below; check tool_args against it before retrying:
+```json
+{"type":"object","properties":{"date":{"type":"string","description":"yyyy-MM-dd"}},"required":["date"]}
+```

@@ -1,0 +1,5 @@
+Found 4 MCP tools matching 'mcp' (each line: [server name] `tool signature`: description):
+- [alpha] `mcp_1(q?: string)`: MCP 工具 1
+- [alpha] `mcp_3(q?: string)`: MCP 工具 3
+- [beta] `mcp_2(q?: string)`: MCP 工具 2
+- [beta] `mcp_4(q?: string)`: MCP 工具 4

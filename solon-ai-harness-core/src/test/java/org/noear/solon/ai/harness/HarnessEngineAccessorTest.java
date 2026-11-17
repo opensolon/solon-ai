@@ -15,6 +15,7 @@ import org.noear.solon.ai.mount.source.FileMountSource;
 import org.noear.solon.ai.mount.Mount;
 import org.noear.solon.ai.mount.MountType;
 
+import java.lang.reflect.Field;
 import java.net.Proxy;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -159,6 +160,28 @@ class HarnessEngineAccessorTest {
         assertEquals(9, e.getMaxTurns());
         e.setHitlEnabled(null);
         assertTrue(e.isHitlEnabled());
+    }
+
+    /**
+     * 运行期改重试次数必须与构建期同口径推送到全部使用方：构建期 mcpRetries 同时交给网页搜索与代码搜索、
+     * apiRetries 交给网页抓取，运行期若只改网关，宿主在设置页改完要重启才对这三个工具生效。
+     */
+    @Test
+    void retrySettersReachEveryTalentBuiltWithThem() throws Exception {
+        HarnessEngine e = engine();
+
+        e.setMcpRetries(7);
+        assertEquals(7, maxRetriesOf(e.getWebsearchTalent()));
+        assertEquals(7, maxRetriesOf(e.getCodeSearchTalent()));
+
+        e.setApiRetries(8);
+        assertEquals(8, maxRetriesOf(e.getWebfetchTalent()));
+    }
+
+    private static int maxRetriesOf(Object talent) throws Exception {
+        Field field = talent.getClass().getDeclaredField("maxRetries");
+        field.setAccessible(true);
+        return field.getInt(talent);
     }
 
     @Test

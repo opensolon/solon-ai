@@ -1,0 +1,5 @@
+找到 2 个匹配 '天气' 的MCP工具（每行：[服务名] `工具签名`: 描述）：
+- [weather] `forecast(q?: string)`: 天气预报
+- [weather] `now(q?: string)`: 实时天气
+
+> 这些MCP服务提供了使用说明：weather。首次使用前请先用 `list_server_tools` 查看。

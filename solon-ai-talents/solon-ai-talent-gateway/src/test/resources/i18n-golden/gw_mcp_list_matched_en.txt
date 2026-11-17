@@ -1,0 +1,7 @@
+### MCP server: many (12 tools, 4 matching 'bulk_1')
+
+#### Tools (pass server_name "many" to call_tool):
+- `bulk_1(q?: string)`: 批量工具 1
+- `bulk_10(q?: string)`: 批量工具 10
+- `bulk_11(q?: string)`: 批量工具 11
+- `bulk_12(q?: string)`: 批量工具 12

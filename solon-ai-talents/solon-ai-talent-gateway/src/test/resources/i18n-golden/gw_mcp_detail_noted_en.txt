@@ -1,0 +1,9 @@
+### MCP tool details: now
+- Server: weather
+- Description: 实时天气
+- Parameter schema (JSON Schema): 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```
+
+> MCP server weather provides usage notes (see "Usage notes of MCP server weather" in the instructions, or the result of `list_server_tools`); read them before using it for the first time.

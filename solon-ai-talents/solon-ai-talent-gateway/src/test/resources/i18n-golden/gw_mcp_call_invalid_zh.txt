@@ -1,0 +1,6 @@
+invalid date
+
+MCP工具 gamma/strict 的参数定义如下，请对照检查 tool_args 后再重试：
+```json
+{"type":"object","properties":{"date":{"type":"string","description":"yyyy-MM-dd"}},"required":["date"]}
+```

@@ -1,0 +1,6 @@
+### MCP server: alpha (2 tools)
+
+#### Tools (pass server_name "alpha" to call_tool):
+> There are many tools, so descriptions are shortened; to see full descriptions, narrow down to 1 or fewer with a keyword, or use get_tool_detail.
+- `mcp_1(q?: string)`: MCP 工具 1
+- `mcp_3(q?: string)`: MCP 工具 3

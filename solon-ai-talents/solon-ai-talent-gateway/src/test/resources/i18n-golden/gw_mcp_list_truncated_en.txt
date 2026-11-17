@@ -1,1 +1,11 @@
-{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}], tip=Only the first 1 are listed (2 in total); narrow down with a keyword.}
+### MCP server: many (12 tools)
+
+#### Tools (pass server_name "many" to call_tool):
+> There are many tools, so descriptions are shortened; to see full descriptions, narrow down to 1 or fewer with a keyword, or use get_tool_detail.
+- `bulk_1(q?: string)`: 批量工具 1
+- `bulk_2(q?: string)`: 批量工具 2
+- `bulk_3(q?: string)`: 批量工具 3
+- `bulk_4(q?: string)`: 批量工具 4
+- `bulk_5(q?: string)`: 批量工具 5
+
+> Only the first 5 are listed (12 in total); narrow down with a keyword.

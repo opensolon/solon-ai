@@ -1,0 +1,13 @@
+Found 12 MCP tools matching 'bulk' (each line: [server name] `tool signature`: description):
+- [many] `bulk_1(q?: string)`: 批量工具 1
+- [many] `bulk_2(q?: string)`: 批量工具 2
+- [many] `bulk_3(q?: string)`: 批量工具 3
+- [many] `bulk_4(q?: string)`: 批量工具 4
+- [many] `bulk_5(q?: string)`: 批量工具 5
+- [many] `bulk_6(q?: string)`: 批量工具 6
+- [many] `bulk_7(q?: string)`: 批量工具 7
+- [many] `bulk_8(q?: string)`: 批量工具 8
+- [many] `bulk_9(q?: string)`: 批量工具 9
+- [many] `bulk_10(q?: string)`: 批量工具 10
+
+> Only the first 10 are listed (12 in total); add keywords to narrow down.

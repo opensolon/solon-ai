@@ -125,7 +125,7 @@ public enum ToolName {
         runtime("task", "task", "multitask");
         runtime("subagent", "task", "multitask");
         runtime("generate", "generate");
-        runtime("mcp", "search_tools", "get_tool_detail", "call_tool");
+        runtime("mcp", "search_tools", "list_server_tools", "get_tool_detail", "call_tool");
         runtime("openapi", "search_apis", "get_api_detail", "call_api");
         runtime("restapi", "search_apis", "get_api_detail", "call_api");
         runtime("lsp", "lsp");

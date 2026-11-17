@@ -1,12 +1,11 @@
 ## MCP工具发现规范 (共 3 个工具)
-### 运行模式: 动态发现 (列表)
-由于工具库规模较大，仅展示名称。请遵循以下流程：
-- **Step 1 (预选)**: 从下方"工具列表"中根据服务名与工具名推断功能，或用 `search_tools` 检索。
-- **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
-- **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
+### 运行模式: 服务目录
+MCP工具按服务组织，下方只列出服务目录。请遵循以下流程：
+- **Step 1 (选服务)**: 按描述从"MCP服务目录"选定服务，调用 `list_server_tools`（传 server_name，可加 keyword 过滤）查看工具、参数签名与服务使用说明。
+- **Step 2 (执行)**: 按签名组装参数，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。签名含 object、any、array 或以 … 结尾时，先用 `get_tool_detail` 查完整参数 Schema。
 
-#### 可用MCP工具列表 (按服务展示):
-- **alpha**: `mcp_1, mcp_3`
-- **beta**: `mcp_2`
+> 从目录判断不出该用哪个服务时，先用 `search_tools` 跨服务按关键词搜索，不要逐个服务列工具。
 
-> 提示：服务名和工具名具有语义参考价值，锁定目标后务必先查详情。
+#### MCP服务目录:
+- **alpha**（2 个工具，无描述）：`mcp_1, mcp_3`
+- **beta**（1 个工具，无描述）：`mcp_2`

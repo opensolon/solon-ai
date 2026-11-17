@@ -1,8 +1,7 @@
 ## MCP Tool Discovery (4 tools in total)
 ### Mode: Search discovery
 The MCP tool library is huge and the list is collapsed. Follow this flow:
-- **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords (results include server_name and tool_name); use `list_server_tools` to browse all tools of a server.
-- **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
-- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
+- **Step 1 (Search)**: First use `search_tools` to find tools by keywords (results include the server name, tool signature and description); use `list_server_tools` to browse all tools and usage notes of a server.
+- **Step 2 (Execute)**: Build the arguments from the signature and submit the execution with `call_tool` (with server_name, tool_name and tool_args). If the signature contains object, any or array, or ends with …, first check the full parameter schema with `get_tool_detail`.
 
 > **Note**: Do not guess tool names. Search by keywords, e.g. search_tools('weather')

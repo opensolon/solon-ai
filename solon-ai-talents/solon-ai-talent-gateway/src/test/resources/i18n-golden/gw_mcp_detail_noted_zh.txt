@@ -1,0 +1,9 @@
+### MCP工具详情: now
+- 所属服务: weather
+- 功能描述: 实时天气
+- 参数架构 (JSON Schema): 
+```json
+{"type":"object","properties":{"q":{"type":"string"}}}
+```
+
+> MCP服务 weather 提供了使用说明（见指令里的“MCP服务 weather 的使用说明”，或 `list_server_tools` 的结果），首次使用前请先阅读。

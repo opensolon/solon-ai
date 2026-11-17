@@ -91,6 +91,12 @@ class ScopeGuardInterceptorTest {
         assertEquals("crm_query", deny(guard, scope, "get_tool_detail", "crm_query"));
         assertEquals("unknown_x", deny(guard, scope, "call_tool", "unknown_x"), "无归属的目标按越界处理");
 
+        // 发现工具随 mcp 分组放行（服务边界由网关按 _mcps_allowed 收窄）
+        assertNull(deny(guard, scope, "search_tools", null));
+        assertNull(deny(guard, scope, "list_server_tools", null), "服务目录模式的下钻工具不能被名单拦掉");
+        InputScope noMcp = InputScope.builder("t1").tools("read").build();
+        assertEquals("list_server_tools", deny(guard, noMcp, "list_server_tools", null));
+
         // 空名单 = 全部禁止
         InputScope none = InputScope.builder("t1").mcps(Collections.emptyList()).build();
         assertEquals("weather_now", deny(guard, none, "weather_now", null));

@@ -1,12 +1,11 @@
 ## MCP Tool Discovery (3 tools in total)
-### Mode: Dynamic discovery (list)
-The tool library is large, so only names are shown. Follow this flow:
-- **Step 1 (Shortlist)**: Infer the function from the server and tool names in the "Tool list" below, or search with `search_tools`.
-- **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
-- **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
+### Mode: Server catalog
+MCP tools are organized by server, and only the server catalog is listed below. Follow this flow:
+- **Step 1 (Pick a server)**: Choose a server from the "MCP server catalog" by its description, then call `list_server_tools` (with server_name, optionally a keyword to filter) to see its tools, parameter signatures and usage notes.
+- **Step 2 (Execute)**: Build the arguments from the signature and submit the execution with `call_tool` (with server_name, tool_name and tool_args). If the signature contains object, any or array, or ends with …, first check the full parameter schema with `get_tool_detail`.
 
-#### Available MCP tool list (by server):
-- **alpha**: `mcp_1, mcp_3`
-- **beta**: `mcp_2`
+> If the catalog does not tell you which server to use, search across servers by keywords with `search_tools` first instead of listing the tools of every server.
 
-> Tip: server names and tool names carry semantic hints; once you pick a target, always check its details first.
+#### MCP server catalog:
+- **alpha** (2 tools, no description): `mcp_1, mcp_3`
+- **beta** (1 tools, no description): `mcp_2`
