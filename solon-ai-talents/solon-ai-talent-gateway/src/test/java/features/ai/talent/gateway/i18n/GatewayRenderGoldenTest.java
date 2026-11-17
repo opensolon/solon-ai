@@ -265,15 +265,24 @@ public class GatewayRenderGoldenTest {
     }
 
     static String mcpSearch(McpGatewayTalent t, String tag, String keyword) {
-        return text(t.searchTools(keyword, null, tag));
+        return text(t.searchTools(keyword, null, null, tag));
     }
 
-    static String mcpDetail(McpGatewayTalent t, String tag, String name) {
-        return t.getToolDetail(name, null, tag);
+    static String mcpDetail(McpGatewayTalent t, String tag, String server, String name) {
+        return t.getToolDetail(server, name, null, tag);
     }
 
-    static String mcpCall(McpGatewayTalent t, String tag, String name) throws Throwable {
-        return text(callTool(t, tag, name));
+    static String mcpCall(McpGatewayTalent t, String tag, String server, String name) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        if (server != null) {
+            args.put("server_name", server);
+        }
+        args.put("tool_name", name);
+        args.put("tool_args", new HashMap<String, Object>());
+        if (tag != null) {
+            args.put(AiI18n.ATTR_LOCALE, tag);
+        }
+        return text(t.getToolMap().get("call_tool").call(args));
     }
 
     static String apiSearch(OpenApiGatewayTalent t, String tag, String keyword) {
@@ -322,15 +331,18 @@ public class GatewayRenderGoldenTest {
             out.put("gw_mcp_tools_" + n, GoldenFiles.dumpTools(t.getTools(prompt)));
         }
         McpGatewayTalent mg = mcpGateway(4);
-        mg.addMcpServer("gamma", new FakeProvider(Collections.singletonList(tool("boom_2", "会失败的工具"))));
+        mg.addMcpServer("gamma", new FakeProvider(Arrays.asList(tool("boom_2", "会失败的工具"), tool("dup", "同名工具 gamma"))));
+        mg.addMcpServer("delta", new FakeProvider(Collections.singletonList(tool("dup", "同名工具 delta"))));
         out.put("gw_mcp_search_blank" + suffix, mcpSearch(mg, tag, ""));
         out.put("gw_mcp_search_none" + suffix, mcpSearch(mg, tag, "不存在"));
-        out.put("gw_mcp_detail_blank" + suffix, mcpDetail(mg, tag, ""));
-        out.put("gw_mcp_detail_found" + suffix, mcpDetail(mg, tag, "mcp_1"));
-        out.put("gw_mcp_detail_missing" + suffix, mcpDetail(mg, tag, "nope"));
-        out.put("gw_mcp_call_blank" + suffix, mcpCall(mg, tag, ""));
-        out.put("gw_mcp_call_missing" + suffix, mcpCall(mg, tag, "nope"));
-        out.put("gw_mcp_call_error" + suffix, mcpCall(mg, tag, "boom_2"));
+        out.put("gw_mcp_detail_blank" + suffix, mcpDetail(mg, tag, "alpha", ""));
+        out.put("gw_mcp_detail_found" + suffix, mcpDetail(mg, tag, "alpha", "mcp_1"));
+        out.put("gw_mcp_detail_missing" + suffix, mcpDetail(mg, tag, "beta", "nope"));
+        out.put("gw_mcp_detail_ambiguous" + suffix, mcpDetail(mg, tag, null, "dup"));
+        out.put("gw_mcp_call_blank" + suffix, mcpCall(mg, tag, "alpha", ""));
+        out.put("gw_mcp_call_missing" + suffix, mcpCall(mg, tag, null, "nope"));
+        out.put("gw_mcp_call_ambiguous" + suffix, mcpCall(mg, tag, null, "dup"));
+        out.put("gw_mcp_call_error" + suffix, mcpCall(mg, tag, "gamma", "boom_2"));
 
         // ---- openapi gateway ----
         if (tag == null) {

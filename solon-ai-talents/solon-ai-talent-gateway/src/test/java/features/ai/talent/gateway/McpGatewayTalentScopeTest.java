@@ -16,6 +16,7 @@
 package features.ai.talent.gateway;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.FunctionToolDesc;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -26,6 +27,7 @@ import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +37,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * selected 视野语义：
- * 发现层（search_tools / get_tool_detail）按视野收窄；执行层（call_tool）不硬控。
+ * search_tools 按视野收窄；get_tool_detail / call_tool 是点名使用，只受强制边界（_mcps_allowed）约束。
+ *
+ * <p>定位语义：工具按「服务 → 工具」定位，search_tools 结果带 server_name，
+ * get_tool_detail / call_tool 以 server_name + tool_name 点名（server_name 为空且边界内唯一时自动补上）。
  */
 public class McpGatewayTalentScopeTest {
     private static FunctionTool mockTool(String name, String desc, AtomicInteger counter) {
@@ -112,6 +117,10 @@ public class McpGatewayTalentScopeTest {
         assertEquals("alpha", talent.getServerOfTool("alpha_fetch"));
         assertEquals("beta", talent.getServerOfTool("BETA_SEARCH"));
         assertNull(talent.getServerOfTool("bash"));
+
+        assertEquals(Collections.singletonList("alpha"), talent.getServersOfTool("ALPHA", "alpha_fetch"), "服务名大小写不敏感");
+        assertTrue(talent.getServersOfTool("beta", "alpha_fetch").isEmpty(), "服务里没有该工具");
+        assertTrue(talent.getServersOfTool("ghost", "alpha_fetch").isEmpty());
     }
 
     @Test
@@ -163,6 +172,212 @@ public class McpGatewayTalentScopeTest {
 
         for (FunctionTool t : talent.getToolAry()) {
             assertFalse(t.inputSchema().contains("_mcps_allowed"), t.name() + " schema leaks implicit param");
+            assertFalse(t.inputSchema().contains("_mcps_selected"), t.name() + " schema leaks implicit param");
         }
+    }
+
+    // ---------- 视野（_mcps_selected） ----------
+
+    private static String search(Map<String, FunctionTool> tools, List<String> selected, List<String> allowed) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        args.put("keyword", "搜索");
+        if (selected != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_SELECTED, selected);
+        }
+        if (allowed != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, allowed);
+        }
+        return String.valueOf(tools.get("search_tools").handle(args));
+    }
+
+    @Test
+    void searchRespectsSelected() throws Throwable {
+        McpGatewayTalent talent = build();
+        Map<String, FunctionTool> tools = toolsOf(talent);
+
+        // 有视野：只搜得到视野内的服务
+        String selected = search(tools, Arrays.asList("beta"), null);
+        assertTrue(selected.contains("beta_search"));
+        assertFalse(selected.contains("alpha_search"));
+
+        // 无视野 / 空视野：不限制
+        String all = search(tools, null, null);
+        assertTrue(all.contains("beta_search"));
+        assertTrue(all.contains("alpha_search"));
+
+        String empty = search(tools, new ArrayList<>(), null);
+        assertTrue(empty.contains("beta_search"));
+        assertTrue(empty.contains("alpha_search"));
+
+        // 视野与强制边界叠加：取交集
+        String both = search(tools, Arrays.asList("alpha", "beta"), Arrays.asList("beta"));
+        assertTrue(both.contains("beta_search"));
+        assertFalse(both.contains("alpha_search"));
+
+        // 视野里只有不存在的服务：结果为空，不退回全量
+        String ghost = search(tools, Arrays.asList("ghost"), null);
+        assertFalse(ghost.contains("beta_search"));
+        assertFalse(ghost.contains("alpha_search"));
+
+        // 点名使用不受视野限制
+        Map<String, Object> detail = new HashMap<>();
+        detail.put("tool_name", "alpha_search");
+        detail.put(McpGatewayTalent.CTX_MCPS_SELECTED, Arrays.asList("beta"));
+        String detailText = String.valueOf(tools.get("get_tool_detail").handle(detail));
+        assertTrue(detailText.contains("alpha_search"));
+        assertFalse(detailText.contains("未找到"));
+    }
+
+    // ---------- 同名工具（按服务定位） ----------
+
+    private static McpGatewayTalent buildDuplicate(AtomicInteger alphaCounter, AtomicInteger betaCounter) {
+        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(8);
+        talent.addMcpServer("alpha", new FakeProvider(Arrays.asList(
+                mockTool("query", "阿尔法查询", alphaCounter),
+                mockTool("alpha_fetch", "阿尔法抓取", alphaCounter))));
+        talent.addMcpServer("beta", new FakeProvider(Arrays.asList(
+                mockTool("query", "贝塔查询", betaCounter))));
+        return talent;
+    }
+
+    private static Object call(Map<String, FunctionTool> tools, String server, String tool, List<String> allowed) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        if (server != null) {
+            args.put("server_name", server);
+        }
+        args.put("tool_name", tool);
+        args.put("tool_args", new HashMap<>());
+        if (allowed != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, allowed);
+        }
+        return tools.get("call_tool").handle(args);
+    }
+
+    private static String detail(Map<String, FunctionTool> tools, String server, String tool, List<String> allowed) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        if (server != null) {
+            args.put("server_name", server);
+        }
+        args.put("tool_name", tool);
+        if (allowed != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, allowed);
+        }
+        return String.valueOf(tools.get("get_tool_detail").handle(args));
+    }
+
+    @Test
+    void duplicateToolNamesAreLocatedByServer() throws Throwable {
+        AtomicInteger alpha = new AtomicInteger();
+        AtomicInteger beta = new AtomicInteger();
+        McpGatewayTalent talent = buildDuplicate(alpha, beta);
+        Map<String, FunctionTool> tools = toolsOf(talent);
+
+        // 两个同名工具都被索引（不再互相覆盖）
+        assertEquals(Arrays.asList("alpha", "beta"), talent.getServersOfTool(null, "query"));
+        assertNull(talent.getServerOfTool("query"), "同名工具属于多个服务时不给唯一归属");
+
+        // 点名服务：调到的是指定服务的工具（服务名大小写不敏感）
+        assertEquals("ok:query", ((ToolResult) call(tools, "beta", "query", null)).getContent());
+        assertEquals(0, alpha.get());
+        assertEquals(1, beta.get());
+        call(tools, "ALPHA", "query", null);
+        assertEquals(1, alpha.get());
+
+        // 不带服务名且有多个候选：提示指定服务，不执行
+        String ambiguous = ((ToolResult) call(tools, null, "query", null)).getContent();
+        assertTrue(ambiguous.contains("alpha") && ambiguous.contains("beta"), ambiguous);
+        assertTrue(ambiguous.contains("server_name"), ambiguous);
+        assertEquals(1, alpha.get());
+        assertEquals(1, beta.get());
+
+        // 不带服务名且工具唯一：自动定位（兼容旧写法）
+        call(tools, null, "alpha_fetch", null);
+        assertEquals(2, alpha.get());
+
+        // 服务里没有该工具：按不存在处理
+        assertTrue(((ToolResult) call(tools, "beta", "alpha_fetch", null)).getContent().contains("未找到"));
+        assertEquals(2, alpha.get());
+
+        // 详情带所属服务
+        String betaDetail = detail(tools, "beta", "query", null);
+        assertTrue(betaDetail.contains("贝塔查询"), betaDetail);
+        assertTrue(betaDetail.contains("beta"), betaDetail);
+        assertTrue(detail(tools, null, "query", null).contains("server_name"), "详情同样提示指定服务");
+    }
+
+    @Test
+    void duplicateToolCannotBypassAllowedBoundary() throws Throwable {
+        AtomicInteger alpha = new AtomicInteger();
+        AtomicInteger beta = new AtomicInteger();
+        McpGatewayTalent talent = buildDuplicate(alpha, beta);
+        Map<String, FunctionTool> tools = toolsOf(talent);
+        List<String> allowed = Collections.singletonList("alpha");
+
+        // 点名边界外服务的同名工具：按不存在处理，绝不执行
+        String denied = ((ToolResult) call(tools, "beta", "query", allowed)).getContent();
+        assertTrue(denied.contains("未找到"), denied);
+        assertEquals(0, beta.get());
+        assertTrue(detail(tools, "beta", "query", allowed).contains("未找到"));
+
+        // 不带服务名：只在边界内找，唯一候选自动定位，且不泄露边界外服务
+        call(tools, null, "query", allowed);
+        assertEquals(1, alpha.get());
+        assertEquals(0, beta.get());
+        String d = detail(tools, null, "query", allowed);
+        assertTrue(d.contains("阿尔法查询"), d);
+        assertFalse(d.contains("beta"), d);
+    }
+
+    @Test
+    void searchResultsCarryServerName() throws Throwable {
+        McpGatewayTalent talent = buildDuplicate(new AtomicInteger(), new AtomicInteger());
+        Map<String, FunctionTool> tools = toolsOf(talent);
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("keyword", "查询");
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> rows = (List<Map<String, String>>) tools.get("search_tools").handle(args);
+        assertEquals(2, rows.size(), "同名工具分别列出");
+        assertEquals("alpha", rows.get(0).get("server_name"));
+        assertEquals("beta", rows.get(1).get("server_name"));
+        assertEquals("query", rows.get(1).get("tool_name"));
+        assertEquals(Arrays.asList("server_name", "tool_name", "tool_description"), new ArrayList<>(rows.get(0).keySet()));
+    }
+
+    @Test
+    void removingServerKeepsOtherServersSameNamedTool() throws Throwable {
+        AtomicInteger beta = new AtomicInteger();
+        McpGatewayTalent talent = buildDuplicate(new AtomicInteger(), beta);
+
+        talent.removeMcpServer("alpha");
+        assertEquals("beta", talent.getServerOfTool("query"));
+
+        call(toolsOf(talent), null, "query", null);
+        assertEquals(1, beta.get());
+
+        // 刷新也只替换本服务的工具
+        talent.refreshMcpServer("beta");
+        assertEquals("beta", talent.getServerOfTool("query"));
+    }
+
+    @Test
+    void duplicateNamesDisableFullMode() {
+        McpGatewayTalent talent = buildDuplicate(new AtomicInteger(), new AtomicInteger());
+        // 3 个工具不超过 dynamicThreshold，但有同名：降为摘要模式，走带服务名的中转
+        List<String> names = new ArrayList<>();
+        for (FunctionTool t : talent.getTools(null)) {
+            names.add(t.name());
+        }
+        assertTrue(names.contains("call_tool"), names.toString());
+        assertFalse(names.contains("query"), names.toString());
+
+        // 只看一个服务时没有同名：恢复直接平铺
+        Prompt prompt = Prompt.of("hi");
+        McpGatewayTalent.putSelected(prompt, Collections.singletonList("alpha"));
+        names.clear();
+        for (FunctionTool t : talent.getTools(prompt)) {
+            names.add(t.name());
+        }
+        assertEquals(Arrays.asList("query", "alpha_fetch"), names);
     }
 }

@@ -1,4 +1,5 @@
 ### MCP tool details: mcp_1
+- Server: alpha
 - Description: MCP 工具 1
 - Parameter schema (JSON Schema): 
 ```json

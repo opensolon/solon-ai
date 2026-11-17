@@ -13,17 +13,17 @@ gateway.mcp.instruction.full: |-
 gateway.mcp.instruction.summary: |-
   ### Mode: Dynamic discovery (summary)
   There are many tools, so follow this flow:
-  - **Step 1 (Pick)**: Choose the tool name from the "Available MCP tools" below by its description.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 1 (Pick)**: Choose the server and tool from the "Available MCP tools" below by its description.
+  - **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
 
-  #### Available MCP tools:
+  #### Available MCP tools (grouped by server):
 gateway.mcp.instruction.list: |-
   ### Mode: Dynamic discovery (list)
   The tool library is large, so only names are shown. Follow this flow:
-  - **Step 1 (Shortlist)**: Infer the function from the names in the "Tool list" below, or search with `search_tools`.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 1 (Shortlist)**: Infer the function from the server and tool names in the "Tool list" below, or search with `search_tools`.
+  - **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
 
   #### Available MCP tool list (by server):
 gateway.mcp.instruction.list_tip: |-
@@ -31,9 +31,9 @@ gateway.mcp.instruction.list_tip: |-
 gateway.mcp.instruction.search: |-
   ### Mode: Search discovery
   The MCP tool library is huge and the list is collapsed. Follow this flow:
-  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords.
-  - **Step 2 (Details)**: Call `get_tool_detail` to get the parameter schema.
-  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool`.
+  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords (results include server_name and tool_name).
+  - **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
 
   > **Note**: Do not guess tool names. Search by keywords, e.g. search_tools('weather')
 
@@ -50,11 +50,14 @@ gateway.mcp.name_blank: |-
   Error: tool_name must not be empty
 gateway.mcp.detail.found: |-
   ### MCP tool details: {name}
+  - Server: {server}
   - Description: {description}
   - Parameter schema (JSON Schema):
 gateway.mcp.detail.missing: |-
-  Error: MCP tool '{name}' was not found; check the spelling of the name.
+  Error: MCP tool '{name}' was not found; check that server_name and tool_name are correct.
 gateway.mcp.call.missing: |-
   Error: MCP tool '{name}' was not found
 gateway.mcp.call.error: |-
   Execution error: {error}
+gateway.mcp.ambiguous: |-
+  Error: MCP tool '{name}' exists in multiple servers ({servers}); specify one with server_name.

@@ -13,17 +13,17 @@ gateway.mcp.instruction.full: |-
 gateway.mcp.instruction.summary: |-
   ### 运行模式: 动态发现 (摘要)
   由于工具较多，请遵循以下流程：
-  - **Step 1 (锁定)**: 从下方"可用MCP工具清单"中根据功能描述选定工具名。
-  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
-  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+  - **Step 1 (锁定)**: 从下方"可用MCP工具清单"中根据功能描述选定服务与工具。
+  - **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
 
-  #### 可用MCP工具清单:
+  #### 可用MCP工具清单 (按服务分组):
 gateway.mcp.instruction.list: |-
   ### 运行模式: 动态发现 (列表)
   由于工具库规模较大，仅展示名称。请遵循以下流程：
-  - **Step 1 (预选)**: 从下方"工具列表"中根据名称推断功能，或用 `search_tools` 检索。
-  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
-  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+  - **Step 1 (预选)**: 从下方"工具列表"中根据服务名与工具名推断功能，或用 `search_tools` 检索。
+  - **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
 
   #### 可用MCP工具列表 (按服务展示):
 gateway.mcp.instruction.list_tip: |-
@@ -31,9 +31,9 @@ gateway.mcp.instruction.list_tip: |-
 gateway.mcp.instruction.search: |-
   ### 运行模式: 搜索发现
   MCP工具库规模巨大，清单已折叠。请遵循以下流程：
-  - **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具。
-  - **Step 2 (详情)**: 调用 `get_tool_detail` 获取参数 Schema。
-  - **Step 3 (执行)**: 确认参数后，通过 `call_tool` 提交执行。
+  - **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具（结果含 server_name 与 tool_name）。
+  - **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
 
   > **注意**: 请勿盲目猜测工具名。建议搜索关键词，如：search_tools('天气')
 
@@ -50,11 +50,14 @@ gateway.mcp.name_blank: |-
   错误：tool_name 不能为空
 gateway.mcp.detail.found: |-
   ### MCP工具详情: {name}
+  - 所属服务: {server}
   - 功能描述: {description}
   - 参数架构 (JSON Schema):
 gateway.mcp.detail.missing: |-
-  错误：未找到MCP工具 '{name}'，请检查名称拼写是否正确。
+  错误：未找到MCP工具 '{name}'，请检查 server_name 与 tool_name 是否正确。
 gateway.mcp.call.missing: |-
   错误：未找到MCP工具 '{name}'
 gateway.mcp.call.error: |-
   执行异常: {error}
+gateway.mcp.ambiguous: |-
+  错误：多个MCP服务都有工具 '{name}'（{servers}），请用 server_name 指定服务。

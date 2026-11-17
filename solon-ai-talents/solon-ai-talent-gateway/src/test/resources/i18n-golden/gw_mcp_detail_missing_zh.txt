@@ -1,1 +1,1 @@
-错误：未找到MCP工具 'nope'，请检查名称拼写是否正确。
+错误：未找到MCP工具 'nope'，请检查 server_name 与 tool_name 是否正确。

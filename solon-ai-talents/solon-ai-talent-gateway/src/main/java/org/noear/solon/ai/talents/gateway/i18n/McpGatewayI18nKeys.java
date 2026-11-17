@@ -44,5 +44,6 @@ public final class McpGatewayI18nKeys {
     public static final String GATEWAY_MCP_DETAIL_MISSING = "gateway.mcp.detail.missing";
     public static final String GATEWAY_MCP_CALL_MISSING = "gateway.mcp.call.missing";
     public static final String GATEWAY_MCP_CALL_ERROR = "gateway.mcp.call.error";
+    public static final String GATEWAY_MCP_AMBIGUOUS = "gateway.mcp.ambiguous";
 }
 

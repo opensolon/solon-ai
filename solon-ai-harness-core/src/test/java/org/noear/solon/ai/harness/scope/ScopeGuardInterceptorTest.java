@@ -12,12 +12,26 @@ import static org.junit.jupiter.api.Assertions.*;
  * 作用域守卫：名单展开、MCP 直连 / 中转判断、预填结果
  */
 class ScopeGuardInterceptorTest {
-    /** 假 MCP 归属：weather_* 属于 weather 服务，crm_* 属于 crm 服务 */
-    private final ScopeGuardInterceptor guard = new ScopeGuardInterceptor(name -> {
-        if (name.startsWith("weather_")) return "weather";
-        if (name.startsWith("crm_")) return "crm";
-        return null;
-    }, "goal_update"::equals, () -> false);
+    /**
+     * 假 MCP 归属：weather_* 属于 weather 服务，crm_* 属于 crm 服务，query 同时属于两者（同名工具）
+     */
+    private static Collection<String> ownersOf(String server, String name) {
+        List<String> owners = new ArrayList<>();
+        if (name.startsWith("weather_") || name.equals("query")) owners.add("weather");
+        if (name.startsWith("crm_") || name.equals("query")) owners.add("crm");
+        if (server != null) {
+            return owners.contains(server) ? Collections.singletonList(server) : Collections.emptyList();
+        }
+        return owners;
+    }
+
+    private final ScopeGuardInterceptor guard = new ScopeGuardInterceptor(
+            ScopeGuardInterceptorTest::ownersOf, "goal_update"::equals, () -> false);
+
+    /** 中转/直连判定的简写（不带服务名） */
+    private String deny(ScopeGuardInterceptor g, InputScope scope, String toolName, String target) {
+        return g.denyReason(scope, toolName, null, target);
+    }
 
     @Test
     void expandLogicalAndGroupNames() {
@@ -42,25 +56,25 @@ class ScopeGuardInterceptorTest {
     @Test
     void nullDimensionMeansUnlimited() {
         InputScope scope = InputScope.builder("t1").build();
-        assertNull(guard.denyReason(scope, "bash", null));
-        assertNull(guard.denyReason(scope, "weather_now", null));
-        assertNull(guard.denyReason(scope, "call_tool", "crm_query"));
+        assertNull(deny(guard, scope, "bash", null));
+        assertNull(deny(guard, scope, "weather_now", null));
+        assertNull(deny(guard, scope, "call_tool", "crm_query"));
     }
 
     @Test
     void toolAllowlistDeniesOthers() {
         InputScope scope = InputScope.builder("t1").tools("read", "skill").build();
-        assertNull(guard.denyReason(scope, "read", null));
-        assertNull(guard.denyReason(scope, "skillread", null));
-        assertNull(guard.denyReason(scope, "now", null), "时钟工具恒允许");
-        assertEquals("bash", guard.denyReason(scope, "bash", null));
-        assertEquals("bash_start", guard.denyReason(scope, "bash_start", null), "bash 分组整体禁止");
-        assertEquals("task", guard.denyReason(scope, "task", null));
-        assertNull(guard.denyReason(scope, "goal_update", null), "已声明的扩展工具不受名单约束（否则 goal 无法完成）");
-        assertEquals("host_write", guard.denyReason(scope, "host_write", null), "未声明的宿主工具按名单判断");
+        assertNull(deny(guard, scope, "read", null));
+        assertNull(deny(guard, scope, "skillread", null));
+        assertNull(deny(guard, scope, "now", null), "时钟工具恒允许");
+        assertEquals("bash", deny(guard, scope, "bash", null));
+        assertEquals("bash_start", deny(guard, scope, "bash_start", null), "bash 分组整体禁止");
+        assertEquals("task", deny(guard, scope, "task", null));
+        assertNull(deny(guard, scope, "goal_update", null), "已声明的扩展工具不受名单约束（否则 goal 无法完成）");
+        assertEquals("host_write", deny(guard, scope, "host_write", null), "未声明的宿主工具按名单判断");
         InputScope withHost = InputScope.builder("t1").tools("read", "host_write").build();
-        assertNull(guard.denyReason(withHost, "host_write", null), "写进名单即可放行");
-        assertEquals("weather_now", guard.denyReason(scope, "weather_now", null), "未授权 mcp 时直连工具拒绝");
+        assertNull(deny(guard, withHost, "host_write", null), "写进名单即可放行");
+        assertEquals("weather_now", deny(guard, scope, "weather_now", null), "未授权 mcp 时直连工具拒绝");
     }
 
     @Test
@@ -68,26 +82,47 @@ class ScopeGuardInterceptorTest {
         InputScope scope = InputScope.builder("t1").tools("mcp").mcps("weather").build();
 
         // 直连
-        assertNull(guard.denyReason(scope, "weather_now", null));
-        assertEquals("crm_query", guard.denyReason(scope, "crm_query", null));
+        assertNull(deny(guard, scope, "weather_now", null));
+        assertEquals("crm_query", deny(guard, scope, "crm_query", null));
 
         // 中转：按目标工具的归属服务
-        assertNull(guard.denyReason(scope, "call_tool", "weather_now"));
-        assertEquals("crm_query", guard.denyReason(scope, "call_tool", "crm_query"));
-        assertEquals("crm_query", guard.denyReason(scope, "get_tool_detail", "crm_query"));
-        assertEquals("unknown_x", guard.denyReason(scope, "call_tool", "unknown_x"), "无归属的目标按越界处理");
+        assertNull(deny(guard, scope, "call_tool", "weather_now"));
+        assertEquals("crm_query", deny(guard, scope, "call_tool", "crm_query"));
+        assertEquals("crm_query", deny(guard, scope, "get_tool_detail", "crm_query"));
+        assertEquals("unknown_x", deny(guard, scope, "call_tool", "unknown_x"), "无归属的目标按越界处理");
 
         // 空名单 = 全部禁止
         InputScope none = InputScope.builder("t1").mcps(Collections.emptyList()).build();
-        assertEquals("weather_now", guard.denyReason(none, "weather_now", null));
+        assertEquals("weather_now", deny(guard, none, "weather_now", null));
+    }
+
+    @Test
+    void relayLocatesByServerNameForDuplicateTools() {
+        InputScope scope = InputScope.builder("t1").tools("mcp", "call_tool", "get_tool_detail").mcps("weather").build();
+
+        // 点名服务：以给出的服务为准，越界服务的同名工具拒绝
+        assertNull(guard.denyReason(scope, "call_tool", "weather", "query"));
+        assertEquals("query", guard.denyReason(scope, "call_tool", "crm", "query"), "边界外服务的同名工具不能借名调用");
+        assertEquals("query", guard.denyReason(scope, "get_tool_detail", "crm", "query"));
+        assertEquals("weather_now", guard.denyReason(scope, "call_tool", "crm", "weather_now"), "服务里没有该工具按越界处理");
+
+        // 不带服务名：边界内有任一归属服务即放行（由网关在边界内解析）
+        assertNull(guard.denyReason(scope, "call_tool", null, "query"));
+        InputScope crmOnly = InputScope.builder("t1").tools("mcp", "call_tool").mcps("crm").build();
+        assertEquals("weather_now", guard.denyReason(crmOnly, "call_tool", null, "weather_now"));
+
+        // 直连同名工具：边界内有任一归属服务即放行（视图已按边界收窄），都不在边界内则拒绝
+        assertNull(guard.denyReason(scope, "query", null, null));
+        InputScope none = InputScope.builder("t1").tools("mcp").mcps("other").build();
+        assertEquals("query", guard.denyReason(none, "query", null, null));
     }
 
     @Test
     void builtinNameIsNotShadowedByMcpTool() {
-        ScopeGuardInterceptor shadow = new ScopeGuardInterceptor(name -> "evil", name -> false, () -> false);
+        ScopeGuardInterceptor shadow = new ScopeGuardInterceptor((server, name) -> Collections.singletonList("evil"), name -> false, () -> false);
         InputScope scope = InputScope.builder("t1").tools("read").mcps("weather").build();
-        assertNull(shadow.denyReason(scope, "read", null), "内置名优先，同名 MCP 工具不改变判定");
-        assertEquals("bash", shadow.denyReason(scope, "bash", null));
+        assertNull(deny(shadow, scope, "read", null), "内置名优先，同名 MCP 工具不改变判定");
+        assertEquals("bash", deny(shadow, scope, "bash", null));
     }
 
     @Test
@@ -101,7 +136,7 @@ class ScopeGuardInterceptorTest {
 
     @Test
     void requiredScopeMissingDeniesAllButClock() {
-        ScopeGuardInterceptor strict = new ScopeGuardInterceptor(name -> null, "goal_update"::equals, () -> true);
+        ScopeGuardInterceptor strict = new ScopeGuardInterceptor((server, name) -> Collections.<String>emptyList(), "goal_update"::equals, () -> true);
         ToolExchanger bash = new ToolExchanger("c1", "bash", new HashMap<>());
         ToolExchanger goal = new ToolExchanger("c2", "goal_update", new HashMap<>());
         ToolExchanger now = new ToolExchanger("c3", "now", new HashMap<>());
@@ -123,7 +158,7 @@ class ScopeGuardInterceptorTest {
         ex.setResult("prefilled");
         InputScope scope = InputScope.builder("t1").tools("read").build();
         // 经公共入口无法直接注入 trace 属性，这里只验证判定函数与预填约定
-        assertEquals("bash", guard.denyReason(scope, ex.getToolName(), null));
+        assertEquals("bash", deny(guard, scope, ex.getToolName(), null));
         assertEquals("prefilled", ex.getResult());
     }
 }

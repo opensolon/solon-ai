@@ -33,6 +33,10 @@ import java.util.stream.Collectors;
  * 3. LIST (名字): 数量 &lt;= searchThreshold。仅展示"工具名"清单。
  * 4. SEARCH (搜索): 数量 &gt; searchThreshold。完全折叠，强制 LLM 使用关键词检索。
  *
+ * <p>工具按「服务 → 工具」定位：不同服务可以有同名工具。search_tools 结果带 server_name，
+ * get_tool_detail / call_tool 用 server_name + tool_name 点名（server_name 为空且工具名唯一时自动补上）。
+ * 视图里有跨服务的同名工具时不走 FULL（直接调用只按工具名，无法区分服务），降为摘要模式。
+ *
  * <p>支持按 name 进行动态添加和移除（含连接关闭）。
  *
  * @author noear 2026/5/29 created
@@ -139,14 +143,12 @@ public class McpGatewayTalent extends AbsTalent {
         return view;
     }
 
-    // 工具索引（自建，完全由本类管理）
+    // 工具索引：服务名 -> (工具名小写 -> 工具)。服务是定位工具的第一级，不同服务允许有同名工具。
+    // 每个服务的工具表构建完即只读，整表替换（不做原地修改）。
     private final Map<String, Map<String, FunctionTool>> categoryTools = new ConcurrentHashMap<>();
-    private final Map<String, FunctionTool> allTools = new ConcurrentHashMap<>();
 
     // MCP 连接管理
     private final Map<String, McpClientProvider> providerMap = new ConcurrentHashMap<>();
-    // name -> 该 provider 注册的 toolNames（小写），加速移除
-    private final Map<String, Set<String>> serverToolIndex = new ConcurrentHashMap<>();
 
     // 四阶段阈值
     private int dynamicThreshold = 8;
@@ -206,24 +208,17 @@ public class McpGatewayTalent extends AbsTalent {
 
         providerMap.put(name, mcpProvider);
 
-        // disabled: 仅注册到管理表，不加入 categoryTools 和 allTools
+        // disabled: 仅注册到管理表，不加入工具索引
         if (mcpProvider.isEnabled() == false) {
             LOG.info("Mcp server '{}': is disabled, registered to management only", name);
             return this;
         }
 
         try {
-            Set<String> toolNames = new LinkedHashSet<>();
-            for (FunctionTool tool : mcpProvider.getToolsActivated()) {
-                String key = tool.name().toLowerCase();
-                categoryTools.computeIfAbsent(name, k -> new ConcurrentHashMap<>())
-                        .put(key, tool);
-                allTools.put(key, tool);
-                toolNames.add(key);
-            }
-            serverToolIndex.put(name, toolNames);
+            Map<String, FunctionTool> tools = loadTools(mcpProvider);
+            putTools(name, tools);
 
-            LOG.info("Mcp server {}: added ({} tools)", name, toolNames.size());
+            LOG.info("Mcp server {}: added ({} tools)", name, tools.size());
         } catch (Throwable e) {
             LOG.error("Mcp server {}: loading failed", name, e);
         }
@@ -253,28 +248,40 @@ public class McpGatewayTalent extends AbsTalent {
         return this;
     }
 
+    /** 拉取服务的工具表（工具名小写为键，保持服务端顺序） */
+    private static Map<String, FunctionTool> loadTools(McpClientProvider provider) {
+        Map<String, FunctionTool> tools = new LinkedHashMap<>();
+        for (FunctionTool tool : provider.getToolsActivated()) {
+            tools.put(tool.name().toLowerCase(), tool);
+        }
+        return Collections.unmodifiableMap(tools);
+    }
+
+    /** 整表替换某服务的工具（空表即移除，不留空分组） */
+    private void putTools(String name, Map<String, FunctionTool> tools) {
+        if (tools.isEmpty()) {
+            categoryTools.remove(name);
+        } else {
+            categoryTools.put(name, tools);
+        }
+    }
+
     // ========== 移除 ==========
 
     /**
      * 移除 MCP 服务（按配置名），并关闭连接
+     *
+     * <p>只移除该服务自己的工具：工具按「服务 → 工具」索引，其它服务的同名工具不受影响。
      */
     public McpGatewayTalent removeMcpServer(String name) {
         if (Utils.isEmpty(name)) {
             return this;
         }
 
-        // 1. 从索引中收集并移除工具
-        Set<String> toolNames = serverToolIndex.remove(name);
-        if (toolNames != null) {
-            for (String key : toolNames) {
-                allTools.remove(key);
-            }
-        }
+        // 1. 从工具索引中移除
+        Map<String, FunctionTool> tools = categoryTools.remove(name);
 
-        // 2. 从 categoryTools 中移除
-        categoryTools.remove(name);
-
-        // 3. 关闭 provider 连接
+        // 2. 关闭 provider 连接
         McpClientProvider provider = providerMap.remove(name);
         if (provider != null) {
             try {
@@ -284,8 +291,8 @@ public class McpGatewayTalent extends AbsTalent {
             }
         }
 
-        if (toolNames != null && !toolNames.isEmpty()) {
-            LOG.info("Mcp server {}: removed ({} tools)", name, toolNames.size());
+        if (tools != null && !tools.isEmpty()) {
+            LOG.info("Mcp server {}: removed ({} tools)", name, tools.size());
         }
         return this;
     }
@@ -295,8 +302,7 @@ public class McpGatewayTalent extends AbsTalent {
     /**
      * 刷新指定 MCP 服务的工具列表（当 McpClientProvider 的 allowedTools / disallowedTools 变更后调用）
      *
-     * <p>采用影子交换策略：先在局部变量中构建新索引，再一次性替换，
-     * 缩小中间状态窗口，避免调用中的线程因工具短暂丢失而失败。
+     * <p>先在局部变量中构建新工具表，再整表替换，调用中的线程不会看到半更新的状态。
      */
     public McpGatewayTalent refreshMcpServer(String name) {
         if (Utils.isEmpty(name)) {
@@ -310,55 +316,23 @@ public class McpGatewayTalent extends AbsTalent {
 
         // disabled: 只从工具索引移除，保留 provider（不关闭连接）
         if (provider.isEnabled() == false) {
-            Set<String> toolNames = serverToolIndex.remove(name);
-            if (toolNames != null) {
-                for (String key : toolNames) {
-                    allTools.remove(key);
-                }
-            }
-            categoryTools.remove(name);
+            Map<String, FunctionTool> tools = categoryTools.remove(name);
             LOG.info("Mcp server {}: is disabled, removed {} tools from index", name,
-                    toolNames != null ? toolNames.size() : 0);
+                    tools != null ? tools.size() : 0);
             return this;
         }
 
-        // 1. 在局部变量中构建新的工具索引
-        Set<String> newToolNames = new LinkedHashSet<>();
-        Map<String, FunctionTool> newCategoryMap = new ConcurrentHashMap<>();
-
+        final Map<String, FunctionTool> tools;
         try {
-            for (FunctionTool tool : provider.getToolsActivated()) {
-                String key = tool.name().toLowerCase();
-                newCategoryMap.put(key, tool);
-                newToolNames.add(key);
-            }
+            tools = loadTools(provider);
         } catch (Throwable e) {
             LOG.error("Mcp server {}: loading failed", name, e);
             return this;
         }
 
-        // 2. 收集旧工具名（仅属于当前 server 且不属于新工具集的）
-        Set<String> oldToolNames = serverToolIndex.get(name);
-        Set<String> toRemove = new LinkedHashSet<>();
-        if (oldToolNames != null) {
-            for (String key : oldToolNames) {
-                if (!newToolNames.contains(key)) {
-                    toRemove.add(key);
-                }
-            }
-        }
+        putTools(name, tools);
 
-        // 3. 原子性替换：先加新，再删旧（保证 add-before-remove）
-        categoryTools.put(name, newCategoryMap);
-        serverToolIndex.put(name, newToolNames);
-        for (String key : newToolNames) {
-            allTools.put(key, newCategoryMap.get(key));
-        }
-        for (String key : toRemove) {
-            allTools.remove(key);
-        }
-
-        LOG.info("Mcp server {}: refreshed ({} tools)", name, newToolNames.size());
+        LOG.info("Mcp server {}: refreshed ({} tools)", name, tools.size());
         return this;
     }
 
@@ -397,28 +371,153 @@ public class McpGatewayTalent extends AbsTalent {
     }
 
     /**
-     * 工具名 → 归属服务名（不是本网关的工具返回 null）
+     * 工具名 → 归属服务名
+     *
+     * <p>不是本网关的工具，或同名工具属于多个服务时返回 null（需要区分时用 {@link #getServersOfTool(String, String)}）。
      *
      * @since 4.2.0
      */
     @Nullable
     public String getServerOfTool(@Nullable String toolName) {
-        if (toolName == null) {
-            return null;
+        List<String> servers = getServersOfTool(null, toolName);
+        return servers.size() == 1 ? servers.get(0) : null;
+    }
+
+    /**
+     * 定位工具的归属服务（结果按服务名排序）
+     *
+     * @param serverName 服务名（大小写不敏感）；给出时只在该服务内找，结果至多一个；为空时返回拥有该工具的全部服务
+     * @param toolName   工具名（大小写不敏感）
+     * @return 归属服务名列表（找不到为空列表）
+     * @since 4.2.0
+     */
+    public List<String> getServersOfTool(@Nullable String serverName, @Nullable String toolName) {
+        if (Utils.isEmpty(toolName)) {
+            return Collections.emptyList();
         }
 
         String key = toolName.trim().toLowerCase();
+
+        if (Utils.isEmpty(serverName) == false) {
+            String server = canonicalServer(serverName);
+            if (server != null) {
+                Map<String, FunctionTool> tools = categoryTools.get(server);
+                if (tools != null && tools.containsKey(key)) {
+                    return Collections.singletonList(server);
+                }
+            }
+            return Collections.emptyList();
+        }
+
+        List<String> servers = new ArrayList<>();
         for (Map.Entry<String, Map<String, FunctionTool>> entry : categoryTools.entrySet()) {
             if (entry.getValue().containsKey(key)) {
-                return entry.getKey();
+                servers.add(entry.getKey());
             }
         }
-        return null;
+        Collections.sort(servers);
+        return servers;
     }
 
-    /** 工具是否在强制边界内（allowed 为 null 时不限制） */
-    private boolean isToolAllowed(String toolName, @Nullable List<String> allowed) {
-        return allowed == null || allowed.contains(getServerOfTool(toolName));
+    /** 服务名规范化：精确匹配优先，否则取大小写不敏感的唯一匹配（多个或没有返回 null） */
+    @Nullable
+    private String canonicalServer(String serverName) {
+        String name = serverName.trim();
+        if (categoryTools.containsKey(name)) {
+            return name;
+        }
+
+        String found = null;
+        for (String server : categoryTools.keySet()) {
+            if (server.equalsIgnoreCase(name)) {
+                if (found != null) {
+                    return null;
+                }
+                found = server;
+            }
+        }
+        return found;
+    }
+
+    /** 服务是否在强制边界内（allowed 为 null 时不限制） */
+    private static boolean isServerAllowed(String server, @Nullable List<String> allowed) {
+        return allowed == null || allowed.contains(server);
+    }
+
+    /** 服务是否在视野内（未选择时不限制）。只用于发现（search_tools），点名使用不受它限制 */
+    private static boolean isServerSelected(String server, @Nullable List<String> selected) {
+        return selected == null || selected.isEmpty() || selected.contains(server);
+    }
+
+    /**
+     * 中转目标的定位结果：要么定位到唯一工具，要么是有多个候选服务（需要模型指定 server_name）
+     */
+    private static final class Target {
+        final String server;
+        final FunctionTool tool;
+        final List<String> candidates;
+
+        Target(String server, FunctionTool tool, List<String> candidates) {
+            this.server = server;
+            this.tool = tool;
+            this.candidates = candidates;
+        }
+    }
+
+    /**
+     * 定位点名使用（get_tool_detail / call_tool）的目标，只在强制边界内找。
+     *
+     * <p>给了服务名：只在该服务内找。没给服务名：边界内只有一个服务有这个工具就自动补上（兼容旧写法）；
+     * 有多个时返回候选，由调用方提示指定。越界与不存在不加区分（返回 null），不泄露边界外的服务。
+     */
+    @Nullable
+    private Target resolveTarget(@Nullable String serverName, String toolName, @Nullable List<String> allowed) {
+        List<String> servers = new ArrayList<>();
+        for (String server : getServersOfTool(serverName, toolName)) {
+            if (isServerAllowed(server, allowed)) {
+                servers.add(server);
+            }
+        }
+
+        if (servers.isEmpty()) {
+            return null;
+        }
+
+        if (servers.size() > 1) {
+            return new Target(null, null, servers);
+        }
+
+        String server = servers.get(0);
+        Map<String, FunctionTool> tools = categoryTools.get(server);
+        FunctionTool tool = tools == null ? null : tools.get(toolName.trim().toLowerCase());
+        return tool == null ? null : new Target(server, tool, null);
+    }
+
+    /** 工具总数（按「服务 + 工具」计，同名工具分别计数） */
+    private static int countTools(Map<String, Map<String, FunctionTool>> view) {
+        int size = 0;
+        for (Map<String, FunctionTool> tools : view.values()) {
+            size += tools.size();
+        }
+        return size;
+    }
+
+    /** 视图里是否有跨服务的同名工具（有则不能直接平铺：直接调用只按工具名，无法区分服务） */
+    private static boolean hasDuplicateName(Map<String, Map<String, FunctionTool>> view) {
+        Set<String> names = new HashSet<>();
+        for (Map<String, FunctionTool> tools : view.values()) {
+            for (String key : tools.keySet()) {
+                if (names.add(key) == false) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 是否走 FULL 模式：数量不超过阈值，且没有同名工具（有同名时降为摘要模式，走带服务名的中转） */
+    private boolean isFullMode(Map<String, Map<String, FunctionTool>> view, int size) {
+        return size <= dynamicThreshold && hasDuplicateName(view) == false;
     }
 
     // ========== Talent 接口实现（四阶段路由） ==========
@@ -426,23 +525,23 @@ public class McpGatewayTalent extends AbsTalent {
     @Override
     public String description(Prompt prompt) {
         return McpGatewayI18n.fmt(AiI18n.localeOf(prompt), McpGatewayI18nKeys.GATEWAY_MCP_DESCRIPTION,
-                "servers", providerMap.size(), "tools", allTools.size());
+                "servers", providerMap.size(), "tools", countTools(categoryTools));
     }
 
     @Override
     public boolean isSupported(Prompt prompt) {
-        return viewTools(prompt).isEmpty() == false;
+        return countTools(viewCategories(prompt)) > 0;
     }
 
     @Override
     public String getInstruction(Prompt prompt) {
         final Locale locale = AiI18n.localeOf(prompt);
         final Map<String, Map<String, FunctionTool>> view = viewCategories(prompt);
-        final int size = viewTools(prompt).size();
+        final int size = countTools(view);
         StringBuilder sb = new StringBuilder();
         sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_TITLE, "count", size)).append("\n");
 
-        if (size <= dynamicThreshold) {
+        if (isFullMode(view, size)) {
             // --- FULL 模式 (全铺) ---
             sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_FULL));
         } else if (size <= listThreshold) {
@@ -472,12 +571,16 @@ public class McpGatewayTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
-        Map<String, FunctionTool> view = viewTools(prompt);
-        int size = view.size();
+        Map<String, Map<String, FunctionTool>> view = viewCategories(prompt);
+        int size = countTools(view);
 
-        // FULL 模式：直接交付原始工具
-        if (size <= dynamicThreshold) {
-            return view.values();
+        // FULL 模式：直接交付原始工具（已保证没有同名工具）
+        if (isFullMode(view, size)) {
+            List<FunctionTool> tools = new ArrayList<>(size);
+            for (Map<String, FunctionTool> group : view.values()) {
+                tools.addAll(group.values());
+            }
+            return tools;
         }
 
         // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
@@ -515,50 +618,41 @@ public class McpGatewayTalent extends AbsTalent {
         return view;
     }
 
-    /** 本次请求可见的工具（toolKey 小写） */
-    private Map<String, FunctionTool> viewTools(@Nullable Prompt prompt) {
-        List<String> selected = effectiveSelection(prompt);
-        if (selected == null) {
-            return allTools;
-        }
-
-        Map<String, FunctionTool> view = new LinkedHashMap<>();
-        for (String serverName : selected) {
-            Map<String, FunctionTool> tools = categoryTools.get(serverName);
-            if (tools != null) {
-                view.putAll(tools);
-            }
-        }
-        return view;
-    }
-
     // ========== 中转工具方法（由 AbsTalent 的 MethodToolProvider 自动扫描） ==========
 
     /**
-     * 搜索 MCP 工具（__locale 由工具上下文注入）
+     * 搜索 MCP 工具（_mcps_allowed、_mcps_selected、__locale 由工具上下文注入）
+     *
+     * <p>每条结果带 server_name，供 get_tool_detail / call_tool 定位（不同服务可能有同名工具）。
+     * 结果同时按强制边界与视野收窄（两者叠加即交集）；视野为空表示不限制。
+     * get_tool_detail / call_tool 属于点名使用，不按视野收窄。
      *
      * @since 4.2
      */
     @ToolMapping(name = "search_tools", description = "搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）")
-    public Object searchTools(@Param("keyword") String keyword, List<String> _mcps_allowed, String __locale) {
+    public Object searchTools(@Param("keyword") String keyword, List<String> _mcps_allowed, List<String> _mcps_selected, String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
         if (Utils.isEmpty(keyword)) return McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_SEARCH_BLANK);
 
         String[] keys = keyword.toLowerCase().split("[\\s,;，；]+");
 
-        List<Map<String, String>> results = allTools.values().stream()
-                .filter(t -> isToolAllowed(t.name(), _mcps_allowed))
-                .filter(t -> {
-                    String content = (t.name() + " " + t.description()).toLowerCase();
-                    return Arrays.stream(keys).allMatch(content::contains);
-                })
+        List<Map<String, String>> results = categoryTools.entrySet().stream()
+                .filter(e -> isServerAllowed(e.getKey(), _mcps_allowed))
+                .filter(e -> isServerSelected(e.getKey(), _mcps_selected))
+                .sorted(Map.Entry.comparingByKey())
+                .flatMap(e -> e.getValue().values().stream()
+                        .filter(t -> {
+                            String content = (t.name() + " " + t.description()).toLowerCase();
+                            return Arrays.stream(keys).allMatch(content::contains);
+                        })
+                        .map(t -> {
+                            Map<String, String> map = new LinkedHashMap<>();
+                            map.put("server_name", e.getKey());
+                            map.put("tool_name", t.name());
+                            map.put("tool_description", t.description());
+                            return map;
+                        }))
                 .limit(10)
-                .map(t -> {
-                    Map<String, String> map = new HashMap<>();
-                    map.put("tool_name", t.name());
-                    map.put("tool_description", t.description());
-                    return map;
-                })
                 .collect(Collectors.toList());
 
         if (results.isEmpty()) {
@@ -569,35 +663,56 @@ public class McpGatewayTalent extends AbsTalent {
     }
 
     /**
-     * 获取 MCP 工具详情（__locale 由工具上下文注入）
+     * 获取 MCP 工具详情（_mcps_allowed、__locale 由工具上下文注入）
+     *
+     * <p>server_name 可选（schema 不设必填，框架会对必填参数做运行期校验）：为空时，边界内只有一个服务有该工具就自动补上；
+     * 有多个时提示指定服务。
      *
      * @since 4.2
      */
     @ToolMapping(name = "get_tool_detail", description = "获取指定MCP工具的完整参数 Schema")
-    public String getToolDetail(@Param("tool_name") String name, List<String> _mcps_allowed, String __locale) {
+    public String getToolDetail(@Param(value = "server_name", required = false) String serverName, @Param("tool_name") String name,
+                                List<String> _mcps_allowed, String __locale) {
         Locale locale = AiI18n.toLocale(__locale);
         if (Utils.isEmpty(name)) return McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_NAME_BLANK);
 
-        FunctionTool tool = allTools.get(name.trim().toLowerCase());
-        if (tool != null && isToolAllowed(tool.name(), _mcps_allowed)) {
-            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_FOUND,
-                    "name", tool.name(), "description", tool.description()) +
-                    " \n```json\n" + tool.inputSchema() + "\n```";
+        Target target = resolveTarget(serverName, name, _mcps_allowed);
+        if (target == null) {
+            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_MISSING, "name", name);
         }
 
-        return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_MISSING, "name", name);
+        if (target.tool == null) {
+            return ambiguousText(locale, name, target.candidates);
+        }
+
+        return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_DETAIL_FOUND,
+                "server", target.server, "name", target.tool.name(), "description", target.tool.description()) +
+                " \n```json\n" + target.tool.inputSchema() + "\n```";
+    }
+
+    private static String ambiguousText(Locale locale, String toolName, List<String> candidates) {
+        return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_AMBIGUOUS,
+                "name", toolName, "servers", String.join(", ", candidates));
     }
 
     //测试用
-    public ToolResult callTool(String tool_name,
+    public ToolResult callTool(String server_name,
+                               String tool_name,
                                Map<String, Object> tool_args) {
         try {
             return callTool.call(Utils.asMap(
+                    "server_name", server_name,
                     "tool_name", tool_name,
                     "tool_args", tool_args));
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
+    }
+
+    //测试用（不带服务名：工具名唯一时自动定位）
+    public ToolResult callTool(String tool_name,
+                               Map<String, Object> tool_args) {
+        return callTool(null, tool_name, tool_args);
     }
 
     // ========== 内部中转代理工具 ==========
@@ -608,6 +723,8 @@ public class McpGatewayTalent extends AbsTalent {
         public McpToolCallTool(McpGatewayTalent gatewayTalent) {
             this.gatewayTalent = gatewayTalent;
 
+            // server_name 可选：为空且边界内工具名唯一时自动补上（兼容不带服务名的旧调用），重名时由返回值提示指定
+            addParam("server_name", String.class, false, "");
             addParam("tool_name", String.class, "");
             addParam("tool_args", TypeRef.mapOf(String.class, Object.class).getType(), "");
         }
@@ -624,7 +741,8 @@ public class McpGatewayTalent extends AbsTalent {
 
         @Override
         public Object handle(Map<String, Object> args) {
-            String tool_name = (String) args.get("tool_name");
+            String server_name = textOf(args.get("server_name"));
+            String tool_name = textOf(args.get("tool_name"));
             Map<String, Object> tool_args = (Map) args.get("tool_args");
 
             //传导工具上下文
@@ -634,8 +752,9 @@ public class McpGatewayTalent extends AbsTalent {
                 tool_args = new HashMap<>(tool_args); // 复制一份，避免修改原始参数
             }
             for (Map.Entry<String, Object> entry : args.entrySet()) {
-                if (!"tool_name".equals(entry.getKey()) && !"tool_args".equals(entry.getKey())) {
-                    tool_args.put(entry.getKey(), entry.getValue());
+                String key = entry.getKey();
+                if (!"server_name".equals(key) && !"tool_name".equals(key) && !"tool_args".equals(key)) {
+                    tool_args.put(key, entry.getValue());
                 }
             }
             final Map<String, Object> finalToolArgs = tool_args;
@@ -647,24 +766,33 @@ public class McpGatewayTalent extends AbsTalent {
                 return ToolResult.success(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_NAME_BLANK));
             }
 
-            FunctionTool tool = gatewayTalent.allTools.get(tool_name.trim().toLowerCase());
-
             // selected 是视野不是权限：call_tool 是点名调用，不按视野硬控；
             // 但 _mcps_allowed 是强制边界，越界按「不存在」处理（不泄露其它租户服务是否存在）。
-            if (tool == null || gatewayTalent.isToolAllowed(tool.name(), getAllowed(args)) == false) {
+            Target target = gatewayTalent.resolveTarget(server_name, tool_name, getAllowed(args));
+            if (target == null) {
                 return ToolResult.success(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CALL_MISSING, "name", tool_name));
+            }
+
+            if (target.tool == null) {
+                return ToolResult.success(ambiguousText(locale, tool_name, target.candidates));
             }
 
             // 边界与视野等框架键不转发给 MCP 服务
             finalToolArgs.remove(CTX_MCPS_ALLOWED);
 
+            final FunctionTool tool = target.tool;
             try {
                 return RetryUtil.callWithRetry(gatewayTalent.maxRetries, gatewayTalent.retryDelayMs, gatewayTalent.retryDelayMs * 4, () -> tool.call(finalToolArgs));
             } catch (Throwable e) {
-                LOG.error("McpTool gateway execution failed: {}", tool_name, e);
+                LOG.error("McpTool gateway execution failed: {}/{}", target.server, tool_name, e);
                 return ToolResult.success(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CALL_ERROR,
                         "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
             }
+        }
+
+        @Nullable
+        private static String textOf(@Nullable Object value) {
+            return value == null ? null : value.toString();
         }
     }
 }

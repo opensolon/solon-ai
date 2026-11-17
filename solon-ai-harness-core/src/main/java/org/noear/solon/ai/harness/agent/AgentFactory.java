@@ -31,6 +31,8 @@ import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+
 /**
  * 代理工厂
  *
@@ -72,9 +74,9 @@ public class AgentFactory {
         builder.defaultInterceptorAdd(engine.getCompressionInterceptor());
         builder.defaultInterceptorAdd(9, engine.getStopLoopInterceptor());
         // 作用域守卫：主/子代理都常驻且最先执行（早于 HITL）
-        builder.defaultInterceptorAdd(ScopeGuardInterceptor.INDEX, new ScopeGuardInterceptor(t -> {
+        builder.defaultInterceptorAdd(ScopeGuardInterceptor.INDEX, new ScopeGuardInterceptor((server, t) -> {
             McpGatewayTalent mcp = engine.getMcpGatewayTalent();
-            return mcp == null ? null : mcp.getServerOfTool(t);
+            return mcp == null ? Collections.<String>emptyList() : mcp.getServersOfTool(server, t);
         }, t -> engine.getExtensions().stream().anyMatch(e -> e.getToolNames().contains(t)), engine::isScopeRequired));
 
         if (Assert.isNotEmpty(agentDefinition.getSystemPrompt())) {

@@ -1,1 +1,1 @@
-Error: MCP tool 'nope' was not found; check the spelling of the name.
+Error: MCP tool 'nope' was not found; check that server_name and tool_name are correct.

@@ -31,8 +31,8 @@ public class GatewayI18nScenarioTest {
 
         McpGatewayTalent mcp = GatewayRenderGoldenTest.mcpGateway(3);
         GoldenFiles.verify("gw_mcp_description_en", mcp.description(null));
-        GoldenFiles.verify("gw_mcp_search_blank_en", String.valueOf(mcp.searchTools("", null, null)));
-        GoldenFiles.verify("gw_mcp_detail_missing_en", mcp.getToolDetail("nope", null, null));
+        GoldenFiles.verify("gw_mcp_search_blank_en", String.valueOf(mcp.searchTools("", null, null, null)));
+        GoldenFiles.verify("gw_mcp_detail_missing_en", mcp.getToolDetail(null, "nope", null, null));
 
         Assertions.assertEquals("General APIs", new ApiTool().getCategory());
         GoldenFiles.verify("gw_api_description_en",

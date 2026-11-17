@@ -1,4 +1,5 @@
 ### MCP工具详情: mcp_1
+- 所属服务: alpha
 - 功能描述: MCP 工具 1
 - 参数架构 (JSON Schema): 
 ```json
