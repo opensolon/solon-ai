@@ -4,7 +4,7 @@
 gateway.mcp.description: |-
   MCP tool gateway ({servers} servers, {tools} tools in total)
 
-# ---- instruction (four modes) ----
+# ---- instruction (five modes) ----
 gateway.mcp.instruction.title: |-
   ## MCP Tool Discovery ({count} tools in total)
 gateway.mcp.instruction.full: |-
@@ -28,10 +28,22 @@ gateway.mcp.instruction.list: |-
   #### Available MCP tool list (by server):
 gateway.mcp.instruction.list_tip: |-
   > Tip: server names and tool names carry semantic hints; once you pick a target, always check its details first.
+gateway.mcp.instruction.catalog: |-
+  ### Mode: Server catalog
+  The MCP tool library is huge, so only the server catalog is listed below. Follow this flow:
+  - **Step 1 (Pick a server)**: Choose a server from the "MCP server catalog" below by its description, then call `list_server_tools` (with server_name, optionally a keyword to filter) to see its tools; or use `search_tools` to search across servers by keywords.
+  - **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
+  - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
+
+  #### MCP server catalog:
+gateway.mcp.catalog.item: |-
+  - **{server}** ({count} tools): {description}
+gateway.mcp.catalog.fallback: |-
+  includes {names}
 gateway.mcp.instruction.search: |-
   ### Mode: Search discovery
   The MCP tool library is huge and the list is collapsed. Follow this flow:
-  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords (results include server_name and tool_name).
+  - **Step 1 (Search)**: First use `search_tools` to find matching tools by keywords (results include server_name and tool_name); use `list_server_tools` to browse all tools of a server.
   - **Step 2 (Details)**: Call `get_tool_detail` (with server_name and tool_name) to get the parameter schema.
   - **Step 3 (Execute)**: After confirming the arguments, submit the execution with `call_tool` (with server_name, tool_name and tool_args).
 
@@ -61,3 +73,11 @@ gateway.mcp.call.error: |-
   Execution error: {error}
 gateway.mcp.ambiguous: |-
   Error: MCP tool '{name}' exists in multiple servers ({servers}); specify one with server_name.
+gateway.mcp.list.server_blank: |-
+  Error: server_name must not be empty
+gateway.mcp.list.missing: |-
+  Error: MCP server '{server}' was not found; use a server_name from the server catalog or from search_tools results.
+gateway.mcp.list.none: |-
+  Note: MCP server '{server}' has no tool matching '{keyword}'. Remove the keyword to see all of its tools.
+gateway.mcp.list.truncated: |-
+  Only the first {limit} are listed ({total} in total); narrow down with a keyword.

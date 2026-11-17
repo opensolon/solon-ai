@@ -1,0 +1,1 @@
+错误：未找到MCP服务 'ghost'，请按服务目录或 search_tools 结果里的 server_name 填写。

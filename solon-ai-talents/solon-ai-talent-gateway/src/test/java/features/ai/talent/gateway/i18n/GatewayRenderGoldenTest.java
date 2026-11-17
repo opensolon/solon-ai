@@ -147,9 +147,14 @@ public class GatewayRenderGoldenTest {
         private final List<FunctionTool> tools;
 
         FakeProvider(List<FunctionTool> tools) {
+            this(tools, null);
+        }
+
+        FakeProvider(List<FunctionTool> tools, String description) {
             super(new McpClientProperties().then(p -> {
                 p.setChannel("sse");
                 p.setUrl("http://127.0.0.1:1/mcp");
+                p.setDescription(description);
             }));
             this.tools = tools;
         }
@@ -272,6 +277,10 @@ public class GatewayRenderGoldenTest {
         return t.getToolDetail(server, name, null, tag);
     }
 
+    static String mcpList(McpGatewayTalent t, String tag, String server, String keyword) {
+        return text(t.listServerTools(server, keyword, null, null, tag));
+    }
+
     static String mcpCall(McpGatewayTalent t, String tag, String server, String name) throws Throwable {
         Map<String, Object> args = new HashMap<>();
         if (server != null) {
@@ -330,6 +339,15 @@ public class GatewayRenderGoldenTest {
             out.put("gw_mcp_instruction_" + n + suffix, t.getInstruction(prompt));
             out.put("gw_mcp_tools_" + n, GoldenFiles.dumpTools(t.getTools(prompt)));
         }
+        // 服务数超过 catalogThreshold：退回搜索模式
+        McpGatewayTalent searchMode = mcpGateway(4).catalogThreshold(1);
+        out.put("gw_mcp_instruction_5" + suffix, searchMode.getInstruction(prompt));
+        out.put("gw_mcp_tools_5", GoldenFiles.dumpTools(searchMode.getTools(prompt)));
+        // 服务目录：有描述的用描述（空白压成一行），没有的用工具名自动生成
+        McpGatewayTalent catalog = mcpGateway(4);
+        catalog.addMcpServer("weather", new FakeProvider(Arrays.asList(tool("forecast", "天气预报"), tool("now", "实时天气")), "天气查询\n与预报"));
+        out.put("gw_mcp_instruction_catalog_desc" + suffix, catalog.getInstruction(prompt));
+
         McpGatewayTalent mg = mcpGateway(4);
         mg.addMcpServer("gamma", new FakeProvider(Arrays.asList(tool("boom_2", "会失败的工具"), tool("dup", "同名工具 gamma"))));
         mg.addMcpServer("delta", new FakeProvider(Collections.singletonList(tool("dup", "同名工具 delta"))));
@@ -343,6 +361,11 @@ public class GatewayRenderGoldenTest {
         out.put("gw_mcp_call_missing" + suffix, mcpCall(mg, tag, null, "nope"));
         out.put("gw_mcp_call_ambiguous" + suffix, mcpCall(mg, tag, null, "dup"));
         out.put("gw_mcp_call_error" + suffix, mcpCall(mg, tag, "gamma", "boom_2"));
+        out.put("gw_mcp_list_blank" + suffix, mcpList(mg, tag, "", null));
+        out.put("gw_mcp_list_missing" + suffix, mcpList(mg, tag, "ghost", null));
+        out.put("gw_mcp_list_none" + suffix, mcpList(mg, tag, "alpha", "不存在"));
+        out.put("gw_mcp_list_found" + suffix, mcpList(mg, tag, "ALPHA", null));
+        out.put("gw_mcp_list_truncated" + suffix, mcpList(mg.listToolsLimit(1), tag, "alpha", null));
 
         // ---- openapi gateway ----
         if (tag == null) {

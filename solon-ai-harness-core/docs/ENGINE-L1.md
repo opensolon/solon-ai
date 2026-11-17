@@ -147,6 +147,8 @@ HarnessInput.of(session, "用那个技能查一下订单表")
 > **`call_tool` / `get_tool_detail` 同样不按视野拦截**：它们是点名使用的入口，模型点名未选中服务的工具时照常执行、照常返回参数说明，只按强制边界过滤。`search_tools` 属于发现，结果按视野（`_mcps_selected`）与强制边界叠加收窄，视野为空表示不限制。需要硬隔离时用请求级作用域（`HarnessInput#scope`，写入 `_mcps_allowed` / `_skills_allowed`）：名单外的项按「不存在」处理，且与视野取交集。
 
 > **MCP 工具按「服务 → 工具」定位**：不同服务可以有同名工具。`search_tools` 每条结果带 `server_name`；`get_tool_detail` / `call_tool` 以 `server_name` + `tool_name` 点名，执行的工具与边界判断用的服务永远是同一个。`server_name` 在 schema 里是可选的：为空时若边界内只有一个服务有该工具就自动补上，有多个则返回「请用 server_name 指定服务」且不执行（候选只列边界内的服务）。视图里存在跨服务同名工具时不走 FULL（直连只按工具名，无法区分服务），降为摘要模式。作用域守卫按同一口径判断：中转工具按 `server_name` + `tool_name` 定位到的服务，未给服务名时边界内有任一归属服务即放行、由网关在边界内解析。
+>
+> **服务目录与 `list_server_tools`**：工具数超过 `searchThreshold`、且视图内服务数不超过 `catalogThreshold` 时，指令只列服务目录（服务名、工具数、描述），模型用 `list_server_tools` 下钻。`list_server_tools` 与 `search_tools` 同属发现，同时按强制边界与视野收窄。服务描述取配置的 `description`，其次服务端握手上报的描述或 instructions。`call_tool` 只转发模型参数，`_mcps_allowed`、`_mcps_selected`、`__locale` 不发给 MCP 服务。
 
 **穿透范围**：子代理（`task` / `multitask`）自己声明了技能 / MCP 就用自己的，没有声明才**继承**父级视野（不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域照旧继承。命令触发的二段任务带上本轮的显式选择（`HarnessInput#derive`）。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
 

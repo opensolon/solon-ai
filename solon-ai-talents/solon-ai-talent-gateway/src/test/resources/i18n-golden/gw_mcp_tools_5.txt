@@ -1,0 +1,29 @@
+name: call_tool
+--- description ---
+代理执行特定的MCP工具
+--- inputSchema ---
+{"type":"object","properties":{"server_name":{"type":"string","description":""},"tool_args":{"type":"object","additionalProperties":true,"description":""},"tool_name":{"type":"string","description":""}},"required":["tool_name","tool_args"]}
+
+===
+
+name: get_tool_detail
+--- description ---
+获取指定MCP工具的完整参数 Schema
+--- inputSchema ---
+{"type":"object","properties":{"server_name":{"type":"string","description":""},"tool_name":{"type":"string","description":""}},"required":["tool_name"]}
+
+===
+
+name: list_server_tools
+--- description ---
+列出指定MCP服务下的工具（名称与描述），可用 keyword 在服务内过滤
+--- inputSchema ---
+{"type":"object","properties":{"keyword":{"type":"string","description":""},"server_name":{"type":"string","description":""}},"required":["server_name"]}
+
+===
+
+name: search_tools
+--- description ---
+搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）
+--- inputSchema ---
+{"type":"object","properties":{"keyword":{"type":"string","description":""}},"required":["keyword"]}

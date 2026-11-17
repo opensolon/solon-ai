@@ -1,5 +1,6 @@
 package org.noear.solon.ai.talents.gateway;
 
+import io.modelcontextprotocol.spec.McpSchema;
 import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.prompt.Prompt;
@@ -27,11 +28,16 @@ import java.util.stream.Collectors;
 /**
  * MCP 网关：按配置名管理 MCP 服务，支持动态添加与移除。
  *
- * <p>通过工具数量自动切换四阶段模式，平衡模型推理精度与 Token 消耗（与 ToolGatewayTalent 相同机制）：
+ * <p>通过工具数量（与服务数量）自动切换五阶段模式，平衡模型推理精度与 Token 消耗：
  * 1. FULL (全量): 数量 &lt;= dynamicThreshold。平铺所有工具的完整 Schema。
  * 2. SUMMARY (摘要): 数量 &lt;= listThreshold。在指令内展示"工具名 + 描述"清单。
  * 3. LIST (名字): 数量 &lt;= searchThreshold。仅展示"工具名"清单。
- * 4. SEARCH (搜索): 数量 &gt; searchThreshold。完全折叠，强制 LLM 使用关键词检索。
+ * 4. CATALOG (服务目录): 数量 &gt; searchThreshold 且服务数 &lt;= catalogThreshold。只展示"服务名 + 工具数 + 描述"，
+ *    模型用 list_server_tools 下钻到服务内的工具。
+ * 5. SEARCH (搜索): 数量 &gt; searchThreshold 且服务数 &gt; catalogThreshold。完全折叠，强制 LLM 使用关键词检索。
+ *
+ * <p>服务描述取值：配置的描述（{@link McpClientProvider#getDescription()}）&gt; 服务端握手上报的 description &gt;
+ * 服务端 instructions；都没有时，服务目录用工具名自动生成一句。
  *
  * <p>工具按「服务 → 工具」定位：不同服务可以有同名工具。search_tools 结果带 server_name，
  * get_tool_detail / call_tool 用 server_name + tool_name 点名（server_name 为空且工具名唯一时自动补上）。
@@ -154,6 +160,10 @@ public class McpGatewayTalent extends AbsTalent {
     private int dynamicThreshold = 8;
     private int listThreshold = 40;
     private int searchThreshold = 100;
+    // 服务目录模式的服务数上限（超过则目录本身太长，退回搜索模式）
+    private int catalogThreshold = 30;
+    // list_server_tools 单次最多返回的工具数
+    private int listToolsLimit = 30;
 
     private int maxRetries = 3;
     private long retryDelayMs = 1000L; // 默认初始延迟
@@ -188,6 +198,26 @@ public class McpGatewayTalent extends AbsTalent {
 
     public McpGatewayTalent searchThreshold(int searchThreshold) {
         this.searchThreshold = searchThreshold;
+        return this;
+    }
+
+    /**
+     * 服务目录模式的服务数上限（工具数超过 searchThreshold 时，服务数不超过它就展示服务目录，否则退回搜索模式）
+     *
+     * @since 4.2.0
+     */
+    public McpGatewayTalent catalogThreshold(int catalogThreshold) {
+        this.catalogThreshold = catalogThreshold;
+        return this;
+    }
+
+    /**
+     * list_server_tools 单次最多返回的工具数（超出时提示用 keyword 缩小范围）
+     *
+     * @since 4.2.0
+     */
+    public McpGatewayTalent listToolsLimit(int listToolsLimit) {
+        this.listToolsLimit = Math.max(1, listToolsLimit);
         return this;
     }
 
@@ -371,6 +401,68 @@ public class McpGatewayTalent extends AbsTalent {
     }
 
     /**
+     * 获取服务描述（服务名大小写不敏感）
+     *
+     * <p>取值顺序：配置的描述 &gt; 服务端握手上报的 description &gt; 服务端 instructions。
+     * 服务端信息只读取已完成的握手结果，不会为此建立连接。都没有或服务不存在时返回 null。
+     *
+     * @since 4.2.0
+     */
+    @Nullable
+    public String getMcpServerDescription(@Nullable String name) {
+        if (Utils.isBlank(name)) {
+            return null;
+        }
+
+        String server = canonicalName(providerMap.keySet(), name);
+        McpClientProvider provider = server == null ? null : providerMap.get(server);
+        if (provider == null) {
+            return null;
+        }
+
+        String description = provider.getDescription();
+        if (Utils.isNotBlank(description)) {
+            return description.trim();
+        }
+
+        try {
+            McpSchema.Implementation info = provider.getServerInfo();
+            if (info != null && Utils.isNotBlank(info.description())) {
+                return info.description().trim();
+            }
+
+            String instructions = provider.getServerInstructions();
+            if (Utils.isNotBlank(instructions)) {
+                return instructions.trim();
+            }
+        } catch (Throwable e) {
+            LOG.debug("Mcp server {}: read server info failed", server, e);
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取服务下已索引的全部工具（服务名大小写不敏感；顺序同服务端；只读）。
+     *
+     * <p>停用、加载失败或不存在的服务返回空集合。工具名与描述见 {@link FunctionTool#name()} / {@link FunctionTool#description()}。
+     *
+     * @since 4.2.0
+     */
+    public Collection<FunctionTool> getMcpServerTools(@Nullable String name) {
+        if (Utils.isBlank(name)) {
+            return Collections.emptyList();
+        }
+
+        String server = canonicalServer(name);
+        Map<String, FunctionTool> tools = server == null ? null : categoryTools.get(server);
+        if (tools == null) {
+            return Collections.emptyList();
+        }
+        return Collections.unmodifiableCollection(tools.values());
+    }
+
+    /**
      * 工具名 → 归属服务名
      *
      * <p>不是本网关的工具，或同名工具属于多个服务时返回 null（需要区分时用 {@link #getServersOfTool(String, String)}）。
@@ -419,16 +511,22 @@ public class McpGatewayTalent extends AbsTalent {
         return servers;
     }
 
-    /** 服务名规范化：精确匹配优先，否则取大小写不敏感的唯一匹配（多个或没有返回 null） */
+    /** 服务名规范化（只在已索引工具的服务里找） */
     @Nullable
     private String canonicalServer(String serverName) {
+        return canonicalName(categoryTools.keySet(), serverName);
+    }
+
+    /** 名字规范化：精确匹配优先，否则取大小写不敏感的唯一匹配（多个或没有返回 null） */
+    @Nullable
+    private static String canonicalName(Set<String> names, String serverName) {
         String name = serverName.trim();
-        if (categoryTools.containsKey(name)) {
+        if (names.contains(name)) {
             return name;
         }
 
         String found = null;
-        for (String server : categoryTools.keySet()) {
+        for (String server : names) {
             if (server.equalsIgnoreCase(name)) {
                 if (found != null) {
                     return null;
@@ -541,32 +639,117 @@ public class McpGatewayTalent extends AbsTalent {
         StringBuilder sb = new StringBuilder();
         sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_TITLE, "count", size)).append("\n");
 
-        if (isFullMode(view, size)) {
-            // --- FULL 模式 (全铺) ---
-            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_FULL));
-        } else if (size <= listThreshold) {
-            // --- SUMMARY 模式 (摘要) ---
-            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SUMMARY)).append("\n");
-            view.forEach((serverName, tools) -> {
-                sb.append("- **[").append(serverName).append("]**:\n");
-                tools.values().forEach(t ->
-                        sb.append("  - `").append(t.name()).append("`: ").append(t.description()).append("\n")
-                );
-            });
-        } else if (size <= searchThreshold) {
-            // --- LIST 模式 (名字) ---
-            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST)).append("\n");
-            view.forEach((serverName, tools) -> {
-                String names = String.join(", ", tools.keySet());
-                sb.append("- **").append(serverName).append("**: `").append(names).append("`\n");
-            });
-            sb.append("\n").append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST_TIP));
-        } else {
-            // --- SEARCH 模式 (搜索) ---
-            sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SEARCH));
+        switch (modeOf(view, size)) {
+            case FULL:
+                // --- FULL 模式 (全铺) ---
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_FULL));
+                break;
+            case SUMMARY:
+                // --- SUMMARY 模式 (摘要) ---
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SUMMARY)).append("\n");
+                view.forEach((serverName, tools) -> {
+                    sb.append("- **[").append(serverName).append("]**:");
+                    String description = briefDescription(serverName, CATALOG_DESCRIPTION_MAX);
+                    if (description != null) {
+                        sb.append(" ").append(description);
+                    }
+                    sb.append("\n");
+                    tools.values().forEach(t ->
+                            sb.append("  - `").append(t.name()).append("`: ").append(t.description()).append("\n")
+                    );
+                });
+                break;
+            case LIST:
+                // --- LIST 模式 (名字) ---
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST)).append("\n");
+                view.forEach((serverName, tools) -> {
+                    String names = String.join(", ", tools.keySet());
+                    sb.append("- **").append(serverName).append("**");
+                    String description = briefDescription(serverName, CATALOG_DESCRIPTION_MAX);
+                    if (description != null) {
+                        sb.append(" (").append(description).append(")");
+                    }
+                    sb.append(": `").append(names).append("`\n");
+                });
+                sb.append("\n").append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST_TIP));
+                break;
+            case CATALOG:
+                // --- CATALOG 模式 (服务目录：按服务名排序，保持指令稳定) ---
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_CATALOG)).append("\n");
+                new TreeMap<>(view).forEach((serverName, tools) -> {
+                    String description = briefDescription(serverName, CATALOG_DESCRIPTION_MAX);
+                    if (description == null) {
+                        description = fallbackDescription(locale, tools);
+                    }
+                    sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CATALOG_ITEM,
+                            "server", serverName, "count", tools.size(), "description", description)).append("\n");
+                });
+                break;
+            default:
+                // --- SEARCH 模式 (搜索) ---
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_SEARCH));
+                break;
         }
 
         return sb.toString();
+    }
+
+    /** 发现模式 */
+    private enum Mode {
+        FULL, SUMMARY, LIST, CATALOG, SEARCH
+    }
+
+    private Mode modeOf(Map<String, Map<String, FunctionTool>> view, int size) {
+        if (isFullMode(view, size)) {
+            return Mode.FULL;
+        } else if (size <= listThreshold) {
+            return Mode.SUMMARY;
+        } else if (size <= searchThreshold) {
+            return Mode.LIST;
+        } else if (view.size() <= catalogThreshold) {
+            return Mode.CATALOG;
+        } else {
+            return Mode.SEARCH;
+        }
+    }
+
+    // 指令里服务描述的最大字符数（超出截断）
+    private static final int CATALOG_DESCRIPTION_MAX = 150;
+    // list_server_tools 返回里服务描述的最大字符数
+    private static final int DETAIL_DESCRIPTION_MAX = 500;
+    // 自动生成描述时列出的工具名个数
+    private static final int FALLBACK_TOOL_NAMES = 5;
+
+    /** 服务描述的单行短文本（没有描述时返回 null） */
+    @Nullable
+    private String briefDescription(String serverName, int max) {
+        String description = getMcpServerDescription(serverName);
+        if (description == null) {
+            return null;
+        }
+
+        String text = description.replaceAll("\\s+", " ").trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        return text.length() > max ? text.substring(0, max) + "…" : text;
+    }
+
+    /** 没有描述时，用前几个工具名自动生成一句 */
+    private static String fallbackDescription(Locale locale, Map<String, FunctionTool> tools) {
+        List<String> names = new ArrayList<>();
+        for (FunctionTool tool : tools.values()) {
+            if (names.size() >= FALLBACK_TOOL_NAMES) {
+                break;
+            }
+            names.add(tool.name());
+        }
+
+        String text = String.join(", ", names);
+        if (tools.size() > names.size()) {
+            text = text + ", …";
+        }
+        return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CATALOG_FALLBACK, "names", text);
     }
 
     @Override
@@ -574,25 +757,33 @@ public class McpGatewayTalent extends AbsTalent {
         Map<String, Map<String, FunctionTool>> view = viewCategories(prompt);
         int size = countTools(view);
 
-        // FULL 模式：直接交付原始工具（已保证没有同名工具）
-        if (isFullMode(view, size)) {
-            List<FunctionTool> tools = new ArrayList<>(size);
-            for (Map<String, FunctionTool> group : view.values()) {
-                tools.addAll(group.values());
+        switch (modeOf(view, size)) {
+            case FULL: {
+                // FULL 模式：直接交付原始工具（已保证没有同名工具）
+                List<FunctionTool> tools = new ArrayList<>(size);
+                for (Map<String, FunctionTool> group : view.values()) {
+                    tools.addAll(group.values());
+                }
+                return tools;
             }
-            return tools;
+            case SUMMARY:
+                // SUMMARY 模式：上下文已包含摘要，无需搜索与下钻，只需提供详情与代理工具
+                return super.getTools(prompt).stream()
+                        .filter(f -> !TOOL_SEARCH.equals(f.name()) && !TOOL_LIST_SERVER.equals(f.name()))
+                        .collect(Collectors.toList());
+            case LIST:
+                // LIST 模式：指令已列出全部工具名，下钻意义不大（详情用 get_tool_detail）
+                return super.getTools(prompt).stream()
+                        .filter(f -> !TOOL_LIST_SERVER.equals(f.name()))
+                        .collect(Collectors.toList());
+            default:
+                // CATALOG & SEARCH 模式：提供完整的中转工具集（含 search_tools 与 list_server_tools）
+                return super.getTools(prompt);
         }
-
-        // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
-        if (size <= listThreshold) {
-            return super.getTools(prompt).stream()
-                    .filter(f -> !"search_tools".equals(f.name()))
-                    .collect(Collectors.toList());
-        }
-
-        // LIST & SEARCH 模式：提供完整的中转工具集（包含 search_tools；中转工具按请求语言本地化）
-        return super.getTools(prompt);
     }
+
+    private static final String TOOL_SEARCH = "search_tools";
+    private static final String TOOL_LIST_SERVER = "list_server_tools";
 
     // ========== 视野（per-request 选择） ==========
 
@@ -690,6 +881,63 @@ public class McpGatewayTalent extends AbsTalent {
                 " \n```json\n" + target.tool.inputSchema() + "\n```";
     }
 
+    /**
+     * 列出服务下的工具（_mcps_allowed、_mcps_selected、__locale 由工具上下文注入）
+     *
+     * <p>属于发现：与 search_tools 一样按强制边界与视野收窄，越界或不在视野内的服务按「不存在」处理。
+     * 服务名大小写不敏感；keyword 可选，在服务内按名称与描述过滤（多个关键词须全部命中）。
+     * 单次最多返回 listToolsLimit 个，超出时提示用 keyword 缩小范围。
+     *
+     * @since 4.2.0
+     */
+    @ToolMapping(name = TOOL_LIST_SERVER, description = "列出指定MCP服务下的工具（名称与描述），可用 keyword 在服务内过滤")
+    public Object listServerTools(@Param("server_name") String serverName,
+                                  @Param(value = "keyword", required = false) String keyword,
+                                  List<String> _mcps_allowed, List<String> _mcps_selected, String __locale) {
+        Locale locale = AiI18n.toLocale(__locale);
+        if (Utils.isBlank(serverName)) {
+            return McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_SERVER_BLANK);
+        }
+
+        String server = canonicalServer(serverName);
+        Map<String, FunctionTool> tools = server == null ? null : categoryTools.get(server);
+        if (tools == null || isServerAllowed(server, _mcps_allowed) == false || isServerSelected(server, _mcps_selected) == false) {
+            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_MISSING, "server", serverName);
+        }
+
+        String[] keys = Utils.isBlank(keyword) ? new String[0] : keyword.trim().toLowerCase().split("[\\s,;，；]+");
+        List<Map<String, String>> matched = new ArrayList<>();
+        for (FunctionTool t : tools.values()) {
+            String content = (t.name() + " " + t.description()).toLowerCase();
+            if (Arrays.stream(keys).allMatch(content::contains)) {
+                Map<String, String> row = new LinkedHashMap<>();
+                row.put("tool_name", t.name());
+                row.put("tool_description", t.description());
+                matched.add(row);
+            }
+        }
+
+        if (matched.isEmpty()) {
+            return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_NONE, "server", server, "keyword", keyword);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("server_name", server);
+        String description = briefDescription(server, DETAIL_DESCRIPTION_MAX);
+        if (description != null) {
+            result.put("server_description", description);
+        }
+        result.put("tool_count", matched.size());
+        if (matched.size() > listToolsLimit) {
+            result.put("tools", new ArrayList<>(matched.subList(0, listToolsLimit)));
+            result.put("tip", McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_TRUNCATED,
+                    "limit", listToolsLimit, "total", matched.size()));
+        } else {
+            result.put("tools", matched);
+        }
+        return result;
+    }
+
     private static String ambiguousText(Locale locale, String toolName, List<String> candidates) {
         return McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_AMBIGUOUS,
                 "name", toolName, "servers", String.join(", ", candidates));
@@ -777,8 +1025,10 @@ public class McpGatewayTalent extends AbsTalent {
                 return ToolResult.success(ambiguousText(locale, tool_name, target.candidates));
             }
 
-            // 边界与视野等框架键不转发给 MCP 服务
+            // 边界、视野、语言等框架键不转发给 MCP 服务（第三方服务不认识，也不应看到）
             finalToolArgs.remove(CTX_MCPS_ALLOWED);
+            finalToolArgs.remove(CTX_MCPS_SELECTED);
+            finalToolArgs.remove(AiI18n.ATTR_LOCALE);
 
             final FunctionTool tool = target.tool;
             try {

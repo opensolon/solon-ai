@@ -57,14 +57,19 @@ public class McpGatewayTalentScopeTest {
         private final List<FunctionTool> tools;
 
         FakeProvider(List<FunctionTool> tools) {
-            super(props());
+            this(tools, null);
+        }
+
+        FakeProvider(List<FunctionTool> tools, String description) {
+            super(props(description));
             this.tools = tools;
         }
 
-        private static McpClientProperties props() {
+        private static McpClientProperties props(String description) {
             return new McpClientProperties().then(p -> {
                 p.setChannel("sse");
                 p.setUrl("http://127.0.0.1:1/mcp");
+                p.setDescription(description);
             });
         }
 
@@ -358,6 +363,145 @@ public class McpGatewayTalentScopeTest {
         // 刷新也只替换本服务的工具
         talent.refreshMcpServer("beta");
         assertEquals("beta", talent.getServerOfTool("query"));
+    }
+
+    @Test
+    void callToolDoesNotForwardFrameworkKeys() throws Throwable {
+        Map<String, Object> received = new HashMap<>();
+        McpGatewayTalent talent = new McpGatewayTalent();
+        talent.addMcpServer("alpha", new FakeProvider(Collections.singletonList(new FunctionToolDesc("alpha_search")
+                .description("a").inputSchema("{\"type\":\"object\",\"properties\":{}}")
+                .doHandle(args -> {
+                    received.putAll(args);
+                    return ToolResult.success("ok");
+                }))));
+
+        Map<String, Object> toolArgs = new HashMap<>();
+        toolArgs.put("q", "x");
+        Map<String, Object> args = new HashMap<>();
+        args.put("tool_name", "alpha_search");
+        args.put("tool_args", toolArgs);
+        args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, Arrays.asList("alpha"));
+        args.put(McpGatewayTalent.CTX_MCPS_SELECTED, Arrays.asList("alpha"));
+        args.put("__locale", "zh-CN");
+        toolsOf(talent).get("call_tool").handle(args);
+
+        assertEquals("x", received.get("q"), "模型给的参数照常转发");
+        assertFalse(received.containsKey(McpGatewayTalent.CTX_MCPS_ALLOWED));
+        assertFalse(received.containsKey(McpGatewayTalent.CTX_MCPS_SELECTED));
+        assertFalse(received.containsKey("__locale"));
+    }
+
+    // ---------- 服务目录与 list_server_tools ----------
+
+    private static String list(Map<String, FunctionTool> tools, String server, String keyword,
+                               List<String> selected, List<String> allowed) throws Throwable {
+        Map<String, Object> args = new HashMap<>();
+        args.put("server_name", server);
+        if (keyword != null) {
+            args.put("keyword", keyword);
+        }
+        if (selected != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_SELECTED, selected);
+        }
+        if (allowed != null) {
+            args.put(McpGatewayTalent.CTX_MCPS_ALLOWED, allowed);
+        }
+        return String.valueOf(tools.get("list_server_tools").handle(args));
+    }
+
+    @Test
+    void listServerToolsRespectsScope() throws Throwable {
+        McpGatewayTalent talent = build();
+        Map<String, FunctionTool> tools = toolsOf(talent);
+
+        String all = list(tools, "ALPHA", null, null, null);
+        assertTrue(all.contains("alpha_search") && all.contains("alpha_fetch"), "服务名大小写不敏感");
+        assertFalse(all.contains("beta_search"));
+
+        String filtered = list(tools, "alpha", "抓取", null, null);
+        assertTrue(filtered.contains("alpha_fetch"));
+        assertFalse(filtered.contains("alpha_search"), "keyword 在服务内过滤");
+
+        // 发现属性：视野外、边界外的服务都按不存在处理
+        assertTrue(list(tools, "alpha", null, Arrays.asList("beta"), null).contains("未找到"));
+        assertTrue(list(tools, "alpha", null, null, Arrays.asList("beta")).contains("未找到"));
+        assertTrue(list(tools, "beta", null, Arrays.asList("beta"), Arrays.asList("beta")).contains("beta_search"));
+        assertTrue(list(tools, "ghost", null, null, null).contains("未找到"));
+
+        assertFalse(tools.get("list_server_tools").inputSchema().contains("_mcps_"), "隐式参数不进 schema");
+    }
+
+    @Test
+    void listServerToolsTruncates() throws Throwable {
+        McpGatewayTalent talent = build().listToolsLimit(1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) talent.listServerTools("alpha", null, null, null, null);
+        assertEquals(2, result.get("tool_count"), "tool_count 是命中总数");
+        assertEquals(1, ((List<?>) result.get("tools")).size());
+        assertTrue(String.valueOf(result.get("tip")).contains("keyword"));
+    }
+
+    @Test
+    void serverDescriptionAndTools() {
+        McpGatewayTalent talent = new McpGatewayTalent();
+        talent.addMcpServer("weather", new FakeProvider(Arrays.asList(
+                mockTool("forecast", "天气预报", new AtomicInteger()),
+                mockTool("now", "实时天气", new AtomicInteger())), "  天气查询  "));
+        talent.addMcpServer("plain", new FakeProvider(Collections.singletonList(
+                mockTool("echo", "回显", new AtomicInteger()))));
+
+        assertEquals("天气查询", talent.getMcpServerDescription("WEATHER"));
+        assertNull(talent.getMcpServerDescription("plain"), "未配置且未连接：没有描述");
+        assertNull(talent.getMcpServerDescription("ghost"));
+
+        List<String> names = new ArrayList<>();
+        for (FunctionTool t : talent.getMcpServerTools("weather")) {
+            names.add(t.name());
+        }
+        assertEquals(Arrays.asList("forecast", "now"), names, "顺序同服务端");
+        assertTrue(talent.getMcpServerTools("ghost").isEmpty());
+        assertThrows(UnsupportedOperationException.class, () -> talent.getMcpServerTools("weather").clear());
+    }
+
+    private static List<String> toolNames(McpGatewayTalent talent, Prompt prompt) {
+        List<String> names = new ArrayList<>();
+        for (FunctionTool t : talent.getTools(prompt)) {
+            names.add(t.name());
+        }
+        return names;
+    }
+
+    @Test
+    void catalogModeShowsServersAndOffersDrillDown() {
+        McpGatewayTalent talent = build().dynamicThreshold(0).listThreshold(0).searchThreshold(1).catalogThreshold(2);
+        talent.addMcpServer("alpha", new FakeProvider(Arrays.asList(
+                mockTool("alpha_search", "阿尔法搜索", new AtomicInteger()),
+                mockTool("alpha_fetch", "阿尔法抓取", new AtomicInteger())), "阿尔法服务"));
+
+        String instruction = talent.getInstruction(null);
+        assertTrue(instruction.contains("**alpha**（2 个工具）：阿尔法服务"), instruction);
+        assertTrue(instruction.contains("**beta**（1 个工具）：包含 beta_search"), "没有描述时自动生成");
+        assertFalse(instruction.contains("alpha_fetch"), "目录不列工具");
+        assertTrue(toolNames(talent, null).containsAll(Arrays.asList("search_tools", "list_server_tools", "get_tool_detail", "call_tool")));
+
+        // 目录按视野收窄
+        Prompt prompt = Prompt.of("hi");
+        McpGatewayTalent.putSelected(prompt, Collections.singletonList("alpha"));
+        assertFalse(talent.searchThreshold(1).getInstruction(prompt).contains("beta"));
+
+        // 服务数超过 catalogThreshold：退回搜索模式，仍提供 list_server_tools
+        talent.catalogThreshold(1);
+        assertFalse(talent.getInstruction(null).contains("阿尔法服务"));
+        assertTrue(toolNames(talent, null).contains("list_server_tools"));
+
+        // LIST 与 SUMMARY 模式不提供下钻；有描述时服务标题带上描述
+        talent.searchThreshold(10);
+        assertFalse(toolNames(talent, null).contains("list_server_tools"));
+        assertTrue(talent.getInstruction(null).contains("**alpha** (阿尔法服务)"));
+        talent.listThreshold(10);
+        assertFalse(toolNames(talent, null).contains("list_server_tools"));
+        assertTrue(talent.getInstruction(null).contains("**[alpha]**: 阿尔法服务"));
     }
 
     @Test

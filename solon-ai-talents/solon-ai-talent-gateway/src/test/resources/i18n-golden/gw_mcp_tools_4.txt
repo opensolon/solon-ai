@@ -14,6 +14,14 @@ name: get_tool_detail
 
 ===
 
+name: list_server_tools
+--- description ---
+列出指定MCP服务下的工具（名称与描述），可用 keyword 在服务内过滤
+--- inputSchema ---
+{"type":"object","properties":{"keyword":{"type":"string","description":""},"server_name":{"type":"string","description":""}},"required":["server_name"]}
+
+===
+
 name: search_tools
 --- description ---
 搜索MCP工具。支持多个关键词用空隔隔开（如：'杭州 旅游'）

@@ -1,0 +1,1 @@
+{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}], tip=Only the first 1 are listed (2 in total); narrow down with a keyword.}

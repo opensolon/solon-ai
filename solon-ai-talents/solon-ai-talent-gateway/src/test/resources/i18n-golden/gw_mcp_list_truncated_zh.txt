@@ -1,0 +1,1 @@
+{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}], tip=仅列出前 1 个（共 2 个），请用 keyword 缩小范围。}

@@ -36,6 +36,9 @@ public final class McpGatewayI18nKeys {
     public static final String GATEWAY_MCP_INSTRUCTION_SUMMARY = "gateway.mcp.instruction.summary";
     public static final String GATEWAY_MCP_INSTRUCTION_LIST = "gateway.mcp.instruction.list";
     public static final String GATEWAY_MCP_INSTRUCTION_LIST_TIP = "gateway.mcp.instruction.list_tip";
+    public static final String GATEWAY_MCP_INSTRUCTION_CATALOG = "gateway.mcp.instruction.catalog";
+    public static final String GATEWAY_MCP_CATALOG_ITEM = "gateway.mcp.catalog.item";
+    public static final String GATEWAY_MCP_CATALOG_FALLBACK = "gateway.mcp.catalog.fallback";
     public static final String GATEWAY_MCP_INSTRUCTION_SEARCH = "gateway.mcp.instruction.search";
     public static final String GATEWAY_MCP_SEARCH_BLANK = "gateway.mcp.search.blank";
     public static final String GATEWAY_MCP_SEARCH_NONE = "gateway.mcp.search.none";
@@ -45,5 +48,9 @@ public final class McpGatewayI18nKeys {
     public static final String GATEWAY_MCP_CALL_MISSING = "gateway.mcp.call.missing";
     public static final String GATEWAY_MCP_CALL_ERROR = "gateway.mcp.call.error";
     public static final String GATEWAY_MCP_AMBIGUOUS = "gateway.mcp.ambiguous";
+    public static final String GATEWAY_MCP_LIST_SERVER_BLANK = "gateway.mcp.list.server_blank";
+    public static final String GATEWAY_MCP_LIST_MISSING = "gateway.mcp.list.missing";
+    public static final String GATEWAY_MCP_LIST_NONE = "gateway.mcp.list.none";
+    public static final String GATEWAY_MCP_LIST_TRUNCATED = "gateway.mcp.list.truncated";
 }
 

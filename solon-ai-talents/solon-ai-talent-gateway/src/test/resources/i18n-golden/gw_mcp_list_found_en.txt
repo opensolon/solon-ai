@@ -1,0 +1,1 @@
+{server_name=alpha, tool_count=2, tools=[{tool_name=mcp_1, tool_description=MCP 工具 1}, {tool_name=mcp_3, tool_description=MCP 工具 3}]}

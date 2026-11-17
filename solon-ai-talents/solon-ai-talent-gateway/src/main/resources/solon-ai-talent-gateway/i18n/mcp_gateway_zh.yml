@@ -4,7 +4,7 @@
 gateway.mcp.description: |-
   MCP工具网关（共 {servers} 个服务，{tools} 个工具）
 
-# ---- 指令（四种模式） ----
+# ---- 指令（五种模式） ----
 gateway.mcp.instruction.title: |-
   ## MCP工具发现规范 (共 {count} 个工具)
 gateway.mcp.instruction.full: |-
@@ -28,10 +28,22 @@ gateway.mcp.instruction.list: |-
   #### 可用MCP工具列表 (按服务展示):
 gateway.mcp.instruction.list_tip: |-
   > 提示：服务名和工具名具有语义参考价值，锁定目标后务必先查详情。
+gateway.mcp.instruction.catalog: |-
+  ### 运行模式: 服务目录
+  MCP工具库规模巨大，下方只列出服务目录。请遵循以下流程：
+  - **Step 1 (选服务)**: 从下方"MCP服务目录"中按描述选定服务，调用 `list_server_tools`（传 server_name，可加 keyword 过滤）查看该服务的工具；也可用 `search_tools` 跨服务按关键词搜索。
+  - **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
+  - **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
+
+  #### MCP服务目录:
+gateway.mcp.catalog.item: |-
+  - **{server}**（{count} 个工具）：{description}
+gateway.mcp.catalog.fallback: |-
+  包含 {names}
 gateway.mcp.instruction.search: |-
   ### 运行模式: 搜索发现
   MCP工具库规模巨大，清单已折叠。请遵循以下流程：
-  - **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具（结果含 server_name 与 tool_name）。
+  - **Step 1 (搜索)**: 必须先使用 `search_tools` 通过关键词寻找匹配的工具（结果含 server_name 与 tool_name）；需要浏览某个服务的全部工具时用 `list_server_tools`。
   - **Step 2 (详情)**: 调用 `get_tool_detail`（传 server_name 与 tool_name）获取参数 Schema。
   - **Step 3 (执行)**: 确认参数后，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。
 
@@ -61,3 +73,11 @@ gateway.mcp.call.error: |-
   执行异常: {error}
 gateway.mcp.ambiguous: |-
   错误：多个MCP服务都有工具 '{name}'（{servers}），请用 server_name 指定服务。
+gateway.mcp.list.server_blank: |-
+  错误：server_name 不能为空
+gateway.mcp.list.missing: |-
+  错误：未找到MCP服务 '{server}'，请按服务目录或 search_tools 结果里的 server_name 填写。
+gateway.mcp.list.none: |-
+  提醒：MCP服务 '{server}' 中没有匹配 '{keyword}' 的工具。可去掉 keyword 查看全部工具。
+gateway.mcp.list.truncated: |-
+  仅列出前 {limit} 个（共 {total} 个），请用 keyword 缩小范围。

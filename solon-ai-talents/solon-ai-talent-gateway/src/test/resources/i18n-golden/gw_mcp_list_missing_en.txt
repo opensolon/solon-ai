@@ -1,0 +1,1 @@
+Error: MCP server 'ghost' was not found; use a server_name from the server catalog or from search_tools results.
