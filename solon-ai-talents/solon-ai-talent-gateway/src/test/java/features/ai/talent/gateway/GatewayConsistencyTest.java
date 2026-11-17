@@ -247,10 +247,46 @@ public class GatewayConsistencyTest {
         assertTrue(mcpShell.call(args).isError());
     }
 
+    /**
+     * 4.1.x 的旧名字仍是纯委派：只配旧方法得到的指令，与只配新方法逐字相同
+     *
+     * <p>若某个别名没有落到新方法上（旧例只断言“不再 FULL”，配错也可能通过），指令会退回默认阈值而不同。</p>
+     */
+    @Test
+    @SuppressWarnings("deprecation")
+    void deprecatedThresholdAliasesStillConfigure() {
+        AtomicReference<Map<String, Object>> received = new AtomicReference<>();
+
+        // Tool：2 个工具、三个阈值都是 1 -> 全部超限，落到 SEARCH；旧名字没生效就会退回 8/40/100 变成 FULL
+        ToolGatewayTalent toolNew = new ToolGatewayTalent().fullThreshold(1).summaryThreshold(1).listThreshold(1);
+        ToolGatewayTalent toolOld = new ToolGatewayTalent().dynamicThreshold(1).summaryThreshold(1).searchThreshold(1);
+        for (ToolGatewayTalent talent : Arrays.asList(toolNew, toolOld)) {
+            talent.addTool("A", echoTool("a", received));
+            talent.addTool("B", echoTool("b", received));
+        }
+        List<String> toolNames = new ArrayList<>();
+        for (FunctionTool t : toolOld.getTools(null)) {
+            toolNames.add(t.name());
+        }
+        assertTrue(toolNames.contains("search_biz_tools"), toolNames.toString());
+        assertEquals(toolNew.getInstruction(null), toolOld.getInstruction(null));
+
+        // MCP：2 个工具、fullThreshold 为 1 -> SUMMARY；旧名字没生效就会退回 8 变成 FULL
+        McpGatewayTalent mcpNew = new McpGatewayTalent().fullThreshold(1);
+        McpGatewayTalent mcpOld = new McpGatewayTalent().dynamicThreshold(1);
+        for (McpGatewayTalent talent : Arrays.asList(mcpNew, mcpOld)) {
+            talent.addMcpServer("alpha", new FakeProvider(Collections.singletonList(echoTool("a1", received))));
+            talent.addMcpServer("beta", new FakeProvider(Collections.singletonList(echoTool("b1", received))));
+        }
+        String instruction = mcpOld.getInstruction(null);
+        assertTrue(instruction.contains("**[alpha]**") && instruction.contains("**[beta]**"), instruction);
+        assertEquals(mcpNew.getInstruction(null), instruction);
+    }
+
     @Test
     void toolGatewayAddAndRemove() {
         AtomicReference<Map<String, Object>> received = new AtomicReference<>();
-        ToolGatewayTalent talent = new ToolGatewayTalent().dynamicThreshold(0).listThreshold(10);
+        ToolGatewayTalent talent = new ToolGatewayTalent().fullThreshold(0).summaryThreshold(10);
         talent.addTool("A", echoTool("x", received));
         talent.addTool("B", echoTool("X", received));
 
@@ -270,7 +306,7 @@ public class GatewayConsistencyTest {
     @Test
     void toolGatewayConcurrentAddWhileRendering() throws Exception {
         AtomicReference<Map<String, Object>> received = new AtomicReference<>();
-        ToolGatewayTalent talent = new ToolGatewayTalent().dynamicThreshold(0).listThreshold(100000).searchThreshold(100000);
+        ToolGatewayTalent talent = new ToolGatewayTalent().fullThreshold(0).summaryThreshold(100000).listThreshold(100000);
         AtomicReference<Throwable> failure = new AtomicReference<>();
         AtomicBoolean stop = new AtomicBoolean();
         CountDownLatch started = new CountDownLatch(1);

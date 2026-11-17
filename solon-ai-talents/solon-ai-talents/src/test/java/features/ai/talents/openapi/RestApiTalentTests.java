@@ -17,7 +17,7 @@ import org.noear.solon.test.SolonTest;
 @SolonTest(MockApp.class)
 public class RestApiTalentTests extends HttpTester {
 
-    private SimpleAgent getAgent(String version, int dynamicThreshold) {
+    private SimpleAgent getAgent(String version, int fullThreshold) {
         String mockApiDocsUrl = "http://localhost:9801/swagger/" + version + "/api-docs";
         String apiBaseUrl = "http://localhost:9801";
 
@@ -26,7 +26,7 @@ public class RestApiTalentTests extends HttpTester {
         // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
         OpenApiGatewayTalent apiTalent = new OpenApiGatewayTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .dynamicThreshold(dynamicThreshold);
+                .fullThreshold(fullThreshold);
 
         return SimpleAgent.of(chatModel)
                 .role("业务助手")
@@ -94,7 +94,7 @@ public class RestApiTalentTests extends HttpTester {
         String mockApiDocsUrl = "http://localhost:8080/swagger/v3/api-docs";
         OpenApiGatewayTalent apiTalent = new OpenApiGatewayTalent()
                 .addApi(mockApiDocsUrl, "http://localhost:8080")
-                .dynamicThreshold(1);
+                .fullThreshold(1);
 
         // getTools 应该包含探测工具 get_api_detail
         boolean hasDetailTool = apiTalent.getTools(null).stream()

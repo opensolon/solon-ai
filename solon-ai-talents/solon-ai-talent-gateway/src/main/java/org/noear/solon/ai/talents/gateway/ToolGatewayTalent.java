@@ -22,12 +22,12 @@ import java.util.stream.Collectors;
 /**
  * Tool 网关：解决工具过多导致的上下文溢出（Context Overflow）问题。
  *
- * <p>通过工具数量自动切换四种模式，平衡模型推理精度与 Token 消耗：
+ * <p>通过工具数量自动切换四种模式，平衡模型推理精度与 Token 消耗（每个模式的阈值以模式命名，不超过它就用这个模式）：
  * <ol>
- *   <li>FULL (直接调用): 工具数 &lt;= dynamicThreshold。直接交付原始工具。</li>
- *   <li>SUMMARY (摘要): 工具数 &lt;= listThreshold。在指令内展示"工具名 + 描述"清单。</li>
- *   <li>LIST (名字): 工具数 &lt;= searchThreshold。仅展示"工具名"清单。</li>
- *   <li>SEARCH (搜索): 工具数 &gt; searchThreshold。完全折叠，模型用关键词检索。</li>
+ *   <li>FULL (直接调用): 工具数 &lt;= fullThreshold。直接交付原始工具。</li>
+ *   <li>SUMMARY (摘要): 工具数 &lt;= summaryThreshold。在指令内展示"工具名 + 描述"清单。</li>
+ *   <li>LIST (名字): 工具数 &lt;= listThreshold。仅展示"工具名"清单。</li>
+ *   <li>SEARCH (搜索): 其余（最后一档，没有阈值）。完全折叠，模型用关键词检索。</li>
  * </ol>
  *
  * <p>中转工具为 {@value #TOOL_SEARCH}、{@value #TOOL_DETAIL}、{@value #TOOL_CALL}（4.2.0 起改名，
@@ -77,9 +77,12 @@ public class ToolGatewayTalent extends AbsTalent {
     private volatile Index index = Index.EMPTY;
     private final Object indexLock = new Object();
 
-    private int dynamicThreshold = 8;   // FULL 模式的工具数上限
-    private int listThreshold = 40;     // SUMMARY 模式的工具数上限
-    private int searchThreshold = 100;  // LIST 模式的工具数上限（超过则 SEARCH）
+    // 模式阈值（工具数）：xxxThreshold 是 xxx 模式的阈值，不超过它（含）就用这个模式，超过往下一档；SEARCH 是最后一档
+    private int fullThreshold = 8;
+    private int summaryThreshold = 40;
+    private int listThreshold = 100;
+    // 是否已检查过阈值顺序（改阈值后重新检查）
+    private volatile boolean thresholdsChecked;
 
     // 缺省只尝试 1 次（不重试），见 retryConfig
     private volatile int maxRetries = 1;
@@ -115,27 +118,55 @@ public class ToolGatewayTalent extends AbsTalent {
     }
 
     /**
-     * FULL（直接调用）模式的工具数上限（缺省 8）：不超过它时直接交付原始工具
+     * FULL（直接调用）模式的阈值（工具数，缺省 8）：不超过它时直接交付原始工具
+     *
+     * @since 4.2.0
      */
-    public ToolGatewayTalent dynamicThreshold(int dynamicThreshold) {
-        this.dynamicThreshold = dynamicThreshold;
+    public ToolGatewayTalent fullThreshold(int fullThreshold) {
+        this.fullThreshold = fullThreshold;
+        this.thresholdsChecked = false;
         return this;
     }
 
     /**
-     * SUMMARY（摘要）模式的工具数上限（缺省 40）：不超过它时在指令里列出"工具名 + 描述"
+     * SUMMARY（摘要）模式的阈值（工具数，缺省 40）：不超过它时在指令里列出"工具名 + 描述"
+     *
+     * @since 4.2.0
+     */
+    public ToolGatewayTalent summaryThreshold(int summaryThreshold) {
+        this.summaryThreshold = summaryThreshold;
+        this.thresholdsChecked = false;
+        return this;
+    }
+
+    /**
+     * LIST（只列名字）模式的阈值（工具数，缺省 100）：不超过它时只列工具名，超过则进入 SEARCH（搜索）模式。
+     * 三个阈值必须递增（{@code fullThreshold < summaryThreshold < listThreshold}），配反或相等时打 WARN（后一档取不到）。
+     *
+     * @since 4.2.0
      */
     public ToolGatewayTalent listThreshold(int listThreshold) {
         this.listThreshold = listThreshold;
+        this.thresholdsChecked = false;
         return this;
     }
 
     /**
-     * LIST（只列名字）模式的工具数上限（缺省 100）：不超过它时只列工具名，超过则进入 SEARCH（搜索）模式
+     * @deprecated 4.2.0 改名为 {@link #fullThreshold(int)}（阈值以它所在的模式命名）
      */
+    @Deprecated
+    public ToolGatewayTalent dynamicThreshold(int dynamicThreshold) {
+        return fullThreshold(dynamicThreshold);
+    }
+
+    /**
+     * @deprecated 4.2.0 改名为 {@link #listThreshold(int)}（含义相同：LIST 模式的工具数阈值）。
+     * 注意 4.1.x 的 {@code listThreshold(n)} 指的是 SUMMARY 模式，现在叫 {@link #summaryThreshold(int)}，
+     * 名字被 LIST 模式占用，无法保留旧方法
+     */
+    @Deprecated
     public ToolGatewayTalent searchThreshold(int searchThreshold) {
-        this.searchThreshold = searchThreshold;
-        return this;
+        return listThreshold(searchThreshold);
     }
 
     /**
@@ -271,16 +302,18 @@ public class ToolGatewayTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        checkThresholds();
+
         final Locale locale = AiI18n.localeOf(prompt);
         final Index idx = index;
         final int size = idx.all.size();
         StringBuilder sb = new StringBuilder();
         sb.append(ToolGatewayI18n.fmt(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_TITLE, "count", size)).append("\n");
 
-        if (size <= dynamicThreshold) {
+        if (size <= fullThreshold) {
             // --- 逻辑分支 1: FULL 模式 (全铺) ---
             sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_FULL));
-        } else if (size <= listThreshold) {
+        } else if (size <= summaryThreshold) {
             // --- 逻辑分支 2: SUMMARY 模式 (摘要) ---
             sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_SUMMARY)).append("\n");
             idx.categories.forEach((cat, tools) -> {
@@ -289,7 +322,7 @@ public class ToolGatewayTalent extends AbsTalent {
                         sb.append("  - `").append(t.name()).append("`: ").append(t.description()).append("\n")
                 );
             });
-        } else if (size <= searchThreshold) {
+        } else if (size <= listThreshold) {
             // --- 逻辑分支 3: LIST 模式 (名字，按原名显示) ---
             sb.append(ToolGatewayI18n.get(locale, ToolGatewayI18nKeys.GATEWAY_TOOL_INSTRUCTION_LIST)).append("\n");
             idx.categories.forEach((cat, tools) -> {
@@ -307,11 +340,13 @@ public class ToolGatewayTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
+        checkThresholds();
+
         Index idx = index;
         int size = idx.all.size();
 
         // FULL 模式：直接交付原始工具
-        if (size <= dynamicThreshold) {
+        if (size <= fullThreshold) {
             return idx.all.values();
         }
 
@@ -319,7 +354,7 @@ public class ToolGatewayTalent extends AbsTalent {
         Collection<FunctionTool> relays = super.getTools(prompt);
 
         // SUMMARY 模式：上下文已包含摘要，无需搜索功能，只需提供详情与代理工具
-        if (size <= listThreshold) {
+        if (size <= summaryThreshold) {
             return relays.stream()
                     .filter(f -> !TOOL_SEARCH.equals(f.name()))
                     .collect(Collectors.toList());
@@ -327,6 +362,28 @@ public class ToolGatewayTalent extends AbsTalent {
 
         // LIST & SEARCH 模式：提供完整的中转工具集（包含搜索）
         return relays;
+    }
+
+    /**
+     * 阈值必须按档位递增：配反或配成相等时，后一档永远取不到。首次渲染时检查一次（改阈值后重新检查）。
+     * <p>
+     * 相等也算配错，因为「不超过」含本数：前两档相等时 SUMMARY 取不到，后两档相等时 LIST 取不到。
+     * 0 是「关掉这一档」的显式写法，不提示。
+     */
+    private void checkThresholds() {
+        if (thresholdsChecked) {
+            return;
+        }
+
+        thresholdsChecked = true;
+        if (summaryThreshold > 0 && fullThreshold >= summaryThreshold) {
+            LOG.warn("ToolGatewayTalent: fullThreshold ({}) >= summaryThreshold ({}), SUMMARY mode is unreachable",
+                    fullThreshold, summaryThreshold);
+        }
+        if (listThreshold > 0 && summaryThreshold >= listThreshold) {
+            LOG.warn("ToolGatewayTalent: summaryThreshold ({}) >= listThreshold ({}), LIST mode is unreachable; if this is 4.1.x code, change listThreshold({}) to summaryThreshold({})",
+                    summaryThreshold, listThreshold, listThreshold, listThreshold);
+        }
     }
 
     /**

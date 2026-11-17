@@ -34,9 +34,9 @@ public final class McpGatewayI18nKeys {
     public static final String GATEWAY_MCP_INSTRUCTION_TITLE = "gateway.mcp.instruction.title";
     public static final String GATEWAY_MCP_INSTRUCTION_FULL = "gateway.mcp.instruction.full";
     public static final String GATEWAY_MCP_INSTRUCTION_SUMMARY = "gateway.mcp.instruction.summary";
-    public static final String GATEWAY_MCP_INSTRUCTION_CATALOG = "gateway.mcp.instruction.catalog";
-    public static final String GATEWAY_MCP_CATALOG_ITEM = "gateway.mcp.catalog.item";
-    public static final String GATEWAY_MCP_CATALOG_ITEM_NAMES = "gateway.mcp.catalog.item_names";
+    public static final String GATEWAY_MCP_INSTRUCTION_LIST = "gateway.mcp.instruction.list";
+    public static final String GATEWAY_MCP_INSTRUCTION_LIST_ITEM = "gateway.mcp.instruction.list_item";
+    public static final String GATEWAY_MCP_INSTRUCTION_LIST_ITEM_NAMES = "gateway.mcp.instruction.list_item_names";
     public static final String GATEWAY_MCP_SERVER_INSTRUCTIONS = "gateway.mcp.server_instructions";
     public static final String GATEWAY_MCP_INSTRUCTIONS_TRUNCATED = "gateway.mcp.instructions_truncated";
     public static final String GATEWAY_MCP_INSTRUCTION_SEARCH = "gateway.mcp.instruction.search";

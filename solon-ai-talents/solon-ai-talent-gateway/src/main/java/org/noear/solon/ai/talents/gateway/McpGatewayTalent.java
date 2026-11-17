@@ -25,15 +25,16 @@ import java.util.stream.Collectors;
 /**
  * MCP 网关：按配置名管理 MCP 服务，支持动态添加与移除。
  *
- * <p><b>四种发现模式</b>（按本次请求可见的工具数与服务数切换）：
+ * <p><b>四种发现模式</b>（按本次请求可见的工具数与服务数切换，每个模式的阈值以模式命名，不超过它就用这个模式）：
  * <ol>
- *   <li>FULL (直接调用): 工具数 &lt;= dynamicThreshold，且没有跨服务同名工具。直接交付原始工具。</li>
- *   <li>SUMMARY (摘要): 工具数 &lt;= listThreshold。指令里按服务列出"参数签名 + 单行描述"，模型多数情况下直接 call_tool。</li>
- *   <li>CATALOG (服务目录): 工具数 &gt; listThreshold 且服务数 &lt;= catalogThreshold。只列"服务名 + 工具数 + 描述"，
+ *   <li>FULL (直接调用): 工具数 &lt;= fullThreshold，且没有跨服务同名工具。直接交付原始工具。</li>
+ *   <li>SUMMARY (摘要): 工具数 &lt;= summaryThreshold。指令里按服务列出"参数签名 + 单行描述"，模型多数情况下直接 call_tool。</li>
+ *   <li>LIST (服务目录): 服务数 &lt;= listThreshold。只列服务名（"服务名 + 工具数 + 描述"），
  *       模型用 list_server_tools 下钻到服务内的工具（带参数签名），再 call_tool。</li>
- *   <li>SEARCH (搜索): 工具数 &gt; listThreshold 且服务数 &gt; catalogThreshold。完全折叠，模型用关键词检索。</li>
+ *   <li>SEARCH (搜索): 其余。完全折叠，模型用关键词检索。</li>
  * </ol>
- * 4.2.0 起去掉了只列工具名的 LIST 模式，{@link #searchThreshold(int)} 不再起作用。
+ * 与 Tool / OpenAPI 网关、SkillTalent 的 LIST 一样只列名字、详情再查一步；不同在于这里列的是服务名，
+ * 所以 listThreshold 按<b>服务数</b>计（其余阈值按工具数计）。
  *
  * <p><b>按「服务 → 工具」定位</b>：不同服务可以有同名工具。发现结果带服务名，get_tool_detail / call_tool 用
  * server_name + tool_name 点名（server_name 为空且边界内工具名唯一时自动补上）。
@@ -54,7 +55,7 @@ import java.util.stream.Collectors;
  * <p><b>服务描述</b>：配置的描述 &gt; 服务端握手上报的 description &gt; 服务端 instructions 的第一句；都没有时，
  * 目录这一行改为列出工具名。握手信息留有快照，连接断开时目录与指令不跳变。
  * instructions 全文是写给模型的使用说明（注明由服务提供、不能改变用户或系统的要求），只在一处给出：
- * FULL 与 SUMMARY 模式写进指令；CATALOG 与 SEARCH 模式由 list_server_tools 给出。
+ * FULL 与 SUMMARY 模式写进指令；LIST 与 SEARCH 模式由 list_server_tools 给出。
  *
  * <p><b>中转调用</b>（call_tool）只转发模型给的 tool_args，不转发工具上下文；失败返回报错结果（isError），
  * 工具报错或服务端报参数非法时附上完整参数定义；只在请求确定没送达时重试。
@@ -158,27 +159,23 @@ public class McpGatewayTalent extends AbsTalent {
 
     private final McpServerRegistry registry = new McpServerRegistry();
 
-    // ---- 模式阈值（判定见 modeOf，工具数与服务数都按本次请求的可见范围统计）----
-    //   工具数 <= dynamicThreshold 且没有跨服务同名工具 → FULL
-    //   工具数 <= listThreshold                          → SUMMARY
-    //   服务数 <= catalogThreshold                       → CATALOG
-    //   其余                                             → SEARCH
-    // 命名沿用网关与 SkillTalent 的旧约定：xxxThreshold 表示「超过它就进入 xxx 模式」，不是「xxx 模式的上限」
-    // （dynamic = 进入动态发现，list = 进入 LIST）。MCP 网关 4.2.0 去掉了 LIST 模式，listThreshold 名字里的
-    // list 已没有对应的模式，实际作用是 SUMMARY 的上限；名字是 4.1.1 已发布的 API，为兼容保留。
-    // catalogThreshold 是 4.2.0 新增的，按模式本身命名，是 CATALOG 的上限，而且按服务数计。
+    // ---- 模式阈值：xxxThreshold 是 xxx 模式的阈值，不超过它（含）就用这个模式，超过往下一档 ----
+    // 判定见 modeOf，工具数与服务数都按本次请求的可见范围统计：
+    //   工具数 <= fullThreshold 且没有跨服务同名工具 → FULL
+    //   工具数 <= summaryThreshold                   → SUMMARY
+    //   服务数 <= listThreshold                      → LIST（服务目录）
+    //   其余                                         → SEARCH（最后一档，没有阈值）
 
-    /** FULL 模式的工具数上限：超过它就改走网关中转（动态发现） */
-    private int dynamicThreshold = 8;
-    /** SUMMARY 模式的工具数上限：超过它就不再把工具清单写进指令，按服务数进入 CATALOG 或 SEARCH（名字由来见上） */
-    private int listThreshold = 40;
-    /** CATALOG 模式的<b>服务数</b>上限：超过它进入 SEARCH */
-    private int catalogThreshold = 30;
-    /**
-     * list_server_tools 单个服务内带完整描述的工具数上限，与模式判定无关。
-     * 这里的 list 指 list_server_tools 工具，和 listThreshold 的 list（LIST 模式）不是一回事
-     */
-    private int listToolsLimit = 30;
+    /** FULL 模式的阈值（工具数） */
+    private int fullThreshold = 8;
+    /** SUMMARY 模式的阈值（工具数） */
+    private int summaryThreshold = 40;
+    /** LIST 模式的阈值（<b>服务数</b>） */
+    private int listThreshold = 30;
+    /** 是否已检查过阈值顺序（改阈值后重新检查） */
+    private volatile boolean thresholdsChecked;
+    /** list_server_tools 返回详略的切换点（单个服务内的工具数），与模式判定无关 */
+    private int listServerToolsThreshold = 30;
 
     private volatile int maxRetries = 3;
     private volatile long retryDelayMs = 1000L; // 默认初始延迟
@@ -223,19 +220,35 @@ public class McpGatewayTalent extends AbsTalent {
     }
 
     /**
-     * FULL（直接调用）模式的工具数上限（缺省 8）：可见工具不超过它、且没有跨服务同名工具时，直接交付原始工具
+     * FULL（直接调用）模式的阈值（工具数，缺省 8）：可见工具不超过它、且没有跨服务同名工具时，直接交付原始工具
+     *
+     * @since 4.2.0
      */
-    public McpGatewayTalent dynamicThreshold(int dynamicThreshold) {
-        this.dynamicThreshold = dynamicThreshold;
+    public McpGatewayTalent fullThreshold(int fullThreshold) {
+        this.fullThreshold = fullThreshold;
+        this.thresholdsChecked = false;
         return this;
     }
 
     /**
-     * SUMMARY（摘要）模式的工具数上限（缺省 40）：可见工具不超过它时，指令里按服务列出签名与描述；
-     * 超过时按服务数进入 CATALOG 或 SEARCH（见 {@link #catalogThreshold(int)}）。
+     * SUMMARY（摘要）模式的阈值（工具数，缺省 40）：可见工具不超过它时，指令里按服务列出签名与描述；
+     * 超过时按服务数进入 LIST 或 SEARCH（见 {@link #listThreshold(int)}）。必须大于 fullThreshold（相等也算配错，后一档取不到），否则打 WARN。
      *
-     * <p>名字沿用「超过它就进入 LIST 模式」的旧约定（与 SkillTalent、OpenApi / Tool 网关同名方法一致）；
-     * 4.2.0 起 MCP 网关没有 LIST 模式，这里的 list 已无对应的模式，按「SUMMARY 的上限」理解即可。
+     * @since 4.2.0
+     */
+    public McpGatewayTalent summaryThreshold(int summaryThreshold) {
+        this.summaryThreshold = summaryThreshold;
+        this.thresholdsChecked = false;
+        return this;
+    }
+
+    /**
+     * LIST（服务目录）模式的阈值（<b>服务数</b>，缺省 30）：工具数超过 summaryThreshold 时，
+     * 可见服务不超过它就只列服务目录，否则进入 SEARCH（搜索）模式。
+     *
+     * <p>按服务数计，与按工具数计的 fullThreshold / summaryThreshold 不比大小。
+     *
+     * @since 4.2.0
      */
     public McpGatewayTalent listThreshold(int listThreshold) {
         this.listThreshold = listThreshold;
@@ -243,41 +256,37 @@ public class McpGatewayTalent extends AbsTalent {
     }
 
     /**
-     * 已不起作用：4.2.0 起 MCP 网关没有 LIST 模式，工具数超过 listThreshold 后按服务数进入服务目录或搜索模式
-     * （见 {@link #catalogThreshold(int)}）。保留方法只为源码兼容。
+     * list_server_tools 返回详略的切换点（<b>单个服务内</b>的工具数，缺省 30），与模式判定无关。
+     *
+     * <p>服务内工具（或 keyword 过滤后的结果）不超过它时每条带签名与描述；超过时每条只留签名与缩短的描述，
+     * 一次给全，不让模型多走一轮；最多列它的 5 倍，再超出提示用 keyword 缩小范围。
+     *
+     * @since 4.2.0
+     */
+    public McpGatewayTalent listServerToolsThreshold(int listServerToolsThreshold) {
+        this.listServerToolsThreshold = Math.max(1, listServerToolsThreshold);
+        return this;
+    }
+
+    /**
+     * @deprecated 4.2.0 改名为 {@link #fullThreshold(int)}（阈值以它所在的模式命名）
+     */
+    @Deprecated
+    public McpGatewayTalent dynamicThreshold(int dynamicThreshold) {
+        return fullThreshold(dynamicThreshold);
+    }
+
+    /**
+     * 已不起作用：MCP 网关自 4.2.0 起没有「只列工具名」的 LIST 模式，第三档是按<b>服务数</b>计的服务目录
+     * （见 {@link #listThreshold(int)}）。保留方法只为源码兼容。
      *
      * @deprecated 4.2.0
      */
     @Deprecated
     public McpGatewayTalent searchThreshold(int searchThreshold) {
-        LOG.warn("McpGatewayTalent.searchThreshold is ignored since 4.2.0 (LIST mode removed), see listThreshold / catalogThreshold");
+        LOG.warn("McpGatewayTalent.searchThreshold is ignored since 4.2.0 (LIST mode removed), see summaryThreshold / listThreshold");
         return this;
     }
-
-    /**
-     * CATALOG（服务目录）模式的<b>服务数</b>上限（缺省 30）：工具数超过 listThreshold 时，
-     * 可见服务不超过它就展示服务目录，否则进入 SEARCH（搜索）模式
-     *
-     * @since 4.2.0
-     */
-    public McpGatewayTalent catalogThreshold(int catalogThreshold) {
-        this.catalogThreshold = catalogThreshold;
-        return this;
-    }
-
-    /**
-     * list_server_tools 带完整描述列出的<b>单个服务内</b>工具数上限（缺省 30）。
-     *
-     * <p>服务内工具（或 keyword 过滤后的结果）不超过它时每条带签名与描述；超过时每条只留签名与缩短的描述，
-     * 一次给全，不让模型多走一轮；也有硬上限（它的 5 倍），再超出提示用 keyword 缩小范围。
-     *
-     * @since 4.2.0
-     */
-    public McpGatewayTalent listToolsLimit(int listToolsLimit) {
-        this.listToolsLimit = Math.max(1, listToolsLimit);
-        return this;
-    }
-
     // ========== 添加 / 移除 / 刷新 ==========
 
     /**
@@ -441,12 +450,12 @@ public class McpGatewayTalent extends AbsTalent {
 
     /** 发现模式（按顺序判定，阈值见字段注释与 modeOf） */
     private enum Mode {
-        /** 工具数 &lt;= dynamicThreshold 且没有跨服务同名工具：直接交付原始工具 */
+        /** 工具数 &lt;= fullThreshold 且没有跨服务同名工具：直接交付原始工具 */
         FULL,
-        /** 工具数 &lt;= listThreshold：指令里按服务列出签名与描述 */
+        /** 工具数 &lt;= summaryThreshold：指令里按服务列出签名与描述 */
         SUMMARY,
-        /** 服务数 &lt;= catalogThreshold：指令里只列服务目录，用 list_server_tools 下钻 */
-        CATALOG,
+        /** 服务数 &lt;= listThreshold：指令里只列服务目录，用 list_server_tools 下钻 */
+        LIST,
         /** 其余：完全折叠，用 search_tools 检索 */
         SEARCH
     }
@@ -454,16 +463,16 @@ public class McpGatewayTalent extends AbsTalent {
     // 指令、目录、搜索结果与详情提示里服务描述的最大字符数（单行，超出截断）
     private static final int BRIEF_DESCRIPTION_MAX = 150;
     // list_server_tools 返回里服务描述的最大字符数
-    private static final int LIST_DESCRIPTION_MAX = 500;
+    private static final int LIST_SERVER_DESCRIPTION_MAX = 500;
     // 目录里没有描述的服务列出的工具名个数
-    private static final int CATALOG_TOOL_NAMES = 12;
+    private static final int LIST_TOOL_NAMES = 12;
     // 发现结果里工具描述的最大字符数（压成一行；完整描述见 get_tool_detail）
     private static final int TOOL_DESCRIPTION_MAX = 200;
-    // list_server_tools 工具过多（超过 listToolsLimit）时每条保留的短描述字符数
+    // list_server_tools 工具过多（超过 listServerToolsThreshold）时每条保留的短描述字符数
     private static final int COMPACT_DESCRIPTION_MAX = 60;
     // search_tools 单次最多列出的工具数
     private static final int SEARCH_LIMIT = 10;
-    // list_server_tools 缩短描述时的上限：listToolsLimit 的倍数
+    // list_server_tools 缩短描述时的上限：listServerToolsThreshold 的倍数
     private static final int COMPACT_FACTOR = 5;
 
     /**
@@ -525,16 +534,16 @@ public class McpGatewayTalent extends AbsTalent {
                     }
                 }
                 break;
-            case CATALOG:
-                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_CATALOG)).append("\n");
+            case LIST:
+                sb.append(McpGatewayI18n.get(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST)).append("\n");
                 view.forEach((serverName, tools) -> {
                     String description = briefDescription(serverName, BRIEF_DESCRIPTION_MAX);
                     if (description == null) {
                         // 没有描述：这一行退化为工具名列表，多花些 token，但目录不失效
-                        sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CATALOG_ITEM_NAMES,
-                                "server", serverName, "count", tools.size(), "names", toolNames(tools, CATALOG_TOOL_NAMES))).append("\n");
+                        sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST_ITEM_NAMES,
+                                "server", serverName, "count", tools.size(), "names", toolNames(tools, LIST_TOOL_NAMES))).append("\n");
                     } else {
-                        sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_CATALOG_ITEM,
+                        sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_INSTRUCTION_LIST_ITEM,
                                 "server", serverName, "count", tools.size(), "description", description)).append("\n");
                     }
                 });
@@ -572,20 +581,39 @@ public class McpGatewayTalent extends AbsTalent {
                     .collect(Collectors.toList());
         }
 
-        // CATALOG & SEARCH 模式：提供完整的中转工具集（含 search_tools 与 list_server_tools）
+        // LIST & SEARCH 模式：提供完整的中转工具集（含 search_tools 与 list_server_tools）
         return relays;
     }
 
     private Mode modeOf(Map<String, Map<String, FunctionTool>> view, int size) {
-        if (size <= dynamicThreshold && hasDuplicateName(view) == false) {
+        checkThresholds();
+
+        if (size <= fullThreshold && hasDuplicateName(view) == false) {
             // 有跨服务同名工具时不走 FULL：直接调用只按工具名，无法区分服务
             return Mode.FULL;
-        } else if (size <= listThreshold) {
+        } else if (size <= summaryThreshold) {
             return Mode.SUMMARY;
-        } else if (view.size() <= catalogThreshold) {
-            return Mode.CATALOG;
+        } else if (view.size() <= listThreshold) {
+            return Mode.LIST;
         } else {
             return Mode.SEARCH;
+        }
+    }
+
+    /**
+     * 阈值必须按档位递增：配反或配成相等时，后一档永远取不到。首次判定模式时检查一次（改阈值后重新检查）。
+     * <p>
+     * listThreshold 按服务数计，与工具数不可比，不参与比较；0 是「关掉这一档」的显式写法，不提示。
+     */
+    private void checkThresholds() {
+        if (thresholdsChecked) {
+            return;
+        }
+
+        thresholdsChecked = true;
+        if (summaryThreshold > 0 && fullThreshold >= summaryThreshold) {
+            LOG.warn("McpGatewayTalent: fullThreshold ({}) >= summaryThreshold ({}), SUMMARY mode is unreachable",
+                    fullThreshold, summaryThreshold);
         }
     }
 
@@ -817,8 +845,8 @@ public class McpGatewayTalent extends AbsTalent {
      * 服务名大小写不敏感；keyword 可选，在服务内按名称与描述过滤（多个关键词须全部命中）。
      *
      * <p>结果是文本：服务名与工具总数（过滤时另列命中数）、服务描述、服务使用说明（instructions 全文，
-     * 与描述相同时不重复），再是工具行。命中不超过 listToolsLimit 时每行 {@code `签名`: 描述}；
-     * 超过时描述缩短到 {@value #COMPACT_DESCRIPTION_MAX} 字（一次给全，省掉一轮调用），最多 listToolsLimit 的
+     * 与描述相同时不重复），再是工具行。命中不超过 listServerToolsThreshold 时每行 {@code `签名`: 描述}；
+     * 超过时描述缩短到 {@value #COMPACT_DESCRIPTION_MAX} 字（一次给全，省掉一轮调用），最多 listServerToolsThreshold 的
      * {@value #COMPACT_FACTOR} 倍，再超出提示用 keyword 缩小范围。这是目录与搜索模式下给出使用说明全文的唯一位置，
      * 每次都给（不按会话去重：上下文压缩后模型要能重新拿到）。
      *
@@ -864,24 +892,24 @@ public class McpGatewayTalent extends AbsTalent {
             sb.append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_HEADER_MATCHED, vars));
         }
 
-        String description = briefDescription(server, LIST_DESCRIPTION_MAX);
+        String description = briefDescription(server, LIST_SERVER_DESCRIPTION_MAX);
         if (description != null) {
             sb.append("\n").append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_DESCRIPTION,
                     "description", description));
         }
 
         // 使用说明与描述是同一句话时（如 instructions 只有一句）不重复给
-        if (registry.hasDistinctInstructions(server, LIST_DESCRIPTION_MAX)) {
+        if (registry.hasDistinctInstructions(server, LIST_SERVER_DESCRIPTION_MAX)) {
             appendInstructions(sb, locale, server);
         }
 
         sb.append("\n\n").append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_TOOLS, "server", server));
 
-        boolean compact = matched.size() > listToolsLimit;
-        int max = compact ? listToolsLimit * COMPACT_FACTOR : listToolsLimit;
+        boolean compact = matched.size() > listServerToolsThreshold;
+        int max = compact ? listServerToolsThreshold * COMPACT_FACTOR : listServerToolsThreshold;
         if (compact) {
             sb.append("\n").append(McpGatewayI18n.fmt(locale, McpGatewayI18nKeys.GATEWAY_MCP_LIST_COMPACT,
-                    "limit", listToolsLimit));
+                    "limit", listServerToolsThreshold));
         }
 
         int shown = 0;

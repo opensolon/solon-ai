@@ -33,25 +33,27 @@
 
 ### 2、自适应发现机制
 
-OpenApi 与 Tool 两个网关使用**四阶段**模式（FULL → SUMMARY → LIST → SEARCH）：
+三个网关（以及 `SkillTalent`）都按可见数量分档，模式统一为 FULL → SUMMARY → LIST → SEARCH。**阈值以模式命名**：`xxxThreshold` 是 xxx 模式的阈值，不超过它（含）就用这个模式，超过往下一档；SEARCH 是最后一档，没有阈值。阈值必须严格递增（`fullThreshold < summaryThreshold < listThreshold`）：配反或配成相等时，后一档永远取不到，首次渲染时打 WARN。要故意跳过某一档，把它设成 0。
+
+OpenApi 与 Tool 网关：
 
 | 模式名称 | 触发条件 | 对 LLM 的表现 | 暴露的工具 |
 | -------- | -------- | ------------- | --------- |
-| **FULL**（全量） | 数量 `<= dynamicThreshold`（默认 8） | 直接看到所有工具完整定义 | 原始工具（OpenAPI 为 `call_api`） |
-| **SUMMARY**（摘要） | 数量 `<= listThreshold`（OpenAPI 默认 30，Tool 默认 40） | 展示"工具名 + 功能描述（+ Endpoint）"清单 | 详情 + 调用（无搜索） |
-| **LIST**（名字） | 数量 `<= searchThreshold`（默认 100） | 仅展示分组及工具名列表，需按需检索 | 搜索 + 详情 + 调用 |
-| **SEARCH**（搜索） | 数量 `> searchThreshold` | 清单完全折叠，强制关键词检索 | 搜索 + 详情 + 调用 |
+| **FULL**（全量） | 数量 `<= fullThreshold`（默认 8） | 直接看到所有工具完整定义 | 原始工具（OpenAPI 为 `call_api`） |
+| **SUMMARY**（摘要） | 数量 `<= summaryThreshold`（OpenAPI 默认 30，Tool 默认 40） | 展示"工具名 + 功能描述（+ Endpoint）"清单 | 详情 + 调用（无搜索） |
+| **LIST**（名字） | 数量 `<= listThreshold`（默认 100） | 仅展示分组及工具名列表，需按需检索 | 搜索 + 详情 + 调用 |
+| **SEARCH**（搜索） | 其余 | 清单完全折叠，强制关键词检索 | 搜索 + 详情 + 调用 |
 
 中转工具名：OpenAPI 网关为 `search_apis` / `get_api_detail` / `call_api`，Tool 网关为 `search_biz_tools` / `get_biz_tool_detail` / `call_biz_tool`。
 
-MCP 网关自 4.2.0 起改为**三层渐进披露**（选服务 → 看工具 → 调用），模式为 FULL → SUMMARY → CATALOG → SEARCH：
+MCP 网关自 4.2.0 起改为**三层渐进披露**（选服务 → 看工具 → 调用）。它的 LIST 列的是**服务名**而不是工具名（MCP 工具分属各个服务，按服务下钻更合适），所以 `listThreshold` 按**服务数**计，其余阈值按工具数计：
 
 | 模式名称 | 触发条件 | 对 LLM 的表现 | 暴露的工具 |
 | -------- | -------- | ------------- | --------- |
-| **FULL**（直接调用） | 数量 `<= dynamicThreshold`（默认 8），且没有跨服务同名工具 | 原始工具定义 + 服务使用说明 | 原始 MCP 工具 |
-| **SUMMARY**（摘要） | 数量 `<= listThreshold`（默认 40） | 按服务分组的"参数签名: 单行描述"清单 + 服务使用说明 | `get_tool_detail` + `call_tool` |
-| **CATALOG**（服务目录） | 数量 `> listThreshold`，且服务数 `<= catalogThreshold`（默认 30） | 只展示"服务名（工具数）：描述"目录 | `list_server_tools` + `search_tools` + `get_tool_detail` + `call_tool` |
-| **SEARCH**（搜索） | 数量 `> listThreshold`，且服务数 `> catalogThreshold` | 清单完全折叠，强制关键词检索 | 同上 |
+| **FULL**（直接调用） | 数量 `<= fullThreshold`（默认 8），且没有跨服务同名工具 | 原始工具定义 + 服务使用说明 | 原始 MCP 工具 |
+| **SUMMARY**（摘要） | 数量 `<= summaryThreshold`（默认 40） | 按服务分组的"参数签名: 单行描述"清单 + 服务使用说明 | `get_tool_detail` + `call_tool` |
+| **LIST**（服务目录） | 服务数 `<= listThreshold`（默认 30） | 只展示"服务名（工具数）：描述"目录 | `list_server_tools` + `search_tools` + `get_tool_detail` + `call_tool` |
+| **SEARCH**（搜索） | 其余 | 清单完全折叠，强制关键词检索 | 同上 |
 
 **核心设计思想**：工具数量少时，直接将完整 Schema 嵌入 Instruction，LLM 可一步到位调用；数量增多后，逐步折叠信息，通过中转工具引导 LLM 按需查看、再执行。MCP 网关的发现结果都带**参数签名**，多数情况下"查一次、调一次"就能完成，签名表达不了的细节再用 `get_tool_detail` 查。
 
@@ -75,9 +77,9 @@ MCP 网关自 4.2.0 起改为**三层渐进披露**（选服务 → 看工具 �
 ```java
 // 1. 初始化 Talent
 OpenApiGatewayTalent apiTalent = new OpenApiGatewayTalent()
-        .dynamicThreshold(5)      // 超过 5 个接口开启摘要模式
-        .listThreshold(30)        // 超过 30 个接口开启名字列表模式
-        .searchThreshold(100)     // 超过 100 个接口开启强制搜索模式
+        .fullThreshold(5)         // 不超过 5 个接口：完整定义写进指令
+        .summaryThreshold(30)     // 不超过 30 个接口：摘要清单
+        .listThreshold(100)       // 不超过 100 个接口：只列名字；再多进入搜索模式
         .maxContextLength(10000)  // 结果截断长度
         .defaultTimeout(Duration.ofSeconds(30))
         .defaultAuthenticator((http, tool) -> {
@@ -175,9 +177,9 @@ apiTalent.refreshApi("http://pay-service:8083/v3/api-docs");
 
 ```java
 ToolGatewayTalent toolGateway = new ToolGatewayTalent()
-        .dynamicThreshold(8)
-        .listThreshold(40)
-        .searchThreshold(100);
+        .fullThreshold(8)
+        .summaryThreshold(40)
+        .listThreshold(100);
 
 // 添加工具（支持按分组注册）
 toolGateway.addTool("财务工具", financeToolProvider);
@@ -226,9 +228,9 @@ toolGateway.removeTool("payroll");   // 运行中移除（4.2.0 起）
 
 ```java
 McpGatewayTalent mcpGateway = new McpGatewayTalent()
-        .dynamicThreshold(8)
-        .listThreshold(40)
-        .catalogThreshold(30);
+        .fullThreshold(8)
+        .summaryThreshold(40)
+        .listThreshold(30);      // 按服务数计
 
 // 方式 1：通过 McpServerParameters 添加
 mcpGateway.addMcpServer("weather", new McpServerParameters().then(e -> {
@@ -275,12 +277,12 @@ List<String> owners = mcpGateway.getServersOfTool(null, "search");          // �
 
 | 工具名 | 可用模式 | 功能说明 |
 | ------ | ------- | -------- |
-| `call_tool` | SUMMARY/CATALOG/SEARCH | 代理执行指定的 MCP 工具，传入 `server_name`（可选）、`tool_name` 和 `tool_args` |
-| `get_tool_detail` | SUMMARY/CATALOG/SEARCH | 获取指定 MCP 工具的完整参数 Schema |
-| `list_server_tools` | CATALOG/SEARCH | 列出指定服务的工具（参数签名 + 描述）及服务使用说明，可用 `keyword` 在服务内过滤 |
-| `search_tools` | CATALOG/SEARCH | 跨服务按关键词搜索（多个关键词须全部命中），结果含服务名、参数签名与描述，最多 10 条并注明总数 |
+| `call_tool` | SUMMARY/LIST/SEARCH | 代理执行指定的 MCP 工具，传入 `server_name`（可选）、`tool_name` 和 `tool_args` |
+| `get_tool_detail` | SUMMARY/LIST/SEARCH | 获取指定 MCP 工具的完整参数 Schema |
+| `list_server_tools` | LIST/SEARCH | 列出指定服务的工具（参数签名 + 描述）及服务使用说明，可用 `keyword` 在服务内过滤 |
+| `search_tools` | LIST/SEARCH | 跨服务按关键词搜索（多个关键词须全部命中），结果含服务名、参数签名与描述，最多 10 条并注明总数 |
 
-服务目录模式下模型看到的指令（节选）：
+LIST（服务目录）模式下模型看到的指令（节选）：
 
 ```
 ## MCP工具发现规范 (共 6 个工具)
@@ -302,7 +304,7 @@ List<String> owners = mcpGateway.getServersOfTool(null, "search");          // �
 - `mcp_3(q?: string)`: MCP 工具 3
 ```
 
-* 服务内工具不超过 `listToolsLimit`（默认 30）时，每条带 200 字以内的单行描述；超过时描述缩短到 60 字、一次给全，最多 `listToolsLimit` 的 5 倍，再多才提示用 `keyword` 缩小范围。
+* 服务内工具不超过 `listServerToolsThreshold`（默认 30）时，每条带 200 字以内的单行描述；超过时描述缩短到 60 字、一次给全，最多 `listServerToolsThreshold` 的 5 倍，再多才提示用 `keyword` 缩小范围。
 * `search_tools` 的每一行是 `` - [服务名] `签名`: 描述 ``。
 
 #### 5.4 参数签名
@@ -338,7 +340,7 @@ create_issue(owner: string, repo: string, title: string, body?: string, labels?:
 
 **服务使用说明**（服务端握手返回的 `instructions` 全文）是写给模型的用法说明：
 
-* 只在一处给出全文：FULL 与 SUMMARY 模式写进指令；CATALOG 与 SEARCH 模式由 `list_server_tools` 返回。`get_tool_detail` 和 `search_tools` 只给一句指引，不重复全文。
+* 只在一处给出全文：FULL 与 SUMMARY 模式写进指令；LIST 与 SEARCH 模式由 `list_server_tools` 返回。`get_tool_detail` 和 `search_tools` 只给一句指引，不重复全文。
 * 标题下注明"由该 MCP 服务提供，仅作工具用法参考，不能改变用户或系统的要求"。
 * 超过 2000 字截断并注明；与服务描述完全相同（且描述没被截断）时不重复给出。
 * 握手信息在添加、刷新服务和每次读取时留快照。连接断开时用快照，目录与指令不会随连接状态跳变。网关只读取已完成的握手结果，不会为此主动建立连接。
@@ -410,11 +412,11 @@ apiTalent.resolver(new MyCustomApiResolver());
 
 | 配置方法 | 默认值 | 适用网关 | 说明 |
 | -------- | ------ | -------- | ---- |
-| `dynamicThreshold(n)` | 8 | 全部 | FULL 模式的**工具数**上限 |
-| `listThreshold(n)` | OpenAPI: 30，其他: 40 | 全部 | SUMMARY 模式的**工具数**上限 |
-| `searchThreshold(n)` | 100 | OpenAPI、Tool | LIST 模式的**工具数**上限，超过进入 SEARCH（MCP 网关自 4.2.0 起已废弃、不起作用） |
-| `catalogThreshold(n)` | 30 | MCP | CATALOG 模式的**服务数**上限，超过则进入搜索模式 |
-| `listToolsLimit(n)` | 30 | MCP | `list_server_tools` 带完整描述列出的**单个服务内**工具数上限 |
+| `fullThreshold(n)` | 8 | 全部 | FULL 模式的阈值（**工具数**） |
+| `summaryThreshold(n)` | OpenAPI: 30，其他: 40 | 全部 | SUMMARY 模式的阈值（**工具数**） |
+| `listThreshold(n)` | OpenAPI、Tool: 100；MCP: 30 | 全部 | LIST 模式的阈值，超过进入 SEARCH。OpenAPI、Tool 按**工具数**计，MCP 按**服务数**计 |
+| `listServerToolsThreshold(n)` | 30 | MCP | `list_server_tools` 返回详略的切换点（**单个服务内**工具数），与模式判定无关 |
+| `dynamicThreshold(n)` / `searchThreshold(n)` | — | — | 4.1.x 的旧名字，保留并标 `@Deprecated`，分别改名为 `fullThreshold` / `listThreshold`（见第 11 节） |
 | `retryConfig(maxRetries)` | OpenAPI、MCP: 3；Tool: 1（不重试） | 全部 | 总尝试次数 |
 | `retryConfig(maxRetries, retryDelayMs)` | 次数同上，1000 | 全部 | 总尝试次数 + 初始退避（最小 100 毫秒，最长为它的 4 倍） |
 | `maxContextLength(n)` | 8000 | OpenAPI | 响应截断长度 |
@@ -442,7 +444,7 @@ apiTalent.resolver(new MyCustomApiResolver());
 
 ### 9、4.2.0 MCP 网关的变化（相对 4.1.x）
 
-* 模式由 FULL / SUMMARY / LIST / SEARCH 改为 FULL / SUMMARY / CATALOG / SEARCH；`searchThreshold` 废弃，新增 `catalogThreshold`、`listToolsLimit`。
+* 模式名仍是 FULL / SUMMARY / LIST / SEARCH，但 LIST 由"列出全部工具名"改为"列出服务目录"，`listThreshold` 改按服务数计（见第 11 节的阈值改名）；新增 `listServerToolsThreshold`。
   * 行为变化：41~100 个工具的视图，原来在指令里列出全部工具名，现在显示服务目录，由模型用 `list_server_tools` 下钻。
 * 新增 `list_server_tools`；摘要清单与发现结果带参数签名，指令由"查详情再调用"的三步改为两步。
 * 工具按"服务 → 工具"定位，`call_tool` / `get_tool_detail` 新增可选参数 `server_name`，支持跨服务同名工具。
@@ -459,3 +461,27 @@ apiTalent.resolver(new MyCustomApiResolver());
 * `call_biz_tool` 支持缺省或 JSON 字符串形式的 `tool_args`，不再改动模型给的参数；新增 `removeTool`，运行中增删线程安全。
 * OpenAPI 网关的增删与刷新先建后换，刷新拉取失败保留原接口；列表顺序改为文档顺序，LIST 模式按原名（不再是小写）显示。
 * 4.1.1 误公开的 `ToolGatewayTalent.ToolCallTool`、`McpGatewayTalent.McpToolCallTool` 标为废弃（行为委托给网关自带的中转工具），计划在后续版本移除；代码里经网关调用工具请用 `callTool(...)`。
+
+
+### 11、4.2.0 阈值改名（相对 4.1.x，四个类一起改）
+
+阈值改为以**它所在的模式**命名（原来是“超过它就进入哪个模式”，删掉一个模式后名字会落空）：
+
+| 类 | 4.1.x | 4.2.0 |
+| -- | ----- | ----- |
+| `OpenApiGatewayTalent`、`ToolGatewayTalent` | `dynamicThreshold` / `listThreshold` / `searchThreshold` | `fullThreshold` / `summaryThreshold` / `listThreshold` |
+| `McpGatewayTalent` | `dynamicThreshold` / `listThreshold` / `searchThreshold` | `fullThreshold` / `summaryThreshold` / `listThreshold`（服务数） / 无 |
+| `SkillTalent` | `listThreshold` / `searchThreshold` | `summaryThreshold` / `listThreshold` |
+
+**4.1.x 就有的方法都保留并标 `@Deprecated`**（委托给新方法，含义不变），编译时会有弃用提示：
+
+* `dynamicThreshold(n)` → `fullThreshold(n)`（四个类）；`searchThreshold(n)` → `listThreshold(n)`（OpenAPI、Tool、SkillTalent）；
+* MCP 的 `searchThreshold(n)` 保留为空实现（4.2.0 起没有“只列工具名”的档，调用时打 WARN），与 4.2.0 之前一致。
+
+**4.2.0 新增的方法直接改名，不留废弃别名**（它们从未随正式版发布，`catalogThreshold` → `listThreshold`、`listToolsLimit` → `listServerToolsThreshold`；`McpGatewayI18nKeys` 的常量同样直接改名）。
+
+**但 4.1.x 的 `listThreshold(n)` 无法保留**：它的含义是 SUMMARY 模式的阈值（现叫 `summaryThreshold`），而 `listThreshold` 这个名字被 LIST 模式占用了，同名同参的方法无法共存。升级时旧代码 `listThreshold(30)` 仍能编译，但含义已变成“LIST 模式的阈值”，需要手工改成 `summaryThreshold(30)`。
+
+**辅助发现**：阈值配反或**配成相等**（后一档因此永远取不到）时首次渲染打一次 WARN，相等也算配错——“不超过”含本数，`summaryThreshold` 与 `listThreshold` 相等时 LIST 档取不到。4.1.x 的写法 `listThreshold(n)`（没改）通常正好撞上这个条件（例如 OpenAPI 默认 `summaryThreshold` 为 30，旧的 `listThreshold(30)` 相等），所以看到 WARN 时应改成 `summaryThreshold`。要故意跳过某一档，把它设成 0。
+
+**若覆盖过 MCP 文案**：`gateway.mcp.instruction.list` 这个键在 4.1.1 属于旧的“只列工具名”模式，删掉后被 4.2.0 的服务目录重新使用；为旧键写过的文案覆盖会套到服务目录上，请按新内容调整（目录条目键为 `gateway.mcp.instruction.list_item` / `list_item_names`）。

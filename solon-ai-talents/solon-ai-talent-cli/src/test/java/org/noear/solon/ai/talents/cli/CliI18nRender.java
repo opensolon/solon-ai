@@ -259,8 +259,8 @@ final class CliI18nRender {
 
     static void renderSkill(Map<String, String> out, String tag, String suffix) throws Exception {
         SkillTalent small = new SkillTalent(new FakeSkills(2));
-        SkillTalent mid = new SkillTalent(new FakeSkills(2)).listThreshold(1).searchThreshold(10);
-        SkillTalent big = new SkillTalent(new FakeSkills(3)).listThreshold(1).searchThreshold(2);
+        SkillTalent mid = new SkillTalent(new FakeSkills(2)).summaryThreshold(1).listThreshold(10);
+        SkillTalent big = new SkillTalent(new FakeSkills(3)).summaryThreshold(1).listThreshold(2);
         SkillTalent empty = new SkillTalent(new FakeSkills(0));
 
         if (tag == null) {

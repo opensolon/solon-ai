@@ -272,7 +272,7 @@ public class McpGatewayTalentScopeTest {
     // ---------- 同名工具（按服务定位） ----------
 
     private static McpGatewayTalent buildDuplicate(AtomicInteger alphaCounter, AtomicInteger betaCounter) {
-        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(8);
+        McpGatewayTalent talent = new McpGatewayTalent().fullThreshold(8);
         talent.addMcpServer("alpha", new FakeProvider(Arrays.asList(
                 mockTool("query", "阿尔法查询", alphaCounter),
                 mockTool("alpha_fetch", "阿尔法抓取", alphaCounter))));
@@ -479,25 +479,25 @@ public class McpGatewayTalentScopeTest {
         McpGatewayTalent talent = new McpGatewayTalent();
         talent.addMcpServer("many", new FakeProvider(many));
 
-        // 不超过 listToolsLimit：签名 + 描述
-        String full = String.valueOf(talent.listToolsLimit(12).listServerTools("many", null, null, null, null));
+        // 不超过 listServerToolsThreshold：签名 + 描述
+        String full = String.valueOf(talent.listServerToolsThreshold(12).listServerTools("many", null, null, null, null));
         assertTrue(full.contains("- `t12()`: 工具描述 12"), full);
         assertTrue(full.contains("（共 12 个工具）"), full);
 
-        // 超过 listToolsLimit：签名 + 缩短的描述，一次给全，不截断
-        String compact = String.valueOf(talent.listToolsLimit(3).listServerTools("many", null, null, null, null));
+        // 超过 listServerToolsThreshold：签名 + 缩短的描述，一次给全，不截断
+        String compact = String.valueOf(talent.listServerToolsThreshold(3).listServerTools("many", null, null, null, null));
         assertTrue(compact.contains("- `t12()`: 工具描述 12"), compact);
         assertTrue(compact.contains("描述已缩短"), compact);
         assertFalse(compact.contains("仅列出前"), compact);
 
-        // 超过 listToolsLimit 的 5 倍：截断并提示 keyword
-        String cut = String.valueOf(talent.listToolsLimit(2).listServerTools("many", null, null, null, null));
+        // 超过 listServerToolsThreshold 的 5 倍：截断并提示 keyword
+        String cut = String.valueOf(talent.listServerToolsThreshold(2).listServerTools("many", null, null, null, null));
         assertTrue(cut.contains("- `t10()`"), cut);
         assertFalse(cut.contains("- `t11()`"), cut);
         assertTrue(cut.contains("仅列出前 10 个（共 12 个）"), cut);
 
         // keyword 过滤后回到带描述；标题同时给出服务总数与命中数
-        String matched = String.valueOf(talent.listToolsLimit(30).listServerTools("many", "t1", null, null, null));
+        String matched = String.valueOf(talent.listServerToolsThreshold(30).listServerTools("many", "t1", null, null, null));
         assertTrue(matched.contains("共 12 个工具，匹配 't1' 的有 4 个"), matched);
         assertTrue(matched.contains("- `t1()`: 工具描述 1"), matched);
     }
@@ -552,8 +552,8 @@ public class McpGatewayTalentScopeTest {
     }
 
     @Test
-    void catalogModeShowsServersAndOffersDrillDown() {
-        McpGatewayTalent talent = build().dynamicThreshold(0).listThreshold(0).catalogThreshold(2);
+    void listModeShowsServersAndOffersDrillDown() {
+        McpGatewayTalent talent = build().fullThreshold(0).summaryThreshold(0).listThreshold(2);
         talent.addMcpServer("alpha", new FakeProvider(Arrays.asList(
                 mockTool("alpha_search", "阿尔法搜索", new AtomicInteger()),
                 mockTool("alpha_fetch", "阿尔法抓取", new AtomicInteger())), "阿尔法服务"));
@@ -569,13 +569,13 @@ public class McpGatewayTalentScopeTest {
         McpGatewayTalent.putSelected(prompt, Collections.singletonList("alpha"));
         assertFalse(talent.getInstruction(prompt).contains("beta"));
 
-        // 服务数超过 catalogThreshold：退回搜索模式，仍提供 list_server_tools
-        talent.catalogThreshold(1);
+        // 服务数超过 listThreshold：退回搜索模式，仍提供 list_server_tools
+        talent.listThreshold(1);
         assertFalse(talent.getInstruction(null).contains("阿尔法服务"));
         assertTrue(toolNames(talent, null).contains("list_server_tools"));
 
         // SUMMARY 模式不提供下钻；有描述时服务标题带上描述
-        talent.listThreshold(10);
+        talent.summaryThreshold(10);
         assertFalse(toolNames(talent, null).contains("list_server_tools"));
         assertTrue(talent.getInstruction(null).contains("**[alpha]**: 阿尔法服务"));
     }
@@ -583,7 +583,7 @@ public class McpGatewayTalentScopeTest {
     @Test
     void duplicateNamesDisableFullMode() {
         McpGatewayTalent talent = buildDuplicate(new AtomicInteger(), new AtomicInteger());
-        // 3 个工具不超过 dynamicThreshold，但有同名：降为摘要模式，走带服务名的中转
+        // 3 个工具不超过 fullThreshold，但有同名：降为摘要模式，走带服务名的中转
         List<String> names = new ArrayList<>();
         for (FunctionTool t : talent.getTools(null)) {
             names.add(t.name());
@@ -689,7 +689,7 @@ public class McpGatewayTalentScopeTest {
     void summaryListsSignaturesAndInstructions() {
         String schema = "{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"},\"days\":{\"type\":\"integer\"}},\"required\":[\"city\"]}";
         String pyDoc = "Get forecast.\n\n    Args:\n        city: city name\n        days: 1-7\n\n    Returns:\n        text";
-        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(1);
+        McpGatewayTalent talent = new McpGatewayTalent().fullThreshold(1);
         talent.addMcpServer("weather", new FakeProvider(Collections.singletonList(new FunctionToolDesc("forecast")
                 .description(pyDoc).inputSchema(schema).doHandle(args -> ToolResult.success("ok"))), "天气查询")
                 .instructions("城市名用中文。\n预报最多 7 天。"));
@@ -771,7 +771,7 @@ public class McpGatewayTalentScopeTest {
         for (int i = 1; i <= 3; i++) {
             tools.add(mockTool("t" + i, desc.toString(), new AtomicInteger()));
         }
-        McpGatewayTalent talent = new McpGatewayTalent().listToolsLimit(2);
+        McpGatewayTalent talent = new McpGatewayTalent().listServerToolsThreshold(2);
         talent.addMcpServer("big", new FakeProvider(tools));
 
         String list = String.valueOf(talent.listServerTools("big", null, null, null, null));
@@ -844,12 +844,12 @@ public class McpGatewayTalentScopeTest {
     }
 
     @Test
-    void undescribedCatalogListsToolNames() {
+    void undescribedServerInListModeShowsToolNames() {
         List<FunctionTool> many = new ArrayList<>();
         for (int i = 1; i <= 15; i++) {
             many.add(mockTool("Tool" + i, "d", new AtomicInteger()));
         }
-        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(0).listThreshold(0);
+        McpGatewayTalent talent = new McpGatewayTalent().fullThreshold(0).summaryThreshold(0);
         talent.addMcpServer("many", new FakeProvider(many));
 
         String instruction = talent.getInstruction(null);
@@ -859,36 +859,32 @@ public class McpGatewayTalentScopeTest {
     }
 
     /**
-     * 四种模式的分界：不超过 listThreshold 是摘要，超过后按服务数进服务目录或搜索；
-     * 没有 LIST 模式，searchThreshold 不再影响分界；只有一个服务时也走目录（一行）。
+     * 四种模式的分界：不超过 summaryThreshold 是摘要，超过后按服务数进服务目录（LIST）或搜索；
+     * 只有一个服务时也走目录（一行）。
      */
     @Test
     void modeBoundaries() {
-        McpGatewayTalent talent = build().dynamicThreshold(0).listThreshold(3).catalogThreshold(2);
+        McpGatewayTalent talent = build().fullThreshold(0).summaryThreshold(3).listThreshold(2);
 
-        // 3 个工具 = listThreshold：摘要，列出工具、不提供下钻
+        // 3 个工具 = summaryThreshold：摘要，列出工具、不提供下钻
         String summary = talent.getInstruction(null);
         assertTrue(summary.contains("`alpha_fetch()`"), summary);
         assertFalse(toolNames(talent, null).contains("list_server_tools"));
 
-        // 超过 listThreshold：服务目录（目录不列有描述服务的工具；无描述的列工具名），四个中转工具都提供
-        talent.listThreshold(2);
-        String catalog = talent.getInstruction(null);
-        assertTrue(catalog.contains("**alpha**（2 个工具，无描述）"), catalog);
+        // 超过 summaryThreshold：服务目录（目录不列有描述服务的工具；无描述的列工具名），四个中转工具都提供
+        talent.summaryThreshold(2);
+        String listMode = talent.getInstruction(null);
+        assertTrue(listMode.contains("**alpha**（2 个工具，无描述）"), listMode);
         assertTrue(toolNames(talent, null).containsAll(Arrays.asList("search_tools", "list_server_tools", "get_tool_detail", "call_tool")));
 
-        // searchThreshold 已不起作用：调多大调多小，模式都不变
-        assertEquals(catalog, talent.searchThreshold(1).getInstruction(null));
-        assertEquals(catalog, talent.searchThreshold(1000).getInstruction(null));
-
-        // 服务数超过 catalogThreshold：搜索模式，指令不列服务
-        talent.catalogThreshold(1);
+        // 服务数超过 listThreshold：搜索模式，指令不列服务
+        talent.listThreshold(1);
         assertFalse(talent.getInstruction(null).contains("**alpha**"));
 
         // 只看一个服务：仍是目录（一行），不因服务少而退回列名
         Prompt prompt = Prompt.of("hi");
         McpGatewayTalent.putSelected(prompt, Collections.singletonList("alpha"));
-        talent.listThreshold(1);
+        talent.summaryThreshold(1);
         String single = talent.getInstruction(prompt);
         assertTrue(single.contains("**alpha**（2 个工具，无描述）") && single.contains("list_server_tools"), single);
     }

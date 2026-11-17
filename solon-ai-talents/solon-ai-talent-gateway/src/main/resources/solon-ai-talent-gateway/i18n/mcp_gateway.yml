@@ -17,7 +17,7 @@ gateway.mcp.instruction.summary: |-
   - **Step 2 (Execute)**: Build the arguments from the signature and submit the execution with `call_tool` (with server_name, tool_name and tool_args). If the signature contains object, any or array, or ends with …, first check the full parameter schema with `get_tool_detail`.
 
   #### Available MCP tools (grouped by server; each line: `tool signature`: description):
-gateway.mcp.instruction.catalog: |-
+gateway.mcp.instruction.list: |-
   ### Mode: Server catalog
   MCP tools are organized by server, and only the server catalog is listed below. Follow this flow:
   - **Step 1 (Pick a server)**: Choose a server from the "MCP server catalog" by its description, then call `list_server_tools` (with server_name, optionally a keyword to filter) to see its tools, parameter signatures and usage notes.
@@ -26,9 +26,9 @@ gateway.mcp.instruction.catalog: |-
   > If the catalog does not tell you which server to use, search across servers by keywords with `search_tools` first instead of listing the tools of every server.
 
   #### MCP server catalog:
-gateway.mcp.catalog.item: |-
+gateway.mcp.instruction.list_item: |-
   - **{server}** ({count} tools): {description}
-gateway.mcp.catalog.item_names: |-
+gateway.mcp.instruction.list_item_names: |-
   - **{server}** ({count} tools, no description): `{names}`
 gateway.mcp.instruction.search: |-
   ### Mode: Search discovery

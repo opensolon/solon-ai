@@ -17,7 +17,7 @@ gateway.mcp.instruction.summary: |-
   - **Step 2 (执行)**: 按签名组装参数，通过 `call_tool`（传 server_name、tool_name 与 tool_args）提交执行。签名含 object、any、array 或以 … 结尾时，先用 `get_tool_detail` 查完整参数 Schema。
 
   #### 可用MCP工具清单 (按服务分组，每行：`工具签名`: 描述):
-gateway.mcp.instruction.catalog: |-
+gateway.mcp.instruction.list: |-
   ### 运行模式: 服务目录
   MCP工具按服务组织，下方只列出服务目录。请遵循以下流程：
   - **Step 1 (选服务)**: 按描述从"MCP服务目录"选定服务，调用 `list_server_tools`（传 server_name，可加 keyword 过滤）查看工具、参数签名与服务使用说明。
@@ -26,9 +26,9 @@ gateway.mcp.instruction.catalog: |-
   > 从目录判断不出该用哪个服务时，先用 `search_tools` 跨服务按关键词搜索，不要逐个服务列工具。
 
   #### MCP服务目录:
-gateway.mcp.catalog.item: |-
+gateway.mcp.instruction.list_item: |-
   - **{server}**（{count} 个工具）：{description}
-gateway.mcp.catalog.item_names: |-
+gateway.mcp.instruction.list_item_names: |-
   - **{server}**（{count} 个工具，无描述）：`{names}`
 gateway.mcp.instruction.search: |-
   ### 运行模式: 搜索发现

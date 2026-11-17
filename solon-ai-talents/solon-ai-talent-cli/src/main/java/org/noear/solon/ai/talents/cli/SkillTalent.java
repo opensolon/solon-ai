@@ -27,6 +27,8 @@ import org.noear.solon.ai.talents.cli.i18n.CliI18n;
 import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.lang.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
@@ -35,12 +37,14 @@ import java.util.stream.Collectors;
 /**
  * 技能管理器
  *
- * 支持三阶段模式自动切换：
- * 1. SUMMARY: 数量 <= listThreshold。展示带描述的技能清单。
- * 2. LIST: 数量 <= searchThreshold。仅展示技能路径索引。
- * 3. SEARCH: 数量 > searchThreshold。强制搜索模式。
+ * 支持三阶段模式自动切换（每个模式的阈值以模式命名，不超过它就用这个模式）：
+ * 1. SUMMARY: 数量 <= summaryThreshold。展示带描述的技能清单。
+ * 2. LIST: 数量 <= listThreshold。仅展示技能路径索引。
+ * 3. SEARCH: 其余（最后一档，没有阈值）。强制搜索模式。
  */
 public class SkillTalent extends AbsTalent {
+    private static final Logger LOG = LoggerFactory.getLogger(SkillTalent.class);
+
     public final static String CTX_SKILLS_SELECTED = "_skills_selected";
     public static List<String> getSelected(Prompt prompt) {
         if (prompt == null) {
@@ -124,8 +128,11 @@ public class SkillTalent extends AbsTalent {
 
     private volatile SkillCatalog skillCatalog;
 
-    private int listThreshold = 30;
-    private int searchThreshold = 100;
+    // 模式阈值（技能数）：xxxThreshold 是 xxx 模式的阈值，不超过它（含）就用这个模式，超过往下一档；SEARCH 是最后一档
+    private int summaryThreshold = 30;
+    private int listThreshold = 100;
+    // 是否已检查过阈值顺序（改阈值后重新检查）
+    private volatile boolean thresholdsChecked;
     /**
      * 选中技能的预加载字符预算（默认 12000，0 表示不预加载）
      * <p>
@@ -147,14 +154,54 @@ public class SkillTalent extends AbsTalent {
         this.skillCatalog = Objects.requireNonNull(skillCatalog, "skillCatalog");
     }
 
-    public SkillTalent listThreshold(int val) {
-        this.listThreshold = val;
+    /**
+     * SUMMARY（摘要）模式的阈值（技能数，缺省 30）：不超过它时展示带描述的技能清单
+     *
+     * @since 4.2.0
+     */
+    public SkillTalent summaryThreshold(int val) {
+        this.summaryThreshold = val;
+        this.thresholdsChecked = false;
         return this;
     }
 
-    public SkillTalent searchThreshold(int val) {
-        this.searchThreshold = val;
+    /**
+     * LIST（只列名字）模式的阈值（技能数，缺省 100）：不超过它时只列技能标识，超过则进入 SEARCH（搜索）模式。
+     * 必须大于 summaryThreshold（相等也算配错，后一档取不到），否则打 WARN。
+     *
+     * @since 4.2.0
+     */
+    public SkillTalent listThreshold(int val) {
+        this.listThreshold = val;
+        this.thresholdsChecked = false;
         return this;
+    }
+
+    /**
+     * @deprecated 4.2.0 改名为 {@link #listThreshold(int)}（含义相同：LIST 模式的技能数阈值）。
+     * 注意 4.1.x 的 {@code listThreshold(n)} 指的是 SUMMARY 模式，现在叫 {@link #summaryThreshold(int)}，
+     * 名字被 LIST 模式占用，无法保留旧方法
+     */
+    @Deprecated
+    public SkillTalent searchThreshold(int val) {
+        return listThreshold(val);
+    }
+
+    /**
+     * 阈值必须按档位递增：配反或配成相等时，LIST 模式永远取不到。首次渲染时检查一次（改阈值后重新检查）。
+     * <p>
+     * 相等也算配错，因为「不超过」含本数；0 是「关掉这一档」的显式写法，不提示。
+     */
+    private void checkThresholds() {
+        if (thresholdsChecked) {
+            return;
+        }
+
+        thresholdsChecked = true;
+        if (listThreshold > 0 && summaryThreshold >= listThreshold) {
+            LOG.warn("SkillTalent: summaryThreshold ({}) >= listThreshold ({}), LIST mode is unreachable; if this is 4.1.x code, change listThreshold({}) to summaryThreshold({})",
+                    summaryThreshold, listThreshold, listThreshold, listThreshold);
+        }
     }
 
     /**
@@ -172,6 +219,7 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        checkThresholds();
         Collection<SkillDescriptor> skillList = availableSkills(prompt);
         if (skillList.isEmpty()) return null;
 
@@ -186,7 +234,7 @@ public class SkillTalent extends AbsTalent {
 
         sb.append(CliI18n.fmt(locale, CliI18nKeys.SKILL_INSTRUCTION_TITLE, "total", total)).append("\n");
 
-        if (total <= listThreshold) {
+        if (total <= summaryThreshold) {
             // --- 档位 1: SUMMARY  ---
             sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_SUMMARY)).append("\n");
 
@@ -195,7 +243,7 @@ public class SkillTalent extends AbsTalent {
                 sb.append("  <skill name=\"").append(s.getId()).append("\">").append(s.getDescription()).append("</skill>\n");
             }
             sb.append("</skill_list>");
-        } else if (total <= searchThreshold) {
+        } else if (total <= listThreshold) {
             // --- 模式 2: LIST ---
             sb.append(CliI18n.get(locale, CliI18nKeys.SKILL_INSTRUCTION_LIST)).append("\n");
 
@@ -214,6 +262,8 @@ public class SkillTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
+        checkThresholds();
+
         Collection<SkillDescriptor> skillList = availableSkills(prompt);
         if (skillList.isEmpty()) return null;
 
@@ -221,13 +271,13 @@ public class SkillTalent extends AbsTalent {
         // 按请求语言本地化的工具描述
         Collection<FunctionTool> tools = super.getTools(prompt);
 
-        if (total <= listThreshold) {
+        if (total <= summaryThreshold) {
             // 少量时，直接 read 即可，不需要 search 和 list 干扰
             return tools.stream().filter(t -> t.name().equals("skillread")
                     || t.name().equals("skillrefresh")).collect(Collectors.toList());
         }
 
-        if (total <= searchThreshold) {
+        if (total <= listThreshold) {
             // 中等规模，保留所有（read, list, refresh），但不强制 search
             return tools.stream().filter(t -> !t.name().equals("skillsearch")).collect(Collectors.toList());
         }
@@ -246,7 +296,7 @@ public class SkillTalent extends AbsTalent {
             return CliI18n.get(locale, CliI18nKeys.SKILL_LIST_EMPTY);
         }
 
-        if (skillList.size() > searchThreshold) {
+        if (skillList.size() > listThreshold) {
             return CliI18n.fmt(locale, CliI18nKeys.SKILL_LIST_TOO_MANY, "count", skillList.size());
         }
 

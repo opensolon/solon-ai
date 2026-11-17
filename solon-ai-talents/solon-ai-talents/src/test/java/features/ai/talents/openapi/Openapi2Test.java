@@ -14,7 +14,7 @@ import org.noear.solon.ai.talents.gateway.OpenApiGatewayTalent;
  */
 public class Openapi2Test {
 
-    private ReActAgent getAgent(int dynamicThreshold) {
+    private ReActAgent getAgent(int fullThreshold) {
         String mockApiDocsUrl = "http://localhost:8081/swagger/v2?group=appApi";
         String apiBaseUrl = "http://localhost:8081";
 
@@ -23,7 +23,7 @@ public class Openapi2Test {
         // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
         OpenApiGatewayTalent apiTalent = new OpenApiGatewayTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .dynamicThreshold(dynamicThreshold);
+                .fullThreshold(fullThreshold);
 
         return ReActAgent.of(chatModel)
                 .role("业务助手")

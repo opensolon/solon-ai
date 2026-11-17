@@ -147,7 +147,7 @@ public class GatewayRenderGoldenTest {
     }
 
     static ToolGatewayTalent toolGateway(int count) {
-        ToolGatewayTalent talent = new ToolGatewayTalent().dynamicThreshold(1).listThreshold(2).searchThreshold(3).retryConfig(1);
+        ToolGatewayTalent talent = new ToolGatewayTalent().fullThreshold(1).summaryThreshold(2).listThreshold(3).retryConfig(1);
         for (int i = 1; i <= count; i++) {
             talent.addTool(i % 2 == 0 ? "财务" : null, tool("tool_" + i, "工具 " + i));
         }
@@ -195,7 +195,7 @@ public class GatewayRenderGoldenTest {
     }
 
     static McpGatewayTalent mcpGateway(int count) {
-        McpGatewayTalent talent = new McpGatewayTalent().dynamicThreshold(1).listThreshold(2).retryConfig(1, 100);
+        McpGatewayTalent talent = new McpGatewayTalent().fullThreshold(1).summaryThreshold(2).retryConfig(1, 100);
         List<FunctionTool> alpha = new ArrayList<>();
         List<FunctionTool> beta = new ArrayList<>();
         for (int i = 1; i <= count; i++) {
@@ -240,7 +240,7 @@ public class GatewayRenderGoldenTest {
     static OpenApiGatewayTalent openApiGateway(List<ApiTool> tools) throws Exception {
         ensureServer();
         OpenApiGatewayTalent talent = new OpenApiGatewayTalent()
-                .dynamicThreshold(3).listThreshold(4).searchThreshold(5)
+                .fullThreshold(3).summaryThreshold(4).listThreshold(5)
                 .maxContextLength(10).retryConfig(1)
                 .resolver(new ApiResolver() {
                     @Override
@@ -386,27 +386,27 @@ public class GatewayRenderGoldenTest {
             out.put("gw_mcp_instruction_" + n + suffix, t.getInstruction(prompt));
             out.put("gw_mcp_tools_" + n, GoldenFiles.dumpTools(t.getTools(prompt)));
         }
-        // 服务数超过 catalogThreshold：退回搜索模式
-        McpGatewayTalent searchMode = mcpGateway(4).catalogThreshold(1);
+        // 服务数超过 listThreshold：退回搜索模式
+        McpGatewayTalent searchMode = mcpGateway(4).listThreshold(1);
         out.put("gw_mcp_instruction_5" + suffix, searchMode.getInstruction(prompt));
         out.put("gw_mcp_tools_5", GoldenFiles.dumpTools(searchMode.getTools(prompt)));
         // 服务目录：有描述的用描述（空白压成一行），没有的用工具名自动生成
-        McpGatewayTalent catalog = mcpGateway(4);
-        catalog.addMcpServer("weather", new FakeProvider(Arrays.asList(tool("forecast", "天气预报"), tool("now", "实时天气")), "天气查询\n与预报"));
-        out.put("gw_mcp_instruction_catalog_desc" + suffix, catalog.getInstruction(prompt));
+        McpGatewayTalent listMode = mcpGateway(4);
+        listMode.addMcpServer("weather", new FakeProvider(Arrays.asList(tool("forecast", "天气预报"), tool("now", "实时天气")), "天气查询\n与预报"));
+        out.put("gw_mcp_instruction_list_desc" + suffix, listMode.getInstruction(prompt));
 
         // 服务目录：只有 instructions 时取第一句当描述
         McpGatewayTalent noted = mcpGateway(4);
         noted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue"), tool("list_issues", "列出 Issue")))
                 .instructions("Use this server to manage GitHub issues. Always call list_issues before create_issue.\n\nRate limit: 60/min."));
-        out.put("gw_mcp_instruction_catalog_noted" + suffix, noted.getInstruction(prompt));
+        out.put("gw_mcp_instruction_list_noted" + suffix, noted.getInstruction(prompt));
         // 直接调用模式：服务使用说明写进指令
         McpGatewayTalent fullNoted = new McpGatewayTalent().retryConfig(1, 100);
         fullNoted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue")))
                 .instructions("用于管理 GitHub Issue。\n创建前先查重。"));
         out.put("gw_mcp_instruction_full_noted" + suffix, fullNoted.getInstruction(prompt));
         // 摘要模式：签名 + 单行描述，服务使用说明写进指令
-        McpGatewayTalent summaryNoted = new McpGatewayTalent().dynamicThreshold(1).retryConfig(1, 100);
+        McpGatewayTalent summaryNoted = new McpGatewayTalent().fullThreshold(1).retryConfig(1, 100);
         summaryNoted.addMcpServer("github", new FakeProvider(Arrays.asList(tool("create_issue", "创建 Issue\n\n参数见 schema"), invalidTool()), "管理 GitHub Issue")
                 .instructions("创建前先查重。\n每分钟最多 60 次。"));
         out.put("gw_mcp_instruction_summary_noted" + suffix, summaryNoted.getInstruction(prompt));
@@ -453,8 +453,8 @@ public class GatewayRenderGoldenTest {
         out.put("gw_mcp_list_missing" + suffix, mcpList(mg, tag, "ghost", null));
         out.put("gw_mcp_list_none" + suffix, mcpList(mg, tag, "alpha", "不存在"));
         out.put("gw_mcp_list_found" + suffix, mcpList(mg, tag, "ALPHA", null));
-        // 超过 listToolsLimit 只列签名；再超过其 5 倍才截断
-        mg.listToolsLimit(1);
+        // 超过 listServerToolsThreshold 只列签名；再超过其 5 倍才截断
+        mg.listServerToolsThreshold(1);
         out.put("gw_mcp_list_compact" + suffix, mcpList(mg, tag, "alpha", null));
         out.put("gw_mcp_list_truncated" + suffix, mcpList(mg, tag, "many", null));
 

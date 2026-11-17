@@ -14,14 +14,14 @@ import org.noear.solon.core.util.ResourceUtil;
  */
 public class Openapi3Test_case1 {
 
-    private ReActAgent getAgent(int dynamicThreshold) {
+    private ReActAgent getAgent(int fullThreshold) {
         String mockApiDocsUrl = ResourceUtil.getResource("openapi3-case1.json").getPath();
         String apiBaseUrl = "http://localhost:9081";
 
         // 实例化 Talent 并指定模式（自适应 v2/v3 及解引用）
         OpenApiGatewayTalent apiTalent = new OpenApiGatewayTalent()
                 .addApi(mockApiDocsUrl, apiBaseUrl)
-                .dynamicThreshold(dynamicThreshold);
+                .fullThreshold(fullThreshold);
 
         ChatModel chatModel = LlmUtil.getChatModel();
         return ReActAgent.of(chatModel)

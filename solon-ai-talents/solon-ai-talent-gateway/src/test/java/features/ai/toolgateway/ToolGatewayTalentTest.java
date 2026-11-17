@@ -38,7 +38,7 @@ public class ToolGatewayTalentTest {
     @Test
     @DisplayName("测试 FULL 模式：工具少于阈值，直接平铺定义")
     void testFullMode() {
-        gatewayTalent.dynamicThreshold(5); // 3 < 5
+        gatewayTalent.fullThreshold(5); // 3 < 5
 
         Collection<FunctionTool> tools = gatewayTalent.getTools(Prompt.of(""));
 
@@ -53,8 +53,8 @@ public class ToolGatewayTalentTest {
     @Test
     @DisplayName("测试 SUMMARY 模式：工具较多，展示摘要清单并开启代理")
     void testSummaryMode() {
-        gatewayTalent.dynamicThreshold(1);  // 3 > 1，超过 dynamicThreshold
-        gatewayTalent.listThreshold(5);     // 3 < 5，未超过 listThreshold → SUMMARY 模式
+        gatewayTalent.fullThreshold(1);  // 3 > 1，超过 fullThreshold
+        gatewayTalent.summaryThreshold(5);     // 3 < 5，未超过 summaryThreshold → SUMMARY 模式
 
         Collection<FunctionTool> tools = gatewayTalent.getTools(Prompt.of(""));
 
@@ -74,9 +74,9 @@ public class ToolGatewayTalentTest {
     @Test
     @DisplayName("测试 LIST 模式：工具规模较大，仅展示名字列表")
     void testListMode() {
-        gatewayTalent.dynamicThreshold(1);  // 3 > 1
-        gatewayTalent.listThreshold(2);     // 3 > 2，超过 listThreshold
-        gatewayTalent.searchThreshold(5);   // 3 < 5，未超过 searchThreshold → LIST 模式
+        gatewayTalent.fullThreshold(1);  // 3 > 1
+        gatewayTalent.summaryThreshold(2);     // 3 > 2，超过 summaryThreshold
+        gatewayTalent.listThreshold(5);   // 3 < 5，未超过 listThreshold → LIST 模式
 
         Collection<FunctionTool> tools = gatewayTalent.getTools(Prompt.of(""));
 
@@ -94,9 +94,9 @@ public class ToolGatewayTalentTest {
     @Test
     @DisplayName("测试 SEARCH 模式：工具海量，折叠清单强制搜索")
     void testSearchMode() {
-        gatewayTalent.dynamicThreshold(1);
-        gatewayTalent.listThreshold(2);
-        gatewayTalent.searchThreshold(2); // 3 > 2，触发 SEARCH 模式
+        gatewayTalent.fullThreshold(1);
+        gatewayTalent.summaryThreshold(2);
+        gatewayTalent.listThreshold(2); // 3 > 2，触发 SEARCH 模式
 
         String instruction = gatewayTalent.getInstruction(Prompt.of(""));
 

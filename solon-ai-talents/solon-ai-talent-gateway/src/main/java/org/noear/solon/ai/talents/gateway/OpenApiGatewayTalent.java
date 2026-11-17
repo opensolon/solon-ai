@@ -45,12 +45,12 @@ import java.util.stream.Collectors;
 /**
  * OpenAPI 网关：按 OpenAPI(Swagger) 文档接入 REST 接口，支持四种自动发现模式。
  *
- * <p>模式按接口数切换：
+ * <p>模式按接口数切换（每个模式的阈值以模式命名，不超过它就用这个模式）：
  * <ol>
- *   <li>FULL (直接调用): 接口数 &lt;= dynamicThreshold。完整接口定义写进指令，只暴露 call_api。</li>
- *   <li>SUMMARY (摘要): 接口数 &lt;= listThreshold。按分组展示名称、描述及 Endpoint。</li>
- *   <li>LIST (名字): 接口数 &lt;= searchThreshold。仅展示分组及接口名列表。</li>
- *   <li>SEARCH (搜索): 接口数 &gt; searchThreshold。强制搜索。</li>
+ *   <li>FULL (直接调用): 接口数 &lt;= fullThreshold。完整接口定义写进指令，只暴露 call_api。</li>
+ *   <li>SUMMARY (摘要): 接口数 &lt;= summaryThreshold。按分组展示名称、描述及 Endpoint。</li>
+ *   <li>LIST (名字): 接口数 &lt;= listThreshold。仅展示分组及接口名列表。</li>
+ *   <li>SEARCH (搜索): 其余（最后一档，没有阈值）。强制搜索。</li>
  * </ol>
  *
  * <p>两个层次：开发者按「接口源」（一份文档，以 docUrl 为键）增删与刷新；模型看到的「分组」是接口的第一个
@@ -100,9 +100,12 @@ public class OpenApiGatewayTalent extends AbsTalent {
     private ApiAuthenticator defaultAuthenticator;
     private Duration defaultTimeout = Duration.ofSeconds(30);
 
-    private int dynamicThreshold = 8;
-    private int listThreshold = 30;
-    private int searchThreshold = 100;
+    // 模式阈值（接口数）：xxxThreshold 是 xxx 模式的阈值，不超过它（含）就用这个模式，超过往下一档；SEARCH 是最后一档
+    private int fullThreshold = 8;
+    private int summaryThreshold = 30;
+    private int listThreshold = 100;
+    // 是否已检查过阈值顺序（改阈值后重新检查）
+    private volatile boolean thresholdsChecked;
 
     private int maxContextLength = 8000;
 
@@ -132,27 +135,56 @@ public class OpenApiGatewayTalent extends AbsTalent {
     // --- 配置方法 ---
 
     /**
-     * FULL（直接调用）模式的接口数上限（缺省 8）：不超过它时完整接口定义写进指令
+     * FULL（直接调用）模式的阈值（接口数，缺省 8）：不超过它时完整接口定义写进指令、只暴露 call_api
+     * （接口不是原始工具，所以这里的 FULL 与 Tool / MCP 网关「直接交付原始工具」不同）
+     *
+     * @since 4.2.0
      */
-    public OpenApiGatewayTalent dynamicThreshold(int dynamicThreshold) {
-        this.dynamicThreshold = dynamicThreshold;
+    public OpenApiGatewayTalent fullThreshold(int fullThreshold) {
+        this.fullThreshold = fullThreshold;
+        this.thresholdsChecked = false;
         return this;
     }
 
     /**
-     * SUMMARY（摘要）模式的接口数上限（缺省 30）：不超过它时按分组列出名称、描述与 Endpoint
+     * SUMMARY（摘要）模式的阈值（接口数，缺省 30）：不超过它时按分组列出名称、描述与 Endpoint
+     *
+     * @since 4.2.0
+     */
+    public OpenApiGatewayTalent summaryThreshold(int summaryThreshold) {
+        this.summaryThreshold = summaryThreshold;
+        this.thresholdsChecked = false;
+        return this;
+    }
+
+    /**
+     * LIST（只列名字）模式的阈值（接口数，缺省 100）：不超过它时只列接口名，超过则进入 SEARCH（搜索）模式。
+     * 三个阈值必须递增（{@code fullThreshold < summaryThreshold < listThreshold}），配反或相等时打 WARN（后一档取不到）。
+     *
+     * @since 4.2.0
      */
     public OpenApiGatewayTalent listThreshold(int listThreshold) {
         this.listThreshold = listThreshold;
+        this.thresholdsChecked = false;
         return this;
     }
 
     /**
-     * LIST（只列名字）模式的接口数上限（缺省 100）：不超过它时只列接口名，超过则进入 SEARCH（搜索）模式
+     * @deprecated 4.2.0 改名为 {@link #fullThreshold(int)}（阈值以它所在的模式命名）
      */
+    @Deprecated
+    public OpenApiGatewayTalent dynamicThreshold(int dynamicThreshold) {
+        return fullThreshold(dynamicThreshold);
+    }
+
+    /**
+     * @deprecated 4.2.0 改名为 {@link #listThreshold(int)}（含义相同：LIST 模式的接口数阈值）。
+     * 注意 4.1.x 的 {@code listThreshold(n)} 指的是 SUMMARY 模式，现在叫 {@link #summaryThreshold(int)}，
+     * 名字被 LIST 模式占用，无法保留旧方法
+     */
+    @Deprecated
     public OpenApiGatewayTalent searchThreshold(int searchThreshold) {
-        this.searchThreshold = searchThreshold;
-        return this;
+        return listThreshold(searchThreshold);
     }
 
     /**
@@ -330,18 +362,20 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     @Override
     public String getInstruction(Prompt prompt) {
+        checkThresholds();
+
         final Locale locale = AiI18n.localeOf(prompt);
         final Index idx = index;
         final int size = idx.all.size();
         StringBuilder sb = new StringBuilder();
         sb.append(OpenApiGatewayI18n.fmt(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_TITLE, "count", size)).append("\n");
 
-        if (size <= dynamicThreshold) {
+        if (size <= fullThreshold) {
             // --- 模式 1: FULL ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_FULL)).append("\n");
             sb.append(formatApiDocs(idx.all.values(), locale));
 
-        } else if (size <= listThreshold) {
+        } else if (size <= summaryThreshold) {
             // --- 模式 2: SUMMARY ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_SUMMARY)).append("\n");
             idx.categories.forEach((cat, tools) -> {
@@ -352,7 +386,7 @@ public class OpenApiGatewayTalent extends AbsTalent {
                                 .append(" (").append(t.getMethod()).append(" ").append(t.getPath()).append(")\n")
                 );
             });
-        } else if (size <= searchThreshold) {
+        } else if (size <= listThreshold) {
             // --- 模式 3: LIST（按原名显示） ---
             sb.append(OpenApiGatewayI18n.get(locale, OpenApiGatewayI18nKeys.GATEWAY_OPENAPI_INSTRUCTION_LIST)).append("\n");
             idx.categories.forEach((cat, tools) -> {
@@ -373,20 +407,44 @@ public class OpenApiGatewayTalent extends AbsTalent {
 
     @Override
     public Collection<FunctionTool> getTools(Prompt prompt) {
+        checkThresholds();
+
         int size = index.all.size();
 
         // 中转工具（描述是固定文本，不随请求语言变化；指令与返回文案按请求语言）
         Collection<FunctionTool> tools = super.getTools(prompt);
 
-        if (size <= dynamicThreshold) {
+        if (size <= fullThreshold) {
             return tools.stream().filter(t -> TOOL_CALL.equals(t.name())).collect(Collectors.toList());
         }
 
-        if (size <= listThreshold) {
+        if (size <= summaryThreshold) {
             return tools.stream().filter(t -> !TOOL_SEARCH.equals(t.name())).collect(Collectors.toList());
         }
 
         return tools;
+    }
+
+    /**
+     * 阈值必须按档位递增：配反或配成相等时，后一档永远取不到。首次渲染时检查一次（改阈值后重新检查）。
+     * <p>
+     * 相等也算配错，因为「不超过」含本数：前两档相等时 SUMMARY 取不到，后两档相等时 LIST 取不到。
+     * 0 是「关掉这一档」的显式写法，不提示。
+     */
+    private void checkThresholds() {
+        if (thresholdsChecked) {
+            return;
+        }
+
+        thresholdsChecked = true;
+        if (summaryThreshold > 0 && fullThreshold >= summaryThreshold) {
+            LOG.warn("OpenApiGatewayTalent: fullThreshold ({}) >= summaryThreshold ({}), SUMMARY mode is unreachable",
+                    fullThreshold, summaryThreshold);
+        }
+        if (listThreshold > 0 && summaryThreshold >= listThreshold) {
+            LOG.warn("OpenApiGatewayTalent: summaryThreshold ({}) >= listThreshold ({}), LIST mode is unreachable; if this is 4.1.x code, change listThreshold({}) to summaryThreshold({})",
+                    summaryThreshold, listThreshold, listThreshold, listThreshold);
+        }
     }
 
     // --- 内置工具映射 ---

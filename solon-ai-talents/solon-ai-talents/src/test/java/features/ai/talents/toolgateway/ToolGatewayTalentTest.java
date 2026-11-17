@@ -12,7 +12,7 @@ public class ToolGatewayTalentTest {
     public void case1() throws Exception {
         String rst = LlmUtil.getChatModel().prompt("杭州今天气如何？")
                 .options(o -> {
-                    o.talentAdd(new ToolGatewayTalent().addTool(new WeatherTool()).dynamicThreshold(0));
+                    o.talentAdd(new ToolGatewayTalent().addTool(new WeatherTool()).fullThreshold(0));
                     o.toolContextPut("oc", 12);
                 }).call().getContent();
 
