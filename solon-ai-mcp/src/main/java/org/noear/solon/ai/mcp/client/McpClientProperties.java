@@ -50,6 +50,11 @@ public class McpClientProperties {
     private String version = "1.0.0";
 
     /**
+     * 服务描述（给人和模型看的功能说明；不参与连接，也不作为 clientInfo 上报）
+     */
+    private String description;
+
+    /**
      * 通道（传输方式）
      */
     @Alias("type")
@@ -177,6 +182,20 @@ public class McpClientProperties {
 
     public void setVersion(String version) {
         this.version = version;
+    }
+
+    /**
+     * @since 4.2.0
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * @since 4.2.0
+     */
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getChannel() {

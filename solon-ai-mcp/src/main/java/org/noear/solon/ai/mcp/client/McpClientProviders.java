@@ -220,6 +220,7 @@ public class McpClientProviders implements ToolProvider, ResourceProvider, Promp
         McpClientProvider.Builder builder = McpClientProvider.builder();
 
         builder.channel(type);
+        builder.description(serverParameters.getDescription());
 
         if (McpChannel.STDIO.equalsIgnoreCase(type)) {
             builder.command(serverParameters.getCommand());

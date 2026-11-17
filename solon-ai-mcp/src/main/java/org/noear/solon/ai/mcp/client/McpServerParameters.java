@@ -31,6 +31,8 @@ import java.util.function.Consumer;
 public class McpServerParameters implements Serializable {
     private String transport;
     private String type;
+    // 服务描述（给人和模型看的功能说明，不参与连接）
+    private String description;
 
     private String url;
     private Map<String, String> headers = new HashMap<>();
@@ -81,6 +83,22 @@ public class McpServerParameters implements Serializable {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    /**
+     * 服务描述（给人和模型看的功能说明，不参与连接）
+     *
+     * @since 4.2.0
+     */
+    public String getDescription() {
+        return description;
+    }
+
+    /**
+     * @since 4.2.0
+     */
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getUrl() {

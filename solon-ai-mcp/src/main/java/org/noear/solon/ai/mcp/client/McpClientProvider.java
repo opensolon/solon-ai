@@ -198,6 +198,45 @@ public class McpClientProvider implements AiSwitchable, ToolProvider, ResourcePr
     }
 
     /**
+     * 服务描述（配置提供；未配置时返回 null）
+     *
+     * @since 4.2.0
+     */
+    public String getDescription() {
+        return clientProps.getDescription();
+    }
+
+    /**
+     * 服务端在初始化握手时上报的实现信息（含 name / title / description 等）。
+     *
+     * <p>只读取已完成的握手结果，不会为此建立连接；尚未连接或已关闭时返回 null。</p>
+     *
+     * @since 4.2.0
+     */
+    public McpSchema.Implementation getServerInfo() {
+        McpAsyncClient tmp = client;
+        if (tmp == null || tmp.isInitialized() == false) {
+            return null;
+        }
+        return tmp.getServerInfo();
+    }
+
+    /**
+     * 服务端在初始化握手时上报的使用说明（instructions）。
+     *
+     * <p>只读取已完成的握手结果，不会为此建立连接；尚未连接或已关闭时返回 null。</p>
+     *
+     * @since 4.2.0
+     */
+    public String getServerInstructions() {
+        McpAsyncClient tmp = client;
+        if (tmp == null || tmp.isInitialized() == false) {
+            return null;
+        }
+        return tmp.getServerInstructions();
+    }
+
+    /**
      * 清理缓存
      */
     public void clearCache() {
@@ -983,6 +1022,16 @@ public class McpClientProvider implements AiSwitchable, ToolProvider, ResourcePr
 
         public Builder version(String version) {
             props.setVersion(version);
+            return this;
+        }
+
+        /**
+         * 服务描述（给人和模型看的功能说明）
+         *
+         * @since 4.2.0
+         */
+        public Builder description(String description) {
+            props.setDescription(description);
             return this;
         }
 
