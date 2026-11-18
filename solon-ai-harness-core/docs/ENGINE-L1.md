@@ -95,7 +95,7 @@ HarnessInput input = HarnessInput.of(session, "帮我看看这个 @coder")
 | `agentNameValidator(Predicate)` | 子代理名格式校验 |
 | `trimContent(boolean)` | 剥提及后去首尾空白（桌面端需要） |
 | `origin(InputOrigin)` | 本次输入的渠道来源身份（渠道 / 发送者 / 返回地址 / 入站关联键） |
-| `scope(InputScope)` | 本轮作用域（只能收窄的强制边界，见 [core README](../README.md) §8.3）；不传则走引擎级 `scopeResolver` |
+| `scope(InputScope)` | 本轮作用域（只能收窄的强制边界，见 [core README](../README.md) §9.1 / §2.6）；不传则走引擎级 `scopeResolver` |
 | `attr(key, value)` / `attrs(Map)` | 宿主域属性（引擎不解读，进积压时原样保存） |
 | `HarnessInput.ofProgram(session, text, channel)` | 程序轮次（goal / loop 缺省执行器用）：不识别命令与提及，忙时 `REJECTED(busy)`、不进积压 |
  | `hitl(action, callId)` + `hitlOutput(text)` | 审批决策与结果改写；`action` 是 `HITLAction` 枚举（APPROVE / REJECT / SKIP），线上字符串由宿主用 `HITLAction.of(action)` 解析，脏值显式报错 |
@@ -339,7 +339,7 @@ host.send("/help");             // 裸引擎未注册命令 → 按普通消息�
 host.send("");                  // IGNORED
 ```
 
-**为什么骨架里写了 `REPLY` 分支，上面三行却没有一行命中它？** 因为裸引擎没有注册任何命令（[core README](../README.md) §3.1）。一旦注册，同一个 `/help` 就会走到那个分支：
+**为什么骨架里写了 `REPLY` 分支，上面三行却没有一行命中它？** 因为裸引擎没有注册任何命令（[core README](../README.md) §5.1）。一旦注册，同一个 `/help` 就会走到那个分支：
 
 ```java
 host.getEngine().getCommandRegistry().register(new HelpCommand());
@@ -348,10 +348,10 @@ host.send("/help");   // REPLY → 渲染回执后收尾
 
 **注册命令并不需要配 `commandOutputFactory`**——这一点是本节曾被误读的地方。分发器（`CommandDispatcher.dispatch`）会兜底使用 `BufferedCommandOutputFactory`，回执写入内存、由 `getCommandOutput()` 一次取回；骨架里 `System.out.print(outcome.getCommandOutput())` 的写法**已经**是这个默认工厂的正确消费方式。
 
-只有在需要改动「回执怎么落地」时才提供工厂——CLI 要实时写终端（带 ANSI），这时才用 `commandOutputFactory(...)`（[core README](../README.md) §3.4）。因此最小骨架刻意不配它：多配一个默认值的等价物，只会让读者以为「不配就不工作」。
+只有在需要改动「回执怎么落地」时才提供工厂——CLI 要实时写终端（带 ANSI），这时才用 `commandOutputFactory(...)`（[core README](../README.md) §5.4）。因此最小骨架刻意不配它：多配一个默认值的等价物，只会让读者以为「不配就不工作」。
 
 一个值得提前知道的副作用：默认 `terminal=false`，所以 `/help` 会裁掉所有 `terminalOnly()` 命令（如 `/exit`）。
-若你的宿主就是命令行程序，用 `.terminal(true)` 打开即可（[core README](../README.md) §3.4）。
+若你的宿主就是命令行程序，用 `.terminal(true)` 打开即可（[core README](../README.md) §5.4）。
 
 再看 `TASK` 分支里的 `hasReply()`：命令触发的任务（如 `/queue` 排队后立刻开跑）回执与任务并存，那份回执同样出自默认工厂。
 
@@ -385,7 +385,7 @@ public class FullHost {
                 .build();
         this.session = engine.getSession("demo");
 
-        // 命令必须显式注册（core README §3.1），不注册则 /help 仍按普通消息处理
+        // 命令必须显式注册（core README §5.1），不注册则 /help 仍按普通消息处理
         engine.getCommandRegistry().register(new HelpCommand());
         engine.getCommandRegistry().register(new ClearCommand());
         engine.getCommandRegistry().register(new ModelCommand());

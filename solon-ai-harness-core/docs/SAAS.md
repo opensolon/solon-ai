@@ -4,7 +4,7 @@
 隔离模型、部署模式、作用域、会话归属、存储、容量与已知限制，以及不用骨架、直连 `engine.handle`（L1）时的写法。
 
 > **先看 [QUICKSTART-SAAS.md](../../solon-ai-harness-host/docs/QUICKSTART-SAAS.md)**：用宿主骨架 `HarnessHost`（L0）搭服务端，四步即可；
-> 术语见 [CONCEPTS.md](../../solon-ai-harness-host/docs/CONCEPTS.md)，引擎的全部配置见 [core README](../README.md) §1.2 / §6，安全底线见 core README §8.3。
+> 术语见 [CONCEPTS.md](../../solon-ai-harness-host/docs/CONCEPTS.md)，引擎的全部配置见 [core README](../README.md) §1.2，安全底线见 core README §9.3。
 > 用 L0 时，本文 §六 的 L1 写法由骨架代办，可以跳过；其余各节（隔离、作用域、归属、存储、容量）两层都适用。
 
 > 文中 `TenantStore`、`Authz`、`RedisOwnership` 等是**宿主自己的类**（示意），harness 不提供；
