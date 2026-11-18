@@ -18,6 +18,7 @@ package org.noear.solon.ai.decision;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.decision.dialect.DecisionDialect;
+import org.noear.solon.ai.util.OptionValueUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
@@ -122,6 +123,8 @@ public class DecisionRequestDesc {
             requestQuestions.put(entry.getKey(), question);
         }
         requestQuestions = Collections.unmodifiableMap(requestQuestions);
+        //字符串形态的选项值（配置读进来的，含嵌套）还原为强类型（llm 需要强类型）
+        options.optionSet(OptionValueUtil.normalize(options.options()));
         String reqJson = dialect.buildRequestJson(config, options, input, requestQuestions, new ArrayList<>(images));
         HttpUtils httpUtils = config.createHttpUtils();
 

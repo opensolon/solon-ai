@@ -16,6 +16,7 @@
 package org.noear.solon.ai.embedding;
 
 import org.noear.solon.ai.embedding.dialect.EmbeddingDialect;
+import org.noear.solon.ai.util.OptionValueUtil;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +75,8 @@ public class EmbeddingRequestDesc {
     public EmbeddingResponse call() throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
+        //字符串形态的选项值（配置读进来的，含嵌套）还原为强类型（llm 需要强类型）
+        options.optionSet(OptionValueUtil.normalize(options.options()));
         String reqJson = dialect.buildRequestJson(config, options, input);
 
         if (log.isDebugEnabled()) {

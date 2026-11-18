@@ -17,6 +17,7 @@ package org.noear.solon.ai.generate;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.generate.dialect.GenerateDialect;
+import org.noear.solon.ai.util.OptionValueUtil;
 import org.noear.solon.lang.Preview;
 import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
@@ -80,6 +81,8 @@ public class GenerateRequestDesc {
     public GenerateResponse call() throws IOException {
         HttpUtils httpUtils = config.createHttpUtils();
 
+        //字符串形态的选项值（配置读进来的，含嵌套）还原为强类型（llm 需要强类型）
+        options.optionSet(OptionValueUtil.normalize(options.options()));
         String reqJson = dialect.buildRequestJson(config, options, promptStr, promptMap);
 
         if (log.isDebugEnabled()) {

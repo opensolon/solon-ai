@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.dialect.ChatDialect;
 import org.noear.solon.ai.chat.message.SystemMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
+import org.noear.solon.ai.util.OptionValueUtil;
 import org.noear.solon.lang.NonSerializable;
 
 /**
@@ -108,6 +109,9 @@ public class ChatRequest implements NonSerializable {
      * 转为请求数据
      */
     public String toRequestData() {
+        //字符串形态的选项值（配置读进来的，含嵌套）还原为强类型（llm 需要强类型）
+        options.optionSet(OptionValueUtil.normalize(options.options()));
+
         //留个变量方便调试
         ONode oNode = dialect.buildRequestJson(config, options, finalPrompt.getMessages(), stream);
 

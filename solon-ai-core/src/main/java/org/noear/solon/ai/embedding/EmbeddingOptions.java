@@ -37,26 +37,8 @@ public class EmbeddingOptions {
     public void putAll(EmbeddingOptions from){
         if(from != null){
             if(Assert.isNotEmpty(from.options)) {
-                //支持配置形态，转为旨类型（llm 需要强类型）
-                for (Map.Entry<String, Object> entry : from.options.entrySet()) {
-                    if (entry.getValue() instanceof String) {
-                        String val = (String) entry.getValue();
-
-                        if (Assert.isBoolean(val)) {
-                            options.put(entry.getKey(), Boolean.parseBoolean(val));
-                        } else if (Assert.isNumber(val)) {
-                            if (val.indexOf('.') < 0) {
-                                options.put(entry.getKey(), Integer.parseInt(val));
-                            } else {
-                                options.put(entry.getKey(), Double.parseDouble(val));
-                            }
-                        } else {
-                            options.put(entry.getKey(), val);
-                        }
-                    } else {
-                        options.put(entry.getKey(), entry.getValue());
-                    }
-                }
+                //只合并，不转类型（强类型还原在转为请求数据时统一处理）
+                options.putAll(from.options);
             }
         }
     }
