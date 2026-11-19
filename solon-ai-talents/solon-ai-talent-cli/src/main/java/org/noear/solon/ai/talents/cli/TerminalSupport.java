@@ -29,6 +29,7 @@ import org.noear.solon.core.util.Assert;
 import java.io.IOException;
 import java.io.File;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -1098,7 +1099,11 @@ public class TerminalSupport {
         if (!sandboxEnabled) {
             return false;
         }
-        String rel = toPolicyRelative(policyRoot, target);
+        return isPolicyReadDenied(toPolicyRelative(policyRoot, target), fs);
+    }
+
+    /** 按策略相对路径判定：mandatory deny，以及 denyRead 中未被 allowRead 放行的路径。 */
+    private boolean isPolicyReadDenied(String rel, FilesystemConfig fs) {
         if (isMandatoryDeny(rel)) {
             return true;
         }
@@ -1106,6 +1111,283 @@ public class TerminalSupport {
             return false;
         }
         return matchesAny(rel, fs.getDenyRead()) && !matchesAny(rel, fs.getAllowRead());
+    }
+
+    /**
+     * 为一次目录遍历创建读拒绝判定器（见 {@link WalkReadGuard}）。
+     *
+     * @param policyRoot     策略根（同 {@link #isReadDenied} 的 policyRoot）
+     * @param start          遍历起点
+     * @param sandboxEnabled 是否沙盒模式
+     * @param fs             文件系统策略配置（可为 null）
+     */
+    WalkReadGuard newWalkReadGuard(Path policyRoot, Path start, boolean sandboxEnabled, FilesystemConfig fs) {
+        return new WalkReadGuard(policyRoot, start, sandboxEnabled, fs);
+    }
+
+    /**
+     * 一次目录遍历内的读拒绝判定器：结果与逐条调用 {@link #isReadDenied} 相同，但省掉重复的文件系统访问。
+     *
+     * <p>{@link #isReadDenied} 每次都要解析策略根、缓存根和目标的真实路径（约 6 次 toRealPath、3 次 exists），
+     * 遍历大目录时这是主要开销。这里做两件事：</p>
+     * <ul>
+     *   <li>策略根、缓存根的真实路径在创建时只算一次；</li>
+     *   <li>遍历不跟随链接，普通文件/目录的真实路径就是“所在目录的真实路径 + 自身名字”，不必再访问文件系统；
+     *       符号链接、重解析点（{@code isOther()}，如 Windows junction）、起点目录，以及无法确定所在目录真实路径的条目，
+     *       仍走 {@link #isReadDenied} 原实现。</li>
+     * </ul>
+     *
+     * <p>用法约定：只用于不跟随链接的 {@link Files#walkFileTree}；条目属性用遍历回调给出的 attrs；
+     * 目录在 preVisitDirectory 判定通过、决定进入后调用 {@link #enter}，在 postVisitDirectory 调用 {@link #exit}。
+     * 非线程安全，每次遍历新建一个。</p>
+     *
+     * <p>与原实现的唯一差别是时间点：策略根、缓存根的状态在创建时取一次，遍历期间它们被创建或改成链接不会再感知。
+     * 缓存根当时不存在的情况下，额外按“已存在祖先的真实路径 + 余下路径”比较，遍历期间才创建出来的缓存目录同样会被拒绝。</p>
+     */
+    final class WalkReadGuard {
+        private final Path policyRoot;
+        private final boolean sandboxEnabled;
+        private final FilesystemConfig fs;
+        /** 能否用“所在目录真实路径 + 名字”推算真实路径；条件不满足时全部走原实现 */
+        private final boolean fastEnabled;
+        /** 策略根真实路径（仅沙盒模式使用） */
+        private final Path realPolicyRoot;
+        /** 规范化后的缓存根；null 表示未启用物化缓存 */
+        private final Path cacheRoot;
+        /** 缓存根存在时的真实路径 */
+        private final Path cacheRealRoot;
+        /** 缓存根不存在时，按已存在祖先推算出的真实路径（可能为 null） */
+        private final Path cacheProjectedRoot;
+        /** 缓存根真实路径解析失败：与原实现一样回退为规范化路径比较 */
+        private final boolean cacheLogical;
+        private final Deque<Path[]> frames = new ArrayDeque<>();
+        /** 用推算真实路径完成的判定次数（供测试确认快速路径确实生效） */
+        private int derivedCount;
+
+        private WalkReadGuard(Path policyRoot, Path start, boolean sandboxEnabled, FilesystemConfig fs) {
+            this.policyRoot = policyRoot;
+            this.sandboxEnabled = sandboxEnabled;
+            this.fs = fs;
+
+            // 遍历条目 = 起点 + 若干名字。起点须是规范化的绝对路径，原实现里 target、
+            // target.toAbsolutePath().normalize() 两种写法的真实路径才是同一个。
+            boolean fast = start != null && start.isAbsolute() && start.equals(start.normalize());
+
+            Path realRoot = null;
+            if (fast && sandboxEnabled) {
+                try {
+                    realRoot = policyRoot.toRealPath();
+                } catch (IOException | RuntimeException e) {
+                    // 原实现在这里有多级回退口径，交给它处理
+                    fast = false;
+                }
+            }
+            this.realPolicyRoot = realRoot;
+
+            Path cr = materializeCacheRoot;
+            Path normalizedCache = null;
+            Path cacheReal = null;
+            Path cacheProjected = null;
+            boolean logical = false;
+            if (cr != null) {
+                normalizedCache = cr.toAbsolutePath().normalize();
+                try {
+                    if (Files.exists(normalizedCache)) {
+                        cacheReal = normalizedCache.toRealPath();
+                    } else {
+                        cacheProjected = projectRealPath(normalizedCache);
+                    }
+                } catch (IOException | RuntimeException e) {
+                    logical = true;
+                }
+            }
+            this.cacheRoot = normalizedCache;
+            this.cacheRealRoot = cacheReal;
+            this.cacheProjectedRoot = cacheProjected;
+            this.cacheLogical = logical;
+            this.fastEnabled = fast;
+        }
+
+        /** 不存在的路径：已存在祖先的真实路径 + 余下部分；推算不了返回 null。 */
+        private Path projectRealPath(Path normalized) {
+            try {
+                Path ancestor = resolveExistingAncestorIncludingSelf(normalized);
+                return ancestor.toRealPath().resolve(ancestor.relativize(normalized)).normalize();
+            } catch (IOException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        /**
+         * 判定遍历条目是否拒绝读取，结果同 {@link #isReadDenied}。
+         *
+         * @param entry 遍历条目
+         * @param attrs 遍历回调给出的条目属性（不跟随链接）
+         */
+        boolean isDenied(Path entry, BasicFileAttributes attrs) {
+            Path real = derivedRealPath(entry, attrs);
+            if (real == null) {
+                return isReadDenied(policyRoot, entry, sandboxEnabled, fs);
+            }
+            derivedCount++;
+            // 以下判定顺序、口径与 isReadDenied 一致，只是真实路径换成推算值
+            if (sandboxEnabled && !real.startsWith(realPolicyRoot)) {
+                return true;
+            }
+            if (isCachePath(entry, real)) {
+                return true;
+            }
+            if (!sandboxEnabled) {
+                return false;
+            }
+            return isPolicyReadDenied(realPolicyRoot.relativize(real).toString().replace("\\", "/"), fs);
+        }
+
+        int getDerivedCount() {
+            return derivedCount;
+        }
+
+        /** 进入目录（preVisitDirectory 判定通过后调用）。 */
+        void enter(Path dir, BasicFileAttributes attrs) {
+            Path real = null;
+            if (fastEnabled) {
+                real = derivedRealPath(dir, attrs);
+                if (real == null) {
+                    try {
+                        real = dir.toRealPath();
+                    } catch (IOException | RuntimeException e) {
+                        // 推算不了：其子项改走原实现
+                        real = null;
+                    }
+                }
+            }
+            frames.push(new Path[]{dir, real});
+        }
+
+        /** 离开目录（postVisitDirectory 时调用）。 */
+        void exit(Path dir) {
+            Path[] top = frames.peek();
+            if (top != null && top[0].equals(dir)) {
+                frames.pop();
+            }
+        }
+
+        /** 普通文件/目录：所在目录真实路径 + 名字；其它情况返回 null（走原实现）。 */
+        private Path derivedRealPath(Path entry, BasicFileAttributes attrs) {
+            if (!fastEnabled || attrs == null || attrs.isSymbolicLink() || attrs.isOther()) {
+                return null;
+            }
+            Path[] top = frames.peek();
+            if (top == null || top[1] == null) {
+                return null;
+            }
+            Path name = entry.getFileName();
+            if (name == null || !top[0].equals(entry.getParent())) {
+                return null;
+            }
+            return top[1].resolve(name.toString());
+        }
+
+        /** 同 isMaterializeCachePath 的口径，目标真实路径用推算值。 */
+        private boolean isCachePath(Path entry, Path real) {
+            if (cacheRoot == null) {
+                return false;
+            }
+            if (cacheLogical) {
+                // entry 是规范化绝对路径（构造时已保证），即原实现里的 normalizedTarget
+                return entry.equals(cacheRoot) || entry.startsWith(cacheRoot);
+            }
+            Path root = cacheRealRoot != null ? cacheRealRoot : cacheRoot;
+            if (real.equals(root) || real.startsWith(root)) {
+                return true;
+            }
+            return cacheProjectedRoot != null && real.startsWith(cacheProjectedRoot);
+        }
+    }
+
+    /**
+     * glob 字面目录前缀：模式开头若干段是普通目录名（如 {@code src/main/**}&#47;{@code *.java} 的 src、main）时，
+     * 返回这些段在 target 下对应的目录（逐级，第一个是 target 的子目录）；不能剪枝时返回空列表。
+     *
+     * <p>只有确定剪枝前后匹配结果一致才剪：</p>
+     * <ul>
+     *   <li>模式是相对的（不以 / 开头、不含盘符冒号），否则走绝对路径匹配；</li>
+     *   <li>段不为空、不是 . 或 ..，不含通配字符 {@code * ? [ ] { } \}；</li>
+     *   <li>目录里按该段（同一套 glob 匹配规则，含平台大小写口径）只匹配到一个条目，且名字与段完全相同；</li>
+     *   <li>该条目是真实目录（不跟随链接读取，非符号链接、非重解析点）——原遍历不进入链接目录。</li>
+     * </ul>
+     * 任一条件不满足即停在上一段；读目录出错同样停下（由全量遍历按原口径处理）。
+     */
+    static List<Path> globLiteralPrefixDirs(Path target, String pattern) {
+        if (target == null || pattern == null || pattern.isEmpty()
+                || pattern.startsWith("/") || pattern.indexOf(':') >= 0) {
+            return Collections.emptyList();
+        }
+        String[] segments = pattern.split("/", -1);
+        List<Path> dirs = new ArrayList<>();
+        Path current = target;
+        // 最后一段是文件名部分，不参与剪枝
+        for (int i = 0; i < segments.length - 1; i++) {
+            String segment = segments[i];
+            if (!isLiteralGlobSegment(segment)) {
+                break;
+            }
+            Path next = findSoleLiteralDir(current, segment);
+            if (next == null) {
+                break;
+            }
+            dirs.add(next);
+            current = next;
+        }
+        return dirs;
+    }
+
+    private static boolean isLiteralGlobSegment(String segment) {
+        if (segment.isEmpty() || ".".equals(segment) || "..".equals(segment)) {
+            return false;
+        }
+        for (int i = 0; i < segment.length(); i++) {
+            if ("*?[]{}\\".indexOf(segment.charAt(i)) >= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Path findSoleLiteralDir(Path dir, String segment) {
+        PathMatcher segmentMatcher;
+        try {
+            segmentMatcher = dir.getFileSystem().getPathMatcher("glob:" + segment);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        Path found = null;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
+            for (Path entry : stream) {
+                Path name = entry.getFileName();
+                if (name != null && segmentMatcher.matches(name)) {
+                    // 多个条目能匹配（如大小写不敏感匹配下的 a 与 A），或名字写法不同：不剪
+                    if (found != null || !segment.equals(name.toString())) {
+                        return null;
+                    }
+                    found = entry;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+        if (found == null) {
+            return null;
+        }
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(found, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            if (!attrs.isDirectory() || attrs.isSymbolicLink() || attrs.isOther()) {
+                return null;
+            }
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+        return found;
     }
 
     boolean isSandboxBoundaryDenied(Path rootPath, Path target, boolean sandboxEnabled) {

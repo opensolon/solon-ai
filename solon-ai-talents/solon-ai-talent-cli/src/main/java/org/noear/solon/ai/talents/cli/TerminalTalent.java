@@ -1645,23 +1645,26 @@ public class TerminalTalent extends AbsTalent {
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
         final FilesystemConfig fsConfig = fs();
 
+        final TerminalSupport.WalkReadGuard guard = support.newWalkReadGuard(policyRoot, target, sandboxEnabled, fsConfig);
         Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isReadDenied(policyRoot, dir, sandboxEnabled, fsConfig)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || guard.isDenied(dir, attrs)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
+                guard.enter(dir, attrs);
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isReadDenied(policyRoot, file, sandboxEnabled, fsConfig)) {
+                // include 过滤：如果指定了文件模式，仅匹配符合模式的文件。
+                // 放在安全检查之前：不匹配的文件反正跳过，省掉它们的检查（两类判定都无副作用，结果不变）
+                if (includeMatcher != null && !includeMatcher.matches(file.getFileName())) {
                     return FileVisitResult.CONTINUE;
                 }
 
-                // include 过滤：如果指定了文件模式，仅匹配符合模式的文件
-                if (includeMatcher != null && !includeMatcher.matches(file.getFileName())) {
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || guard.isDenied(file, attrs)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -1697,6 +1700,12 @@ public class TerminalTalent extends AbsTalent {
                     // 仅忽略读取异常（如权限、损坏的编码等）
                 }
                 return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                guard.exit(dir);
+                return super.postVisitDirectory(dir, exc);
             }
         });
 
@@ -1742,31 +1751,61 @@ public class TerminalTalent extends AbsTalent {
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
         final FilesystemConfig fsConfig = fs();
 
-        Files.walkFileTree(target, new SimpleFileVisitor<Path>() {
+        // 模式以字面目录开头（如 src/main/**/X.java）时，只有该目录下的文件可能匹配，直接从它开始遍历。
+        // 原遍历会先后经过 target 与各中间目录的 preVisitDirectory：这里按同一口径逐个校验，任一被跳过则没有结果。
+        Path walkStart = target;
+        List<Path> prefixDirs = TerminalSupport.globLiteralPrefixDirs(target, fixedPattern);
+        if (!prefixDirs.isEmpty()) {
+            boolean skipped = isSearchDirSkipped(workPath, target, policyRoot, target, fsConfig);
+            for (int i = 0; !skipped && i < prefixDirs.size() - 1; i++) {
+                skipped = isSearchDirSkipped(workPath, target, policyRoot, prefixDirs.get(i), fsConfig);
+            }
+            if (skipped) {
+                return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE));
+            }
+            walkStart = prefixDirs.get(prefixDirs.size() - 1);
+        }
+
+        final TerminalSupport.WalkReadGuard guard = support.newWalkReadGuard(policyRoot, walkStart, sandboxEnabled, fsConfig);
+        Files.walkFileTree(walkStart, new SimpleFileVisitor<Path>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || support.isReadDenied(policyRoot, dir, sandboxEnabled, fsConfig)) {
+                if (support.isIgnored(workPath, dir) || support.isIgnored(target, dir) || guard.isDenied(dir, attrs)) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
+                guard.enter(dir, attrs);
                 return FileVisitResult.CONTINUE;
             }
 
             @Override
             public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || support.isReadDenied(policyRoot, file, sandboxEnabled, fsConfig)) {
+                // 先匹配、再做安全检查：不匹配的文件不会输出，省掉它们的检查。两类判定都无副作用，结果不变。
+                if (!matcher.matches(target.relativize(file)) && !matcher.matches(file)) {
+                    return FileVisitResult.CONTINUE;
+                }
+                if (support.isIgnored(workPath, file) || support.isIgnored(target, file) || guard.isDenied(file, attrs)) {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if(matcher.matches(target.relativize(file)) || matcher.matches(file)) {
-                    results.add("[FILE] " + support.formatDisplayPath(workPath, path, target, file, sandboxEnabled));
-                }
-
+                results.add("[FILE] " + support.formatDisplayPath(workPath, path, target, file, sandboxEnabled));
                 return results.size() >= 500 ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                guard.exit(dir);
+                return super.postVisitDirectory(dir, exc);
             }
         });
         if (results.isEmpty()) return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_GLOB_NONE));
         Collections.sort(results);
         return ToolResult.success(String.join("\n", results));
+    }
+
+    /** 搜索遍历是否跳过该目录（与 glob/grep 的 preVisitDirectory 同一口径，走原实现）。 */
+    private boolean isSearchDirSkipped(Path workPath, Path target, Path policyRoot, Path dir, FilesystemConfig fsConfig) {
+        return support.isIgnored(workPath, dir) || support.isIgnored(target, dir)
+                || support.isReadDenied(policyRoot, dir, sandboxEnabled, fsConfig);
     }
 
     /** 解析仅能通过 MountSource 访问的虚拟来源；本地来源继续走既有 Path 安全路径。 */
