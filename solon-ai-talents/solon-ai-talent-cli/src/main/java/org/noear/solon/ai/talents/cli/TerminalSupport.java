@@ -33,7 +33,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -1833,33 +1832,77 @@ public class TerminalSupport {
     }
 
     void generateTreeInternal(Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs, Locale locale) throws IOException {
+        // 一次树遍历共用一个判定器：策略根/缓存根的真实路径只算一次（口径见 WalkReadGuard）
+        WalkReadGuard guard = newWalkReadGuard(workPath, current, sandboxEnabled, fs);
+        generateTreeInternal(guard, workPath, current, depth, maxDepth, indent, sb, showHidden, locale);
+    }
+
+    private void generateTreeInternal(WalkReadGuard guard, Path workPath, Path current, int depth, int maxDepth, String indent, StringBuilder sb, boolean showHidden, Locale locale) throws IOException {
         if (depth >= maxDepth) return;
+        guard.enter(current, readAttributesNoFollow(current));
         try (Stream<Path> stream = Files.list(current)) {
-            List<Path> children = stream
-                    .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isReadDenied(workPath, p, sandboxEnabled, fs))
-                    .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
-                    .sorted((a, b) -> {
-                        boolean aDir = Files.isDirectory(a);
-                        boolean bDir = Files.isDirectory(b);
-                        if (aDir != bDir) return aDir ? -1 : 1;
-                        return a.getFileName().compareTo(b.getFileName());
-                    }).collect(Collectors.toList());
+            List<LsEntry> children = new ArrayList<>();
+            Iterator<Path> it = stream.iterator();
+            while (it.hasNext()) {
+                Path p = it.next();
+                if (isIgnored(workPath, p)) continue;
+                // 每个条目只读一次属性：读拒绝判定与“是否目录”共用（后者与原 Files.isDirectory 同口径）
+                BasicFileAttributes attrs = readAttributesNoFollow(p);
+                if (guard.isDenied(p, attrs)) continue;
+                if (!showHidden && p.getFileName().toString().startsWith(".")) continue;
+                children.add(new LsEntry(p, isDirectoryFollow(p, attrs)));
+            }
+            // 目录在前、再按名字：与原比较器一致
+            Collections.sort(children, (a, b) -> {
+                if (a.directory != b.directory) return a.directory ? -1 : 1;
+                return a.path.getFileName().compareTo(b.path.getFileName());
+            });
 
             for (int i = 0; i < children.size(); i++) {
-                Path child = children.get(i);
+                LsEntry child = children.get(i);
                 boolean isLast = (i == children.size() - 1);
-                boolean isDir = Files.isDirectory(child);
-                if (isReadDenied(workPath, child, sandboxEnabled, fs)) {
-                    continue;
-                }
-                sb.append(indent).append(isLast ? "└── " : "├── ").append(child.getFileName()).append("\n");
-                if (isDir)
-                    generateTreeInternal(workPath, child, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, sandboxEnabled, fs, locale);
+                sb.append(indent).append(isLast ? "└── " : "├── ").append(child.path.getFileName()).append("\n");
+                if (child.directory)
+                    generateTreeInternal(guard, workPath, child.path, depth + 1, maxDepth, indent + (isLast ? "    " : "│   "), sb, showHidden, locale);
             }
         } catch (AccessDeniedException e) {
             sb.append(indent).append("└── ").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_DENIED)).append("\n");
+        } finally {
+            guard.exit(current);
         }
+    }
+
+    /** ls 的一条子项：路径 + 是否目录（跟随链接，同 Files.isDirectory 口径）。 */
+    private static final class LsEntry {
+        final Path path;
+        final boolean directory;
+
+        LsEntry(Path path, boolean directory) {
+            this.path = path;
+            this.directory = directory;
+        }
+    }
+
+    /**
+     * 条目的 NOFOLLOW 属性，供 {@link WalkReadGuard} 判定使用；读取失败返回 null（判定器退回原实现）。
+     */
+    private static BasicFileAttributes readAttributesNoFollow(Path path) {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 与 {@link Files#isDirectory} 同口径（跟随链接），已有 NOFOLLOW 属性时省掉一次系统调用。
+     * 符号链接、重解析点（{@code isOther()}）以及属性读取失败的条目仍走 {@link Files#isDirectory}。
+     */
+    private static boolean isDirectoryFollow(Path path, BasicFileAttributes noFollowAttrs) {
+        if (noFollowAttrs == null || noFollowAttrs.isSymbolicLink() || noFollowAttrs.isOther()) {
+            return Files.isDirectory(path);
+        }
+        return noFollowAttrs.isDirectory();
     }
 
     String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs) throws IOException {
@@ -1867,17 +1910,27 @@ public class TerminalSupport {
     }
 
     String flatListLogic(Path workPath, Path policyRoot, Path target, String inputPath, boolean showHidden, boolean sandboxEnabled, FilesystemConfig fs, Locale locale) throws IOException {
+        WalkReadGuard guard = newWalkReadGuard(policyRoot, target, sandboxEnabled, fs);
+        guard.enter(target, readAttributesNoFollow(target));
         try (Stream<Path> stream = Files.list(target)) {
-            List<String> lines = stream
-                    .filter(p -> !isIgnored(workPath, p))
-                    .filter(p -> !isReadDenied(policyRoot, p, sandboxEnabled, fs))
-                    .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
-                    .map(p -> {
-                        boolean isDir = Files.isDirectory(p);
-                        String displayPath = formatDisplayPath(workPath, inputPath, target, p, sandboxEnabled);
-                        return (isDir ? "[DIR] " : "[FILE] ") + displayPath + (isDir ? "/" : "");
-                    }).sorted().collect(Collectors.toList());
+            List<String> lines = new ArrayList<>();
+            Iterator<Path> it = stream.iterator();
+            while (it.hasNext()) {
+                Path p = it.next();
+                if (isIgnored(workPath, p)) continue;
+                // 每个条目只读一次属性：读拒绝判定与“是否目录”共用（后者与原 Files.isDirectory 同口径）
+                BasicFileAttributes attrs = readAttributesNoFollow(p);
+                if (guard.isDenied(p, attrs)) continue;
+                if (!showHidden && p.getFileName().toString().startsWith(".")) continue;
+                boolean isDir = isDirectoryFollow(p, attrs);
+                String displayPath = formatDisplayPath(workPath, inputPath, target, p, sandboxEnabled);
+                lines.add((isDir ? "[DIR] " : "[FILE] ") + displayPath + (isDir ? "/" : ""));
+            }
+            // 与原 sorted() 一致：按整行字符串排序（[DIR] 前缀天然排在 [FILE] 之前）
+            Collections.sort(lines);
             return lines.isEmpty() ? CliI18n.get(locale, CliI18nKeys.TERMINAL_LS_EMPTY) : String.join("\n", lines);
+        } finally {
+            guard.exit(target);
         }
     }
 

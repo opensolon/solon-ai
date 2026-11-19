@@ -2,7 +2,6 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.mount.Mount;
 import org.noear.solon.ai.mount.MountManager;
 import org.noear.solon.ai.mount.MountType;
@@ -47,15 +46,46 @@ class TerminalSearchEquivalenceTest {
         boolean links;
     }
 
-    @TempDir
-    static Path tmp;
+    /** 共享目录树的根（自建临时目录，JVM 退出时删除；供本类与 ls 差分测试共用）。 */
+    private static Path fallbackBase;
 
     static final List<Env> ENVS = new ArrayList<>();
 
     @BeforeAll
     static void setUp() throws IOException {
+        ensureEnvs();
+    }
+
+    /** 共享目录树的根：自建临时目录（JUnit 的 @TempDir 在本类结束后会被删除，其它类复用时不安全）。 */
+    private static synchronized Path baseDir() throws IOException {
+        if (fallbackBase == null) {
+            fallbackBase = Files.createTempDirectory("cli-equiv");
+            final Path created = fallbackBase;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> deleteQuietly(created)));
+        }
+        return fallbackBase;
+    }
+
+    private static void deleteQuietly(Path root) {
+        try (java.util.stream.Stream<Path> stream = Files.walk(root)) {
+            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                }
+            });
+        } catch (IOException ignored) {
+        }
+    }
+
+    /** 构建（或复用）共享的差分测试目录树，供本类与 ls 差分测试共用。 */
+    static synchronized void ensureEnvs() throws IOException {
+        if (!ENVS.isEmpty()) {
+            return;
+        }
+        Path base0 = baseDir();
         for (long seed : new long[]{7L, 2026L}) {
-            Path base = Files.createDirectories(tmp.resolve("env" + seed));
+            Path base = Files.createDirectories(base0.resolve("env" + seed));
             Env env = new Env();
             env.ws = Files.createDirectories(base.resolve("ws"));
             env.outside = Files.createDirectories(base.resolve("outside"));

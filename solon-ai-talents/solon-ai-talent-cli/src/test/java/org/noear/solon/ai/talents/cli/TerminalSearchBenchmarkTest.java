@@ -47,8 +47,28 @@ class TerminalSearchBenchmarkTest {
             long a = median(() -> LegacySearch.grep(t, "class TerminalSupport", ".", "*.java", cwd));
             long b = median(() -> t.grep("class TerminalSupport", ".", "*.java", cwd, null).getContent());
             report("grep", "class TerminalSupport (*.java)", sandbox, legacy.split("\n").length, a, b);
+
+            for (String[] lsCase : LS_CASES) {
+                String path = lsCase[0];
+                boolean recursive = Boolean.parseBoolean(lsCase[1]);
+                String flatLegacy = recursive
+                        ? LegacyList.tree(t, path, false, cwd)
+                        : LegacyList.flat(t, path, false, cwd);
+                String flatNow = t.ls(path, recursive, false, cwd, null).getContent();
+                assertEquals(flatLegacy, flatNow, "ls " + path + " recursive=" + recursive);
+                long la = median(() -> recursive ? LegacyList.tree(t, path, false, cwd) : LegacyList.flat(t, path, false, cwd));
+                long lb = median(() -> t.ls(path, recursive, false, cwd, null).getContent());
+                report("ls", path + (recursive ? " -r" : " -1"), sandbox, flatLegacy.split("\n").length, la, lb);
+            }
         }
     }
+
+    /** ls 基准场景：目录树深度有限，取有代表性的目录。 */
+    private static final List<String[]> LS_CASES = Arrays.asList(
+            new String[]{".", "false"},
+            new String[]{".", "true"},
+            new String[]{"solon-ai-talents", "true"},
+            new String[]{"solon-ai-talents/solon-ai-talent-cli/src", "true"});
 
     private static void report(String tool, String pattern, boolean sandbox, int lines, long legacyNs, long nowNs) {
         System.out.println(String.format("[bench] %s | %-58s | sandbox=%-5s | lines=%4d | legacy=%8.1f ms | now=%8.1f ms | x%.1f",
