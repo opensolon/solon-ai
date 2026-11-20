@@ -1,5 +1,6 @@
 package org.noear.solon.ai.harness.extension.goal;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
@@ -95,6 +96,31 @@ class GoalIndexReadFailureTest {
 
             state.failLists = false;
             assertEquals(1, goal.recover(), "读得到之后照常恢复，且只登记一次");
+        } finally {
+            ext2.shutdown();
+        }
+    }
+
+    @Test
+    void recoverSkipsBrokenAndEscapingLinksInTheIndex() throws Exception {
+        // 索引目录里的断链 / 越界链接只是坏条目：跳过即可，不能让每次恢复都失败
+        Assumptions.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"), "依赖符号链接");
+        Path stateDir = Files.createDirectories(workspace.resolve("state"));
+        FileMountSource state = FileMountSource.of(stateDir);
+
+        HarnessEngine ext1 = engine(state);
+        ext1.getExtension(GoalExtension.class).get().getGoalScheduler().schedule("s1", false);
+        ext1.shutdown();
+
+        Path index = stateDir.resolve(GoalExtension.INDEX_PATH);
+        Path outside = Files.createDirectories(workspace.resolve("outside"));
+        Files.write(outside.resolve("x"), new byte[0]);
+        Files.createSymbolicLink(index.resolve("broken"), workspace.resolve("missing"));
+        Files.createSymbolicLink(index.resolve("escaped"), outside.resolve("x"));
+
+        HarnessEngine ext2 = engine(state);
+        try {
+            assertEquals(1, ext2.getExtension(GoalExtension.class).get().recover());
         } finally {
             ext2.shutdown();
         }

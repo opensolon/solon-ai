@@ -215,6 +215,23 @@ class LoopStoreTest {
     }
 
     @Test
+    void brokenOrEscapingLinkInStoreDirDoesNotSwitchToReadOnly() throws Exception {
+        // 任务目录里的断链 / 越界链接只是列举时跳过的坏条目，不是「读不出来」：
+        // 不能让整个进程的 loop 存储变成只读
+        assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"), "依赖符号链接");
+        writeFile("{\"version\":2,\"tasks\":[" + loopEntry("aaaa0009", "s1") + "]}");
+        Path outside = Files.createDirectories(dir.resolve("outside"));
+        Files.write(outside.resolve("x.json"), "{}".getBytes(StandardCharsets.UTF_8));
+        Files.createSymbolicLink(dir.resolve("loop").resolve("broken.json"), dir.resolve("missing.json"));
+        Files.createSymbolicLink(dir.resolve("loop").resolve("out.json"), outside.resolve("x.json"));
+
+        LoopExtension ext = loaded(id -> true);
+        assertEquals(1, ext.list("s1").size(), "健康的会话文件照常加载");
+        ext.schedule("s2", LoopSpec.of("after").everyMinutes(5));
+        assertTrue(Files.exists(tasksFile("s2")), "不是只读：新任务照常落盘");
+    }
+
+    @Test
     void unreadableFileSwitchesToReadOnly() throws Exception {
         assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"), "依赖 POSIX 权限");
         String original = "{\"version\":2,\"tasks\":[" + loopEntry("aaaa0008", "s1") + "]}";

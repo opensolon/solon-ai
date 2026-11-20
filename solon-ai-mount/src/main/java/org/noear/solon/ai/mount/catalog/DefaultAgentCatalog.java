@@ -32,7 +32,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * 基于统一挂载注册表的来源无关 Agent 目录。
  *
- * <p>创建时订阅 {@link MountManager} 的挂载变更（{@link MountListener}），挂载注册/移除后自动刷新。</p>
+ * <p>创建时订阅 {@link MountManager} 的挂载变更（{@link MountListener}），Agent 挂载注册/移除（或同名 Agent 挂载被替换）后自动刷新，普通文件挂载的变更不触发重扫。</p>
  *
  * @author noear
  * @since 4.1.1
@@ -62,14 +62,55 @@ public final class DefaultAgentCatalog implements AgentCatalog {
         mountManager.addListener(new MountListener() {
             @Override
             public void onMountRegistered(Mount mount) {
-                refreshByMount(mount.getAlias());
+                onMountChanged(mount);
             }
 
             @Override
             public void onMountRemoved(Mount mount) {
-                refreshByMount(mount.getAlias());
+                onMountChanged(mount);
             }
         });
+    }
+
+    /**
+     * 挂载变更时只在可能影响本目录时刷新：变更的是 Agent 挂载，或当前快照里还有该别名的 Agent
+     * （同名的 Agent 挂载被其他类型挂载替换时，监听器只拿到新挂载）。普通文件挂载的注册/移除不再触发全量重扫。
+     *
+     * @param mount 发生变更的挂载（注册时为新挂载，移除时为被移除的挂载）
+     */
+    private void onMountChanged(Mount mount) {
+        if (mount.getType() == MountType.AGENTS) {
+            refreshByMount(mount.getAlias());
+            return;
+        }
+        // 在刷新锁内判定：若有进行中的刷新（可能正在扫描刚被替换的旧 Agent 挂载），等它提交后再看快照
+        refreshLock.lock();
+        try {
+            if (hasRecordsOf(mount.getAlias())) {
+                refreshByMount(mount.getAlias());
+            }
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    /**
+     * 当前快照里是否有来自指定挂载的 Agent。
+     *
+     * @param alias 规范化后的挂载别名（带 {@code @}）
+     * @return 有记录时为 true
+     */
+    private boolean hasRecordsOf(String alias) {
+        if (alias == null) {
+            return false;
+        }
+
+        for (AgentDescriptor agent : agents.values()) {
+            if (alias.equals(agent.getMountAlias())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -1,5 +1,6 @@
 package org.noear.solon.ai.harness.extension.queue;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
@@ -340,6 +341,27 @@ class QueueIndexTest {
             state.writeString(QueueExtension.INDEX_PATH + "/.s1.0123abcd.tmp", "");   // 原子写中断留下的临时文件
 
             assertEquals(Collections.singletonList(".hidden"), indexed(state));
+        } finally {
+            engine.shutdown();
+        }
+    }
+
+    @Test
+    void listingSkipsBrokenAndEscapingLinks() throws Exception {
+        // 索引目录里有一个断链或越界链接时，恢复不能永远失败：只跳过坏条目
+        Assumptions.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"), "依赖符号链接");
+        FileMountSource state = stateDir();
+        HarnessEngine engine = engine(state);
+        try {
+            QueueExtension q = queue(engine);
+            q.markPending("s1");
+            Path dir = tmp.resolve("state").resolve(QueueExtension.INDEX_PATH);
+            Path outside = Files.createDirectories(tmp.resolve("outside"));
+            Files.write(outside.resolve("x"), new byte[0]);
+            Files.createSymbolicLink(dir.resolve("broken"), tmp.resolve("missing"));
+            Files.createSymbolicLink(dir.resolve("escaped"), outside.resolve("x"));
+
+            assertEquals(Collections.singletonList("s1"), indexed(state));
         } finally {
             engine.shutdown();
         }

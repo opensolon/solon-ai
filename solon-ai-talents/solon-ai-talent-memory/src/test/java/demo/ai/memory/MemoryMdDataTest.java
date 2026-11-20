@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.talents.memory.MemorySearchResult;
+import org.noear.solon.ai.mount.source.FileMountSource;
+import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.talents.memory.md.MemoryMdData;
 
 import java.io.IOException;
@@ -27,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * MemoryMdData 单元测试（零外部依赖，黑盒验证公开契约）。
@@ -1185,6 +1188,44 @@ public class MemoryMdDataTest {
 
             assertTrue(data.keys(U1).isEmpty(), "非 md 文件不应被加载");
             assertFalse(Files.exists(userDir.resolve("u1__x.md.tmp")), "残留 tmp 应被清理");
+        }
+    
+        @Test
+        @DisplayName("目录里有断链或越界链接时，其余条目照常加载进索引")
+        public void broken_or_escaping_link_does_not_empty_index() throws IOException {
+            // 列举目录时遇到的坏条目只跳过它本身；以前会让整次列举失败，
+            // 而加载只在构造时做一次，结果整个进程运行期间记忆索引都是空的
+            assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"), "依赖符号链接");
+            save(U1, "k1", "用户偏好使用Solon框架", 7, T_MID);
+            save(U1, "k2", "Redis cache configuration", 5, T_MID, -1, SCOPE_WS);
+            data.close();
+            data = null;
+    
+            Path outside = Files.createDirectories(tmpRoot.resolve("outside"));
+            Files.write(outside.resolve("u1__out.md"), "x".getBytes(StandardCharsets.UTF_8));
+            for (Path dir : new Path[]{userDir, wsDir}) {
+                Files.createSymbolicLink(dir.resolve("u1__broken.md"), tmpRoot.resolve("missing.md"));
+                Files.createSymbolicLink(dir.resolve("u1__escaped.md"), outside.resolve("u1__out.md"));
+            }
+    
+            // 不跟随外部链接（构造器默认）与跟随外部链接两种来源都要成立
+            for (boolean follow : new boolean[]{false, true}) {
+                Map<String, MountSource> sources = new LinkedHashMap<>();
+                sources.put(SCOPE_USER, FileMountSource.of(userDir, follow));
+                sources.put(SCOPE_WS, FileMountSource.of(wsDir, follow));
+                data = follow ? MemoryMdData.of(sources) : newData();
+    
+                // get 未命中缓存时会回源读文件，掩盖加载失败，所以这里只看索引
+                List<MemorySearchResult> rs = data.search(U1, "Solon", 10);
+                assertEquals(1, rs.size(), "follow=" + follow + "：user 作用域条目应进入索引");
+                assertEquals("k1", rs.get(0).getKey());
+                assertEquals(Collections.singletonList("k2"), keysOf(data.search(U1, "Redis", 10)),
+                        "follow=" + follow + "：workspace 作用域条目应进入索引");
+                assertEquals(2, data.keys(U1).size(), "follow=" + follow + "：链接本身不应成为条目");
+    
+                data.close();
+                data = null;
+            }
         }
     }
 

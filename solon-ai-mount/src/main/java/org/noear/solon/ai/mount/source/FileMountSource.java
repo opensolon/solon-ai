@@ -24,6 +24,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
@@ -280,6 +281,10 @@ public final class FileMountSource implements MountSource {
     /**
      * 列出目录的直接子条目。
      *
+     * <p>单个子条目在列举后消失（并发删除、原子写的临时文件被改名）、是断开的符号链接，
+     * 或是指向挂载根之外的符号链接（不跟随模式）时，只跳过该条目，与 {@link #find} 口径一致；
+     * 其余单条读取失败（如权限不足）仍抛出，以便调用方区分"读到空目录"与"没读到"。</p>
+     *
      * @param path 相对目录路径
      * @return 按名称排序的子条目
      * @throws IOException 目录不存在、非目录或读取失败时
@@ -294,7 +299,17 @@ public final class FileMountSource implements MountSource {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir)) {
             for (Path child : stream) {
                 String childPath = rootPath.relativize(child).toString().replace('\\', '/');
-                result.add(stat(childPath));
+                MountEntry entry;
+                try {
+                    entry = stat(childPath);
+                } catch (NoSuchFileException | SecurityException e) {
+                    // 列举后消失 / 断链（不跟随模式下 toRealPath 失败）/ 越界链接：跳过该条目
+                    continue;
+                }
+                if (entry != null) {
+                    // null：列举后消失，或跟随模式下的断链
+                    result.add(entry);
+                }
             }
         }
         result.sort(Comparator.comparing(MountEntry::getName));

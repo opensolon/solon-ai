@@ -12,9 +12,17 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * 本地文件挂载来源的独立行为验证：
@@ -129,6 +137,96 @@ public class FileMountSourceTest {
 
         assertThrows(java.io.IOException.class, () -> source.list("a.txt"));
         assertThrows(java.io.IOException.class, () -> source.list("missing-dir"));
+    }
+
+    @Test
+    public void listShouldSkipBrokenAndEscapingLinksButKeepSiblings() throws Exception {
+        // 单个坏条目只跳过该条目（与 find 口径一致），不能让整次列举失败：
+        // 状态目录（goal/queue/loop/memory）里只要有一个断链或越界链接，恢复就会永远失败。
+        assumeTrue(!isWindows());
+        Path root = newSourceDir("list-links-root");
+        Path outside = newSourceDir("list-links-outside");
+        Files.write(outside.resolve("secret.txt"), "s".getBytes(StandardCharsets.UTF_8));
+        Files.write(root.resolve("a.txt"), "a".getBytes(StandardCharsets.UTF_8));
+        // 原子写留下的临时文件是普通文件，照常列出（是否忽略由调用方决定）
+        Files.write(root.resolve(".a.txt.0123abcd.tmp"), new byte[0]);
+        Files.createDirectories(root.resolve("sub"));
+        Files.createSymbolicLink(root.resolve("broken"), root.resolve("missing-target"));
+        Files.createSymbolicLink(root.resolve("out"), outside);
+        Files.createSymbolicLink(root.resolve("in-link"), root.resolve("a.txt"));
+
+        FileMountSource strict = FileMountSource.of(root);
+        assertEquals(Arrays.asList(".a.txt.0123abcd.tmp", "a.txt", "in-link", "sub"), names(strict.list("")));
+        // 安全语义不变：显式访问越界链接仍拒绝
+        assertThrows(SecurityException.class, () -> strict.stat("out"));
+        assertThrows(SecurityException.class, () -> strict.stat("out/secret.txt"));
+        assertThrows(NoSuchFileException.class, () -> strict.stat("broken"));
+
+        FileMountSource trusted = FileMountSource.of(root, true);
+        List<MountEntry> entries = trusted.list("");
+        assertEquals(Arrays.asList(".a.txt.0123abcd.tmp", "a.txt", "in-link", "out", "sub"), names(entries));
+        assertTrue(entries.get(3).isDirectory(), "跟随模式下指向目录的链接仍是目录");
+        assertNull(trusted.stat("broken"), "跟随模式下断链视为不存在");
+    }
+
+    @Test
+    public void listShouldTolerateConcurrentAtomicWritesAndDeletes() throws Exception {
+        // 列举拿到文件名之后、stat 之前条目可能消失：原子写的临时文件被改名、标记文件被别的线程/节点删除。
+        // 这些条目必须被跳过，不能带着 null 进入结果（排序空指针）或让整次列举抛异常。
+        for (boolean follow : new boolean[]{false, true}) {
+            Path root = newSourceDir("list-race-" + follow);
+            FileMountSource source = FileMountSource.of(root, follow);
+            source.writeString("idx/stable", "");
+
+            AtomicBoolean stop = new AtomicBoolean();
+            AtomicReference<Throwable> writerError = new AtomicReference<>();
+            Thread writer = new Thread(() -> {
+                int i = 0;
+                try {
+                    while (!stop.get()) {
+                        source.writeString("idx/m" + (i % 4), "v" + i);   // 原子写：临时文件 + 改名
+                        source.writeString("idx/t" + (i % 4), "");
+                        source.deleteIfExists("idx/t" + ((i + 2) % 4));   // 并发删除
+                        i++;
+                    }
+                } catch (Throwable e) {
+                    writerError.set(e);
+                }
+            });
+            writer.start();
+
+            int lists = 0;
+            List<Throwable> failures = new ArrayList<>();
+            long deadline = System.currentTimeMillis() + 1500;
+            try {
+                while (System.currentTimeMillis() < deadline) {
+                    try {
+                        List<MountEntry> entries = source.list("idx");
+                        lists++;
+                        assertTrue(entries.stream().allMatch(Objects::nonNull));
+                        assertTrue(names(entries).contains("stable"), "未变动的条目始终可见");
+                    } catch (Exception e) {
+                        failures.add(e);
+                    }
+                }
+            } finally {
+                stop.set(true);
+                writer.join(10_000);
+            }
+
+            assertNull(writerError.get(), "写线程本身不应失败");
+            assertTrue(lists > 0, "至少成功列举过");
+            assertTrue(failures.isEmpty(), "follow=" + follow + " 列举失败 " + failures.size() + " 次，首个："
+                    + (failures.isEmpty() ? "" : failures.get(0)));
+        }
+    }
+
+    private static List<String> names(List<MountEntry> entries) {
+        List<String> names = new ArrayList<>();
+        for (MountEntry e : entries) {
+            names.add(e.getName());
+        }
+        return names;
     }
 
     @Test
