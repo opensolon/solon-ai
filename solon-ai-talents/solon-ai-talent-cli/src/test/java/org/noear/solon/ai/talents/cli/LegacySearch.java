@@ -27,6 +27,7 @@ import java.util.regex.PatternSyntaxException;
 /**
  * 优化前 glob / grep 本地路径分支的逐字副本（只去掉了虚拟来源分支与路径存在性校验，这两段没有改动），
  * 用作差分测试的参照实现与基准对照。每个条目逐条调用 {@link TerminalSupport#isReadDenied}，先检查再匹配。
+ * 文本文件判定（{@link #isNotTextFile}）也是优化前的逐字副本：grep 读文件方式改造后它不再依赖产品代码。
  */
 final class LegacySearch {
     private LegacySearch() {
@@ -136,7 +137,7 @@ final class LegacySearch {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if (attrs.size() > 10 * 1024 * 1024 || support.isNotTextFile(file)) {
+                if (attrs.size() > 10 * 1024 * 1024 || isNotTextFile(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -174,5 +175,76 @@ final class LegacySearch {
         }
 
         return sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString();
+    }
+
+    // ---- 优化前 TerminalSupport#isNotTextFile / isLikelyBinaryFile 的逐字副本 ----
+
+    static boolean isNotTextFile(Path file) {
+        String fileName = file.getFileName().toString().toLowerCase();
+
+        // 1. 基于已知二进制后缀的快速过滤
+        if (fileName.endsWith(".class") || fileName.endsWith(".jar")  ||
+                fileName.endsWith(".war")   || fileName.endsWith(".exe")   ||
+                fileName.endsWith(".dll")   || fileName.endsWith(".so")    ||
+                fileName.endsWith(".a")     || fileName.endsWith(".lib")   ||
+                fileName.endsWith(".o")     || fileName.endsWith(".obj")   ||
+                fileName.endsWith(".pyc")   || fileName.endsWith(".pyo")   ||
+                fileName.endsWith(".png")   || fileName.endsWith(".jpg")   ||
+                fileName.endsWith(".jpeg")  || fileName.endsWith(".gif")   ||
+                fileName.endsWith(".webp")  || fileName.endsWith(".ico")   ||
+                fileName.endsWith(".zip")   || fileName.endsWith(".gz")    ||
+                fileName.endsWith(".tar")   || fileName.endsWith(".bz2")   ||
+                fileName.endsWith(".7z")    || fileName.endsWith(".rar")   ||
+                fileName.endsWith(".pdf")   || fileName.endsWith(".doc")   ||
+                fileName.endsWith(".docx")  || fileName.endsWith(".xls")   ||
+                fileName.endsWith(".xlsx")  || fileName.endsWith(".ppt")   ||
+                fileName.endsWith(".pptx")  || fileName.endsWith(".odt")   ||
+                fileName.endsWith(".ods")   || fileName.endsWith(".odp")   ||
+                fileName.endsWith(".bin")   || fileName.endsWith(".dat")   ||
+                fileName.endsWith(".wasm")  || fileName.endsWith(".class")) {
+            return true;
+        }
+
+        // 2. 字节级内容兜底：识别无后缀（或后缀伪装）的二进制文件，
+        //    如编译产物、core dump、无扩展名的 ELF 等。读取文件首部采样探测，
+        //    避免后缀白名单漏判后将二进制按文本强行解码输出乱码。
+        return isLikelyBinaryFile(file);
+    }
+
+    /**
+     * 读取文件首部采样，按字节判定是否疑似二进制。
+     *
+     * <p>判定规则与命令输出探测保持一致：NUL 直接判定；统计非空白控制字符占比，
+     * 超过阈值判定为二进制。对常见空白、ANSI 转义及 UTF-8 多字节高位字节（&gt;= 0x80）
+     * 做豁免，避免误伤中文等多字节文本。探测失败（IO 异常）时保守按文本处理。</p>
+     */
+    private static boolean isLikelyBinaryFile(Path file) {
+        byte[] buffer = new byte[4096];
+        int read;
+        try (java.io.InputStream in = Files.newInputStream(file)) {
+            read = in.read(buffer);
+        } catch (Throwable e) {
+            return false; // 读不到就保守按文本，交由后续流程处理
+        }
+
+        if (read <= 0) {
+            return false;
+        }
+
+        int suspicious = 0;
+        for (int i = 0; i < read; i++) {
+            int b = buffer[i] & 0xFF;
+            if (b == 0x00) {
+                return true; // NUL 是二进制强特征
+            }
+            if (b == '\n' || b == '\r' || b == '\t' || b == 0x1B || b >= 0x80) {
+                continue;
+            }
+            if (b < 0x20) {
+                suspicious++;
+            }
+        }
+
+        return suspicious * 100 > read * 30; // 控制字符占比 > 30%
     }
 }

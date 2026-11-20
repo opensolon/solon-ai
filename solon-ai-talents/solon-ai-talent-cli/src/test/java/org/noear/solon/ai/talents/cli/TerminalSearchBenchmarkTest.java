@@ -42,11 +42,15 @@ class TerminalSearchBenchmarkTest {
                 long b = median(() -> t.glob(pattern, ".", cwd, null).getContent());
                 report("glob", pattern, sandbox, legacy.split("\n").length, a, b);
             }
-            String legacy = LegacySearch.grep(t, "class TerminalSupport", ".", "*.java", cwd);
-            assertEquals(legacy, t.grep("class TerminalSupport", ".", "*.java", cwd, null).getContent());
-            long a = median(() -> LegacySearch.grep(t, "class TerminalSupport", ".", "*.java", cwd));
-            long b = median(() -> t.grep("class TerminalSupport", ".", "*.java", cwd, null).getContent());
-            report("grep", "class TerminalSupport (*.java)", sandbox, legacy.split("\n").length, a, b);
+            for (String[] grepCase : GREP_CASES) {
+                String pattern = grepCase[0];
+                String include = grepCase[1];
+                String legacy = LegacySearch.grep(t, pattern, ".", include, cwd);
+                assertEquals(legacy, t.grep(pattern, ".", include, cwd, null).getContent(), pattern + " / " + include);
+                long a = median(() -> LegacySearch.grep(t, pattern, ".", include, cwd));
+                long b = median(() -> t.grep(pattern, ".", include, cwd, null).getContent());
+                report("grep", pattern + " (" + include + ")", sandbox, legacy.split("\n").length, a, b);
+            }
 
             for (String[] lsCase : LS_CASES) {
                 String path = lsCase[0];
@@ -62,6 +66,13 @@ class TerminalSearchBenchmarkTest {
             }
         }
     }
+
+    /** grep 基准场景：字面量（走字节预筛）、字面量无命中、正则（不预筛）、不带 include。 */
+    private static final List<String[]> GREP_CASES = Arrays.asList(
+            new String[]{"class TerminalSupport", "*.java"},
+            new String[]{"no-such-literal-anywhere-42", "*.java"},
+            new String[]{"class\\s+Terminal\\w+Test", "*.java"},
+            new String[]{"class TerminalSupport", null});
 
     /** ls 基准场景：目录树深度有限，取有代表性的目录。 */
     private static final List<String[]> LS_CASES = Arrays.asList(

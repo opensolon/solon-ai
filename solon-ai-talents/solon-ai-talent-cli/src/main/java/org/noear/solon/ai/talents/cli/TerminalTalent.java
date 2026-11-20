@@ -40,6 +40,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -1641,6 +1642,9 @@ public class TerminalTalent extends AbsTalent {
         // 构建 include 的 PathMatcher（如果提供了 include 参数）
         final PathMatcher includeMatcher = buildIncludeMatcher(include);
 
+        // 字面量模式的整文件预筛（字节里找不到就整文件跳过；null 表示不预筛）
+        final byte[] literalBytes = TerminalSupport.grepLiteralBytes(pattern, finalPattern != null, fileCharset);
+
         StringBuilder sb = new StringBuilder();
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
         final FilesystemConfig fsConfig = fs();
@@ -1668,11 +1672,14 @@ public class TerminalTalent extends AbsTalent {
                     return FileVisitResult.CONTINUE;
                 }
 
-                if (attrs.size() > 10 * 1024 * 1024 || support.isNotTextFile(file)) {
+                if (attrs.size() > TerminalSupport.GREP_MAX_FILE_BYTES || support.isNotTextFileByName(file)) {
                     return FileVisitResult.CONTINUE;
                 }
 
-                try (BufferedReader reader = Files.newBufferedReader(file, fileCharset)) {
+                try (BufferedReader reader = openGrepReader(file, attrs, literalBytes)) {
+                    if (reader == null) {
+                        return FileVisitResult.CONTINUE;
+                    }
                     int lineNum = 0;
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -1715,6 +1722,36 @@ public class TerminalTalent extends AbsTalent {
         }
 
         return ToolResult.success(sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString());
+    }
+
+    /**
+     * 打开 grep 要逐行扫描的读取器；返回 null 表示跳过该文件（疑似二进制，或字面量预筛未命中）。
+     *
+     * <p>只打开一次文件：读入全部字节后，在内存里做二进制探测（取开头 {@link TerminalSupport#BINARY_SNIFF_BYTES} 字节，
+     * 与 {@link TerminalSupport#isNotTextFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。读取器的构造与
+     * {@link Files#newBufferedReader(Path, Charset)} 相同（报错模式的解码器套 {@link InputStreamReader}），
+     * 换行切分、解码出错时已输出的部分都与直接读文件一致。</p>
+     *
+     * <p>实际内容超过上限（指向大文件的符号链接，或遍历后文件变大）时不整体读入，按原方式探测后流式读取。</p>
+     */
+    private BufferedReader openGrepReader(Path file, BasicFileAttributes attrs, byte[] literalBytes) throws IOException {
+        byte[] bytes = TerminalSupport.readUpTo(file, attrs.size(), TerminalSupport.GREP_MAX_FILE_BYTES);
+        if (bytes == null) {
+            if (support.isLikelyBinaryFile(file)) {
+                return null;
+            }
+            return Files.newBufferedReader(file, fileCharset);
+        }
+
+        if (TerminalSupport.isLikelyBinary(bytes, Math.min(bytes.length, TerminalSupport.BINARY_SNIFF_BYTES))) {
+            return null;
+        }
+
+        if (literalBytes != null && !TerminalSupport.containsBytes(bytes, literalBytes)) {
+            return null;
+        }
+
+        return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset.newDecoder()));
     }
 
     /**
@@ -1968,7 +2005,7 @@ public class TerminalTalent extends AbsTalent {
                 skippedLarge++;
                 continue;
             }
-            try (BufferedReader reader = new BufferedReader(new java.io.InputStreamReader(new ByteArrayInputStream(bytes), fileCharset))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset))) {
                 String line; int lineNo = 0;
                 while ((line = reader.readLine()) != null) {
                     lineNo++;

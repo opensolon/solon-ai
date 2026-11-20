@@ -27,7 +27,10 @@ import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.core.util.Assert;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.File;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
@@ -1952,10 +1955,24 @@ public class TerminalSupport {
     }
 
     boolean isNotTextFile(Path file) {
+        // 1. 基于已知二进制后缀的快速过滤
+        if (isNotTextFileByName(file)) {
+            return true;
+        }
+
+        // 2. 字节级内容兜底：识别无后缀（或后缀伪装）的二进制文件，
+        //    如编译产物、core dump、无扩展名的 ELF 等。读取文件首部采样探测，
+        //    避免后缀白名单漏判后将二进制按文本强行解码输出乱码。
+        return isLikelyBinaryFile(file);
+    }
+
+    /**
+     * 按文件名后缀判定是否为已知二进制文件（{@link #isNotTextFile} 的第一步，不访问文件系统）。
+     */
+    boolean isNotTextFileByName(Path file) {
         String fileName = file.getFileName().toString().toLowerCase();
 
-        // 1. 基于已知二进制后缀的快速过滤
-        if (fileName.endsWith(".class") || fileName.endsWith(".jar")  ||
+        return fileName.endsWith(".class") || fileName.endsWith(".jar")  ||
                 fileName.endsWith(".war")   || fileName.endsWith(".exe")   ||
                 fileName.endsWith(".dll")   || fileName.endsWith(".so")    ||
                 fileName.endsWith(".a")     || fileName.endsWith(".lib")   ||
@@ -1973,15 +1990,11 @@ public class TerminalSupport {
                 fileName.endsWith(".pptx")  || fileName.endsWith(".odt")   ||
                 fileName.endsWith(".ods")   || fileName.endsWith(".odp")   ||
                 fileName.endsWith(".bin")   || fileName.endsWith(".dat")   ||
-                fileName.endsWith(".wasm")  || fileName.endsWith(".class")) {
-            return true;
-        }
-
-        // 2. 字节级内容兜底：识别无后缀（或后缀伪装）的二进制文件，
-        //    如编译产物、core dump、无扩展名的 ELF 等。读取文件首部采样探测，
-        //    避免后缀白名单漏判后将二进制按文本强行解码输出乱码。
-        return isLikelyBinaryFile(file);
+                fileName.endsWith(".wasm");
     }
+
+    /** 二进制探测的首部采样字节数。 */
+    static final int BINARY_SNIFF_BYTES = 4096;
 
     /**
      * 读取文件首部采样，按字节判定是否疑似二进制。
@@ -1990,15 +2003,24 @@ public class TerminalSupport {
      * 超过阈值判定为二进制。对常见空白、ANSI 转义及 UTF-8 多字节高位字节（&gt;= 0x80）
      * 做豁免，避免误伤中文等多字节文本。探测失败（IO 异常）时保守按文本处理。</p>
      */
-    private boolean isLikelyBinaryFile(Path file) {
-        byte[] buffer = new byte[4096];
+    boolean isLikelyBinaryFile(Path file) {
+        byte[] buffer = new byte[BINARY_SNIFF_BYTES];
         int read;
-        try (java.io.InputStream in = Files.newInputStream(file)) {
+        try (InputStream in = Files.newInputStream(file)) {
             read = in.read(buffer);
         } catch (Throwable e) {
             return false; // 读不到就保守按文本，交由后续流程处理
         }
 
+        return isLikelyBinary(buffer, read);
+    }
+
+    /**
+     * 按首部采样字节判定是否疑似二进制（{@link #isLikelyBinaryFile} 的判定部分）。
+     *
+     * @param read 采样的有效字节数（取文件开头的 {@link #BINARY_SNIFF_BYTES} 字节以内）；不大于 0 按文本处理
+     */
+    static boolean isLikelyBinary(byte[] buffer, int read) {
         if (read <= 0) {
             return false;
         }
@@ -2018,5 +2040,100 @@ public class TerminalSupport {
         }
 
         return suspicious * 100 > read * 30; // 控制字符占比 > 30%
+    }
+
+    /** grep 扫描单个文件的大小上限（超过即跳过；与按属性判断的阈值一致）。 */
+    static final int GREP_MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+    /**
+     * 一次读入文件全部内容，最多 {@code limit} 字节；实际内容超过上限时返回 null（调用方另行处理）。
+     *
+     * <p>{@code sizeHint} 是遍历时拿到的文件大小，普通文件按它一次分配、不再复制；
+     * 符号链接（属性是链接本身的）或读取期间文件变化时按需扩容。</p>
+     */
+    static byte[] readUpTo(Path file, long sizeHint, int limit) throws IOException {
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] buf = new byte[(int) Math.max(0L, Math.min(sizeHint, (long) limit))];
+            int n = 0;
+            while (true) {
+                if (n == buf.length) {
+                    // 缓冲已满：再读一个字节确认是否到达末尾
+                    int b = in.read();
+                    if (b < 0) {
+                        return buf;
+                    }
+                    if (n >= limit) {
+                        return null;
+                    }
+                    buf = Arrays.copyOf(buf, (int) Math.min((long) limit, Math.max(8192L, (long) buf.length * 2)));
+                    buf[n++] = (byte) b;
+                    continue;
+                }
+                int r = in.read(buf, n, buf.length - n);
+                if (r < 0) {
+                    return Arrays.copyOf(buf, n);
+                }
+                n += r;
+            }
+        }
+    }
+
+    /** 正则元字符：模式里不含这些字符时，按正则查找与按字面查找等价。 */
+    private static final String REGEX_META_CHARS = "\\^$.|?*+()[]{}";
+
+    /**
+     * grep 字面量预筛用的字节序列；返回 null 表示不预筛。
+     *
+     * <p>只在两种情况下预筛：模式不是合法正则（原实现回退为 {@code contains}），或模式是合法正则但不含任何元字符
+     * （按正则查找等价于按字面查找）；并且文件按 UTF-8 解码。此时某一行能命中，说明解码出的文本包含该模式，
+     * 文件字节里也就一定包含它的 UTF-8 编码；反过来字节里没有，就一行也命中不了，可以整文件跳过。
+     * 这只是必要条件：字节里有，仍按原方式逐行匹配。</p>
+     */
+    static byte[] grepLiteralBytes(String pattern, boolean compiledAsRegex, Charset charset) {
+        if (pattern == null || pattern.isEmpty() || !StandardCharsets.UTF_8.equals(charset)) {
+            return null;
+        }
+        if (compiledAsRegex) {
+            for (int i = 0; i < pattern.length(); i++) {
+                if (REGEX_META_CHARS.indexOf(pattern.charAt(i)) >= 0) {
+                    return null;
+                }
+            }
+        }
+        // 含孤立代理字符的模式无法如实编码（会被替换为 '?'），不预筛
+        if (!StandardCharsets.UTF_8.newEncoder().canEncode(pattern)) {
+            return null;
+        }
+        return pattern.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 字节序列查找：{@code data} 中是否包含 {@code needle}。
+     */
+    static boolean containsBytes(byte[] data, byte[] needle) {
+        int n = needle.length;
+        if (n == 0) {
+            return true;
+        }
+        byte first = needle[0];
+        int max = data.length - n;
+        for (int i = 0; i <= max; i++) {
+            if (data[i] != first) {
+                while (++i <= max && data[i] != first) {
+                    // 跳到下一个首字节
+                }
+            }
+            if (i <= max) {
+                int j = i + 1;
+                int end = i + n;
+                for (int k = 1; j < end && data[j] == needle[k]; j++, k++) {
+                    // 逐字节比较剩余部分
+                }
+                if (j == end) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
