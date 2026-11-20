@@ -36,17 +36,10 @@ class TerminalEditRawBytesTest {
 
     private static final Charset GBK = Charset.forName("GBK");
 
-    /**
-     * 本类测“原字节原样保留”的机制，关掉自动识别（候选编码为空），GBK 文件按“编码无法确定”处理。
-     * 自动识别后的行为见 TerminalFileEncodingTest。
-     */
+    /** 本类测“原字节原样保留”的机制；GBK 文件不是 UTF-8，按“编码无法确定”处理（BOM 等其他编码行为见 TerminalFileEncodingTest）。 */
     private static TerminalTalent talent(Path ws) {
-        TerminalTalent t = new TerminalTalent(new MountManager(ws.toString()));
-        t.setFileEncodingPolicy(NO_DETECTION);
-        return t;
+        return new TerminalTalent(new MountManager(ws.toString()));
     }
-
-    private static final FileEncodingPolicy NO_DETECTION = FileEncodingPolicy.builder().noCandidates().build();
 
     private static TerminalTalent.EditOp op(String oldStr, String newStr, Integer line, Boolean all) {
         TerminalTalent.EditOp op = new TerminalTalent.EditOp();
@@ -123,7 +116,7 @@ class TerminalEditRawBytesTest {
 
         r = edit(talent(ws), ws, "mixed.txt", op("TARGET", "REPLACED", null, null), op("head", "HEAD", null, null));
         assertFalse(r.isError(), r.getContent());
-        assertTrue(r.getContent().endsWith("已按 UTF-8 编码保存，10 个无法解码的字节已原样保留。"), r.getContent());
+        assertEquals("文件 mixed.txt 成功完成 2 处修改。", r.getContent());
         byte[] expected = cat(b(0xFF), u("HEAD\n中文 ok\nleft"), b(0xC3), u("REPLACED"), b(0xE4, 0xB8), u("right\n"),
                 b(0xED, 0xA0, 0x80), u("\ntail "), b(0xF0, 0x9F, 0x98));
         assertArrayEquals(expected, Files.readAllBytes(f));
@@ -329,7 +322,6 @@ class TerminalEditRawBytesTest {
         MountManager manager = new MountManager(ws.toString());
         manager.register(Mount.builder().alias("@mem").type(MountType.FILES).source(source).writable(true).build());
         TerminalTalent t = new TerminalTalent(manager);
-        t.setFileEncodingPolicy(NO_DETECTION);
 
         List<TerminalTalent.EditOp> ops = Arrays.asList(op("// 中文", "// x", null, null));
         ToolResult r = t.edit("@mem/A.java", ops, ws.toString(), null);

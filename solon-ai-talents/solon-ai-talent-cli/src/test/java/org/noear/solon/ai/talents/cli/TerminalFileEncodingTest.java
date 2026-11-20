@@ -9,14 +9,20 @@ import org.noear.solon.ai.mount.MountType;
 import org.noear.solon.ai.mount.source.InMemoryMountSource;
 import org.noear.solon.ai.mount.source.WriteOptions;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StringReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 文件编码识别接入 read / edit / write 后的行为（docs/file-encoding-plan.md 第三节的三张表，每行至少一例）。
+ * 文件编码接入 read / edit / write 后的行为：只认 UTF-8 与 BOM（UTF-8 / UTF-16LE / UTF-16BE），不猜其他编码。
  */
 class TerminalFileEncodingTest {
 
@@ -90,9 +96,10 @@ class TerminalFileEncodingTest {
 
         assertEquals("--- File: u.txt (Lines: 1 - 4, Size: 0.06 KB, Encoding: UTF-8) ---", header(read(t, ws, "u.txt", null, null)));
 
+        // GBK 不猜：标明不是 UTF-8，中文显示为 �，ASCII 照常
         String g = read(t, ws, "g.java", null, null);
-        assertTrue(header(g).endsWith("Encoding: GBK detected) ---"), g);
-        assertTrue(g.contains("     1 | // 中文注释：用户服务\n"), g);
+        assertTrue(header(g).matches(".*Encoding: not UTF-8, \\d+ undecodable bytes shown as U\\+FFFD\\) ---"), g);
+        assertTrue(g.contains("     1 | // \uFFFD") && g.contains("     3 |     int x = 1;\n"), g);
 
         String bom = read(t, ws, "bom.txt", null, null);
         assertTrue(header(bom).endsWith("Encoding: UTF-8 with BOM) ---"), bom);
@@ -103,19 +110,13 @@ class TerminalFileEncodingTest {
         assertTrue(header(u16).endsWith("Encoding: UTF-16LE with BOM) ---"), u16);
         assertTrue(u16.contains("     1 | // 中文注释：用户服务\n") && u16.contains("     3 |     int x = 1;\n"), u16);
 
-        assertTrue(header(read(t, ws, "bad.txt", null, null)).endsWith("Encoding: unknown, 1 undecodable byte shown as U+FFFD) ---"));
+        assertTrue(header(read(t, ws, "bad.txt", null, null)).endsWith("Encoding: not UTF-8, 1 undecodable byte shown as U+FFFD) ---"));
         assertTrue(header(read(t, ws, "mixed.txt", null, null)).endsWith("Encoding: UTF-8, 2 undecodable bytes shown as U+FFFD) ---")); // “粘”的 GBK 编码 D5 B3 恰好是合法 UTF-8
-
-        // 路径规则
-        Files.write(ws.resolve("a.properties"), "name=caf\u00e9\n".getBytes(StandardCharsets.ISO_8859_1));
-        t.setFileEncodingPolicy(FileEncodingPolicy.builder().rule("*.properties", StandardCharsets.ISO_8859_1).build());
-        String p = read(t, ws, "a.properties", null, null);
-        assertTrue(header(p).endsWith("Encoding: ISO-8859-1 configured) ---") && p.contains("     1 | name=café\n"), p);
     }
 
-    /** 编码按整份文件识别：前面全是英文、后面才有 GBK 的文件，每一页的 Encoding 都一样，中文页显示正确。 */
+    /** 编码按整份文件判断：前面全是英文、最后才有坏字节的文件，每一页的 Encoding 都一样。 */
     @Test
-    void encodingIsDetectedOnWholeFileNotPage() throws Exception {
+    void encodingIsJudgedOnWholeFileNotPage() throws Exception {
         Path ws = ws();
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 2500; i++) {
@@ -126,46 +127,128 @@ class TerminalFileEncodingTest {
         TerminalTalent t = talent(ws);
         String first = read(t, ws, "long.txt", 1, 100);
         String last = read(t, ws, "long.txt", 2501, 10);
-        assertTrue(header(first).endsWith("Encoding: GBK detected) ---"), header(first));
-        assertTrue(header(last).endsWith("Encoding: GBK detected) ---"), header(last));
-        assertTrue(last.contains("  2501 | // 中文注释：最后一页\n"), last);
+        assertTrue(header(first).contains("Encoding: not UTF-8, "), header(first));
+        assertEquals(header(first).replaceAll("Lines: \\d+ - \\d+", ""), header(last).replaceAll("Lines: \\d+ - \\d+", ""));
     }
 
-    /** 超过 10 MB：只抽样开头识别、流式读取，标签注明 sampled。 */
+    /** 超过 10 MB：只抽样开头判断、流式读取，标签注明 sampled。 */
     @Test
     void hugeFileIsSampled() throws Exception {
         Path ws = ws();
-        byte[] line = "// 中文注释：很长的文件\n".getBytes(GBK);
+        byte[] line = u("// 中文注释：很长的文件\n");
         byte[] big = new byte[TerminalSupport.GREP_MAX_FILE_BYTES + line.length * 2];
         for (int i = 0; i + line.length <= big.length; i += line.length) {
             System.arraycopy(line, 0, big, i, line.length);
         }
         Files.write(ws.resolve("big.txt"), big);
         String out = read(talent(ws), ws, "big.txt", 1, 2);
-        assertTrue(header(out).endsWith("Encoding: GBK detected, sampled first 1 MB) ---"), header(out));
+        assertTrue(header(out).endsWith("Encoding: UTF-8, sampled first 1 MB) ---"), header(out));
         assertTrue(out.contains("     1 | // 中文注释：很长的文件\n"), out);
+
+        String text = new String(big, StandardCharsets.UTF_8);
+        Files.write(ws.resolve("big16.txt"), cat(BOM16LE, (text + text).getBytes(StandardCharsets.UTF_16LE)));
+        out = read(talent(ws), ws, "big16.txt", 2, 1);
+        assertTrue(header(out).endsWith("Encoding: UTF-16LE with BOM, sampled first 1 MB) ---"), header(out));
+        assertTrue(out.contains("     2 | // 中文注释：很长的文件\n"), out);
+    }
+
+    private static final String[] PIECES = {"a", "bc", " ", "\t", "中文", "注释", "：", "é", "😀", "\n", "\r\n", "\r", "\n\n", "x=1;"};
+
+    /** 各种形态的文件：UTF-8、带 BOM、GBK、夹坏字节、UTF-16LE 带 BOM、换行混用。 */
+    private static byte[] randomFile(Random r) {
+        StringBuilder sb = new StringBuilder();
+        int n = 20 + r.nextInt(200);
+        for (int i = 0; i < n; i++) {
+            sb.append(PIECES[r.nextInt(PIECES.length)]);
+        }
+        String text = sb.toString();
+        switch (r.nextInt(6)) {
+            case 1:
+                return cat(BOM8, u(text));
+            case 2:
+                return text.replace("😀", "用户").replace("é", "e").getBytes(GBK);
+            case 3: {
+                byte[] b = u(text);
+                for (int k = 0; k < 3 && b.length > 0; k++) {
+                    b[r.nextInt(b.length)] = (byte) (0x80 + r.nextInt(0x80));
+                }
+                return b;
+            }
+            case 4:
+                return cat(BOM16LE, text.getBytes(StandardCharsets.UTF_16LE));
+            default:
+                return u(text);
+        }
+    }
+
+    private static List<String> bodyLines(String out) {
+        List<String> lines = new ArrayList<>();
+        for (String line : out.split("\n", -1)) {
+            if (line.matches("^ *\\d+ \\| .*")) {
+                lines.add(line);
+            }
+        }
+        return lines;
+    }
+
+    /** 任意页与“按判断出的编码整份替换解码、再逐行切分”的结果逐字相同，翻页时首行不变。 */
+    @Test
+    void readPagesMatchFullDecode() throws Exception {
+        Path ws = ws();
+        TerminalTalent t = talent(ws);
+        Random r = new Random(20261120);
+        for (int round = 0; round < 300; round++) {
+            byte[] data = randomFile(r);
+            Path f = ws.resolve("f" + round + ".txt");
+            Files.write(f, data);
+            TextEncodings.Decoded d = TextEncodings.detect(data, data.length, false, StandardCharsets.UTF_8);
+            List<String> expected = new BufferedReader(new StringReader(d.displayText())).lines().collect(Collectors.toList());
+            if (expected.isEmpty()) {
+                continue;
+            }
+            String full = read(t, ws, f.getFileName().toString(), null, null);
+            List<String> all = bodyLines(full);
+            assertEquals(expected.size(), all.size(), full);
+            for (int i = 0; i < expected.size(); i++) {
+                assertEquals(String.format("%6d | %s", i + 1, expected.get(i)), all.get(i));
+            }
+            for (int k = 0; k < 4; k++) {
+                int offset = 2 + r.nextInt(expected.size() + 1);
+                int limit = 1 + r.nextInt(5);
+                String page = read(t, ws, f.getFileName().toString(), offset, limit);
+                if (offset > expected.size()) {
+                    assertTrue(bodyLines(page).isEmpty(), page);
+                    continue;
+                }
+                assertEquals(header(full).replaceAll("Lines: \\d+ - \\d+", ""), header(page).replaceAll("Lines: \\d+ - \\d+", ""));
+                assertEquals(all.subList(offset - 1, Math.min(all.size(), offset - 1 + limit)), bodyLines(page), page);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ edit
 
+    /** 不是 UTF-8 的文件（GBK）：只改 ASCII 可以，中文原字节逐字节保留；写入非 ASCII 拒绝，文件不动。 */
     @Test
-    void editGbkFileInItsOwnEncoding() throws Exception {
+    void editNotUtf8File() throws Exception {
         Path ws = ws();
         Path f = ws.resolve("A.java");
         Files.write(f, CN.getBytes(GBK));
         TerminalTalent t = talent(ws);
 
-        ToolResult r = edit(t, ws, "A.java", op("// 中文注释：用户服务", "// 中文注释：订单服务"), op("int x = 1;", "int x = 2; // 新增"));
-        assertFalse(r.isError(), r.getContent());
-        assertEquals("文件 A.java 成功完成 2 处修改。\n已按 GBK 编码保存。", r.getContent());
-        assertArrayEquals(CN.replace("用户", "订单").replace("int x = 1;", "int x = 2; // 新增").getBytes(GBK), Files.readAllBytes(f));
+        ToolResult r = edit(t, ws, "A.java", op("int x = 1;", "int x = 2;"));
+        assertEquals("文件 A.java 成功完成 1 处修改。", r.getContent());
+        assertArrayEquals(CN.replace("int x = 1;", "int x = 2;").getBytes(GBK), Files.readAllBytes(f));
 
-        // GBK 表示不了的字符：拒绝，指出是哪个字符、第几个，文件不动
         byte[] before = Files.readAllBytes(f);
-        r = edit(t, ws, "A.java", op("订单", "订单\uD83D\uDE00"));
+        r = edit(t, ws, "A.java", op("int x = 2;", "int x = 3; // 新增"));
         assertTrue(r.isError(), r.getContent());
-        assertTrue(r.getContent().contains("'\uD83D\uDE00' (U+1F600)（第 3 个字符）") && r.getContent().contains("GBK"), r.getContent());
+        assertTrue(r.getContent().contains("该文件不是 UTF-8（有 ") && r.getContent().contains("请告诉用户该文件的编码无法自动识别"), r.getContent());
+        assertFalse(r.getContent().contains("配置") || r.getContent().contains("转成") || r.getContent().contains("重写"), r.getContent());
         assertArrayEquals(before, Files.readAllBytes(f));
+        r = t.edit("A.java", Arrays.asList(op("int x = 2;", "int x = 3; // 新增")), ws.toString(), "en");
+        assertTrue(r.getContent().contains("this file is not UTF-8 (bytes that cannot be decoded as UTF-8: "), r.getContent());
+        assertFalse(r.getContent().contains("configure"), r.getContent());
     }
 
     @Test
@@ -175,39 +258,29 @@ class TerminalFileEncodingTest {
         Path u16 = ws.resolve("u16.txt");
         Files.write(u16, cat(BOM16LE, "第一行\r\nkey=1\r\n".getBytes(StandardCharsets.UTF_16LE)));
         ToolResult r = edit(t, ws, "u16.txt", op("key=1", "键=2"));
-        assertFalse(r.isError(), r.getContent());
-        assertTrue(r.getContent().endsWith("已按 UTF-16LE with BOM 编码保存。"), r.getContent());
+        assertEquals("文件 u16.txt 成功完成 1 处修改。", r.getContent());
         assertArrayEquals(cat(BOM16LE, "第一行\r\n键=2\r\n".getBytes(StandardCharsets.UTF_16LE)), Files.readAllBytes(u16));
+
+        Path be = ws.resolve("be.txt");
+        Files.write(be, cat(new byte[]{(byte) 0xFE, (byte) 0xFF}, "a\n".getBytes(StandardCharsets.UTF_16BE)));
+        assertFalse(edit(t, ws, "be.txt", op("a", "中")).isError());
+        assertArrayEquals(cat(new byte[]{(byte) 0xFE, (byte) 0xFF}, "中\n".getBytes(StandardCharsets.UTF_16BE)), Files.readAllBytes(be));
 
         Path bom = ws.resolve("bom.txt");
         Files.write(bom, cat(BOM8, u("a\n")));
-        r = edit(t, ws, "bom.txt", op("a", "中"));
-        assertTrue(r.getContent().endsWith("已按 UTF-8 with BOM 编码保存。"), r.getContent());
+        assertEquals("文件 bom.txt 成功完成 1 处修改。", edit(t, ws, "bom.txt", op("a", "中")).getContent());
         assertArrayEquals(cat(BOM8, u("中\n")), Files.readAllBytes(bom));
-
-        // 普通 UTF-8：提示与原来一字不差
-        Files.write(ws.resolve("p.txt"), u("a\n"));
-        assertEquals("文件 p.txt 成功完成 1 处修改。", edit(t, ws, "p.txt", op("a", "中")).getContent());
     }
 
+    /** 大体是 UTF-8、夹少量坏字节：可以写中文，坏字节原样保留。 */
     @Test
-    void editUnknownAndMixedFiles() throws Exception {
+    void editMixedFile() throws Exception {
         Path ws = ws();
         TerminalTalent t = talent(ws);
-        byte[] unknown = cat(u("hello "), new byte[]{(byte) 0xFF}, u(" world\n"));
-        Files.write(ws.resolve("x.txt"), unknown);
-        ToolResult r = edit(t, ws, "x.txt", op("world", "世界"));
-        assertTrue(r.isError(), r.getContent());
-        assertTrue(r.getContent().contains("无法确定该文件的编码（有 1 个字节无法按 UTF-8 解码）"), r.getContent());
-        assertArrayEquals(unknown, Files.readAllBytes(ws.resolve("x.txt")));
-        r = t.edit("x.txt", Arrays.asList(op("world", "世界")), ws.toString(), "en");
-        assertTrue(r.getContent().contains("the encoding of this file cannot be determined (bytes that cannot be decoded as UTF-8: 1)"), r.getContent());
-
         byte[] mixed = cat(u(CN + CN), "// 粘贴\n".getBytes(GBK));
         Files.write(ws.resolve("m.txt"), mixed);
-        r = edit(t, ws, "m.txt", op("int x = 1;\n}\n// 中文", "int x = 1;\n}\n// 汉字"));
-        assertFalse(r.isError(), r.getContent());
-        assertTrue(r.getContent().endsWith("已按 UTF-8 编码保存，2 个无法解码的字节已原样保留。"), r.getContent());
+        ToolResult r = edit(t, ws, "m.txt", op("int x = 1;\n}\n// 中文", "int x = 1;\n}\n// 汉字"));
+        assertEquals("文件 m.txt 成功完成 1 处修改。", r.getContent());
         assertArrayEquals(cat(u(CN + CN.replaceFirst("// 中文", "// 汉字")), "// 粘贴\n".getBytes(GBK)), Files.readAllBytes(ws.resolve("m.txt")));
     }
 
@@ -226,30 +299,16 @@ class TerminalFileEncodingTest {
         assertTrue(r.isError(), r.getContent());
         assertTrue(r.getContent().contains("U+D83D（第 2 个字符）"), r.getContent());
         assertFalse(Files.exists(ws.resolve("s.txt")));
-
-        t.setFileEncodingPolicy(FileEncodingPolicy.builder().rule("legacy/**", GBK).build());
-        r = t.write("legacy/a.c", "// 中文\n", ws.toString(), null);
-        assertEquals("文件成功写入: legacy/a.c\n已按 GBK 编码保存。", r.getContent());
-        assertArrayEquals("// 中文\n".getBytes(GBK), Files.readAllBytes(ws.resolve("legacy/a.c")));
     }
 
     @Test
-    void writeOverwritesInTheExistingEncoding() throws Exception {
+    void writeOverwritesKeepingBom() throws Exception {
         Path ws = ws();
         TerminalTalent t = talent(ws);
-        Path g = ws.resolve("g.java");
-        Files.write(g, CN.getBytes(GBK));
-        ToolResult r = t.write("g.java", "// 全部重写\n", ws.toString(), null);
-        assertEquals("文件成功写入: g.java\n已按 GBK 编码保存。", r.getContent());
-        assertArrayEquals("// 全部重写\n".getBytes(GBK), Files.readAllBytes(g));
-        r = t.write("g.java", "\uD83D\uDE00\n", ws.toString(), null);
-        assertTrue(r.isError() && r.getContent().contains("GBK"), r.getContent());
-        assertArrayEquals("// 全部重写\n".getBytes(GBK), Files.readAllBytes(g));
-
         // UTF-8 BOM：保留，内容自带 BOM 时不写两个
         Path bom = ws.resolve("bom.txt");
         Files.write(bom, cat(BOM8, u("old\n")));
-        assertTrue(t.write("bom.txt", "new\n", ws.toString(), null).getContent().endsWith("已按 UTF-8 with BOM 编码保存。"));
+        assertEquals("文件成功写入: bom.txt", t.write("bom.txt", "new\n", ws.toString(), null).getContent());
         assertArrayEquals(cat(BOM8, u("new\n")), Files.readAllBytes(bom));
         t.write("bom.txt", "\uFEFFnew2\n", ws.toString(), null);
         assertArrayEquals(cat(BOM8, u("new2\n")), Files.readAllBytes(bom));
@@ -257,7 +316,7 @@ class TerminalFileEncodingTest {
         // UTF-16LE BOM：按原字节序写
         Path u16 = ws.resolve("u16.txt");
         Files.write(u16, cat(BOM16LE, "a\n".getBytes(StandardCharsets.UTF_16LE)));
-        t.write("u16.txt", "中\n", ws.toString(), null);
+        assertEquals("文件成功写入: u16.txt", t.write("u16.txt", "中\n", ws.toString(), null).getContent());
         assertArrayEquals(cat(BOM16LE, "中\n".getBytes(StandardCharsets.UTF_16LE)), Files.readAllBytes(u16));
 
         // 普通 UTF-8：与原来逐字节相同（内容自带 BOM 字符也照写）
@@ -271,23 +330,23 @@ class TerminalFileEncodingTest {
     void writeRefusesToDestroyUndecodableBytes() throws Exception {
         Path ws = ws();
         TerminalTalent t = talent(ws);
-        Path x = ws.resolve("x.txt");
-        byte[] unknown = cat(u("hello "), new byte[]{(byte) 0xFF}, u(" world\n"));
-        Files.write(x, unknown);
+        Path g = ws.resolve("g.java");
+        byte[] gbk = CN.getBytes(GBK);
+        Files.write(g, gbk);
 
         // 照抄 read 显示（含 �）整份覆盖：会永久丢掉原字节
-        ToolResult r = t.write("x.txt", "hello \uFFFD world!\n", ws.toString(), null);
+        ToolResult r = t.write("g.java", "// \uFFFD\uFFFD\nclass A {}\n", ws.toString(), null);
         assertTrue(r.isError(), r.getContent());
-        assertTrue(r.getContent().contains("原文件有 1 个无法解码的字节") && r.getContent().contains("edit"), r.getContent());
+        assertTrue(r.getContent().contains("个无法解码的字节") && r.getContent().contains("edit"), r.getContent());
         assertFalse(r.getContent().contains("转成 UTF-8"), r.getContent());
-        assertArrayEquals(unknown, Files.readAllBytes(x));
-        // 非 ASCII：会混入另一种编码
-        r = t.write("x.txt", "你好\n", ws.toString(), null);
-        assertTrue(r.isError() && r.getContent().contains("非 ASCII"), r.getContent());
-        assertArrayEquals(unknown, Files.readAllBytes(x));
+        assertArrayEquals(gbk, Files.readAllBytes(g));
+        // 非 ASCII：文件会悄悄换成另一种编码
+        r = t.write("g.java", "// 全部重写\n", ws.toString(), null);
+        assertTrue(r.isError() && r.getContent().contains("原文件不是 UTF-8") && !r.getContent().contains("配置"), r.getContent());
+        assertArrayEquals(gbk, Files.readAllBytes(g));
         // 纯 ASCII 可以
-        assertFalse(t.write("x.txt", "hello\n", ws.toString(), null).isError());
-        assertArrayEquals(u("hello\n"), Files.readAllBytes(x));
+        assertEquals("文件成功写入: g.java", t.write("g.java", "class A {}\n", ws.toString(), null).getContent());
+        assertArrayEquals(u("class A {}\n"), Files.readAllBytes(g));
 
         // 大体是 UTF-8 的文件：不含 � 的内容按 UTF-8 写
         Path m = ws.resolve("m.txt");
@@ -303,9 +362,11 @@ class TerminalFileEncodingTest {
         assertArrayEquals(u("文本\n"), Files.readAllBytes(bin));
 
         // 英文
-        Files.write(x, unknown);
-        r = t.write("x.txt", "\uFFFD", ws.toString(), "en");
-        assertTrue(r.getContent().startsWith("Error: the existing file has undecodable bytes (count: 1;"), r.getContent());
+        Files.write(g, gbk);
+        r = t.write("g.java", "\uFFFD", ws.toString(), "en");
+        assertTrue(r.getContent().startsWith("Error: the existing file has undecodable bytes (count: "), r.getContent());
+        r = t.write("g.java", "中", ws.toString(), "en");
+        assertTrue(r.getContent().startsWith("Error: the existing file is not UTF-8 (bytes that cannot be decoded as UTF-8: "), r.getContent());
     }
 
     // ------------------------------------------------------------------ 虚拟来源
@@ -315,26 +376,28 @@ class TerminalFileEncodingTest {
         Path ws = ws();
         InMemoryMountSource source = new InMemoryMountSource();
         put(source, "g.java", CN.getBytes(GBK));
-        put(source, "x.txt", cat(u("hello "), new byte[]{(byte) 0xFF}, u(" world\n")));
+        put(source, "u16.txt", cat(BOM16LE, CN.getBytes(StandardCharsets.UTF_16LE)));
         MountManager manager = new MountManager(ws.toString());
         manager.register(Mount.builder().alias("@mem").type(MountType.FILES).source(source).writable(true).build());
         TerminalTalent t = new TerminalTalent(manager);
 
         String out = t.read("@mem/g.java", null, null, ws.toString(), null).getContent();
-        assertTrue(header(out).endsWith("Encoding: GBK detected) ---") && out.contains("     1 | // 中文注释：用户服务\n"), out);
+        assertTrue(header(out).contains("Encoding: not UTF-8, ") && out.contains("     3 |     int x = 1;\n"), out);
+        out = t.read("@mem/u16.txt", null, null, ws.toString(), null).getContent();
+        assertTrue(header(out).endsWith("Encoding: UTF-16LE with BOM) ---") && out.contains("     1 | // 中文注释：用户服务\n"), out);
 
-        ToolResult r = t.edit("@mem/g.java", Arrays.asList(op("用户", "订单")), ws.toString(), null);
-        assertEquals("文件 @mem/g.java 成功完成 1 处修改。\n已按 GBK 编码保存。", r.getContent());
-        assertArrayEquals(CN.replace("用户", "订单").getBytes(GBK), get(source, "g.java"));
+        assertEquals("文件 @mem/g.java 成功完成 1 处修改。", t.edit("@mem/g.java", Arrays.asList(op("x = 1", "x = 2")), ws.toString(), null).getContent());
+        assertArrayEquals(CN.replace("x = 1", "x = 2").getBytes(GBK), get(source, "g.java"));
+        byte[] before = get(source, "g.java");
+        assertTrue(t.edit("@mem/g.java", Arrays.asList(op("x = 2", "x = 中")), ws.toString(), null).isError());
+        assertTrue(t.write("@mem/g.java", "// \uFFFD\n", ws.toString(), null).isError());
+        assertTrue(t.write("@mem/g.java", "// 中\n", ws.toString(), null).isError());
+        assertArrayEquals(before, get(source, "g.java"));
 
-        r = t.write("@mem/g.java", "// 重写\n", ws.toString(), null);
-        assertEquals("文件成功写入: @mem/g.java\n已按 GBK 编码保存。", r.getContent());
-        assertArrayEquals("// 重写\n".getBytes(GBK), get(source, "g.java"));
-
-        byte[] before = get(source, "x.txt");
-        assertTrue(t.write("@mem/x.txt", "\uFFFD", ws.toString(), null).isError());
-        assertTrue(t.edit("@mem/x.txt", Arrays.asList(op("world", "世界")), ws.toString(), null).isError());
-        assertArrayEquals(before, get(source, "x.txt"));
+        assertEquals("文件 @mem/u16.txt 成功完成 1 处修改。", t.edit("@mem/u16.txt", Arrays.asList(op("用户", "订单")), ws.toString(), null).getContent());
+        assertArrayEquals(cat(BOM16LE, CN.replace("用户", "订单").getBytes(StandardCharsets.UTF_16LE)), get(source, "u16.txt"));
+        assertEquals("文件成功写入: @mem/u16.txt", t.write("@mem/u16.txt", "// 重写\n", ws.toString(), null).getContent());
+        assertArrayEquals(cat(BOM16LE, "// 重写\n".getBytes(StandardCharsets.UTF_16LE)), get(source, "u16.txt"));
 
         assertEquals("文件成功写入: @mem/new.txt", t.write("@mem/new.txt", "中文", ws.toString(), null).getContent());
         assertArrayEquals(u("中文"), get(source, "new.txt"));

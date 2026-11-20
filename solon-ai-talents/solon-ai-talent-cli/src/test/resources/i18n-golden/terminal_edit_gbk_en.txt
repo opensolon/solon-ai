@@ -1,2 +1,1 @@
-File gbk.txt: 1 edit(s) applied.
-Saved in GBK.
+Precheck failed (operation #1): this file is not UTF-8 (bytes that cannot be decoded as UTF-8: 4) and its encoding cannot be determined; new_str contains non-ASCII characters, which would end up in a different encoding from the rest of the file, so the edit was cancelled and the file was not modified. Change only ASCII text; if non-ASCII text must be written, tell the user that this file's encoding cannot be detected automatically.

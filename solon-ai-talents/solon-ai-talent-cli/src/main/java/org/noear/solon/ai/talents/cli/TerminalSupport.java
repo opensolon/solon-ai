@@ -2236,27 +2236,6 @@ public class TerminalSupport {
         }
     }
 
-    /**
-     * 第 {@code lines} 行之后（即跳过前 {@code lines} 行）的字节位置；行尾与 {@link java.io.BufferedReader#readLine()} 同口径
-     * （{@code \n}、{@code \r}、{@code \r\n}）。不足这么多行时返回末尾。只用于换行符就是单个 0x0A / 0x0D 字节的编码。
-     */
-    static int lineStartOffset(byte[] bytes, long lines) {
-        int i = 0;
-        long n = 0;
-        while (n < lines && i < bytes.length) {
-            byte c = bytes[i++];
-            if (c == '\n') {
-                n++;
-            } else if (c == '\r') {
-                if (i < bytes.length && bytes[i] == '\n') {
-                    i++;
-                }
-                n++;
-            }
-        }
-        return n < lines ? bytes.length : i;
-    }
-
     /** 读取文件开头最多 {@code limit} 字节（超大文件的编码抽样）。 */
     static byte[] readHead(Path file, int limit) throws IOException {
         try (InputStream in = Files.newInputStream(file)) {
@@ -2301,26 +2280,6 @@ public class TerminalSupport {
             return null;
         }
         return pattern.getBytes(StandardCharsets.UTF_8);
-    }
-
-    /**
-     * 字面量模式在另一种编码下的字节（已由 {@link #grepLiteralBytes} 判定可以预筛）；无法如实编码时返回 null（不预筛）。
-     *
-     * <p>只用于按严格解码、往返逐字节相同的编码识别出的文件：解码文本含有该模式，字节里就一定有它的编码；
-     * 路径规则指定的编码若有解不了的字节，它们显示为 U+FFFD，含 U+FFFD 的模式本就不预筛。</p>
-     */
-    static byte[] literalBytesIn(String pattern, Charset charset) {
-        try {
-            ByteBuffer bb = charset.newEncoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .encode(CharBuffer.wrap(pattern));
-            byte[] out = new byte[bb.remaining()];
-            bb.get(out);
-            return out.length == 0 ? null : out;
-        } catch (CharacterCodingException | RuntimeException e) {
-            return null;
-        }
     }
 
     /**

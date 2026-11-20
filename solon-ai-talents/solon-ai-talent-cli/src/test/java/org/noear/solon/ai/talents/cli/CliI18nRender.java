@@ -301,14 +301,12 @@ final class CliI18nRender {
         Files.write(work.resolve("dup.txt"), "x\nx\n".getBytes(StandardCharsets.UTF_8));
         Files.write(work.resolve("empty.txt"), new byte[0]);
         Files.write(work.resolve("bin.dat"), new byte[]{0, 1, 2, 3, 0, 0, 5});
-        // 非 UTF-8 文件：GBK 中文（自动识别）；编码无法确定的文件（ASCII 里夹一个坏字节，再夹一段 GBK）；
+        // 编码：GBK 中文（不是 UTF-8）；ASCII 里夹一段 GBK 和一个坏字节；带 BOM 的 UTF-16LE；
         // 无 BOM 的 UTF-16 大端（主编码设为会自动加 BOM 的 UTF-16 时无法原样写回）；大体是 UTF-8 夹两个坏字节
         Files.write(work.resolve("gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
+        Files.write(work.resolve("le16.txt"), concat(new byte[]{(byte) 0xFF, (byte) 0xFE}, "// 中文\nint x = 1;\n".getBytes(StandardCharsets.UTF_16LE)));
         Files.write(work.resolve("raw.txt"), concat("// ".getBytes(StandardCharsets.UTF_8), "中文".getBytes(Charset.forName("GBK")),
                 new byte[]{(byte) 0xFF}, "\nint x = 1;\n".getBytes(StandardCharsets.UTF_8)));
-        Files.createDirectories(work.resolve("enc"));
-        Files.write(work.resolve("enc/gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
-        Files.write(work.resolve("enc/utf8.txt"), "int y = 2;\n".getBytes(StandardCharsets.UTF_8));
         Files.write(work.resolve("u16.txt"), "ab\n".getBytes(StandardCharsets.UTF_16BE));
         Files.write(work.resolve("mixed.txt"), concat("// 中文注释：用户服务\nint x = 1;\n".getBytes(StandardCharsets.UTF_8),
                 new byte[]{(byte) 0xCC, (byte) 0xF9, '\n'}));
@@ -501,6 +499,7 @@ final class CliI18nRender {
                 op("two", "2", null, null), op("two\nthree", "x", null, null))));
         // ---- 文件编码 ----
         if (on(part, "file")) out.put("terminal_read_gbk" + suffix, run(root, tag, () -> read(base, tag, "gbk.txt", null, null)));
+        if (on(part, "file")) out.put("terminal_read_utf16" + suffix, run(root, tag, () -> read(base, tag, "le16.txt", null, null)));
         if (on(part, "file")) out.put("terminal_edit_gbk" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("// 中文", "// 汉字", 1, null))));
         if (on(part, "file")) out.put("terminal_read_raw_bytes" + suffix, run(root, tag, () -> read(base, tag, "raw.txt", null, null)));
         if (on(part, "file")) out.put("terminal_edit_raw_bytes_mismatch" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("// 中文", "// x", 1, null))));
@@ -511,9 +510,8 @@ final class CliI18nRender {
         if (on(part, "file")) out.put("terminal_edit_raw_bytes" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("x = 1", "x = 2", null, null))));
         if (on(part, "file")) out.put("terminal_edit_mixed" + suffix, run(root, tag, () -> edit(base, tag, "mixed.txt", op("x = 1", "x = 2", null, null))));
         if (on(part, "file")) out.put("terminal_edit_unencodable" + suffix, run(root, tag, () -> edit(base, tag, "a.txt", op("one", "\uD800", null, null))));
-        if (on(part, "file")) out.put("terminal_write_unencodable" + suffix, run(root, tag, () -> write(base, tag, "gbk.txt", "// \uD83D\uDE00\n")));
-        if (on(part, "file")) out.put("terminal_write_gbk" + suffix, run(root, tag, () -> write(base, tag, "gbk.txt", "// 重写\n")));
-        if (on(part, "file")) out.put("terminal_grep_encoding_note" + suffix, run(root, tag, () -> grep(base, tag, "x = ", "enc")));
+        if (on(part, "file")) out.put("terminal_write_unencodable" + suffix, run(root, tag, () -> write(base, tag, "a.txt", "// \uD83D\n")));
+        if (on(part, "file")) out.put("terminal_write_utf16" + suffix, run(root, tag, () -> write(base, tag, "le16.txt", "// 重写\n")));
         TerminalTalent utf16 = terminal(work, ShellMode.UNIX_SHELL, "bash");
         utf16.fileCharset = StandardCharsets.UTF_16;
         if (on(part, "file")) out.put("terminal_edit_not_preservable" + suffix, run(root, tag, () -> edit(utf16, tag, "u16.txt", op("ab", "cd", null, null))));

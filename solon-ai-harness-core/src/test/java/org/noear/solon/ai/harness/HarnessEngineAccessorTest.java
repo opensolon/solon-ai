@@ -2,7 +2,6 @@ package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.noear.solon.ai.talents.cli.FileEncodingPolicy;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -135,13 +134,6 @@ class HarnessEngineAccessorTest {
         e.setSandboxAllowUserHome(false);
         e.setSandboxSystemRestrict(true);
         assertTrue(e.isSandboxSystemRestrict());
-        // 编码策略同步推送到 TerminalTalent
-        FileEncodingPolicy policy = FileEncodingPolicy.builder().noCandidates().build();
-        e.setFileEncodingPolicy(policy);
-        assertSame(policy, e.getFileEncodingPolicy());
-        assertSame(policy, e.getTerminalTalent().getFileEncodingPolicy());
-        e.setFileEncodingPolicy(null);
-        assertSame(policy, e.getFileEncodingPolicy());
 
         e.setHitlEnabled(true);
         assertTrue(e.isHitlEnabled());
@@ -618,7 +610,7 @@ class HarnessEngineAccessorTest {
     private static final List<String> SWEEP_COVERED = Arrays.asList(
             "setMaxTurns", "setModelRetries", "setMcpRetries", "setApiRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks",
             "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount", "setMemorySummaryLength",
-            "setSandboxEnabled", "setSandboxAllowUserHome", "setSandboxSystemRestrict", "setFileEncodingPolicy",
+            "setSandboxEnabled", "setSandboxAllowUserHome", "setSandboxSystemRestrict",
             "setHitlEnabled", "setSubagentEnabled", "setBashAsyncEnabled", "setSessionWindowSize",
             "setCompressionThreshold", "setCompressionDefaultContextLength", "setSystemPrompt",
             "setCacheControl", "setHttpProxy", "setHttpCustomize", "addHttpCustomize",

@@ -115,7 +115,7 @@ terminal.instruction.cmd_open: |-
 terminal.instruction.tools_first: |-
   - **Tools first (choose a tool before a command)**: to read files, list directories, find files, search text, write files and edit files, always use the `read` / `ls` / `glob` / `grep` / `{write}` / `{edit}` tools instead of shell commands (such as {examples}): the tool layer already handles encodings and BOM, line-number positioning, ignored directories (node_modules/target/.git, etc.), paged truncation of large files and atomic rollback of writes, which the command line cannot do. Use `bash` for what really needs executing: builds, tests, git, package management, running scripts, and pipelines or statistics the tools cannot cover.
 terminal.instruction.file_encoding: |-
-  - **File encoding**: the Encoding field on the first line of `read` is the automatically detected file encoding; `edit` / `{write}` save in it, so do not convert encodings yourself. Bytes shown as � cannot be decoded; `edit` keeps them unchanged, so just avoid them when editing.
+  - **File encoding**: files are handled as UTF-8 (or by their BOM if they have one); the Encoding field on the first line of `read` gives the file encoding, and `edit` / `{write}` save in it, so do not convert encodings yourself. Bytes shown as � cannot be decoded; `edit` keeps them unchanged, so just avoid them when editing.
 terminal.instruction.file_cmds_powershell: |-
   `Get-Content`, `Get-ChildItem`, `Select-String`, `Set-Content`, `>`
 terminal.instruction.file_cmds_cmd: |-
@@ -153,7 +153,7 @@ terminal.instruction.stderr_cmd: |-
 terminal.instruction.ps_encoding: |-
   - **Encoding (already handled by the system; write commands accordingly)**: the default encoding for input, output and file reads/writes in this session is unified as UTF-8 (including reads by `Get-Content`, `Select-String` and `Import-Csv`, and writes by `Set-Content`, `Add-Content`, `Out-File` and `>` / `>>`). No need to run `chcp`, set `$OutputEncoding` or keep adding `-Encoding UTF8`.
 terminal.instruction.ps_encoding_gbk: |-
-  - Exception: if the Encoding field on the first line of `read` shows that a file uses GBK or another non-UTF-8 encoding, you must write `-Encoding Default` explicitly to read or write it in PowerShell.
+  - Exception: if a file is confirmed to be GBK/ANSI encoded, you must write `-Encoding Default` explicitly to read it correctly.
 terminal.instruction.ps_encoding_bom: |-
   - Windows PowerShell 5.1 writes UTF-8 with a BOM; this tool's `read` / `edit` / `grep` ignore it automatically, so no special handling is needed.
 terminal.instruction.ps_encoding_garbled: |-
@@ -219,11 +219,7 @@ terminal.write.unencodable: |-
 terminal.write.raw_bytes_lost: |-
   Error: the existing file has undecodable bytes (count: {count}; read shows them as �) and the content contains �; overwriting would lose these original bytes permanently, so the write was cancelled and the file was not modified. Use edit to change only the parts that need changing.
 terminal.write.unknown_non_ascii: |-
-  Error: the encoding of the existing file cannot be determined (bytes that cannot be decoded as {charset}: {count}) and the content contains non-ASCII characters, which would end up in a different encoding from the rest of the file; the write was cancelled and the file was not modified. Use edit to change only ASCII text, or ask the user to configure an encoding for this path.
-terminal.file.saved_as: |-
-  Saved in {encoding}.
-terminal.file.saved_keeping_raw: |-
-  Saved in {encoding}; undecodable bytes kept unchanged: {count}.
+  Error: the existing file is not {charset} (bytes that cannot be decoded as {charset}: {count}) and its encoding cannot be determined; the content contains non-ASCII characters, which would end up in a different encoding from the rest of the file, so the write was cancelled and the file was not modified. Use edit to change only ASCII text; if non-ASCII text must be written, tell the user that this file's encoding cannot be detected automatically.
 terminal.edit.missing: |-
   Error: the file does not exist and cannot be edited.
 terminal.edit.empty_old: |-
@@ -243,7 +239,7 @@ terminal.edit.raw_bytes_hint: |-
 terminal.edit.unencodable: |-
   Precheck failed (operation {op}): {char} in new_str (character {index}) cannot be represented in the file's encoding {charset}; the file was not modified. Write it in a form this encoding can represent (such as an escape sequence) instead of changing the file's encoding.
 terminal.edit.unknown_non_ascii: |-
-  Precheck failed (operation {op}): the encoding of this file cannot be determined (bytes that cannot be decoded as {charset}: {count}) and new_str contains non-ASCII characters, which would end up in a different encoding from the rest of the file; the edit was cancelled and the file was not modified. Change only ASCII text, or ask the user to configure an encoding for this path.
+  Precheck failed (operation {op}): this file is not {charset} (bytes that cannot be decoded as {charset}: {count}) and its encoding cannot be determined; new_str contains non-ASCII characters, which would end up in a different encoding from the rest of the file, so the edit was cancelled and the file was not modified. Change only ASCII text; if non-ASCII text must be written, tell the user that this file's encoding cannot be detected automatically.
 terminal.edit.not_preservable: |-
   Error: the file contains bytes that cannot be decoded as {charset}, and they cannot be guaranteed to be written back unchanged; the edit was cancelled and the file was not modified.
 terminal.vedit.empty_old: |-
@@ -256,8 +252,6 @@ terminal.grep.none: |-
   No results found.
 terminal.grep.truncated: |-
   Warning: too many search results; truncated at the {kb}KB limit. Narrow the search path or keywords.
-terminal.grep.encoding_note: |-
-  Note: the matched files below are not plain UTF-8 and were decoded in the encoding shown (read shows the same encoding on its first line, and edit / write save in it):{files}
 terminal.grep.skipped_large: |-
   Skipped {count} file(s) exceeding the per-file read limit (10MB).
 terminal.glob.none: |-

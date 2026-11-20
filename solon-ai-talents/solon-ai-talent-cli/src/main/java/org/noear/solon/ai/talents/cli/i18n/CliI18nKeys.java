@@ -133,8 +133,6 @@ public final class CliI18nKeys {
     public static final String TERMINAL_WRITE_UNENCODABLE = "terminal.write.unencodable";
     public static final String TERMINAL_WRITE_RAW_BYTES_LOST = "terminal.write.raw_bytes_lost";
     public static final String TERMINAL_WRITE_UNKNOWN_NON_ASCII = "terminal.write.unknown_non_ascii";
-    public static final String TERMINAL_FILE_SAVED_AS = "terminal.file.saved_as";
-    public static final String TERMINAL_FILE_SAVED_KEEPING_RAW = "terminal.file.saved_keeping_raw";
     public static final String TERMINAL_EDIT_MISSING = "terminal.edit.missing";
     public static final String TERMINAL_EDIT_EMPTY_OLD = "terminal.edit.empty_old";
     public static final String TERMINAL_EDIT_ALL_MISSING = "terminal.edit.all_missing";
@@ -151,7 +149,6 @@ public final class CliI18nKeys {
     public static final String TERMINAL_VEDIT_ALL_MISSING = "terminal.vedit.all_missing";
     public static final String TERMINAL_GREP_NONE = "terminal.grep.none";
     public static final String TERMINAL_GREP_TRUNCATED = "terminal.grep.truncated";
-    public static final String TERMINAL_GREP_ENCODING_NOTE = "terminal.grep.encoding_note";
     public static final String TERMINAL_GREP_SKIPPED_LARGE = "terminal.grep.skipped_large";
     public static final String TERMINAL_GLOB_NONE = "terminal.glob.none";
     public static final String TERMINAL_VFILE_TOO_LARGE = "terminal.vfile.too_large";

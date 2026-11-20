@@ -1,4 +1,0 @@
-enc/gbk.txt:2: int x = 1;
-
-注：以下命中文件不是普通 UTF-8，已按所示编码解码（read 首行显示同样的编码，edit / write 会按它保存）：
-- enc/gbk.txt: GBK detected

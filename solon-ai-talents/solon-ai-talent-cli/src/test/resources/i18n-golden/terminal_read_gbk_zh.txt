@@ -1,6 +1,6 @@
---- File: gbk.txt (Lines: 1 - 2, Size: 0.02 KB, Encoding: GBK detected) ---
+--- File: gbk.txt (Lines: 1 - 2, Size: 0.02 KB, Encoding: not UTF-8, 4 undecodable bytes shown as U+FFFD) ---
 --------------------------------------------------
-     1 | // 中文
+     1 | // ����
      2 | int x = 1;
 
 

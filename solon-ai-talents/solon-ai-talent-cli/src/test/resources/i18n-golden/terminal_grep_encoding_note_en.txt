@@ -1,4 +1,0 @@
-enc/gbk.txt:2: int x = 1;
-
-Note: the matched files below are not plain UTF-8 and were decoded in the encoding shown (read shows the same encoding on its first line, and edit / write save in it):
-- enc/gbk.txt: GBK detected

@@ -39,14 +39,11 @@ import org.noear.solon.core.util.Assert;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.CharArrayReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.StringReader;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -124,10 +121,8 @@ public class TerminalTalent extends AbsTalent {
     private final ReentrantLock pythonProbeLock = new ReentrantLock();
     private final ReentrantLock nodeProbeLock = new ReentrantLock();
 
-    /** 主编码：合法即按它处理，也是新建文件（未命中路径规则时）的编码。默认 UTF-8。 */
+    /** 主编码：合法即按它处理（带 BOM 的按 BOM），也是新建文件的编码。默认 UTF-8，见 {@link TextEncodings#detect}。 */
     protected Charset fileCharset = StandardCharsets.UTF_8;
-    /** 非 UTF-8 文件的识别策略（候选编码、按路径指定的编码），见 {@link TextEncodings#detect}。 */
-    private volatile FileEncodingPolicy fileEncodingPolicy = FileEncodingPolicy.defaults();
     protected final ProcessExecutor executor = new ProcessExecutor();
     protected final TerminalSessionManager bashSessionManager;
     //异步会话模式：启用后提供 bash_start/wait/stop 工具
@@ -228,17 +223,6 @@ public class TerminalTalent extends AbsTalent {
         if (support != null) {
             support.setMaxCharacterLimit(maxCharacterLimit);
         }
-    }
-
-    public FileEncodingPolicy getFileEncodingPolicy() {
-        return fileEncodingPolicy;
-    }
-
-    /**
-     * 设置文件编码策略（候选编码与按路径指定的编码）；null 恢复默认（候选 GBK，无路径规则）。
-     */
-    public void setFileEncodingPolicy(FileEncodingPolicy fileEncodingPolicy) {
-        this.fileEncodingPolicy = fileEncodingPolicy == null ? FileEncodingPolicy.defaults() : fileEncodingPolicy;
     }
 
     /**
@@ -841,7 +825,7 @@ public class TerminalTalent extends AbsTalent {
         // 从而绕开工具层的编码处理、行号定位、忽略目录、分页截断与写入原子回滚。
         sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_TOOLS_FIRST,
                 "write", TOOL_WRITE, "edit", TOOL_EDIT, "examples", fileShellCommandExamples(locale))).append("\n");
-        // 让模型信任 read 首行的 Encoding：否则它常会把 GBK 文件“顺手”整份重写成 UTF-8
+        // 让模型信任 read 首行的 Encoding、不自己转换编码：否则它常会把非 UTF-8 文件“顺手”整份重写
         sb.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_INSTRUCTION_FILE_ENCODING, "write", TOOL_WRITE)).append("\n");
 
         if (bashAsyncEnabled) {
@@ -1396,7 +1380,7 @@ public class TerminalTalent extends AbsTalent {
             return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_EMPTY));
         }
 
-        // 编码按整份文件识别（与当前读哪一页无关，翻页时 Encoding 字段不变）；超过上限的只抽样开头、流式读取
+        // 编码按整份文件判断（与当前读哪一页无关，翻页时 Encoding 字段不变）；超过上限的只抽样开头、流式读取
         byte[] bytes = readWholeOrNull(target, fileSize);
         boolean sampled = bytes == null;
         if (sampled) {
@@ -1405,7 +1389,7 @@ public class TerminalTalent extends AbsTalent {
         if (isBinaryContent(bytes)) {
             return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY));
         }
-        TextEncodings.Decoded encoding = detectEncoding(bytes, sampled, encodingPath(workPath, target));
+        TextEncodings.Decoded encoding = detectEncoding(bytes, sampled);
 
         // 1. 参数预处理
         long startLine0 = (offset == null || offset < 1) ? 0L : offset - 1L;
@@ -1418,18 +1402,11 @@ public class TerminalTalent extends AbsTalent {
         boolean hasData = false;
         boolean hasMore = false;
 
-        // 按识别出的编码、替换模式解码：解不了的字节显示为 U+FFFD，其余内容照常输出（与 grep、虚拟来源的 read 一致）。
+        // 按判断出的编码、替换模式解码：解不了的字节显示为 U+FFFD，其余内容照常输出（与 grep、虚拟来源的 read 一致）。
         // 合法 UTF-8 文件与原实现逐字相同：BOM 仍作为首行第一个字符交给下面的剥除逻辑
-        // 翻页时尽量在原字节上跳过前面的行，只解码当前页（结果与逐行解码后再跳过相同）
-        int startByte = 0;
-        long skipLines = startLine0;
-        if (!sampled && startLine0 > 0 && encoding.lineBreaksAreSingleBytes()) {
-            startByte = TerminalSupport.lineStartOffset(bytes, startLine0);
-            skipLines = 0;
-        }
-        try (BufferedReader reader = openReadReader(target, bytes, startByte, sampled, encoding);
+        try (BufferedReader reader = openReadReader(target, bytes, sampled, encoding);
              Stream<String> stream = reader.lines()) {
-            Iterator<String> iterator = stream.skip(skipLines).iterator();
+            Iterator<String> iterator = stream.skip(startLine0).iterator();
 
             long count = 0;
             while (iterator.hasNext() && count < lineLimit) {
@@ -1507,12 +1484,12 @@ public class TerminalTalent extends AbsTalent {
 
     /** 内容是否疑似二进制：带 UTF-16 BOM 的文本含大量 NUL，先认 BOM。 */
     static boolean isBinaryContent(byte[] bytes) {
-        return !TextEncodings.hasUtf16Bom(bytes, bytes.length)
+        return TextEncodings.utf16BomCharset(bytes, bytes.length) == null
                 && TerminalSupport.isLikelyBinary(bytes, Math.min(bytes.length, TerminalSupport.BINARY_SNIFF_BYTES));
     }
 
     /**
-     * 整份读入用于识别编码；超过上限返回 null（调用方改为抽样开头）。
+     * 整份读入用于判断编码；超过上限返回 null（调用方改为抽样开头）。
      * 大小已知超限时直接返回，不先白读 10 MB；读取期间变大的仍由 {@link TerminalSupport#readUpTo} 兜底。
      */
     private static byte[] readWholeOrNull(Path target, long size) throws IOException {
@@ -1522,41 +1499,20 @@ public class TerminalTalent extends AbsTalent {
         return TerminalSupport.readUpTo(target, size, TerminalSupport.GREP_MAX_FILE_BYTES);
     }
 
-    private TextEncodings.Decoded detectEncoding(byte[] bytes, boolean sampled, String path) {
-        return TextEncodings.detect(bytes, bytes.length, sampled, fileCharset, fileEncodingPolicy, path);
-    }
-
-    /** 匹配路径规则用的路径；没有路径规则时不必计算（grep 每个文件都要用，省掉路径运算）。 */
-    private String rulePath(Path workPath, Path target) {
-        return fileEncodingPolicy.getRules().isEmpty() ? null : encodingPath(workPath, target);
-    }
-
-    /** 匹配路径规则用的路径：工作区内用相对路径，工作区外用绝对路径。 */
-    private static String encodingPath(Path workPath, Path target) {
-        try {
-            Path abs = target.toAbsolutePath().normalize();
-            Path root = workPath == null ? null : workPath.toAbsolutePath().normalize();
-            if (root != null && abs.startsWith(root)) {
-                return root.relativize(abs).toString().replace('\\', '/');
-            }
-            return abs.toString().replace('\\', '/');
-        } catch (RuntimeException e) {
-            return target.toString();
-        }
+    private TextEncodings.Decoded detectEncoding(byte[] bytes, boolean sampled) {
+        return TextEncodings.detect(bytes, bytes.length, sampled, fileCharset);
     }
 
     /**
-     * read 的逐行读取器：整份读入时从内存里的字节边读边解码（只解码到当前页为止，不把整份文件转成字符串）；
-     * 超大文件跳过 BOM 后按识别出的编码流式读取。
+     * read 的逐行读取器：整份读入时从内存里的字节边读边解码；超大文件跳过 BOM 后按判断出的编码流式读取。
      *
      * <p>整份读入时从第 0 字节开始解码：UTF-8 / UTF-16LE / UTF-16BE 的 BOM 按各自编码解出来都是 U+FEFF，
-     * 交给首行的 BOM 剥除逻辑，与「先去掉 BOM 解码正文、再在前面补一个 U+FEFF」结果相同。</p>
+     * 交给首行的 BOM 剥除逻辑。</p>
      */
-    private static BufferedReader openReadReader(Path target, byte[] bytes, int startByte, boolean sampled,
+    private static BufferedReader openReadReader(Path target, byte[] bytes, boolean sampled,
                                                  TextEncodings.Decoded encoding) throws IOException {
         if (!sampled) {
-            return new BufferedReader(new InputStreamReader(
-                    new ByteArrayInputStream(bytes, startByte, bytes.length - startByte), encoding.charset()));
+            return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), encoding.charset()));
         }
         InputStream in = Files.newInputStream(target);
         try {
@@ -1604,48 +1560,30 @@ public class TerminalTalent extends AbsTalent {
         return null;
     }
 
-    /** 写入成功提示后另起一行的保存编码说明；普通 UTF-8 不说明。 */
-    private static String savedSuffix(Locale locale, String name, int keptRawBytes) {
-        if (keptRawBytes > 0) {
-            return "\n" + CliI18n.fmt(locale, CliI18nKeys.TERMINAL_FILE_SAVED_KEEPING_RAW, "encoding", name, "count", keptRawBytes);
-        }
-        return name == null ? "" : "\n" + CliI18n.fmt(locale, CliI18nKeys.TERMINAL_FILE_SAVED_AS, "encoding", name);
-    }
-
-    private static String savedSuffix(Locale locale, TextEncodings.Decoded encoding) {
-        return encoding.isPlainUtf8() ? "" : savedSuffix(locale, encoding.name(), encoding.rawBytes());
-    }
-
     /**
-     * 覆盖前识别旧文件的编码（内容为 {@code bytes}，抽样时为开头部分）。二进制文件不保护，返回 null。
+     * 覆盖前判断旧文件的编码（内容为 {@code bytes}，抽样时为开头部分）。二进制文件不保护，返回 null。
      */
-    private TextEncodings.Decoded overwrittenEncoding(byte[] bytes, boolean sampled, String path, Path nameForBinaryCheck) {
+    private TextEncodings.Decoded overwrittenEncoding(byte[] bytes, boolean sampled, Path nameForBinaryCheck) {
         if (bytes == null || bytes.length == 0) {
             return null;
         }
         if ((nameForBinaryCheck != null && support.isNotTextFileByName(nameForBinaryCheck)) || isBinaryContent(bytes)) {
             return null;
         }
-        return detectEncoding(bytes, sampled, path);
+        return detectEncoding(bytes, sampled);
     }
 
     /**
      * write 要写出的字节；不能安全写入时把错误文案放进 {@code error[0]} 并返回 null。
      *
-     * <p>新建文件：路径规则的编码，否则主编码（默认 UTF-8）。覆盖已有文本文件：沿用它的编码与 BOM；
+     * <p>新建文件：主编码（默认 UTF-8）。覆盖已有文本文件：沿用它的 BOM 与编码；
      * 原文件有解不了的字节而内容含 U+FFFD（照抄 read 的显示）时拒绝——覆盖会永久丢掉这些原字节；
-     * 编码无法确定且内容含非 ASCII 字符时拒绝——否则文件会变成两种编码混在一起。</p>
+     * 原文件不是 UTF-8 且内容含非 ASCII 字符时拒绝——否则文件会悄悄换成另一种编码。</p>
      */
-    private byte[] encodeForWrite(String content, TextEncodings.Decoded old, String path, Locale locale, String[] error, String[] suffix) {
+    private byte[] encodeForWrite(String content, TextEncodings.Decoded old, Locale locale, String[] error) {
         if (old == null) {
-            Charset rule = fileEncodingPolicy.ruleFor(path);
-            Charset cs = rule != null ? rule : fileCharset;
-            error[0] = checkWritableText(content, null, cs, null, locale);
-            if (error[0] != null) {
-                return null;
-            }
-            suffix[0] = StandardCharsets.UTF_8.equals(cs) ? "" : savedSuffix(locale, cs.name(), 0);
-            return content.getBytes(cs);
+            error[0] = checkWritableText(content, null, fileCharset, null, locale);
+            return error[0] != null ? null : content.getBytes(fileCharset);
         }
         if (old.rawBytes() > 0 && content.indexOf('\uFFFD') >= 0) {
             error[0] = CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_RAW_BYTES_LOST, "count", old.rawBytes());
@@ -1658,10 +1596,7 @@ public class TerminalTalent extends AbsTalent {
             return null;
         }
         try {
-            byte[] data = old.bomLength() > 0 ? concat(old.bom(), body.getBytes(old.charset())) : body.getBytes(old.charset());
-            boolean plain = StandardCharsets.UTF_8.equals(old.charset()) && old.bomLength() == 0;
-            suffix[0] = plain ? "" : savedSuffix(locale, old.name(), 0);
-            return data;
+            return old.bomLength() > 0 ? concat(old.bom(), body.getBytes(old.charset())) : body.getBytes(old.charset());
         } catch (RuntimeException e) {
             error[0] = CliI18n.fmt(locale, CliI18nKeys.TERMINAL_ERROR, "message", CliI18n.messageOf(e, locale));
             return null;
@@ -1700,9 +1635,8 @@ public class TerminalTalent extends AbsTalent {
         }
         Path target = support.resolveSafePath(workPath, filePath, true, sandboxEnabled, sandboxAllowUserHome, fs());
         String text = content == null ? "" : content;
-        String path = encodingPath(workPath, target);
 
-        // 覆盖已有文件：先识别它的编码（读不了就按新文件处理，与原行为一致）
+        // 覆盖已有文件：先判断它的编码（读不了就按新文件处理，与原行为一致）
         TextEncodings.Decoded old = null;
         if (Files.isRegularFile(target)) {
             try {
@@ -1710,21 +1644,20 @@ public class TerminalTalent extends AbsTalent {
                 byte[] bytes = readWholeOrNull(target, size);
                 boolean sampled = bytes == null;
                 old = overwrittenEncoding(sampled ? TerminalSupport.readHead(target, TextEncodings.SAMPLE_BYTES) : bytes,
-                        sampled, path, target);
+                        sampled, target);
             } catch (IOException | RuntimeException ignored) {
                 // 读不了（如只写权限）：按新文件处理
             }
         }
         String[] error = new String[1];
-        String[] suffix = new String[]{""};
-        byte[] data = encodeForWrite(text, old, path, locale, error, suffix);
+        byte[] data = encodeForWrite(text, old, locale, error);
         if (data == null) {
             return ToolResult.error(error[0]);
         }
 
         Files.createDirectories(target.getParent());
         Files.write(target, data);
-        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", filePath) + suffix[0], target));
+        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", filePath), target));
     }
 
 
@@ -1758,7 +1691,7 @@ public class TerminalTalent extends AbsTalent {
                 : "";
     }
 
-    /** edit 的 new_str 检查：编码表示不了的字符、编码无法确定时的非 ASCII 字符都拒绝（原先会被无声写成 '?' 或混入另一种编码）。 */
+    /** edit 的 new_str 检查：编码表示不了的字符、不是 UTF-8 的文件里的非 ASCII 字符都拒绝（原先会被无声写成 '?' 或混入另一种编码）。 */
     private static String checkNewStr(String newStr, TextEncodings.Decoded encoding, int index, Locale locale) {
         return checkWritableText(newStr, encoding, encoding.charset(), opNo(index), locale);
     }
@@ -1776,10 +1709,10 @@ public class TerminalTalent extends AbsTalent {
         }
 
         byte[] rawBytes = Files.readAllBytes(target);
-        // 按识别出的编码解码，解不了的字节原样保留到写回（见 TerminalSupport#decodeKeepingRawBytes），不再被改成 U+FFFD。
+        // 按判断出的编码解码，解不了的字节原样保留到写回（见 TerminalSupport#decodeKeepingRawBytes），不再被改成 U+FFFD。
         // BOM 与编辑逻辑解耦：匹配、行号、缩进推断全部在无 BOM 的正文上进行（否则首行匹配必失败），
         // 写回时再按原样补回，避免 edit 顺手改变文件的字节形态
-        TextEncodings.Decoded encoding = detectEncoding(rawBytes, false, encodingPath(workPath, target));
+        TextEncodings.Decoded encoding = detectEncoding(rawBytes, false);
         if (!encoding.writesBackUnchanged()) {
             return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_NOT_PRESERVABLE, "charset", encoding.charset().name()));
         }
@@ -1852,8 +1785,7 @@ public class TerminalTalent extends AbsTalent {
         // 原子性保存：按原编码写回（原文件带 BOM 则保持带 BOM；解不了的字节原样写回）
         Files.write(target, encoding.encode(workingContent));
 
-        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", filePath, "count", edits.size())
-                + savedSuffix(locale, encoding), target));
+        return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", filePath, "count", edits.size()), target));
     }
 
     // --- 5. 搜索工具 ---
@@ -1900,10 +1832,7 @@ public class TerminalTalent extends AbsTalent {
         final PathMatcher includeMatcher = buildIncludeMatcher(include);
 
         // 字面量模式的整文件预筛（字节里找不到就整文件跳过；null 表示不预筛）
-        // 各种可能的解码方式（主编码与各候选编码）下模式的字节，先于编码识别预筛；null 表示不预筛
-        final byte[][] needles = grepNeedles(pattern, TerminalSupport.grepLiteralBytes(pattern, finalPattern != null, fileCharset));
-        // 命中的非 UTF-8 文件及其编码，结果末尾汇总说明
-        final Map<String, String> encodingNotes = new LinkedHashMap<>();
+        final byte[] literalBytes = TerminalSupport.grepLiteralBytes(pattern, finalPattern != null, fileCharset);
 
         StringBuilder sb = new StringBuilder();
         Path policyRoot = support.getSandboxPolicyRoot(workPath, path);
@@ -1936,16 +1865,10 @@ public class TerminalTalent extends AbsTalent {
                     return FileVisitResult.CONTINUE;
                 }
 
-                GrepFile grepFile = null;
-                try {
-                    grepFile = openGrepFile(file, attrs, pattern, needles, workPath);
-                } catch (IOException | UncheckedIOException ignored) {
-                    // 仅忽略读取异常（如权限）
-                }
-                if (grepFile == null) {
-                    return FileVisitResult.CONTINUE;
-                }
-                try (BufferedReader reader = grepFile.reader) {
+                try (BufferedReader reader = openGrepReader(file, attrs, literalBytes)) {
+                    if (reader == null) {
+                        return FileVisitResult.CONTINUE;
+                    }
                     int lineNum = 0;
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -1962,7 +1885,6 @@ public class TerminalTalent extends AbsTalent {
 
                             String displayPath = support.formatDisplayPath(workPath, path, target, file, sandboxEnabled);
                             sb.append(displayPath).append(":").append(lineNum).append(": ").append(trimmedLine).append("\n");
-                            noteEncoding(encodingNotes, displayPath, grepFile.encoding);
 
                             // 发现匹配后立即检查长度，防止 StringBuilder 过载
                             if (sb.length() > support.maxCharacterLimit) {
@@ -1987,88 +1909,8 @@ public class TerminalTalent extends AbsTalent {
             sb.append("\n\n").append(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MORE));
             sb.append("\n").append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_TRUNCATED, "kb", support.maxCharacterLimit / 1024));
         }
-        appendEncodingNotes(sb, encodingNotes, locale);
 
         return ToolResult.success(sb.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : sb.toString());
-    }
-
-    /** grep 打开的文件：逐行读取器与识别出的编码（超大文件流式读取时为 null）。 */
-    private static final class GrepFile {
-        final BufferedReader reader;
-        final TextEncodings.Decoded encoding;
-
-        GrepFile(BufferedReader reader, TextEncodings.Decoded encoding) {
-            this.reader = reader;
-            this.encoding = encoding;
-        }
-    }
-
-    /**
-     * grep 字面量预筛用的字节序列：主编码（{@code primary}）与各候选编码下模式的字节（去重）；不预筛时返回 null。
-     *
-     * <p>文件最终只会按这几种编码之一解码（带 UTF-16 BOM 的文件与命中路径规则的文件另行处理），
-     * 哪一份字节都找不到就不可能命中，不必再识别编码。候选编码表示不了模式时不列入：候选编码只在严格解码、
-     * 往返逐字节相同时才采用，解码出的每个字符都能按它编码，不可能包含这样的模式。</p>
-     */
-    private byte[][] grepNeedles(String pattern, byte[] primary) {
-        if (primary == null) {
-            return null;
-        }
-        List<byte[]> needles = new ArrayList<>();
-        needles.add(primary);
-        for (Charset cs : fileEncodingPolicy.getCandidates()) {
-            if (cs.equals(fileCharset) || !cs.canEncode() || !cs.newEncoder().canEncode(pattern)) {
-                continue;
-            }
-            byte[] b = TerminalSupport.literalBytesIn(pattern, cs);
-            if (b == null) {
-                return null;
-            }
-            boolean dup = false;
-            for (byte[] n : needles) {
-                dup |= Arrays.equals(n, b);
-            }
-            if (!dup) {
-                needles.add(b);
-            }
-        }
-        return needles.toArray(new byte[0][]);
-    }
-
-    private static boolean containsAny(byte[] bytes, byte[][] needles) {
-        for (byte[] n : needles) {
-            if (TerminalSupport.containsBytes(bytes, n)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** 命中文件不是普通的主编码（换了编码解码，或有解不了的字节）时记下它的编码。 */
-    private void noteEncoding(Map<String, String> notes, String displayPath, TextEncodings.Decoded encoding) {
-        if (encoding != null && (!encoding.charset().equals(fileCharset) || encoding.rawBytes() > 0)) {
-            notes.put(displayPath, encoding.label());
-        }
-    }
-
-    /** grep 结果末尾的编码说明：让模型知道这些文件改的时候要留意编码（最多列 20 个）。 */
-    private static void appendEncodingNotes(StringBuilder sb, Map<String, String> notes, Locale locale) {
-        if (notes.isEmpty() || sb.length() == 0) {
-            return;
-        }
-        StringBuilder files = new StringBuilder();
-        int n = 0;
-        for (Map.Entry<String, String> e : notes.entrySet()) {
-            if (n++ == 20) {
-                files.append("\n- ...(+").append(notes.size() - 20).append(")");
-                break;
-            }
-            files.append("\n- ").append(e.getKey()).append(": ").append(e.getValue());
-        }
-        if (sb.charAt(sb.length() - 1) != '\n') {
-            sb.append('\n');
-        }
-        sb.append('\n').append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_ENCODING_NOTE, "files", files.toString()));
     }
 
     /**
@@ -2078,53 +1920,33 @@ public class TerminalTalent extends AbsTalent {
      * 与 {@link TerminalSupport#isNotTextFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。</p>
      *
      * <p>按替换模式解码：解不了的字节变成 U+FFFD 后继续搜（与虚拟来源的 grep、read 一致）。报错模式会在第一个坏字节处停下，
-     * 其后的命中被悄悄丢掉，模型会把“没找到”当成确实没有。</p>
+     * 其后的命中被悄悄丢掉，模型会把“没找到”当成确实没有。带 UTF-16 BOM 的文件按 BOM 的编码读（不做 UTF-8 字节预筛）。</p>
      *
      * <p>实际内容超过上限（指向大文件的符号链接，或遍历后文件变大）时不整体读入，按原方式探测后流式读取。</p>
      */
-    private GrepFile openGrepFile(Path file, BasicFileAttributes attrs, String pattern, byte[][] needles,
-                                  Path workPath) throws IOException {
+    private BufferedReader openGrepReader(Path file, BasicFileAttributes attrs, byte[] literalBytes) throws IOException {
         byte[] bytes = TerminalSupport.readUpTo(file, attrs.size(), TerminalSupport.GREP_MAX_FILE_BYTES);
         if (bytes == null) {
             if (support.isLikelyBinaryFile(file)) {
                 return null;
             }
-            return new GrepFile(new BufferedReader(new InputStreamReader(Files.newInputStream(file), fileCharset)), null);
+            return new BufferedReader(new InputStreamReader(Files.newInputStream(file), fileCharset));
         }
 
-        if (isBinaryContent(bytes)) {
+        Charset utf16 = TextEncodings.utf16BomCharset(bytes, bytes.length);
+        if (utf16 != null) {
+            return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), utf16));
+        }
+
+        if (TerminalSupport.isLikelyBinary(bytes, Math.min(bytes.length, TerminalSupport.BINARY_SNIFF_BYTES))) {
             return null;
         }
 
-        String rulePath = rulePath(workPath, file);
-        if (needles != null && !TextEncodings.hasUtf16Bom(bytes, bytes.length) && !containsAny(bytes, needles)) {
-            // 主编码与候选编码的字节里都没有：只有路径规则指定了别的编码时才可能命中
-            Charset rule = rulePath == null ? null : fileEncodingPolicy.ruleFor(rulePath);
-            if (rule == null) {
-                return null;
-            }
-            byte[] ruleNeedle = TerminalSupport.literalBytesIn(pattern, rule);
-            if (ruleNeedle != null && !TerminalSupport.containsBytes(bytes, ruleNeedle)) {
-                return null;
-            }
+        if (literalBytes != null && !TerminalSupport.containsBytes(bytes, literalBytes)) {
+            return null;
         }
-        if (StandardCharsets.UTF_8.equals(fileCharset) && (rulePath == null || fileEncodingPolicy.ruleFor(rulePath) == null)) {
-            // 绝大多数文件是合法 UTF-8（含带 BOM）：严格解码一次，既确认了编码又得到了正文，不必先扫描再解码。
-            // 结果与识别编码后按 UTF-8 替换解码相同（合法内容不会产生 U+FFFD），也不必在结果末尾说明编码
-            CharBuffer chars = TextEncodings.decodeStrictOrNull(bytes, StandardCharsets.UTF_8);
-            if (chars != null) {
-                return new GrepFile(new BufferedReader(new CharArrayReader(chars.array(),
-                        chars.arrayOffset() + chars.position(), chars.remaining())), null);
-            }
-        }
-        TextEncodings.Decoded encoding = detectEncoding(bytes, false, rulePath);
 
-        if (encoding.charset().equals(fileCharset)) {
-            // 主编码（含带 BOM、夹坏字节、无法确定的情况）：与原实现完全相同的读法
-            return new GrepFile(new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset)), encoding);
-        }
-        String text = encoding.displayText();
-        return new GrepFile(new BufferedReader(new StringReader(encoding.bomLength() > 0 ? TerminalSupport.UTF8_BOM + text : text)), encoding);
+        return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset));
     }
 
     /**
@@ -2272,7 +2094,7 @@ public class TerminalTalent extends AbsTalent {
         } catch (VirtualFileTooLargeException e) {
             return ToolResult.error(virtualFileTooLarge(locale));
         }
-        TextEncodings.Decoded encoding = detectEncoding(bytes, false, resource.getSourcePath());
+        TextEncodings.Decoded encoding = detectEncoding(bytes, false);
         String text = encoding.displayText();
         String[] lines = text.split("\\R", -1);
         int start = offset == null || offset < 1 ? 0 : offset - 1;
@@ -2311,15 +2133,14 @@ public class TerminalTalent extends AbsTalent {
             MountEntry entry = resource.getSource().stat(path);
             if (entry != null && !entry.isDirectory() && entry.getSize() <= MAX_VIRTUAL_FILE_BYTES) {
                 try (InputStream in = resource.getSource().openRead(path)) {
-                    old = overwrittenEncoding(readVirtualBytes(in), false, path, Paths.get(entry.getName()));
+                    old = overwrittenEncoding(readVirtualBytes(in), false, Paths.get(entry.getName()));
                 }
             }
         } catch (IOException | RuntimeException ignored) {
             // 读不了旧文件（只写来源、超过上限等）：按新文件处理
         }
         String[] error = new String[1];
-        String[] suffix = new String[]{""};
-        byte[] data = encodeForWrite(content == null ? "" : content, old, path, locale, error, suffix);
+        byte[] data = encodeForWrite(content == null ? "" : content, old, locale, error);
         if (data == null) {
             return ToolResult.error(error[0]);
         }
@@ -2330,7 +2151,7 @@ public class TerminalTalent extends AbsTalent {
             return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_ERROR,
                     "message", CliI18n.messageOf(e, locale)));
         }
-        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", resource.getLogicalPath()) + suffix[0]);
+        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_WRITE_OK, "path", resource.getLogicalPath()));
     }
 
     private ToolResult editVirtual(ResolvedResource resource, List<EditOp> edits, Locale locale) throws IOException {
@@ -2343,8 +2164,8 @@ public class TerminalTalent extends AbsTalent {
         } catch (VirtualFileTooLargeException e) {
             return ToolResult.error(virtualFileTooLarge(locale));
         }
-        // 与本地 edit 同一口径：按识别出的编码编辑，解不了的字节原样写回
-        TextEncodings.Decoded encoding = detectEncoding(rawBytes, false, resource.getSourcePath());
+        // 与本地 edit 同一口径：按判断出的编码编辑，解不了的字节原样写回
+        TextEncodings.Decoded encoding = detectEncoding(rawBytes, false);
         if (!encoding.writesBackUnchanged()) {
             return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_NOT_PRESERVABLE, "charset", encoding.charset().name()));
         }
@@ -2379,8 +2200,7 @@ public class TerminalTalent extends AbsTalent {
         try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), options)) {
             out.write(data);
         }
-        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", resource.getLogicalPath(), "count", edits.size())
-                + savedSuffix(locale, encoding));
+        return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", resource.getLogicalPath(), "count", edits.size()));
     }
 
     private ToolResult grepVirtual(ResolvedResource resource, String pattern, String include, Locale locale) throws IOException {
@@ -2397,7 +2217,6 @@ public class TerminalTalent extends AbsTalent {
         try { regex = Pattern.compile(pattern); } catch (PatternSyntaxException ignored) { }
         StringBuilder out = new StringBuilder();
         int skippedLarge = 0;
-        Map<String, String> encodingNotes = new LinkedHashMap<>();
         for (MountEntry entry : entries) {
             if (include != null && !include.isEmpty() && !globMatches(include, entry.getName())) continue;
             if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) {
@@ -2411,12 +2230,10 @@ public class TerminalTalent extends AbsTalent {
                 skippedLarge++;
                 continue;
             }
-            // 与本地 grep 同一口径：主编码照原样读，识别出别的编码时按它解码
-            TextEncodings.Decoded encoding = detectEncoding(bytes, false, entry.getPath());
-            BufferedReader opened = encoding.charset().equals(fileCharset)
-                    ? new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset))
-                    : new BufferedReader(new StringReader(encoding.displayText()));
-            try (BufferedReader reader = opened) {
+            // 与本地 grep 同一口径：带 UTF-16 BOM 的按 BOM 的编码读，其余按主编码
+            Charset utf16 = TextEncodings.utf16BomCharset(bytes, bytes.length);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes),
+                    utf16 != null ? utf16 : fileCharset))) {
                 String line; int lineNo = 0;
                 while ((line = reader.readLine()) != null) {
                     lineNo++;
@@ -2424,14 +2241,12 @@ public class TerminalTalent extends AbsTalent {
                     if (regex != null ? regex.matcher(line).find() : line.contains(pattern)) {
                         String display = resource.getMountAlias() + "/" + entry.getPath();
                         out.append(display).append(":").append(lineNo).append(": ").append(line.trim()).append('\n');
-                        noteEncoding(encodingNotes, display, encoding);
                         if (out.length() >= support.maxCharacterLimit) return ToolResult.success(out.substring(0, support.maxCharacterLimit));
                     }
                 }
             }
         }
         if (skippedLarge > 0) out.append(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_GREP_SKIPPED_LARGE, "count", skippedLarge)).append("\n");
-        appendEncodingNotes(out, encodingNotes, locale);
         return ToolResult.success(out.length() == 0 ? CliI18n.get(locale, CliI18nKeys.TERMINAL_GREP_NONE) : out.toString());
     }
 
