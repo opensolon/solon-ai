@@ -1,0 +1,2 @@
+Precheck failed (operation #1): replace-all found no match. Make sure the content of old_str exists in the file (indentation and whitespace differences are ignored).
+Hint: the file contains bytes that cannot be decoded as UTF-8 (read and grep show them as �; the file may use another encoding such as GBK). edit keeps these bytes unchanged, but old_str cannot match them: replace only text without �, and do not span these positions.

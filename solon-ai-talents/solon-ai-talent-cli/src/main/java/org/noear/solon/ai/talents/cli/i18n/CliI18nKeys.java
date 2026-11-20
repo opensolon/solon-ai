@@ -136,6 +136,9 @@ public final class CliI18nKeys {
     public static final String TERMINAL_EDIT_NOT_UNIQUE = "terminal.edit.not_unique";
     public static final String TERMINAL_EDIT_APPLY_FAILED = "terminal.edit.apply_failed";
     public static final String TERMINAL_EDIT_OK = "terminal.edit.ok";
+    public static final String TERMINAL_EDIT_RAW_BYTES_HINT = "terminal.edit.raw_bytes_hint";
+    public static final String TERMINAL_EDIT_UNENCODABLE = "terminal.edit.unencodable";
+    public static final String TERMINAL_EDIT_NOT_PRESERVABLE = "terminal.edit.not_preservable";
     public static final String TERMINAL_VEDIT_EMPTY_OLD = "terminal.vedit.empty_old";
     public static final String TERMINAL_VEDIT_MISMATCH = "terminal.vedit.mismatch";
     public static final String TERMINAL_VEDIT_ALL_MISSING = "terminal.vedit.all_missing";

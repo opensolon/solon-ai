@@ -25,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * grep 读文件方式改造（一次读入字节、内存二进制探测、字面量字节预筛）的内容级差分测试：
- * 各类边角内容下，新实现与 {@link LegacySearch#grep}（优化前逐字副本，含原文本判定）输出逐字一致。
+ * 各类边角内容下，新实现与 {@link LegacySearch#grepReplacing}（优化前逐字副本，含原文本判定，
+ * 只把解码换成替换模式）输出逐字一致。
  */
 class TerminalGrepContentTest {
 
@@ -34,7 +35,7 @@ class TerminalGrepContentTest {
 
     private static final List<String> PATTERNS = Arrays.asList(
             "token", "tok", "en", "中文令牌", "令", "\uD83D\uDE00", "a.b", "token$", "^token", "[unclosed", "[未闭合",
-            "\uD83D", "[\uD83D", "\uFEFFtoken", "\r", "", "x", "TOKEN", "n\u0001");
+            "\uD83D", "[\uD83D", "\uFEFFtoken", "\r", "", "x", "TOKEN", "n\u0001", "\uFFFD", "two\n", "\uFFFD\ntoken");
 
     private static TerminalTalent talent(Path ws, boolean sandbox) {
         TerminalTalent t = new TerminalTalent(new MountManager(ws.toString()));
@@ -77,7 +78,7 @@ class TerminalGrepContentTest {
 
     private static String compare(TerminalTalent t, Path ws, String pattern, String include) throws Exception {
         String cwd = ws.toString();
-        String expected = TerminalSearchEquivalenceTest.outcome(() -> LegacySearch.grep(t, pattern, ".", include, cwd));
+        String expected = TerminalSearchEquivalenceTest.outcome(() -> LegacySearch.grepReplacing(t, pattern, ".", include, cwd));
         String actual = TerminalSearchEquivalenceTest.outcome(() -> t.grep(pattern, ".", include, cwd, null).getContent());
         assertEquals(expected, actual, "pattern=" + escape(pattern) + " include=" + include + " ws=" + ws);
         return actual;
@@ -103,25 +104,45 @@ class TerminalGrepContentTest {
         return sb.toString();
     }
 
-    /** 坏 UTF-8 字节：小文件整文件无输出；大文件（跨 8 KB 解码缓冲）输出坏字节前已解码的部分。 */
+    /**
+     * 坏 UTF-8 字节：替换成 U+FFFD 后继续搜，坏字节前后的命中都输出（原先小文件整文件无输出、
+     * 大文件只输出坏字节前已解码的部分）。
+     */
     @Test
-    void malformedUtf8KeepsLegacyPartialOutput() throws Exception {
+    void malformedUtf8IsReplacedAndSearchContinues() throws Exception {
         Path ws = tmp.resolve("ws");
         writeBytes(ws.resolve("small.txt"), u("token one\ntoken two\n"), b(0xFF), u("\ntoken three\n"));
         writeBytes(ws.resolve("large.txt"), repeat("token line\n", 30000), b(0xC3), u("\ntoken tail\n"));
         writeBytes(ws.resolve("edge8k.txt"), repeat("token z\n", 8191), b(0xE4, 0xB8), u("\ntoken after\n"));
         writeBytes(ws.resolve("surrogate.txt"), u("token a\n"), b(0xED, 0xA0, 0x80), u("\ntoken b\n"));
+        writeBytes(ws.resolve("inline.txt"), u("x "), b(0xD6, 0xD0), u(" token mid\n"));
+        writeBytes(ws.resolve("gbk.java"), "// 中文注释\nint token = 1;\n".getBytes(Charset.forName("GBK")));
         writeBytes(ws.resolve("ok.txt"), u("token ok\n"));
         compareAll(ws, null);
 
         TerminalTalent t = talent(ws, true);
         t.setMaxCharacterLimit(1 << 22);
         String out = compare(t, ws, "token", null);
-        // 场景确实落在“部分输出”：大文件坏字节前的命中有输出、坏字节后的没有；小文件没有任何输出
         assertTrue(out.contains("large.txt:1: token line"), out.substring(0, Math.min(200, out.length())));
-        assertFalse(out.contains("token tail"));
-        assertFalse(out.contains("small.txt"));
+        assertTrue(out.contains("large.txt:2729: token tail"), out.substring(Math.max(0, out.indexOf("large.txt:272"))));
+        assertTrue(out.contains("small.txt:1: token one"));
+        assertTrue(out.contains("small.txt:4: token three"));
+        assertTrue(out.contains("edge8k.txt:1025: token after"));
+        assertTrue(out.contains("surrogate.txt:3: token b"));
+        assertTrue(out.contains("inline.txt:1: x \uFFFD"), out);
+        assertTrue(out.contains("gbk.java:2: int token = 1;"));
         assertTrue(out.contains("ok.txt:1: token ok"));
+
+        // 确实是行为变化：原口径下这些命中都会丢
+        String legacy = LegacySearch.grep(t, "token", ".", null, ws.toString());
+        assertFalse(legacy.contains("token tail"));
+        assertFalse(legacy.contains("small.txt"));
+        assertFalse(legacy.contains("gbk.java"));
+
+        // 按 U+FFFD 搜：字节里没有 EF BF BD，但解码后有，不能被预筛跳过
+        String fffd = compare(t, ws, "\uFFFD", null);
+        assertTrue(fffd.contains("small.txt:3:"), fffd);
+        assertTrue(fffd.contains("gbk.java:1:"), fffd);
     }
 
     /** 换行：\n、\r\n、孤立 \r、末尾 \r、连续空行，行号必须一致。 */
@@ -236,7 +257,8 @@ class TerminalGrepContentTest {
         Path ws = tmp.resolve("ws");
         Path outside = tmp.resolve("outside");
         byte[] big = repeat("filler line\n", TerminalSupport.GREP_MAX_FILE_BYTES + 100);
-        writeBytes(outside.resolve("big.txt"), big, u("\ntoken at end\n"));
+        // 尾部前夹一个坏字节：流式回退路径同样按替换模式解码，坏字节之后的命中仍要输出
+        writeBytes(outside.resolve("big.txt"), big, b(0xFF), u("\ntoken at end\n"));
         writeBytes(ws.resolve("big-in-ws.txt"), big, u("\ntoken at end\n"));
         boolean linked;
         try {
@@ -250,6 +272,7 @@ class TerminalGrepContentTest {
         assertFalse(out.contains("big-in-ws.txt"), out);
         if (linked) {
             assertTrue(out.contains("link-big.txt:"), out);
+            assertTrue(out.contains(": token at end"), out);
         }
     }
 
@@ -377,6 +400,9 @@ class TerminalGrepContentTest {
         assertArrayEquals(u("[unclosed"), TerminalSupport.grepLiteralBytes("[unclosed", false, utf8));
         assertNull(TerminalSupport.grepLiteralBytes("", true, utf8));
         assertNull(TerminalSupport.grepLiteralBytes("\uD83D", true, utf8));
+        // 含 U+FFFD：解码时坏字节会变成它，字节里未必有对应编码
+        assertNull(TerminalSupport.grepLiteralBytes("\uFFFD", true, utf8));
+        assertNull(TerminalSupport.grepLiteralBytes("a\uFFFDb", false, utf8));
         assertNull(TerminalSupport.grepLiteralBytes("token", true, StandardCharsets.ISO_8859_1));
         assertNotNull(TerminalSupport.grepLiteralBytes("\uD83D\uDE00", true, utf8));
     }

@@ -1,0 +1,1 @@
+Precheck failed (operation #1): new_str contains characters that cannot be saved as UTF-8. The file was not modified.

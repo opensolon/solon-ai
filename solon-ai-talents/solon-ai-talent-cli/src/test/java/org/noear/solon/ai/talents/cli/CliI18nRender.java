@@ -14,6 +14,7 @@ import org.noear.solon.ai.sandbox.SandboxManager;
 import org.noear.solon.ai.talents.cli.i18n.CliI18n;
 
 import java.lang.reflect.Method;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -299,6 +300,9 @@ final class CliI18nRender {
         Files.write(work.resolve("dup.txt"), "x\nx\n".getBytes(StandardCharsets.UTF_8));
         Files.write(work.resolve("empty.txt"), new byte[0]);
         Files.write(work.resolve("bin.dat"), new byte[]{0, 1, 2, 3, 0, 0, 5});
+        // 非 UTF-8 文件：GBK 中文；带 BOM 的 UTF-16 小端且末尾多一个孤字节（按 UTF-16 无法原样写回）
+        Files.write(work.resolve("gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
+        Files.write(work.resolve("u16.txt"), new byte[]{(byte) 0xFF, (byte) 0xFE, 'a', 0, 'b', 0, 0x41});
         StringBuilder longLine = new StringBuilder();
         for (int i = 0; i < 400; i++) {
             longLine.append("0123456789");
@@ -486,6 +490,14 @@ final class CliI18nRender {
         if (on(part, "file")) out.put("terminal_edit_not_unique" + suffix, run(root, tag, () -> edit(base, tag, "dup.txt", op("x", "y", null, null))));
         if (on(part, "file")) out.put("terminal_edit_apply_failed" + suffix, run(root, tag, () -> edit(base, tag, "a.txt",
                 op("two", "2", null, null), op("two\nthree", "x", null, null))));
+        if (on(part, "file")) out.put("terminal_read_raw_bytes" + suffix, run(root, tag, () -> read(base, tag, "gbk.txt", null, null)));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes_mismatch" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("// 中文", "// x", 1, null))));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes_all_missing" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("中文", "x", null, true))));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("x = 1", "x = 2", null, null))));
+        if (on(part, "file")) out.put("terminal_edit_unencodable" + suffix, run(root, tag, () -> edit(base, tag, "a.txt", op("one", "\uD800", null, null))));
+        TerminalTalent utf16 = terminal(work, ShellMode.UNIX_SHELL, "bash");
+        utf16.fileCharset = StandardCharsets.UTF_16;
+        if (on(part, "file")) out.put("terminal_edit_not_preservable" + suffix, run(root, tag, () -> edit(utf16, tag, "u16.txt", op("ab", "cd", null, null))));
 
         if (on(part, "file")) out.put("terminal_grep_none" + suffix, run(root, tag, () -> grep(base, tag, "zzz-none", "g")));
         if (on(part, "file")) out.put("terminal_grep_sep" + suffix, run(root, tag, () -> grep(base, tag, "x", "a;b")));

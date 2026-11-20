@@ -6,6 +6,7 @@ import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,6 +29,10 @@ import java.util.regex.PatternSyntaxException;
  * 优化前 glob / grep 本地路径分支的逐字副本（只去掉了虚拟来源分支与路径存在性校验，这两段没有改动），
  * 用作差分测试的参照实现与基准对照。每个条目逐条调用 {@link TerminalSupport#isReadDenied}，先检查再匹配。
  * 文本文件判定（{@link #isNotTextFile}）也是优化前的逐字副本：grep 读文件方式改造后它不再依赖产品代码。
+ *
+ * <p>grep 的解码口径后来有意调整过：原先按报错模式读，遇到坏字节就停，只输出之前的命中；现在按替换模式读，
+ * 坏字节变成 U+FFFD 后继续搜。{@link #grep} 保留原口径（用于证明行为确实变了），{@link #grepReplacing}
+ * 只把读取器换成替换模式，其余逐字不变，是现实现的对照基准。</p>
  */
 final class LegacySearch {
     private LegacySearch() {
@@ -98,6 +103,14 @@ final class LegacySearch {
     }
 
     static String grep(TerminalTalent talent, String pattern, String path, String include, String cwd) throws IOException {
+        return grep(talent, pattern, path, include, cwd, false);
+    }
+
+    static String grepReplacing(TerminalTalent talent, String pattern, String path, String include, String cwd) throws IOException {
+        return grep(talent, pattern, path, include, cwd, true);
+    }
+
+    private static String grep(TerminalTalent talent, String pattern, String path, String include, String cwd, boolean replacing) throws IOException {
         TerminalSupport support = support(talent);
         boolean sandboxEnabled = talent.isSandboxEnabled();
         Locale locale = AiI18n.toLocale(null);
@@ -141,7 +154,9 @@ final class LegacySearch {
                     return FileVisitResult.CONTINUE;
                 }
 
-                try (BufferedReader reader = Files.newBufferedReader(file, talent.fileCharset)) {
+                try (BufferedReader reader = replacing
+                        ? new BufferedReader(new InputStreamReader(Files.newInputStream(file), talent.fileCharset))
+                        : Files.newBufferedReader(file, talent.fileCharset)) {
                     int lineNum = 0;
                     String line;
                     while ((line = reader.readLine()) != null) {

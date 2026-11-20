@@ -45,7 +45,7 @@ class TerminalSearchBenchmarkTest {
             for (String[] grepCase : GREP_CASES) {
                 String pattern = grepCase[0];
                 String include = grepCase[1];
-                String legacy = LegacySearch.grep(t, pattern, ".", include, cwd);
+                String legacy = LegacySearch.grepReplacing(t, pattern, ".", include, cwd);
                 assertEquals(legacy, t.grep(pattern, ".", include, cwd, null).getContent(), pattern + " / " + include);
                 long a = median(() -> LegacySearch.grep(t, pattern, ".", include, cwd));
                 long b = median(() -> t.grep(pattern, ".", include, cwd, null).getContent());

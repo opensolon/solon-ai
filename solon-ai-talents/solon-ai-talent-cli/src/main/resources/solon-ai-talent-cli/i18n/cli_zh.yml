@@ -225,6 +225,12 @@ terminal.edit.apply_failed: |-
   执行失败（操作 {op}）: {error}。可能是由于前面的修改破坏了此处的匹配上下文，请尝试分多次调用 edit。
 terminal.edit.ok: |-
   文件 {path} 成功完成 {count} 处修改。
+terminal.edit.raw_bytes_hint: |-
+  提示：文件中有无法按 {charset} 解码的字节（read 和 grep 显示为 �，文件可能是 GBK 等其他编码）。edit 会原样保留这些字节，但 old_str 无法匹配它们：请只替换不含 � 的文本，不要跨过这些位置。
+terminal.edit.unencodable: |-
+  预检查失败（操作 {op}）: new_str 中有无法按 {charset} 保存的字符。文件未修改。
+terminal.edit.not_preservable: |-
+  错误：文件中有无法按 {charset} 解码的字节，且无法保证写回时原样保留，已取消编辑，文件未修改。
 terminal.vedit.empty_old: |-
   预检查失败（操作 {op}): old_str 不能为空。
 terminal.vedit.mismatch: |-

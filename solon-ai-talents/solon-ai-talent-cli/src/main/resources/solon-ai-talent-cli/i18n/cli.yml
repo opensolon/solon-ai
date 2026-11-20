@@ -226,6 +226,12 @@ terminal.edit.apply_failed: |-
   Execution failed (operation {op}): {error}. An earlier edit may have broken the matching context here; try calling edit several times instead.
 terminal.edit.ok: |-
   File {path}: {count} edit(s) applied.
+terminal.edit.raw_bytes_hint: |-
+  Hint: the file contains bytes that cannot be decoded as {charset} (read and grep show them as �; the file may use another encoding such as GBK). edit keeps these bytes unchanged, but old_str cannot match them: replace only text without �, and do not span these positions.
+terminal.edit.unencodable: |-
+  Precheck failed (operation {op}): new_str contains characters that cannot be saved as {charset}. The file was not modified.
+terminal.edit.not_preservable: |-
+  Error: the file contains bytes that cannot be decoded as {charset}, and they cannot be guaranteed to be written back unchanged; the edit was cancelled and the file was not modified.
 terminal.vedit.empty_old: |-
   Precheck failed (operation {op}): old_str must not be empty.
 terminal.vedit.mismatch: |-

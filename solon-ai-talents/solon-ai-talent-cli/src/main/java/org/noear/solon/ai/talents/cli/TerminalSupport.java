@@ -26,10 +26,18 @@ import org.noear.solon.ai.talents.cli.i18n.CliI18n;
 import org.noear.solon.ai.talents.cli.i18n.CliI18nKeys;
 import org.noear.solon.core.util.Assert;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.File;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -1753,6 +1761,134 @@ public class TerminalSupport {
         return hasUtf8Bom(content) ? content.substring(1) : content;
     }
 
+    // ---- edit 的保字节编解码 ----
+    //
+    // 文件里有按字符集解不了的字节（GBK 等其他编码的文件、混入的零星坏字节）时，edit 不能按替换模式解码后整体写回：
+    // 那样每个坏字节都会变成 U+FFFD 的编码（EF BF BD），用户没要求改的内容被无声改坏且无法恢复。
+    // 这里改为：能解码的部分照常解码；解不了的字节逐个映射为孤立低代理 U+DC00+b（同 Python 的 surrogateescape），
+    // 编辑只发生在文本上，写回时再把它们还原成原字节，未编辑的部分逐字节不变。
+    // 合法解码不会产生孤立低代理（UTF-8 解码器把编码过的代理视为非法；代理对的低半部分前面总有高代理），所以不会混淆。
+
+    /** 原字节映射区的起点：字节 b 映射为 {@code (char) (RAW_BYTE_BASE + b)}。 */
+    private static final char RAW_BYTE_BASE = '\uDC00';
+
+    /** 位置 i 是否为原字节映射字符（U+DC00..U+DCFF，且前面不是高代理）。 */
+    private static boolean isRawByteAt(CharSequence text, int i) {
+        char c = text.charAt(i);
+        return c >= RAW_BYTE_BASE && c <= RAW_BYTE_BASE + 0xFF
+                && (i == 0 || !Character.isHighSurrogate(text.charAt(i - 1)));
+    }
+
+    /**
+     * 保字节解码：能按字符集解码的部分照常解码，解不了的字节逐个映射为 U+DC00+b。
+     * 内容全部合法时，结果与 {@code new String(bytes, charset)} 相同。
+     */
+    static String decodeKeepingRawBytes(byte[] bytes, Charset charset) {
+        CharsetDecoder decoder = charset.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        ByteBuffer in = ByteBuffer.wrap(bytes);
+        CharBuffer out = CharBuffer.allocate(Math.max(16, Math.min(bytes.length + 16, 8192)));
+        StringBuilder sb = new StringBuilder(bytes.length);
+        while (true) {
+            CoderResult cr = decoder.decode(in, out, true);
+            if (cr.isOverflow()) {
+                drain(out, sb);
+                continue;
+            }
+            if (cr.isError()) {
+                drain(out, sb);
+                for (int i = 0; i < cr.length(); i++) {
+                    sb.append((char) (RAW_BYTE_BASE + (in.get() & 0xFF)));
+                }
+                continue;
+            }
+            break; // 下溢且已到输入末尾：解码完成
+        }
+        while (decoder.flush(out).isOverflow()) {
+            drain(out, sb);
+        }
+        drain(out, sb);
+        return sb.toString();
+    }
+
+    private static void drain(CharBuffer out, StringBuilder sb) {
+        out.flip();
+        sb.append(out);
+        out.clear();
+    }
+
+    /** 文本中是否含原字节映射字符（即原文件有解不了的字节）。 */
+    static boolean hasRawBytes(CharSequence text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (isRawByteAt(text, i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 保字节编码：原字节映射字符还原为原字节，其余按字符集严格编码。
+     *
+     * @throws CharacterCodingException 有字符无法用该字符集表示
+     */
+    static byte[] encodeKeepingRawBytes(String text, Charset charset) throws CharacterCodingException {
+        CharsetEncoder encoder = charset.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        ByteArrayOutputStream out = new ByteArrayOutputStream(text.length() + 16);
+        int runStart = 0;
+        for (int i = 0; i <= text.length(); i++) {
+            boolean raw = i < text.length() && isRawByteAt(text, i);
+            if (i == text.length() || raw) {
+                if (i > runStart) {
+                    ByteBuffer bb = encoder.encode(CharBuffer.wrap(text, runStart, i));
+                    out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining());
+                }
+                if (raw) {
+                    out.write(text.charAt(i) - RAW_BYTE_BASE);
+                }
+                runStart = i + 1;
+            }
+        }
+        return out.toByteArray();
+    }
+
+    /**
+     * 含原字节映射字符的文本能否原样写回（编码结果与原字节逐字节相同）。
+     * UTF-8 总是可以；个别字符集（如带 BOM 的 UTF-16、有状态的编码）可能不行，这时不能编辑。
+     */
+    static boolean writesBackUnchanged(String text, byte[] original, Charset charset) {
+        try {
+            return Arrays.equals(encodeKeepingRawBytes(text, charset), original);
+        } catch (CharacterCodingException e) {
+            return false;
+        }
+    }
+
+    /** 展示用：孤立代理（含原字节映射字符）一律换成 U+FFFD，避免把它们输出给模型。 */
+    static String displayRawBytes(String text) {
+        if (text == null) {
+            return null;
+        }
+        StringBuilder sb = null;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean lone = Character.isHighSurrogate(c)
+                    ? i + 1 >= text.length() || !Character.isLowSurrogate(text.charAt(i + 1))
+                    : Character.isLowSurrogate(c) && (i == 0 || !Character.isHighSurrogate(text.charAt(i - 1)));
+            if (lone && sb == null) {
+                sb = new StringBuilder(text.length());
+                sb.append(text, 0, i);
+            }
+            if (sb != null) {
+                sb.append(lone ? '\uFFFD' : c);
+            }
+        }
+        return sb == null ? text : sb.toString();
+    }
+
     String getEnvPlaceholder(String envKey) {
         if (this.shellMode == ShellMode.CMD) {
             return "%" + envKey + "%";
@@ -2088,9 +2224,13 @@ public class TerminalSupport {
      * （按正则查找等价于按字面查找）；并且文件按 UTF-8 解码。此时某一行能命中，说明解码出的文本包含该模式，
      * 文件字节里也就一定包含它的 UTF-8 编码；反过来字节里没有，就一行也命中不了，可以整文件跳过。
      * 这只是必要条件：字节里有，仍按原方式逐行匹配。</p>
+     *
+     * <p>grep 按替换模式解码（坏字节变成 U+FFFD 后继续），每处坏字节至少产生一个 U+FFFD，
+     * 所以不含 U+FFFD 的命中片段只由合法字节序列解码而来，上面的推理成立；模式含 U+FFFD 时它可能来自坏字节，不预筛。</p>
      */
     static byte[] grepLiteralBytes(String pattern, boolean compiledAsRegex, Charset charset) {
-        if (pattern == null || pattern.isEmpty() || !StandardCharsets.UTF_8.equals(charset)) {
+        if (pattern == null || pattern.isEmpty() || !StandardCharsets.UTF_8.equals(charset)
+                || pattern.indexOf('\uFFFD') >= 0) {
             return null;
         }
         if (compiledAsRegex) {

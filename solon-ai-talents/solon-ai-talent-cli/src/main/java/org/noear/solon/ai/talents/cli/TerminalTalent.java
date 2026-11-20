@@ -1388,7 +1388,10 @@ public class TerminalTalent extends AbsTalent {
         boolean hasData = false;
         boolean hasMore = false;
 
-        try (Stream<String> stream = Files.lines(target, fileCharset)) {
+        // 按替换模式解码：解不了的字节（GBK 等其他编码的文件、混入的零星坏字节）显示为 U+FFFD，其余内容照常输出，
+        // 与 grep、虚拟来源的 read 一致。按报错模式读时，这类文件会整个读不出来，只给模型一个解码异常
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(Files.newInputStream(target), fileCharset));
+             Stream<String> stream = reader.lines()) {
             Iterator<String> iterator = stream.skip(startLine0).iterator();
 
             long count = 0;
@@ -1518,6 +1521,28 @@ public class TerminalTalent extends AbsTalent {
         return "#" + (index + 1);
     }
 
+    /** new_str 能否按文件字符集保存（孤立代理、字符集表示不了的字符都不行，原先会被无声写成 '?'）。 */
+    private boolean canSave(String text) {
+        return fileCharset.newEncoder().canEncode(text);
+    }
+
+    /** 文件含解不了的字节时，追加在匹配失败提示后的说明（否则为空串）。 */
+    private String rawBytesHint(Locale locale, boolean keepsRawBytes) {
+        return keepsRawBytes
+                ? "\n" + CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_RAW_BYTES_HINT, "charset", fileCharset.name())
+                : "";
+    }
+
+    /**
+     * edit 写回的字节：文件内容全部合法时与原实现相同；含解不了的字节时把它们原样写回。
+     */
+    private byte[] encodeForEdit(String text, boolean keepsRawBytes) throws IOException {
+        if (!keepsRawBytes) {
+            return text.getBytes(fileCharset);
+        }
+        return TerminalSupport.encodeKeepingRawBytes(text, fileCharset);
+    }
+
     private ToolResult editInternal(String filePath, List<EditOp> edits, String __cwd, Locale locale) throws IOException {
         Path workPath = getWorkPath(__cwd);
         ResolvedResource virtual = resolveVirtualResource(filePath, true);
@@ -1530,11 +1555,18 @@ public class TerminalTalent extends AbsTalent {
             return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_EDIT_MISSING));
         }
 
-        String rawContent = new String(Files.readAllBytes(target), fileCharset);
+        byte[] rawBytes = Files.readAllBytes(target);
+        // 解不了的字节原样保留到写回（见 TerminalSupport#decodeKeepingRawBytes），不再被改成 U+FFFD
+        String rawContent = TerminalSupport.decodeKeepingRawBytes(rawBytes, fileCharset);
+        boolean keepsRawBytes = TerminalSupport.hasRawBytes(rawContent);
+        if (keepsRawBytes && !TerminalSupport.writesBackUnchanged(rawContent, rawBytes, fileCharset)) {
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_NOT_PRESERVABLE, "charset", fileCharset.name()));
+        }
         // BOM 与编辑逻辑解耦：匹配、行号、缩进推断全部在无 BOM 的正文上进行（否则首行匹配必失败），
         // 写回时再按原样补回，避免 edit 顺手改变文件的字节形态
         boolean hadBom = TerminalSupport.hasUtf8Bom(rawContent);
         String originalContent = TerminalSupport.stripUtf8Bom(rawContent);
+        String rawBytesHint = rawBytesHint(locale, keepsRawBytes);
 
         // 在尝试应用任何修改前，先校验所有 oldStr 的有效性，确保原子性
         for (int i = 0; i < edits.size(); i++) {
@@ -1549,11 +1581,15 @@ public class TerminalTalent extends AbsTalent {
                 edit.newStr = "";
             }
 
+            if (!canSave(edit.newStr)) {
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_UNENCODABLE, "op", opNo(i), "charset", fileCharset.name()));
+            }
+
             String finalOld = support.normalizeNewlines(originalContent, edit.oldStr);
 
             if (Boolean.TRUE.equals(edit.replaceAll)) {
                 if (!originalContent.contains(finalOld)) {
-                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_ALL_MISSING, "op", opNo(i)));
+                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_ALL_MISSING, "op", opNo(i)) + rawBytesHint);
                 }
                 continue;
             }
@@ -1570,7 +1606,8 @@ public class TerminalTalent extends AbsTalent {
                 int hintLine = (edit.oldStrStartLine == null) ? 0 : edit.oldStrStartLine;
                 String diag = support.findLooseMatchDiagnostics(originalContent, finalOld, hintLine, locale);
                 if (diag != null) {
-                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_MISMATCH, "op", opNo(i), "diag", diag));
+                    return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_MISMATCH, "op", opNo(i),
+                            "diag", TerminalSupport.displayRawBytes(diag)) + rawBytesHint);
                 }
                 // diag 返回 null 表示宽松匹配成功（边缘情况），允许通过预检查
                 continue;
@@ -1589,12 +1626,12 @@ public class TerminalTalent extends AbsTalent {
             try {
                 workingContent = support.applyEditLogic(workingContent, edit.oldStr, edit.newStr, Boolean.TRUE.equals(edit.replaceAll), edit.oldStrStartLine);
             } catch (IllegalArgumentException e) {
-                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_APPLY_FAILED, "op", opNo(editIndex), "error", CliI18n.messageOf(e, locale)));
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_APPLY_FAILED, "op", opNo(editIndex), "error", CliI18n.messageOf(e, locale)) + rawBytesHint);
             }
         }
 
-        // 原子性保存（原文件带 BOM 则保持带 BOM）
-        Files.write(target, (hadBom ? TerminalSupport.UTF8_BOM + workingContent : workingContent).getBytes(fileCharset));
+        // 原子性保存（原文件带 BOM 则保持带 BOM；解不了的字节原样写回）
+        Files.write(target, encodeForEdit(hadBom ? TerminalSupport.UTF8_BOM + workingContent : workingContent, keepsRawBytes));
 
         return ToolResult.success(withDiagnostics(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", filePath, "count", edits.size()), target));
     }
@@ -1704,7 +1741,7 @@ public class TerminalTalent extends AbsTalent {
                         }
                     }
                 } catch (IOException | UncheckedIOException ignored) {
-                    // 仅忽略读取异常（如权限、损坏的编码等）
+                    // 仅忽略读取异常（如权限）；坏字节按替换模式解码，不会走到这里
                 }
                 return FileVisitResult.CONTINUE;
             }
@@ -1728,9 +1765,10 @@ public class TerminalTalent extends AbsTalent {
      * 打开 grep 要逐行扫描的读取器；返回 null 表示跳过该文件（疑似二进制，或字面量预筛未命中）。
      *
      * <p>只打开一次文件：读入全部字节后，在内存里做二进制探测（取开头 {@link TerminalSupport#BINARY_SNIFF_BYTES} 字节，
-     * 与 {@link TerminalSupport#isNotTextFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。读取器的构造与
-     * {@link Files#newBufferedReader(Path, Charset)} 相同（报错模式的解码器套 {@link InputStreamReader}），
-     * 换行切分、解码出错时已输出的部分都与直接读文件一致。</p>
+     * 与 {@link TerminalSupport#isNotTextFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。</p>
+     *
+     * <p>按替换模式解码：解不了的字节变成 U+FFFD 后继续搜（与虚拟来源的 grep、read 一致）。报错模式会在第一个坏字节处停下，
+     * 其后的命中被悄悄丢掉，模型会把“没找到”当成确实没有。</p>
      *
      * <p>实际内容超过上限（指向大文件的符号链接，或遍历后文件变大）时不整体读入，按原方式探测后流式读取。</p>
      */
@@ -1740,7 +1778,7 @@ public class TerminalTalent extends AbsTalent {
             if (support.isLikelyBinaryFile(file)) {
                 return null;
             }
-            return Files.newBufferedReader(file, fileCharset);
+            return new BufferedReader(new InputStreamReader(Files.newInputStream(file), fileCharset));
         }
 
         if (TerminalSupport.isLikelyBinary(bytes, Math.min(bytes.length, TerminalSupport.BINARY_SNIFF_BYTES))) {
@@ -1751,7 +1789,7 @@ public class TerminalTalent extends AbsTalent {
             return null;
         }
 
-        return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset.newDecoder()));
+        return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(bytes), fileCharset));
     }
 
     /**
@@ -1944,23 +1982,33 @@ public class TerminalTalent extends AbsTalent {
         MountEntry entry = resource.getSource().stat(resource.getSourcePath());
         if (entry == null || entry.isDirectory()) return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_EDIT_MISSING));
         if (entry.getSize() > MAX_VIRTUAL_FILE_BYTES) return ToolResult.error(virtualFileTooLarge(locale));
-        String raw;
+        byte[] rawBytes;
         try (InputStream in = resource.getSource().openRead(resource.getSourcePath())) {
-            raw = new String(readVirtualBytes(in), fileCharset);
+            rawBytes = readVirtualBytes(in);
         } catch (VirtualFileTooLargeException e) {
             return ToolResult.error(virtualFileTooLarge(locale));
         }
+        // 与本地 edit 同一口径：解不了的字节原样写回
+        String raw = TerminalSupport.decodeKeepingRawBytes(rawBytes, fileCharset);
+        boolean keepsRawBytes = TerminalSupport.hasRawBytes(raw);
+        if (keepsRawBytes && !TerminalSupport.writesBackUnchanged(raw, rawBytes, fileCharset)) {
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_NOT_PRESERVABLE, "charset", fileCharset.name()));
+        }
+        String rawBytesHint = rawBytesHint(locale, keepsRawBytes);
         boolean bom = TerminalSupport.hasUtf8Bom(raw);
         String original = TerminalSupport.stripUtf8Bom(raw);
         for (int i = 0; i < edits.size(); i++) {
             EditOp edit = edits.get(i);
             if (edit.oldStr == null || edit.oldStr.isEmpty()) return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_EMPTY_OLD, "op", opNo(i)));
+            if (edit.newStr != null && !canSave(edit.newStr)) {
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_UNENCODABLE, "op", opNo(i), "charset", fileCharset.name()));
+            }
             String old = support.normalizeNewlines(original, edit.oldStr);
             if (!Boolean.TRUE.equals(edit.replaceAll) && original.indexOf(old) < 0) {
-                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_MISMATCH, "op", opNo(i)));
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_MISMATCH, "op", opNo(i)) + rawBytesHint);
             }
             if (Boolean.TRUE.equals(edit.replaceAll) && !original.contains(old)) {
-                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_ALL_MISSING, "op", opNo(i)));
+                return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_VEDIT_ALL_MISSING, "op", opNo(i)) + rawBytesHint);
             }
         }
         String updated = original;
@@ -1972,8 +2020,10 @@ public class TerminalTalent extends AbsTalent {
         WriteOptions options = entry.getVersion() == null
                 ? WriteOptions.replace()
                 : WriteOptions.builder().expectedVersion(entry.getVersion()).build();
+        // 先编码再打开写入：编码失败时不能留下一个被清空的文件
+        byte[] data = encodeForEdit(bom ? TerminalSupport.UTF8_BOM + updated : updated, keepsRawBytes);
         try (OutputStream out = resource.getSource().openWrite(resource.getSourcePath(), options)) {
-            out.write((bom ? TerminalSupport.UTF8_BOM + updated : updated).getBytes(fileCharset));
+            out.write(data);
         }
         return ToolResult.success(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_EDIT_OK, "path", resource.getLogicalPath(), "count", edits.size()));
     }

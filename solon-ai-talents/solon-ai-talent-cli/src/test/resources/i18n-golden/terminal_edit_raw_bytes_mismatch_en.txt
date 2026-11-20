@@ -1,0 +1,2 @@
+Precheck failed (operation #1): content mismatch — Line 1 does not match: expected "// 中文", the file has "// ����". Check whether old_str matches the file.
+Hint: the file contains bytes that cannot be decoded as UTF-8 (read and grep show them as �; the file may use another encoding such as GBK). edit keeps these bytes unchanged, but old_str cannot match them: replace only text without �, and do not span these positions.

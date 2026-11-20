@@ -207,7 +207,7 @@ class TerminalSearchEquivalenceTest {
                 for (String path : PATHS) {
                     for (String pattern : patterns) {
                         for (String include : includes) {
-                            String expected = outcome(() -> LegacySearch.grep(t, pattern, path, include, cwd));
+                            String expected = outcome(() -> LegacySearch.grepReplacing(t, pattern, path, include, cwd));
                             String actual = outcome(() -> t.grep(pattern, path, include, cwd, null).getContent());
                             assertEquals(expected, actual, "grep pattern=" + pattern + " include=" + include + " path=" + path
                                     + " cache=" + c[0] + " sandbox=" + c[1] + " state=" + c[2]);
@@ -226,7 +226,7 @@ class TerminalSearchEquivalenceTest {
         TerminalTalent t = talent(env, CacheMode.HOME_ABSENT, true, false);
         t.setMaxCharacterLimit(300);
         String cwd = env.ws.toString();
-        String expected = LegacySearch.grep(t, "token", ".", null, cwd);
+        String expected = LegacySearch.grepReplacing(t, "token", ".", null, cwd);
         assertEquals(expected, t.grep("token", ".", null, cwd, null).getContent());
     }
 
