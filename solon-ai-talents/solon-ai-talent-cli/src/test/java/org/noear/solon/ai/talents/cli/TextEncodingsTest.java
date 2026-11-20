@@ -2,6 +2,7 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -192,6 +193,61 @@ class TextEncodingsTest {
                 assertEquals(0, d.rawBytes());
             }
         }
+    }
+
+    /**
+     * 超大文件的整份流式判断与整份读入后判断结果相同：任意开头长度、任意分块大小（多字节字符、连续坏字节被块边界切断），
+     * 无 BOM / UTF-8 BOM / UTF-16 BOM、主编码不是 UTF-8 的情况都覆盖。
+     */
+    @Test
+    void detectWholeMatchesWholeDetect() throws Exception {
+        Random r = new Random(23);
+        byte[][] prefixes = {{}, {(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}, {(byte) 0xFF, (byte) 0xFE}, {(byte) 0xFE, (byte) 0xFF}};
+        for (int round = 0; round < 30000; round++) {
+            byte[] prefix = prefixes[r.nextInt(prefixes.length)];
+            byte[] data = cat(prefix, randomBytes(r, r.nextInt(120)));
+            Charset primary = prefix.length == 0 && r.nextInt(5) == 0 ? GBK : UTF8;
+            int headLen = Math.min(data.length, 4 + r.nextInt(Math.max(1, data.length)));
+            byte[] head = Arrays.copyOf(data, headLen);
+            int chunk = 8 + r.nextInt(24);
+            TextEncodings.Decoded whole = TextEncodings.detectWhole(head,
+                    new ByteArrayInputStream(data, headLen, data.length - headLen), primary, chunk);
+            TextEncodings.Decoded expected = TextEncodings.detect(data, data.length, false, primary);
+            String msg = Arrays.toString(data) + " head=" + headLen + " chunk=" + chunk + " " + primary;
+            assertEquals(expected.source(), whole.source(), msg);
+            assertEquals(expected.rawBytes(), whole.rawBytes(), msg);
+            assertEquals(expected.charset(), whole.charset(), msg);
+            assertEquals(expected.bomLength(), whole.bomLength(), msg);
+            assertTrue(whole.sampled(), msg);
+        }
+    }
+
+    /** 连续坏字节被块边界切开仍算一段：4 个中文 + 1 段坏字节是“大体是 UTF-8”，算成两段就会变成“不是 UTF-8”。 */
+    @Test
+    void detectWholeKeepsBadRunAcrossChunks() throws Exception {
+        byte[] data = cat("一二三四".getBytes(UTF8), new byte[]{(byte) 0xFF, (byte) 0xFF});
+        assertEquals(TextEncodings.Source.MIXED, detect(data).source());
+        TextEncodings.Decoded whole = TextEncodings.detectWhole(data, new ByteArrayInputStream(new byte[0]), UTF8, 13);
+        assertEquals(TextEncodings.Source.MIXED, whole.source());
+        assertEquals(2, whole.rawBytes());
+    }
+
+    /** 坏字节只在抽样范围之后：抽样判断看不到，整份流式判断能看到。 */
+    @Test
+    void detectWholeSeesBytesBeyondSample() throws Exception {
+        byte[] ascii = new byte[TextEncodings.SAMPLE_BYTES + 100];
+        Arrays.fill(ascii, (byte) 'a');
+        for (int i = 79; i < ascii.length; i += 80) {
+            ascii[i] = '\n';
+        }
+        byte[] data = cat(ascii, "// 中文\n".getBytes(GBK));
+        byte[] head = Arrays.copyOf(data, TextEncodings.SAMPLE_BYTES);
+        assertEquals(0, TextEncodings.detect(head, head.length, true, UTF8).rawBytes());
+        TextEncodings.Decoded whole = TextEncodings.detectWhole(head,
+                new ByteArrayInputStream(data, head.length, data.length - head.length), UTF8);
+        assertEquals(TextEncodings.Source.UNKNOWN, whole.source());
+        assertEquals(4, whole.rawBytes());
+        assertFalse(whole.allowsNonAscii());
     }
 
     @Test

@@ -1818,16 +1818,6 @@ public class TerminalSupport {
         out.clear();
     }
 
-    /** 文本中是否含原字节映射字符（即原文件有解不了的字节）。 */
-    static boolean hasRawBytes(CharSequence text) {
-        for (int i = 0; i < text.length(); i++) {
-            if (isRawByteAt(text, i)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /** 文本中原字节映射字符的个数（即原文件里解不了的字节数）。 */
     static int countRawBytes(CharSequence text) {
         int n = 0;
@@ -2112,23 +2102,18 @@ public class TerminalSupport {
         return false;
     }
 
-    boolean isNotTextFile(Path file) {
-        // 1. 基于已知二进制后缀的快速过滤
-        if (isNotTextFileByName(file)) {
-            return true;
-        }
-
-        // 2. 字节级内容兜底：识别无后缀（或后缀伪装）的二进制文件，
-        //    如编译产物、core dump、无扩展名的 ELF 等。读取文件首部采样探测，
-        //    避免后缀白名单漏判后将二进制按文本强行解码输出乱码。
-        return isLikelyBinaryFile(file);
-    }
-
     /**
-     * 按文件名后缀判定是否为已知二进制文件（{@link #isNotTextFile} 的第一步，不访问文件系统）。
+     * 按文件名后缀判定是否为已知二进制文件（不访问文件系统）。
+     *
+     * <p>无后缀（或后缀伪装）的二进制文件再由 {@link #isLikelyBinary} 按开头字节探测。</p>
      */
     boolean isNotTextFileByName(Path file) {
-        String fileName = file.getFileName().toString().toLowerCase();
+        return isNotTextFileByName(file.getFileName().toString());
+    }
+
+    /** 同 {@link #isNotTextFileByName(Path)}，直接给文件名（虚拟来源的条目名不一定能转成本机 Path）。 */
+    boolean isNotTextFileByName(String name) {
+        String fileName = name.toLowerCase();
 
         return fileName.endsWith(".class") || fileName.endsWith(".jar")  ||
                 fileName.endsWith(".war")   || fileName.endsWith(".exe")   ||
@@ -2236,17 +2221,22 @@ public class TerminalSupport {
         }
     }
 
-    /** 读取文件开头最多 {@code limit} 字节（超大文件的编码抽样）。 */
+    /** 读取文件开头最多 {@code limit} 字节（二进制探测、超大文件的编码抽样）。返回长度不足 {@code limit} 说明已读到文件末尾。 */
     static byte[] readHead(Path file, int limit) throws IOException {
         try (InputStream in = Files.newInputStream(file)) {
-            byte[] buf = new byte[limit];
-            int n = 0;
-            int r;
-            while (n < limit && (r = in.read(buf, n, limit - n)) > 0) {
-                n += r;
-            }
-            return n == limit ? buf : Arrays.copyOf(buf, n);
+            return readHead(in, limit);
         }
+    }
+
+    /** 从流里读最多 {@code limit} 字节（不关闭流，调用方可接着读其余部分）。 */
+    static byte[] readHead(InputStream in, int limit) throws IOException {
+        byte[] buf = new byte[limit];
+        int n = 0;
+        int r;
+        while (n < limit && (r = in.read(buf, n, limit - n)) > 0) {
+            n += r;
+        }
+        return n == limit ? buf : Arrays.copyOf(buf, n);
     }
 
     /** 正则元字符：模式里不含这些字符时，按正则查找与按字面查找等价。 */

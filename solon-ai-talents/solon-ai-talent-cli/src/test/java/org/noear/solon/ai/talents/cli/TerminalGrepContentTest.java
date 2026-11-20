@@ -473,7 +473,6 @@ class TerminalGrepContentTest {
         int binary = 0;
         for (Path f : files) {
             boolean legacy = LegacySearch.isNotTextFile(f);
-            assertEquals(legacy, support.isNotTextFile(f), f.toString());
             byte[] bytes = Files.readAllBytes(f);
             boolean split = support.isNotTextFileByName(f)
                     || TerminalSupport.isLikelyBinary(bytes, Math.min(bytes.length, TerminalSupport.BINARY_SNIFF_BYTES));

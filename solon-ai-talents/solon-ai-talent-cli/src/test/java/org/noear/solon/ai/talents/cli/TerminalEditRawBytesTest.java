@@ -279,7 +279,7 @@ class TerminalEditRawBytesTest {
             String text = TerminalSupport.decodeKeepingRawBytes(data, StandardCharsets.UTF_8);
             assertArrayEquals(data, TerminalSupport.encodeKeepingRawBytes(text, StandardCharsets.UTF_8), Arrays.toString(data));
             assertTrue(TerminalSupport.writesBackUnchanged(text, data, StandardCharsets.UTF_8));
-            if (!TerminalSupport.hasRawBytes(text)) {
+            if (TerminalSupport.countRawBytes(text) == 0) {
                 assertEquals(new String(data, StandardCharsets.UTF_8), text);
             }
             // 展示版：原字节位置对应 U+FFFD，无孤立代理
@@ -292,7 +292,7 @@ class TerminalEditRawBytesTest {
         assertArrayEquals(big, TerminalSupport.encodeKeepingRawBytes(text, StandardCharsets.UTF_8));
         // 代理对的低半部分落在映射区（U+1F400 = D83D DC00）也不会被误认
         String rat = new String(u("\uD83D\uDC00"), StandardCharsets.UTF_8);
-        assertFalse(TerminalSupport.hasRawBytes(rat));
+        assertEquals(0, TerminalSupport.countRawBytes(rat));
         assertArrayEquals(u("\uD83D\uDC00"), TerminalSupport.encodeKeepingRawBytes(rat, StandardCharsets.UTF_8));
     }
 

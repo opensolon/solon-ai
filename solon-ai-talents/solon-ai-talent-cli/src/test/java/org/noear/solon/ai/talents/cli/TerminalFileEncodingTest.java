@@ -369,6 +369,77 @@ class TerminalFileEncodingTest {
         assertTrue(r.getContent().startsWith("Error: the existing file is not UTF-8 (bytes that cannot be decoded as UTF-8: "), r.getContent());
     }
 
+    /** 超过 10 MB 的文件：坏字节只在 1 MB 之后也要拦住（覆盖前扫完整份，不像 read 只抽样开头）。 */
+    @Test
+    void writeChecksWholeHugeFile() throws Exception {
+        Path ws = ws();
+        TerminalTalent t = talent(ws);
+        byte[] ascii = new byte[TerminalSupport.GREP_MAX_FILE_BYTES + 1000];
+        Arrays.fill(ascii, (byte) 'a');
+        for (int i = 79; i < ascii.length; i += 80) {
+            ascii[i] = '\n';
+        }
+
+        // 尾部是 GBK：含 � 的内容、非 ASCII 内容都拒绝，文件不动；纯 ASCII 可以
+        Path g = ws.resolve("huge.txt");
+        byte[] gbk = cat(ascii, "// 中文注释\n".getBytes(GBK));
+        Files.write(g, gbk);
+        ToolResult r = t.write("huge.txt", "// \uFFFD\uFFFD\n", ws.toString(), null);
+        // 整份统计（“注”的 GBK 编码 D7 A2 恰好是合法 UTF-8，其余 6 个字节解不了）；只看开头 1 MB 会是 0 个
+        assertTrue(r.isError() && r.getContent().contains("原文件有 6 个无法解码的字节"), r.getContent());
+        r = t.write("huge.txt", "// 中\n", ws.toString(), null);
+        assertTrue(r.isError() && r.getContent().contains("原文件不是 UTF-8"), r.getContent());
+        assertArrayEquals(gbk, Files.readAllBytes(g));
+        assertFalse(t.write("huge.txt", "ascii\n", ws.toString(), null).isError());
+        assertArrayEquals(u("ascii\n"), Files.readAllBytes(g));
+
+        // 尾部是合法 UTF-8 中文：照常写中文
+        Path ok = ws.resolve("huge-ok.txt");
+        Files.write(ok, cat(ascii, u("// 中文\n")));
+        assertEquals("文件成功写入: huge-ok.txt", t.write("huge-ok.txt", "中文\n", ws.toString(), null).getContent());
+
+        // UTF-16LE BOM，尾部有孤立代理：含 � 的内容拒绝；其余沿用 BOM
+        Path u16 = ws.resolve("huge16.txt");
+        byte[] body = new String(ascii, StandardCharsets.US_ASCII).getBytes(StandardCharsets.UTF_16LE);
+        byte[] u16Bytes = cat(BOM16LE, body, new byte[]{0x3D, (byte) 0xD8}, "\n".getBytes(StandardCharsets.UTF_16LE));
+        Files.write(u16, u16Bytes);
+        assertTrue(t.write("huge16.txt", "\uFFFD\n", ws.toString(), null).isError());
+        assertArrayEquals(u16Bytes, Files.readAllBytes(u16));
+        assertFalse(t.write("huge16.txt", "中\n", ws.toString(), null).isError());
+        assertArrayEquals(cat(BOM16LE, "中\n".getBytes(StandardCharsets.UTF_16LE)), Files.readAllBytes(u16));
+
+        // 没有已知后缀的二进制大文件：开头探测到就不保护
+        Path bin = ws.resolve("huge.raw");
+        byte[] binBytes = gbk.clone();
+        binBytes[0] = 0;
+        Files.write(bin, binBytes);
+        assertFalse(t.write("huge.raw", "文本\n", ws.toString(), null).isError());
+    }
+
+    /** read 先读开头探测二进制：探测长度上下的文本文件完整读出，开头是二进制的拒绝。 */
+    @Test
+    void readSniffsHeadBeforeReadingWhole() throws Exception {
+        Path ws = ws();
+        TerminalTalent t = talent(ws);
+        int sniff = TerminalSupport.BINARY_SNIFF_BYTES;
+        for (int size : new int[]{sniff - 1, sniff, sniff + 1, sniff * 3}) {
+            byte[] data = new byte[size];
+            Arrays.fill(data, (byte) 'x');
+            data[size - 1] = '\n';
+            byte[] tail = u("中\n");
+            System.arraycopy(tail, 0, data, size - tail.length, tail.length);
+            Files.write(ws.resolve("s" + size + ".txt"), data);
+            String out = read(t, ws, "s" + size + ".txt", null, null);
+            assertTrue(header(out).endsWith("Encoding: UTF-8) ---"), out);
+            assertTrue(out.contains("     1 | " + new String(data, 0, size - 1, StandardCharsets.UTF_8) + "\n"), size + "");
+        }
+        byte[] bin = new byte[sniff * 3];
+        Arrays.fill(bin, (byte) 'x');
+        bin[10] = 0;
+        Files.write(ws.resolve("b.raw"), bin);
+        assertEquals("错误：该文件是二进制格式，无法作为文本读取。", t.read("b.raw", null, null, ws.toString(), null).getContent());
+    }
+
     // ------------------------------------------------------------------ 虚拟来源
 
     @Test

@@ -1380,8 +1380,12 @@ public class TerminalTalent extends AbsTalent {
             return ToolResult.success(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_EMPTY));
         }
 
-        // 编码按整份文件判断（与当前读哪一页无关，翻页时 Encoding 字段不变）；超过上限的只抽样开头、流式读取
-        byte[] bytes = readWholeOrNull(target, fileSize);
+        // 编码按整份文件判断（与当前读哪一页无关，翻页时 Encoding 字段不变）；超过上限的只抽样开头、流式读取。
+        // 先读开头探测二进制：没有已知后缀的大二进制文件不必整份读入
+        byte[] bytes = readTextOrNull(target, fileSize);
+        if (bytes == BINARY) {
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY));
+        }
         boolean sampled = bytes == null;
         if (sampled) {
             bytes = TerminalSupport.readHead(target, TextEncodings.SAMPLE_BYTES);
@@ -1480,7 +1484,7 @@ public class TerminalTalent extends AbsTalent {
         return ToolResult.success(sb.toString());
     }
 
-    // --- 文件编码（read / edit / write / grep 共用，保证同一份内容判断一致） ---
+    // --- 文件编码（read / edit / write 共用，保证同一份内容判断一致；grep 只认 UTF-16 BOM，见 TextEncodings） ---
 
     /** 内容是否疑似二进制：带 UTF-16 BOM 的文本含大量 NUL，先认 BOM。 */
     static boolean isBinaryContent(byte[] bytes) {
@@ -1497,6 +1501,24 @@ public class TerminalTalent extends AbsTalent {
             return null;
         }
         return TerminalSupport.readUpTo(target, size, TerminalSupport.GREP_MAX_FILE_BYTES);
+    }
+
+    /** {@link #readTextOrNull} 的“是二进制”结果（按引用比较）。 */
+    private static final byte[] BINARY = new byte[0];
+
+    /**
+     * 读入文本文件用于判断编码：先读开头 {@link TerminalSupport#BINARY_SNIFF_BYTES} 字节探测二进制，
+     * 是二进制就返回 {@link #BINARY}、不再往下读；否则同 {@link #readWholeOrNull}（文件不超过探测长度时直接用已读内容）。
+     */
+    private static byte[] readTextOrNull(Path target, long size) throws IOException {
+        byte[] head = TerminalSupport.readHead(target, TerminalSupport.BINARY_SNIFF_BYTES);
+        if (isBinaryContent(head)) {
+            return BINARY;
+        }
+        if (head.length < TerminalSupport.BINARY_SNIFF_BYTES) {
+            return head; // 已读到文件末尾
+        }
+        return readWholeOrNull(target, size);
     }
 
     private TextEncodings.Decoded detectEncoding(byte[] bytes, boolean sampled) {
@@ -1561,16 +1583,41 @@ public class TerminalTalent extends AbsTalent {
     }
 
     /**
-     * 覆盖前判断旧文件的编码（内容为 {@code bytes}，抽样时为开头部分）。二进制文件不保护，返回 null。
+     * 覆盖前判断本地旧文件的编码。二进制文件不保护，返回 null。
+     *
+     * <p>超过上限的文件也要扫完整份（见 {@link TextEncodings#detectWhole}），不能像 read 那样只抽样开头。</p>
      */
-    private TextEncodings.Decoded overwrittenEncoding(byte[] bytes, boolean sampled, Path nameForBinaryCheck) {
-        if (bytes == null || bytes.length == 0) {
+    private TextEncodings.Decoded overwrittenEncoding(Path target) throws IOException {
+        if (support.isNotTextFileByName(target)) {
             return null;
         }
-        if ((nameForBinaryCheck != null && support.isNotTextFileByName(nameForBinaryCheck)) || isBinaryContent(bytes)) {
+        byte[] bytes = readTextOrNull(target, Files.size(target));
+        if (bytes == BINARY) {
             return null;
         }
-        return detectEncoding(bytes, sampled);
+        if (bytes != null) {
+            return overwrittenEncoding(bytes);
+        }
+        try (InputStream in = Files.newInputStream(target)) {
+            return overwrittenEncodingStreaming(in);
+        }
+    }
+
+    /** 覆盖前判断旧文件的编码（整份内容为 {@code bytes}）。空文件、二进制文件返回 null。 */
+    private TextEncodings.Decoded overwrittenEncoding(byte[] bytes) {
+        if (bytes.length == 0 || isBinaryContent(bytes)) {
+            return null;
+        }
+        return detectEncoding(bytes, false);
+    }
+
+    /** 覆盖前判断超大旧文件的编码：开头探测二进制与 BOM，坏字节按整份流式统计。 */
+    private TextEncodings.Decoded overwrittenEncodingStreaming(InputStream in) throws IOException {
+        byte[] head = TerminalSupport.readHead(in, TextEncodings.SAMPLE_BYTES);
+        if (head.length == 0 || isBinaryContent(head)) {
+            return null;
+        }
+        return TextEncodings.detectWhole(head, in, fileCharset);
     }
 
     /**
@@ -1595,12 +1642,8 @@ public class TerminalTalent extends AbsTalent {
         if (error[0] != null) {
             return null;
         }
-        try {
-            return old.bomLength() > 0 ? concat(old.bom(), body.getBytes(old.charset())) : body.getBytes(old.charset());
-        } catch (RuntimeException e) {
-            error[0] = CliI18n.fmt(locale, CliI18nKeys.TERMINAL_ERROR, "message", CliI18n.messageOf(e, locale));
-            return null;
-        }
+        // 上面已确认每个字符都能编码（含孤立代理检查），getBytes 不会有替换字符
+        return old.bomLength() > 0 ? concat(old.bom(), body.getBytes(old.charset())) : body.getBytes(old.charset());
     }
 
     private static byte[] concat(byte[] a, byte[] b) {
@@ -1640,11 +1683,7 @@ public class TerminalTalent extends AbsTalent {
         TextEncodings.Decoded old = null;
         if (Files.isRegularFile(target)) {
             try {
-                long size = Files.size(target);
-                byte[] bytes = readWholeOrNull(target, size);
-                boolean sampled = bytes == null;
-                old = overwrittenEncoding(sampled ? TerminalSupport.readHead(target, TextEncodings.SAMPLE_BYTES) : bytes,
-                        sampled, target);
+                old = overwrittenEncoding(target);
             } catch (IOException | RuntimeException ignored) {
                 // 读不了（如只写权限）：按新文件处理
             }
@@ -1917,7 +1956,7 @@ public class TerminalTalent extends AbsTalent {
      * 打开 grep 要逐行扫描的读取器；返回 null 表示跳过该文件（疑似二进制，或字面量预筛未命中）。
      *
      * <p>只打开一次文件：读入全部字节后，在内存里做二进制探测（取开头 {@link TerminalSupport#BINARY_SNIFF_BYTES} 字节，
-     * 与 {@link TerminalSupport#isNotTextFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。</p>
+     * 与 {@link TerminalSupport#isLikelyBinaryFile} 同一套判定）和字面量预筛，再把同一份字节交给逐行循环。</p>
      *
      * <p>按替换模式解码：解不了的字节变成 U+FFFD 后继续搜（与虚拟来源的 grep、read 一致）。报错模式会在第一个坏字节处停下，
      * 其后的命中被悄悄丢掉，模型会把“没找到”当成确实没有。带 UTF-16 BOM 的文件按 BOM 的编码读（不做 UTF-8 字节预筛）。</p>
@@ -2131,9 +2170,10 @@ public class TerminalTalent extends AbsTalent {
         TextEncodings.Decoded old = null;
         try {
             MountEntry entry = resource.getSource().stat(path);
-            if (entry != null && !entry.isDirectory() && entry.getSize() <= MAX_VIRTUAL_FILE_BYTES) {
+            if (entry != null && !entry.isDirectory() && entry.getSize() <= MAX_VIRTUAL_FILE_BYTES
+                    && !support.isNotTextFileByName(entry.getName())) {
                 try (InputStream in = resource.getSource().openRead(path)) {
-                    old = overwrittenEncoding(readVirtualBytes(in), false, Paths.get(entry.getName()));
+                    old = overwrittenEncoding(readVirtualBytes(in));
                 }
             }
         } catch (IOException | RuntimeException ignored) {

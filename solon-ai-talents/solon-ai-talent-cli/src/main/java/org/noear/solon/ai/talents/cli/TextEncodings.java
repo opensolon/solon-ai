@@ -15,15 +15,26 @@
  */
 package org.noear.solon.ai.talents.cli;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 /**
- * 文件编码判断（read / edit / write / grep 共用，保证同一份内容四个工具判断一致）。
+ * 文件编码判断（read / edit / write 共用，保证同一份内容三个工具判断一致）。
+ *
+ * <p>grep 不调用这里的判断：它只认 UTF-16 BOM（{@link #utf16BomCharset}），其余按 UTF-8 替换模式解码。
+ * 搜索不需要区分“大体是 UTF-8”和“不是 UTF-8”，两者都是坏字节显示为 U+FFFD 后照常匹配，结果与按判断解码相同。</p>
  *
  * <p>只认 UTF-8，不猜其他编码：编码只由文件内容决定，同一份文件在任何机器上结果相同。判断顺序（命中即停）：</p>
  * <ol>
@@ -59,6 +70,9 @@ final class TextEncodings {
 
     /** 大体是 UTF-8 的判定：合法多字节字符数至少是坏字节段数的这么多倍。 */
     static final int MIXED_RATIO = 4;
+
+    /** 整份流式判断（{@link #detectWhole}）每次读入的字节数。 */
+    static final int STREAM_CHUNK = 64 * 1024;
 
     static boolean isAscii(CharSequence text) {
         for (int i = 0; i < text.length(); i++) {
@@ -110,6 +124,8 @@ final class TextEncodings {
         int badSegments;
         /** 坏字节数（与保字节解码得到的原字节数一致） */
         int badBytes;
+        /** 上一段以坏字节结束（分块扫描时跨块延续，连续坏字节仍算一段） */
+        private boolean inBad;
     }
 
     /**
@@ -119,7 +135,17 @@ final class TextEncodings {
      */
     static Utf8Scan scanUtf8(byte[] b, int off, int end, boolean tolerateTail) {
         Utf8Scan s = new Utf8Scan();
-        boolean inBad = false;
+        scanUtf8(s, b, off, end, tolerateTail);
+        return s;
+    }
+
+    /**
+     * 扫描一段并累加到 {@code s}（分块扫描用：前一块的坏字节段状态延续到这一块）。
+     *
+     * @return 扫描停下的位置：{@code tolerateTail} 且末尾是残缺的多字节序列时为它的起点，其余为 {@code end}
+     */
+    static int scanUtf8(Utf8Scan s, byte[] b, int off, int end, boolean tolerateTail) {
+        boolean inBad = s.inBad;
         int i = off;
         while (i < end) {
             if (b[i] >= 0) {
@@ -170,7 +196,8 @@ final class TextEncodings {
                     continue;
                 }
                 if (tolerateTail && i + 1 + ok == end) {
-                    break; // 抽样边界切断的字符
+                    s.inBad = inBad;
+                    return i; // 抽样边界（或分块边界）切断的字符
                 }
             }
             // 首字节与已匹配的续字节都算坏字节（与 JDK 解码器的出错长度一致）
@@ -183,7 +210,8 @@ final class TextEncodings {
             }
             i += bad;
         }
-        return s;
+        s.inBad = inBad;
+        return end;
     }
 
     // ---------------------------------------------------------------- 判断
@@ -225,6 +253,96 @@ final class TextEncodings {
         }
         Source source = scan.multiByte > 0 && scan.multiByte >= MIXED_RATIO * scan.badSegments ? Source.MIXED : Source.UNKNOWN;
         return new Decoded(bytes, 0, length, primary, source, sampled, scan.badBytes);
+    }
+
+    /**
+     * 超大文件的整份判断（write 覆盖前检查用）：BOM 看开头，坏字节、多字节字符按整份文件流式统计。
+     *
+     * <p>{@link #detect} 对超大文件只抽样开头 1 MB，坏字节都在后面时会判成“没有坏字节”，
+     * 覆盖检查就会放行含 U+FFFD 的内容、永久丢掉这些原字节，所以覆盖前要扫完整份。</p>
+     *
+     * <p>结果只用于写入检查（{@link Decoded#rawBytes()}、{@link Decoded#allowsNonAscii()}、编码与 BOM）：
+     * 它只保存开头 {@code head}（{@link Decoded#sampled()} 为 true），不能用来解码正文或写回。</p>
+     *
+     * @param head    文件开头（至少要含 BOM）
+     * @param rest    文件其余部分，紧接 {@code head}
+     * @param primary 主编码
+     */
+    static Decoded detectWhole(byte[] head, InputStream rest, Charset primary) throws IOException {
+        return detectWhole(head, rest, primary, STREAM_CHUNK);
+    }
+
+    static Decoded detectWhole(byte[] head, InputStream rest, Charset primary, int chunk) throws IOException {
+        Charset bom = bomCharset(head, head.length);
+        int start = bom == null ? 0 : bomLength(bom);
+        Charset cs = bom != null ? bom : primary;
+        InputStream body = new SequenceInputStream(new ByteArrayInputStream(head, start, head.length - start), rest);
+
+        if (!StandardCharsets.UTF_8.equals(cs)) {
+            int raw = countRawStream(body, cs, chunk);
+            Source source = bom != null ? Source.BOM : raw == 0 ? Source.PRIMARY : Source.UNKNOWN;
+            return new Decoded(head, start, head.length, cs, source, true, raw);
+        }
+
+        Utf8Scan scan = new Utf8Scan();
+        byte[] buf = new byte[Math.max(chunk, 8)];
+        int len = 0;
+        while (true) {
+            int r = body.read(buf, len, buf.length - len);
+            if (r < 0) {
+                scanUtf8(scan, buf, 0, len, false);
+                break;
+            }
+            len += r;
+            // 块末尾残缺的多字节序列（最多 3 字节）留到下一块开头再判断，与整份扫描结果相同
+            int stop = scanUtf8(scan, buf, 0, len, true);
+            System.arraycopy(buf, stop, buf, 0, len - stop);
+            len -= stop;
+        }
+        Source source;
+        if (bom != null) {
+            source = Source.BOM;
+        } else if (scan.valid) {
+            source = Source.PRIMARY;
+        } else {
+            source = scan.multiByte > 0 && scan.multiByte >= MIXED_RATIO * scan.badSegments ? Source.MIXED : Source.UNKNOWN;
+        }
+        return new Decoded(head, start, head.length, cs, source, true, scan.badBytes);
+    }
+
+    /** 流式统计按 {@code cs} 解不了的字节数（与 {@link #countRaw} 同口径：每个出错字节算一个）。 */
+    private static int countRawStream(InputStream in, Charset cs, int chunk) throws IOException {
+        CharsetDecoder decoder = cs.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        byte[] arr = new byte[Math.max(chunk, 8)];
+        ByteBuffer bb = ByteBuffer.wrap(arr);
+        bb.limit(0);
+        CharBuffer out = CharBuffer.allocate(Math.max(chunk, 8));
+        int raw = 0;
+        boolean eof = false;
+        while (!eof) {
+            bb.compact();
+            int r = in.read(arr, bb.position(), bb.remaining());
+            if (r < 0) {
+                eof = true;
+            } else {
+                bb.position(bb.position() + r);
+            }
+            bb.flip();
+            while (true) {
+                CoderResult cr = decoder.decode(bb, out, eof);
+                if (cr.isOverflow()) {
+                    out.clear();
+                } else if (cr.isError()) {
+                    raw += cr.length();
+                    bb.position(bb.position() + cr.length());
+                } else {
+                    break;
+                }
+            }
+        }
+        return raw;
     }
 
     /** 按保字节解码统计解不了的字节数。 */
