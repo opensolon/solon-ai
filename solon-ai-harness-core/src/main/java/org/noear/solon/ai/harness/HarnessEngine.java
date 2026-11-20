@@ -1203,6 +1203,24 @@ public class HarnessEngine {
         return options.isSandboxSystemRestrict();
     }
 
+    /**
+     * 文件编码识别策略（read / edit / write / grep 识别非 UTF-8 文件用）；未设置时为默认策略（候选 GBK，无路径规则）
+     */
+    public FileEncodingPolicy getFileEncodingPolicy() {
+        return terminalTalent.getFileEncodingPolicy();
+    }
+
+    /**
+     * 设置文件编码识别策略（null 忽略，保留旧值）
+     */
+    public void setFileEncodingPolicy(FileEncodingPolicy fileEncodingPolicy) {
+        assertMutable("setFileEncodingPolicy");
+        if (fileEncodingPolicy != null) {
+            options.setFileEncodingPolicy(fileEncodingPolicy);
+            terminalTalent.setFileEncodingPolicy(fileEncodingPolicy);
+        }
+    }
+
     public void setSandboxSystemRestrict(Boolean sandboxSystemRestrict) {
         assertMutable("setSandboxSystemRestrict");
         options.setSandboxSystemRestrict(sandboxSystemRestrict);
@@ -1895,6 +1913,7 @@ public class HarnessEngine {
         terminalTalent.setSandboxAllowUserHome(options.isSandboxAllowUserHome());
         terminalTalent.setSandboxSystemRestrict(options.isSandboxSystemRestrict());
         terminalTalent.setSandboxSelfBootstrap(options.isSandboxSelfBootstrap());
+        terminalTalent.setFileEncodingPolicy(options.getFileEncodingPolicy());
         //harness 状态目录（缺省在工作区内）对模型不可读写：里面是其它会话/用户的数据
         terminalTalent.setProtectedStatePaths(options.getProtectedStatePaths());
         // cwdPolicy 同时在消费端生效：请求级 toolContext 或直接写会话属性的 __cwd 也绕不过去
@@ -2613,6 +2632,15 @@ public class HarnessEngine {
         public Builder sandboxSystemRestrict(Boolean sandboxSystemRestrict) {
             options.setSandboxSystemRestrict(sandboxSystemRestrict);
             return explicit("sandboxSystemRestrict", sandboxSystemRestrict);
+        }
+
+        /**
+         * 文件编码识别策略：候选编码（默认 GBK）与按路径指定的编码（如 {@code *.properties} → ISO-8859-1）。
+         * 见 {@link FileEncodingPolicy}。
+         */
+        public Builder fileEncodingPolicy(FileEncodingPolicy fileEncodingPolicy) {
+            options.setFileEncodingPolicy(fileEncodingPolicy);
+            return this;
         }
 
         // ========== 权限系统 ==========

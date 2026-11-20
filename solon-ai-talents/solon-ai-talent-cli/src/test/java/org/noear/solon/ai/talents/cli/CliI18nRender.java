@@ -13,6 +13,7 @@ import org.noear.solon.ai.mount.source.MountCapabilities;
 import org.noear.solon.ai.sandbox.SandboxManager;
 import org.noear.solon.ai.talents.cli.i18n.CliI18n;
 
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -300,9 +301,17 @@ final class CliI18nRender {
         Files.write(work.resolve("dup.txt"), "x\nx\n".getBytes(StandardCharsets.UTF_8));
         Files.write(work.resolve("empty.txt"), new byte[0]);
         Files.write(work.resolve("bin.dat"), new byte[]{0, 1, 2, 3, 0, 0, 5});
-        // 非 UTF-8 文件：GBK 中文；带 BOM 的 UTF-16 小端且末尾多一个孤字节（按 UTF-16 无法原样写回）
+        // 非 UTF-8 文件：GBK 中文（自动识别）；编码无法确定的文件（ASCII 里夹一个坏字节，再夹一段 GBK）；
+        // 无 BOM 的 UTF-16 大端（主编码设为会自动加 BOM 的 UTF-16 时无法原样写回）；大体是 UTF-8 夹两个坏字节
         Files.write(work.resolve("gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
-        Files.write(work.resolve("u16.txt"), new byte[]{(byte) 0xFF, (byte) 0xFE, 'a', 0, 'b', 0, 0x41});
+        Files.write(work.resolve("raw.txt"), concat("// ".getBytes(StandardCharsets.UTF_8), "中文".getBytes(Charset.forName("GBK")),
+                new byte[]{(byte) 0xFF}, "\nint x = 1;\n".getBytes(StandardCharsets.UTF_8)));
+        Files.createDirectories(work.resolve("enc"));
+        Files.write(work.resolve("enc/gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
+        Files.write(work.resolve("enc/utf8.txt"), "int y = 2;\n".getBytes(StandardCharsets.UTF_8));
+        Files.write(work.resolve("u16.txt"), "ab\n".getBytes(StandardCharsets.UTF_16BE));
+        Files.write(work.resolve("mixed.txt"), concat("// 中文注释：用户服务\nint x = 1;\n".getBytes(StandardCharsets.UTF_8),
+                new byte[]{(byte) 0xCC, (byte) 0xF9, '\n'}));
         StringBuilder longLine = new StringBuilder();
         for (int i = 0; i < 400; i++) {
             longLine.append("0123456789");
@@ -490,11 +499,21 @@ final class CliI18nRender {
         if (on(part, "file")) out.put("terminal_edit_not_unique" + suffix, run(root, tag, () -> edit(base, tag, "dup.txt", op("x", "y", null, null))));
         if (on(part, "file")) out.put("terminal_edit_apply_failed" + suffix, run(root, tag, () -> edit(base, tag, "a.txt",
                 op("two", "2", null, null), op("two\nthree", "x", null, null))));
-        if (on(part, "file")) out.put("terminal_read_raw_bytes" + suffix, run(root, tag, () -> read(base, tag, "gbk.txt", null, null)));
-        if (on(part, "file")) out.put("terminal_edit_raw_bytes_mismatch" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("// 中文", "// x", 1, null))));
-        if (on(part, "file")) out.put("terminal_edit_raw_bytes_all_missing" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("中文", "x", null, true))));
-        if (on(part, "file")) out.put("terminal_edit_raw_bytes" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("x = 1", "x = 2", null, null))));
+        // ---- 文件编码 ----
+        if (on(part, "file")) out.put("terminal_read_gbk" + suffix, run(root, tag, () -> read(base, tag, "gbk.txt", null, null)));
+        if (on(part, "file")) out.put("terminal_edit_gbk" + suffix, run(root, tag, () -> edit(base, tag, "gbk.txt", op("// 中文", "// 汉字", 1, null))));
+        if (on(part, "file")) out.put("terminal_read_raw_bytes" + suffix, run(root, tag, () -> read(base, tag, "raw.txt", null, null)));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes_mismatch" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("// 中文", "// x", 1, null))));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes_all_missing" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("中文", "x", null, true))));
+        if (on(part, "file")) out.put("terminal_edit_unknown_non_ascii" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("x = 1", "x = 中", null, null))));
+        if (on(part, "file")) out.put("terminal_write_raw_bytes_lost" + suffix, run(root, tag, () -> write(base, tag, "raw.txt", "// \uFFFD\uFFFD\n")));
+        if (on(part, "file")) out.put("terminal_write_unknown_non_ascii" + suffix, run(root, tag, () -> write(base, tag, "raw.txt", "// 中文\n")));
+        if (on(part, "file")) out.put("terminal_edit_raw_bytes" + suffix, run(root, tag, () -> edit(base, tag, "raw.txt", op("x = 1", "x = 2", null, null))));
+        if (on(part, "file")) out.put("terminal_edit_mixed" + suffix, run(root, tag, () -> edit(base, tag, "mixed.txt", op("x = 1", "x = 2", null, null))));
         if (on(part, "file")) out.put("terminal_edit_unencodable" + suffix, run(root, tag, () -> edit(base, tag, "a.txt", op("one", "\uD800", null, null))));
+        if (on(part, "file")) out.put("terminal_write_unencodable" + suffix, run(root, tag, () -> write(base, tag, "gbk.txt", "// \uD83D\uDE00\n")));
+        if (on(part, "file")) out.put("terminal_write_gbk" + suffix, run(root, tag, () -> write(base, tag, "gbk.txt", "// 重写\n")));
+        if (on(part, "file")) out.put("terminal_grep_encoding_note" + suffix, run(root, tag, () -> grep(base, tag, "x = ", "enc")));
         TerminalTalent utf16 = terminal(work, ShellMode.UNIX_SHELL, "bash");
         utf16.fileCharset = StandardCharsets.UTF_16;
         if (on(part, "file")) out.put("terminal_edit_not_preservable" + suffix, run(root, tag, () -> edit(utf16, tag, "u16.txt", op("ab", "cd", null, null))));
@@ -605,4 +624,13 @@ final class CliI18nRender {
         if (on(part, "support")) out.put("support_cache_path" + suffix, run(root, tag, () -> resolve(cached, tag, work,
                 cacheRoot.resolve("x").toString(), false, false, null)));
     }
+
+    static byte[] concat(byte[]... parts) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (byte[] p : parts) {
+            out.write(p, 0, p.length);
+        }
+        return out.toByteArray();
+    }
+
 }

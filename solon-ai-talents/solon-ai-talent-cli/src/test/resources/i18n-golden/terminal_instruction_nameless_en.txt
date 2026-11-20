@@ -19,6 +19,7 @@
 ## Execution Rules
 - **Command execution**: in sandbox mode, **never** use absolute paths in bash commands (such as: ls /users/).
 - **Tools first (choose a tool before a command)**: to read files, list directories, find files, search text, write files and edit files, always use the `read` / `ls` / `glob` / `grep` / `write` / `edit` tools instead of shell commands (such as `cat`, `ls`, `find`, `grep`, `sed -i`, `echo >`): the tool layer already handles encodings and BOM, line-number positioning, ignored directories (node_modules/target/.git, etc.), paged truncation of large files and atomic rollback of writes, which the command line cannot do. Use `bash` for what really needs executing: builds, tests, git, package management, running scripts, and pipelines or statistics the tools cannot cover.
+- **File encoding**: the Encoding field on the first line of `read` is the automatically detected file encoding; `edit` / `write` save in it, so do not convert encodings yourself. Bytes shown as � cannot be decoded; `edit` keeps them unchanged, so just avoid them when editing.
 - **Arguments and encoding**: always quote arguments containing spaces, quotes or other special characters (such as `python3 a.py "hello world"`, `cat "my file.txt"`). Output is decoded as UTF-8; no need to set encoding environment variables.
 
 <SYSTEM_CONSTRAINTS>

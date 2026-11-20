@@ -1,4 +1,4 @@
---- File: a.txt (Lines: 2 - 3, Size: 0.02 KB) ---
+--- File: a.txt (Lines: 2 - 3, Size: 0.02 KB, Encoding: UTF-8) ---
 --------------------------------------------------
      2 | two
      3 | three

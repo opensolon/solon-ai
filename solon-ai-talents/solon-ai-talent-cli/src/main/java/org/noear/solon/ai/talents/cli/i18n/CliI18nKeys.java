@@ -81,6 +81,7 @@ public final class CliI18nKeys {
     public static final String TERMINAL_INSTRUCTION_CMD_OPEN_MOUNTS = "terminal.instruction.cmd_open_mounts";
     public static final String TERMINAL_INSTRUCTION_CMD_OPEN = "terminal.instruction.cmd_open";
     public static final String TERMINAL_INSTRUCTION_TOOLS_FIRST = "terminal.instruction.tools_first";
+    public static final String TERMINAL_INSTRUCTION_FILE_ENCODING = "terminal.instruction.file_encoding";
     public static final String TERMINAL_INSTRUCTION_FILE_CMDS_POWERSHELL = "terminal.instruction.file_cmds_powershell";
     public static final String TERMINAL_INSTRUCTION_FILE_CMDS_CMD = "terminal.instruction.file_cmds_cmd";
     public static final String TERMINAL_INSTRUCTION_FILE_CMDS_UNIX = "terminal.instruction.file_cmds_unix";
@@ -129,6 +130,11 @@ public final class CliI18nKeys {
     public static final String TERMINAL_READ_NEXT = "terminal.read.next";
     public static final String TERMINAL_READ_DONE = "terminal.read.done";
     public static final String TERMINAL_WRITE_OK = "terminal.write.ok";
+    public static final String TERMINAL_WRITE_UNENCODABLE = "terminal.write.unencodable";
+    public static final String TERMINAL_WRITE_RAW_BYTES_LOST = "terminal.write.raw_bytes_lost";
+    public static final String TERMINAL_WRITE_UNKNOWN_NON_ASCII = "terminal.write.unknown_non_ascii";
+    public static final String TERMINAL_FILE_SAVED_AS = "terminal.file.saved_as";
+    public static final String TERMINAL_FILE_SAVED_KEEPING_RAW = "terminal.file.saved_keeping_raw";
     public static final String TERMINAL_EDIT_MISSING = "terminal.edit.missing";
     public static final String TERMINAL_EDIT_EMPTY_OLD = "terminal.edit.empty_old";
     public static final String TERMINAL_EDIT_ALL_MISSING = "terminal.edit.all_missing";
@@ -138,12 +144,14 @@ public final class CliI18nKeys {
     public static final String TERMINAL_EDIT_OK = "terminal.edit.ok";
     public static final String TERMINAL_EDIT_RAW_BYTES_HINT = "terminal.edit.raw_bytes_hint";
     public static final String TERMINAL_EDIT_UNENCODABLE = "terminal.edit.unencodable";
+    public static final String TERMINAL_EDIT_UNKNOWN_NON_ASCII = "terminal.edit.unknown_non_ascii";
     public static final String TERMINAL_EDIT_NOT_PRESERVABLE = "terminal.edit.not_preservable";
     public static final String TERMINAL_VEDIT_EMPTY_OLD = "terminal.vedit.empty_old";
     public static final String TERMINAL_VEDIT_MISMATCH = "terminal.vedit.mismatch";
     public static final String TERMINAL_VEDIT_ALL_MISSING = "terminal.vedit.all_missing";
     public static final String TERMINAL_GREP_NONE = "terminal.grep.none";
     public static final String TERMINAL_GREP_TRUNCATED = "terminal.grep.truncated";
+    public static final String TERMINAL_GREP_ENCODING_NOTE = "terminal.grep.encoding_note";
     public static final String TERMINAL_GREP_SKIPPED_LARGE = "terminal.grep.skipped_large";
     public static final String TERMINAL_GLOB_NONE = "terminal.glob.none";
     public static final String TERMINAL_VFILE_TOO_LARGE = "terminal.vfile.too_large";

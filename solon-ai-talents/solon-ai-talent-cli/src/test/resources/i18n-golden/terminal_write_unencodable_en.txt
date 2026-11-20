@@ -1,0 +1,1 @@
+Error: '😀' (U+1F600) in the content (character 4) cannot be represented in the file's encoding GBK; the file was not modified. Write it in a form this encoding can represent (such as an escape sequence) instead of changing the file's encoding.

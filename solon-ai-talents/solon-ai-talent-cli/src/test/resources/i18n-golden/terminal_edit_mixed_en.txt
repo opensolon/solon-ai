@@ -1,0 +1,2 @@
+File mixed.txt: 1 edit(s) applied.
+Saved in UTF-8; undecodable bytes kept unchanged: 2.

@@ -1,1 +1,2 @@
-File gbk.txt: 1 edit(s) applied.
+File raw.txt: 1 edit(s) applied.
+Saved in UTF-8; undecodable bytes kept unchanged: 5.

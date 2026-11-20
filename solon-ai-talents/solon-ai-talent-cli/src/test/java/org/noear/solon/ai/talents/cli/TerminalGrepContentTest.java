@@ -2,10 +2,15 @@ package org.noear.solon.ai.talents.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.mount.Mount;
 import org.noear.solon.ai.mount.MountManager;
+import org.noear.solon.ai.mount.MountType;
+import org.noear.solon.ai.mount.source.InMemoryMountSource;
+import org.noear.solon.ai.mount.source.WriteOptions;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,10 +42,26 @@ class TerminalGrepContentTest {
             "token", "tok", "en", "中文令牌", "令", "\uD83D\uDE00", "a.b", "token$", "^token", "[unclosed", "[未闭合",
             "\uD83D", "[\uD83D", "\uFEFFtoken", "\r", "", "x", "TOKEN", "n\u0001", "\uFFFD", "two\n", "\uFFFD\ntoken");
 
+    /**
+     * 与 LegacySearch 对照用：关掉自动识别（候选编码为空），只比“逐行解码与匹配”本身。
+     * 自动识别 GBK 的行为见 {@link #gbkFilesAreDecodedAndNoted}。
+     */
     private static TerminalTalent talent(Path ws, boolean sandbox) {
         TerminalTalent t = new TerminalTalent(new MountManager(ws.toString()));
         t.setSandboxEnabled(sandbox);
+        t.setFileEncodingPolicy(FileEncodingPolicy.builder().noCandidates().build());
         return t;
+    }
+
+    /** 去掉末尾的编码说明（原实现没有它；内容由 {@link #malformedUtf8IsReplacedAndSearchContinues} 等单独断言）。 */
+    static String stripEncodingNote(String expected, String actual) {
+        int i = actual.indexOf("\n注：以下命中文件不是普通 UTF-8");
+        if (i < 0) {
+            return actual;
+        }
+        String head = actual.substring(0, i);
+        // 结果不以换行结尾时（如截断提示），说明前会先补一个换行
+        return !expected.endsWith("\n") && head.endsWith("\n") ? head.substring(0, head.length() - 1) : head;
     }
 
     private static void writeBytes(Path file, byte[]... parts) throws IOException {
@@ -80,7 +101,7 @@ class TerminalGrepContentTest {
         String cwd = ws.toString();
         String expected = TerminalSearchEquivalenceTest.outcome(() -> LegacySearch.grepReplacing(t, pattern, ".", include, cwd));
         String actual = TerminalSearchEquivalenceTest.outcome(() -> t.grep(pattern, ".", include, cwd, null).getContent());
-        assertEquals(expected, actual, "pattern=" + escape(pattern) + " include=" + include + " ws=" + ws);
+        assertEquals(expected, stripEncodingNote(expected, actual), "pattern=" + escape(pattern) + " include=" + include + " ws=" + ws);
         return actual;
     }
 
@@ -132,6 +153,10 @@ class TerminalGrepContentTest {
         assertTrue(out.contains("inline.txt:1: x \uFFFD"), out);
         assertTrue(out.contains("gbk.java:2: int token = 1;"));
         assertTrue(out.contains("ok.txt:1: token ok"));
+        // 末尾汇总这些文件的编码；合法 UTF-8 的不列
+        assertTrue(out.contains("\n- small.txt: unknown, 1 undecodable byte shown as U+FFFD"), out.substring(out.indexOf("\n注")));
+        assertTrue(out.contains("\n- surrogate.txt: unknown, 3 undecodable bytes shown as U+FFFD"));
+        assertFalse(out.substring(out.indexOf("\n注")).contains("ok.txt"));
 
         // 确实是行为变化：原口径下这些命中都会丢
         String legacy = LegacySearch.grep(t, "token", ".", null, ws.toString());
@@ -339,6 +364,55 @@ class TerminalGrepContentTest {
     }
 
     // ---- 支撑方法 ----
+
+    /**
+     * 默认策略（候选 GBK）：GBK 文件按 GBK 解码，用中文能搜到；英文模式结果不变；末尾注明哪些命中文件不是 UTF-8。
+     * 本地与虚拟来源同口径。
+     */
+    @Test
+    void gbkFilesAreDecodedAndNoted() throws Exception {
+        Path ws = tmp.resolve("ws");
+        Charset gbk = Charset.forName("GBK");
+        writeBytes(ws.resolve("src/Gbk.java"), "// 中文注释：用户服务\nint token = 1;\n".getBytes(gbk));
+        writeBytes(ws.resolve("src/Utf.java"), u("// 中文注释：用户服务\nint token = 2;\n"));
+        writeBytes(ws.resolve("src/U16.txt"), b(0xFF, 0xFE), "中文注释 token\n".getBytes(StandardCharsets.UTF_16LE));
+        TerminalTalent t = new TerminalTalent(new MountManager(ws.toString()));
+
+        String out = t.grep("中文注释", ".", null, ws.toString(), null).getContent();
+        assertTrue(out.contains("src/Gbk.java:1: // 中文注释：用户服务\n"), out);
+        assertTrue(out.contains("src/Utf.java:1: // 中文注释：用户服务\n"), out);
+        assertTrue(out.contains("src/U16.txt:1: 中文注释 token\n"), out);
+        String note = out.substring(out.indexOf("\n注："));
+        assertTrue(note.contains("\n- src/Gbk.java: GBK detected"), note);
+        assertTrue(note.contains("\n- src/U16.txt: UTF-16LE with BOM"), note);
+        assertFalse(note.contains("Utf.java"), note);
+
+        // 英文模式：命中行不变，只列出非 UTF-8 的命中文件
+        out = t.grep("int token", ".", null, ws.toString(), null).getContent();
+        assertTrue(out.startsWith("src/") && out.contains("Gbk.java:2: int token = 1;") && out.contains("Utf.java:2: int token = 2;"), out);
+        assertTrue(out.contains("\n- src/Gbk.java: GBK detected"), out);
+        // 只有 UTF-8 文件命中时不加说明
+        out = t.grep("token = 2", ".", null, ws.toString(), null).getContent();
+        assertEquals("src/Utf.java:2: int token = 2;\n", out);
+        // 英文说明
+        out = t.grep("token = 1", ".", null, ws.toString(), "en").getContent();
+        assertTrue(out.contains("\nNote: the matched files below are not plain UTF-8") && out.endsWith("\n- src/Gbk.java: GBK detected"), out);
+
+        // 关掉自动识别时搜不到 GBK 里的中文（对照：确实是识别带来的）
+        out = talent(ws, true).grep("中文注释", ".", null, ws.toString(), null).getContent();
+        assertFalse(out.contains("Gbk.java"), out);
+
+        // 虚拟来源
+        InMemoryMountSource source = new InMemoryMountSource();
+        try (OutputStream o = source.openWrite("Gbk.java", WriteOptions.replace())) {
+            o.write("// 中文注释\nint token = 1;\n".getBytes(gbk));
+        }
+        MountManager mm = new MountManager(ws.toString());
+        mm.register(Mount.builder().alias("@mem").type(MountType.FILES).source(source).build());
+        out = new TerminalTalent(mm).grep("中文", "@mem", null, ws.toString(), null).getContent();
+        assertTrue(out.startsWith("@mem/Gbk.java:1: // 中文注释\n"), out);
+        assertTrue(out.endsWith("\n- @mem/Gbk.java: GBK detected"), out);
+    }
 
     @Test
     void containsBytesMatchesNaiveSearch() {

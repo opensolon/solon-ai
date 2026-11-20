@@ -36,9 +36,17 @@ class TerminalEditRawBytesTest {
 
     private static final Charset GBK = Charset.forName("GBK");
 
+    /**
+     * 本类测“原字节原样保留”的机制，关掉自动识别（候选编码为空），GBK 文件按“编码无法确定”处理。
+     * 自动识别后的行为见 TerminalFileEncodingTest。
+     */
     private static TerminalTalent talent(Path ws) {
-        return new TerminalTalent(new MountManager(ws.toString()));
+        TerminalTalent t = new TerminalTalent(new MountManager(ws.toString()));
+        t.setFileEncodingPolicy(NO_DETECTION);
+        return t;
     }
+
+    private static final FileEncodingPolicy NO_DETECTION = FileEncodingPolicy.builder().noCandidates().build();
 
     private static TerminalTalent.EditOp op(String oldStr, String newStr, Integer line, Boolean all) {
         TerminalTalent.EditOp op = new TerminalTalent.EditOp();
@@ -107,9 +115,16 @@ class TerminalEditRawBytesTest {
                 b(0xED, 0xA0, 0x80), u("\ntail "), b(0xF0, 0x9F, 0x98));
         Files.write(f, before);
 
+        // 坏字节多、合法多字节字符少：编码无法确定，写入非 ASCII 会混入另一种编码，拒绝且文件不动
         ToolResult r = edit(talent(ws), ws, "mixed.txt", op("TARGET", "替换后", null, null), op("head", "HEAD", null, null));
+        assertTrue(r.isError(), r.getContent());
+        assertTrue(r.getContent().contains("非 ASCII"), r.getContent());
+        assertArrayEquals(before, Files.readAllBytes(f));
+
+        r = edit(talent(ws), ws, "mixed.txt", op("TARGET", "REPLACED", null, null), op("head", "HEAD", null, null));
         assertFalse(r.isError(), r.getContent());
-        byte[] expected = cat(b(0xFF), u("HEAD\n中文 ok\nleft"), b(0xC3), u("替换后"), b(0xE4, 0xB8), u("right\n"),
+        assertTrue(r.getContent().endsWith("已按 UTF-8 编码保存，10 个无法解码的字节已原样保留。"), r.getContent());
+        byte[] expected = cat(b(0xFF), u("HEAD\n中文 ok\nleft"), b(0xC3), u("REPLACED"), b(0xE4, 0xB8), u("right\n"),
                 b(0xED, 0xA0, 0x80), u("\ntail "), b(0xF0, 0x9F, 0x98));
         assertArrayEquals(expected, Files.readAllBytes(f));
     }
@@ -151,7 +166,7 @@ class TerminalEditRawBytesTest {
                 op("// 中文注释", "// x", null, true))) {
             ToolResult r = edit(t, ws, "A.java", op);
             assertTrue(r.isError(), r.getContent());
-            assertTrue(r.getContent().contains("UTF-8") && r.getContent().contains("GBK"), r.getContent());
+            assertTrue(r.getContent().contains("UTF-8") && r.getContent().contains("Encoding"), r.getContent());
             assertNoLoneSurrogate(r.getContent());
             assertArrayEquals(original, Files.readAllBytes(f));
         }
@@ -160,7 +175,7 @@ class TerminalEditRawBytesTest {
         Files.write(ws.resolve("ok.txt"), u("hello\n"));
         ToolResult r = edit(t, ws, "ok.txt", op("zzz", "y", null, null));
         assertTrue(r.isError());
-        assertFalse(r.getContent().contains("GBK"), r.getContent());
+        assertFalse(r.getContent().contains("Encoding"), r.getContent());
     }
 
     /** new_str 无法按文件字符集保存：拒绝且文件不动（原先孤立代理、GBK 表示不了的字符会被无声写成 '?'）。 */
@@ -181,14 +196,18 @@ class TerminalEditRawBytesTest {
                 byte[] before = Files.readAllBytes(p);
                 ToolResult r = edit(t, ws, p.getFileName().toString(), op("hello", newStr, null, null));
                 assertTrue(r.isError(), r.getContent());
-                assertTrue(r.getContent().contains("UTF-8"), r.getContent());
+                assertTrue(r.getContent().contains("UTF-8") && r.getContent().contains("U+D"), r.getContent());
                 assertArrayEquals(before, Files.readAllBytes(p));
             }
         }
 
-        // 完整的代理对没问题
-        assertFalse(edit(t, ws, "bad.txt", op("hello", "\uD83D\uDE00", null, null)).isError());
-        assertArrayEquals(cat(u("\uD83D\uDE00 "), b(0xFF), u(" world\n")), Files.readAllBytes(bad));
+        // 完整的代理对：普通 UTF-8 文件没问题；编码无法确定的文件不能写入非 ASCII
+        assertFalse(edit(t, ws, "ok.txt", op("hello", "\uD83D\uDE00", null, null)).isError());
+        assertArrayEquals(u("\uD83D\uDE00 world\n"), Files.readAllBytes(ok));
+        assertTrue(edit(t, ws, "bad.txt", op("hello", "\uD83D\uDE00", null, null)).isError());
+        assertArrayEquals(badBytes, Files.readAllBytes(bad));
+        assertFalse(edit(t, ws, "bad.txt", op("hello", "hi", null, null)).isError());
+        assertArrayEquals(cat(u("hi "), b(0xFF), u(" world\n")), Files.readAllBytes(bad));
 
         // GBK 字符集：emoji 表示不了
         t.fileCharset = GBK;
@@ -202,13 +221,16 @@ class TerminalEditRawBytesTest {
         assertArrayEquals("中文 你好\n".getBytes(GBK), Files.readAllBytes(g));
     }
 
-    /** 个别字符集无法保证原样写回（如带 BOM 的 UTF-16 小端文件且有坏字节）：拒绝且文件不动。 */
+    /**
+     * 个别字符集无法保证原样写回（主编码设为会自动加 BOM 的 UTF-16，而文件没有 BOM）：拒绝且文件不动。
+     * 带 BOM 的 UTF-16 小端文件末尾多一个孤字节：现在按 BOM 识别为 UTF-16LE，孤字节原样保留，可以编辑。
+     */
     @Test
     void notPreservableCharsetIsRejected() throws Exception {
         Path ws = tmp.resolve("ws");
         Files.createDirectories(ws);
         Path f = ws.resolve("u16.txt");
-        byte[] original = cat(b(0xFF, 0xFE), "ab\n".getBytes(StandardCharsets.UTF_16LE), b(0x41));
+        byte[] original = "ab\n".getBytes(StandardCharsets.UTF_16BE);
         Files.write(f, original);
         TerminalTalent t = talent(ws);
         t.fileCharset = StandardCharsets.UTF_16;
@@ -216,6 +238,12 @@ class TerminalEditRawBytesTest {
         assertTrue(r.isError(), r.getContent());
         assertTrue(r.getContent().contains("UTF-16"), r.getContent());
         assertArrayEquals(original, Files.readAllBytes(f));
+
+        Path le = ws.resolve("le.txt");
+        Files.write(le, cat(b(0xFF, 0xFE), "ab\n".getBytes(StandardCharsets.UTF_16LE), b(0x41)));
+        r = edit(talent(ws), ws, "le.txt", op("ab", "cd", null, null));
+        assertFalse(r.isError(), r.getContent());
+        assertArrayEquals(cat(b(0xFF, 0xFE), "cd\n".getBytes(StandardCharsets.UTF_16LE), b(0x41)), Files.readAllBytes(le));
     }
 
     /** 合法文件：结果与原实现（new String / getBytes）逐字节相同。 */
@@ -301,11 +329,12 @@ class TerminalEditRawBytesTest {
         MountManager manager = new MountManager(ws.toString());
         manager.register(Mount.builder().alias("@mem").type(MountType.FILES).source(source).writable(true).build());
         TerminalTalent t = new TerminalTalent(manager);
+        t.setFileEncodingPolicy(NO_DETECTION);
 
         List<TerminalTalent.EditOp> ops = Arrays.asList(op("// 中文", "// x", null, null));
         ToolResult r = t.edit("@mem/A.java", ops, ws.toString(), null);
         assertTrue(r.isError(), r.getContent());
-        assertTrue(r.getContent().contains("GBK"), r.getContent());
+        assertTrue(r.getContent().contains("Encoding"), r.getContent());
         assertArrayEquals(original, readAll(source, "A.java"));
 
         r = t.edit("@mem/A.java", Arrays.asList(op("x = 1", "x = 2", null, null)), ws.toString(), null);

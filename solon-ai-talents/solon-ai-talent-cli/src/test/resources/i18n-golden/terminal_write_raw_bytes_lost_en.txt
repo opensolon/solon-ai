@@ -1,0 +1,1 @@
+Error: the existing file has undecodable bytes (count: 5; read shows them as �) and the content contains �; overwriting would lose these original bytes permanently, so the write was cancelled and the file was not modified. Use edit to change only the parts that need changing.

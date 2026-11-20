@@ -1,1 +1,1 @@
-Precheck failed (operation #1): new_str contains characters that cannot be saved as UTF-8. The file was not modified.
+Precheck failed (operation #1): U+D800 in new_str (character 1) cannot be represented in the file's encoding UTF-8; the file was not modified. Write it in a form this encoding can represent (such as an escape sequence) instead of changing the file's encoding.

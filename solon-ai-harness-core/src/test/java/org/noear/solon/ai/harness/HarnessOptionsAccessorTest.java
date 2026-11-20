@@ -1,6 +1,7 @@
 package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.talents.cli.FileEncodingPolicy;
 import org.noear.solon.ai.chat.CacheControl;
 import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
@@ -150,6 +151,11 @@ class HarnessOptionsAccessorTest {
         o.setSandboxSystemRestrict(true);
         o.setSandboxSystemRestrict(null);
         assertTrue(o.isSandboxSystemRestrict());
+
+        FileEncodingPolicy policy = FileEncodingPolicy.builder().noCandidates().build();
+        o.setFileEncodingPolicy(policy);
+        o.setFileEncodingPolicy(null);
+        assertSame(policy, o.getFileEncodingPolicy());
 
         o.setHitlEnabled(true);
         o.setHitlEnabled(null);
@@ -453,7 +459,7 @@ class HarnessOptionsAccessorTest {
                 "setCompressionDefaultContextLength",
                 "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount",
                 "setMemorySummaryLength", "setSandboxEnabled", "setSandboxAllowUserHome",
-                "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",
+                "setSandboxSystemRestrict", "setFileEncodingPolicy", "setHitlEnabled", "setPermissionContext",
                 "setSubagentEnabled", "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
                 "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel", "setLocale",

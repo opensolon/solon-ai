@@ -1,4 +1,4 @@
---- File: @mem/a.txt (Lines: 1 - 3, Size: 0.01 KB) ---
+--- File: @mem/a.txt (Lines: 1 - 3, Size: 0.01 KB, Encoding: UTF-8) ---
 --------------------------------------------------
      1 | alpha
      2 | beta

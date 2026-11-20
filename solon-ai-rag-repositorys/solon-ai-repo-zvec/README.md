@@ -35,6 +35,7 @@ import org.noear.solon.ai.rag.Document;
 import org.noear.solon.ai.rag.repository.ZvecRepository;
 import org.noear.solon.ai.rag.repository.zvec.MetadataField;
 import org.noear.solon.ai.rag.util.QueryCondition;
+import org.noear.solon.expression.snel.ConditionBuilder;
 
 EmbeddingModel embeddingModel = EmbeddingModel.of("http://127.0.0.1:11434/api/embed")
         .provider("ollama")
@@ -66,6 +67,11 @@ List<Document> docs2 = repository.search(new QueryCondition("框架")
         .filterExpression("category == 'framework' && year > 2015")
         .limit(10));
 
+// in / not in 请用 ConditionBuilder 构造（SnEL 的字符串语法不支持 IN）
+List<Document> docs3 = repository.search(new QueryCondition("框架")
+        .filterExpression(new ConditionBuilder().in("category", "framework", "tool"))
+        .limit(10));
+
 // 删除
 repository.deleteById("doc-id");
 ```
@@ -77,9 +83,13 @@ repository.deleteById("doc-id");
   - `COSINE`：`1 - 距离`
   - `L2`：`1 / (1 + 距离)`
   - `IP`：直接使用内积值
-- **过滤下推范围**：`==`、`!=`、`>`、`>=`、`<`、`<=`、`&&`、`||`、`in`、`not in` 会下推；`like`（SnEL 与 Zvec 的通配符写法不同）与 `NOT`（Zvec 表达式无该语法）不下推，走内存二次过滤，结果仍然正确。
+- **过滤下推范围**：`==`、`!=`、`>`、`>=`、`<`、`<=`、`&&`、`||`、`in`、`not in` 会下推；`like`（SnEL 与 Zvec 的通配符写法不同）、`NOT`（Zvec 表达式无该语法）以及引用未声明列的表达式不下推，走内存二次过滤，结果仍然正确。
+  - 下推时写成 Zvec 的 SQL 风格：逻辑运算符为 `AND` / `OR`（Zvec 不认 `&&` / `||`），相等为 `=`（不认 `==`），字符串单引号转义为 `\'`。
+  - `in` / `not in` 请用 `new ConditionBuilder().in(...)` 构造（SnEL 的字符串语法不支持 `IN`）。
+  - `content` 与 `metadata` 不参与下推：solon-ai 的过滤表达式是在文档 metadata 上求值的，把 `content` 下推出去会把“按正文过滤”误当成“按 metadata.content 过滤”。
+- **元数据值类型**：声明为强类型列（如 `int32`、`bool`）的字段，写入时值必须是对应类型（`Number` / `Boolean`），类型不符会抛 `IllegalArgumentException` 并指明字段与期望类型；该字段的值为 `null` 时跳过该列。文档向量长度与集合维度不一致时同样在写入前报错，并指明文档 id 与期望维度。
 - **同一目录只能打开一次**：Zvec 的集合目录里带读写锁，一个进程内重复打开会报 `Can't lock read-write collection`。本实现以绝对路径缓存集合句柄（`zvec.CollectionRegistry`），指向同一路径的多个 `ZvecRepository` 共用同一个句柄。
-- **生命周期**：`build()` 时自动初始化（目录已存在则打开，否则新建）；`dropRepository()` 会删除磁盘数据。
+- **生命周期**：`build()` 时自动初始化（目录已存在则打开，否则新建）；`dropRepository()` 会删除磁盘数据。句柄被同路径的其它仓库 `drop` 掉后会失效，本实现在每次使用时检查并自动重新打开。
 - **Zvec 初始化**：`build()` 会自动调用一次 `Zvec.initialize(null)`（幂等），无需手动初始化。
 - **原生库定位**：默认使用 jar 内打包的原生库；如需使用本地构建，可设置 `-Dzvec.native.path=/path/to/zvec/build/lib` 或环境变量 `ZVEC_NATIVE_PATH`。
 - **平台限制**：Zvec 是本地库，不支持 GraalVM native-image。

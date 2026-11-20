@@ -113,6 +113,8 @@ terminal.instruction.cmd_open: |-
   - **命令执行**: 在 `bash` 中支持绝对路径访问。
 terminal.instruction.tools_first: |-
   - **工具优先（先选工具，再考虑命令）**: 读文件、列目录、查找文件、全文检索、写文件与改文件，一律用 `read` / `ls` / `glob` / `grep` / `{write}` / `{edit}` 工具，不要用 shell 命令代劳（如 {examples}）：工具层已统一处理编码与 BOM、行号定位、忽略无关目录（node_modules/target/.git 等）、大文件分页截断与写入原子回滚，命令行做不到这些。`bash` 用于真正需要执行的场景：构建、测试、git、包管理、脚本运行，以及工具无法覆盖的管道与统计。
+terminal.instruction.file_encoding: |-
+  - **文件编码**：`read` 首行的 Encoding 是自动识别的文件编码，`edit` / `{write}` 会按它保存，不需要也不要自己转换编码；显示为 � 的字节无法解码，`edit` 会原样保留它们，修改时避开即可。
 terminal.instruction.file_cmds_powershell: |-
   `Get-Content`、`Get-ChildItem`、`Select-String`、`Set-Content`、`>`
 terminal.instruction.file_cmds_cmd: |-
@@ -150,7 +152,7 @@ terminal.instruction.stderr_cmd: |-
 terminal.instruction.ps_encoding: |-
   - **编码（系统已前置处理，按此书写）**：本次会话的输入/输出/文件读写默认编码已统一为 UTF-8（包括 `Get-Content`、`Select-String`、`Import-Csv` 的读，以及 `Set-Content`、`Add-Content`、`Out-File` 和 `>` / `>>` 的写）。无需自行 `chcp`、设置 `$OutputEncoding` 或反复加 `-Encoding UTF8`。
 terminal.instruction.ps_encoding_gbk: |-
-  - 例外：若已确认某文件是 GBK/ANSI 编码，必须显式写 `-Encoding Default` 才能读对。
+  - 例外：若 `read` 首行的 Encoding 显示某文件是 GBK 等非 UTF-8 编码，在 PowerShell 里读写它必须显式写 `-Encoding Default`。
 terminal.instruction.ps_encoding_bom: |-
   - Windows PowerShell 5.1 的 UTF-8 写入带 BOM，本工具的 `read` / `edit` / `grep` 会自动忽略它，无需特殊处理。
 terminal.instruction.ps_encoding_garbled: |-
@@ -211,6 +213,16 @@ terminal.read.done: |-
   --- [文件读取完毕] ---
 terminal.write.ok: |-
   文件成功写入: {path}
+terminal.write.unencodable: |-
+  错误：内容中的 {char}（第 {index} 个字符）无法用该文件的编码 {charset} 表示，文件未修改。请换一种该编码能表示的写法（如转义序列），不要改变文件的编码。
+terminal.write.raw_bytes_lost: |-
+  错误：原文件有 {count} 个无法解码的字节（read 显示为 �），写入内容里含有 �，覆盖会永久丢失这些原字节，已取消，文件未修改。请改用 edit 只修改需要改的部分。
+terminal.write.unknown_non_ascii: |-
+  错误：无法确定原文件的编码（有 {count} 个字节无法按 {charset} 解码），写入内容含非 ASCII 字符，写入后会与原内容的编码不一致，已取消，文件未修改。请改用 edit 只修改 ASCII 内容，或请用户在配置中为该路径指定编码。
+terminal.file.saved_as: |-
+  已按 {encoding} 编码保存。
+terminal.file.saved_keeping_raw: |-
+  已按 {encoding} 编码保存，{count} 个无法解码的字节已原样保留。
 terminal.edit.missing: |-
   错误：文件不存在，无法进行编辑。
 terminal.edit.empty_old: |-
@@ -226,9 +238,11 @@ terminal.edit.apply_failed: |-
 terminal.edit.ok: |-
   文件 {path} 成功完成 {count} 处修改。
 terminal.edit.raw_bytes_hint: |-
-  提示：文件中有无法按 {charset} 解码的字节（read 和 grep 显示为 �，文件可能是 GBK 等其他编码）。edit 会原样保留这些字节，但 old_str 无法匹配它们：请只替换不含 � 的文本，不要跨过这些位置。
+  提示：文件中有 {charset} 无法解码的字节（read 首行的 Encoding 会注明数量，read 和 grep 把它们显示为 �）。edit 会原样保留这些字节，但 old_str 无法匹配它们：请只替换不含 � 的文本，不要跨过这些位置。
 terminal.edit.unencodable: |-
-  预检查失败（操作 {op}）: new_str 中有无法按 {charset} 保存的字符。文件未修改。
+  预检查失败（操作 {op}）: new_str 中的 {char}（第 {index} 个字符）无法用该文件的编码 {charset} 表示，文件未修改。请换一种该编码能表示的写法（如转义序列），不要改变文件的编码。
+terminal.edit.unknown_non_ascii: |-
+  预检查失败（操作 {op}）: 无法确定该文件的编码（有 {count} 个字节无法按 {charset} 解码），new_str 含非 ASCII 字符，写入后会与原内容的编码不一致，已取消，文件未修改。可以只修改 ASCII 内容，或请用户在配置中为该路径指定编码。
 terminal.edit.not_preservable: |-
   错误：文件中有无法按 {charset} 解码的字节，且无法保证写回时原样保留，已取消编辑，文件未修改。
 terminal.vedit.empty_old: |-
@@ -241,6 +255,8 @@ terminal.grep.none: |-
   未找到结果。
 terminal.grep.truncated: |-
   警告：搜索结果过多，已达到 {kb}KB 限制并截断。请缩小搜索路径或关键词。
+terminal.grep.encoding_note: |-
+  注：以下命中文件不是普通 UTF-8，已按所示编码解码（read 首行显示同样的编码，edit / write 会按它保存）：{files}
 terminal.grep.skipped_large: |-
   跳过 {count} 个超过单文件读取上限（10MB）的文件。
 terminal.glob.none: |-

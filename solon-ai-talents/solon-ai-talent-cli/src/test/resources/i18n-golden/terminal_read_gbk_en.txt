@@ -1,0 +1,7 @@
+--- File: gbk.txt (Lines: 1 - 2, Size: 0.02 KB, Encoding: GBK detected) ---
+--------------------------------------------------
+     1 | // 中文
+     2 | int x = 1;
+
+
+--- [end of file] ---

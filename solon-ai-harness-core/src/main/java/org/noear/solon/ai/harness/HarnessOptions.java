@@ -35,6 +35,7 @@ import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.harness.agent.ToolName;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.talents.cli.FileEncodingPolicy;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
 import org.noear.solon.ai.talents.memory.MemorySolutionProvider;
 import org.noear.solon.ai.mount.MountManager;
@@ -102,6 +103,8 @@ class HarnessOptions implements NonSerializable {
     private volatile boolean sandboxEnabled = true;
     private volatile boolean sandboxAllowUserHome = false;
     private volatile boolean sandboxSystemRestrict = true;
+    /** 文件编码识别策略（候选编码、按路径指定的编码）；null 用 TerminalTalent 的默认（候选 GBK，无路径规则） */
+    private volatile FileEncodingPolicy fileEncodingPolicy;
 
     private volatile boolean hitlEnabled = false;
     private volatile PermissionContext permissionContext = PermissionContext.create();
@@ -430,6 +433,16 @@ class HarnessOptions implements NonSerializable {
     void setSandboxAllowUserHome(Boolean sandboxAllowUserHome) {
         if (sandboxAllowUserHome != null) {
             this.sandboxAllowUserHome = sandboxAllowUserHome;
+        }
+    }
+
+    FileEncodingPolicy getFileEncodingPolicy() {
+        return fileEncodingPolicy;
+    }
+
+    void setFileEncodingPolicy(FileEncodingPolicy fileEncodingPolicy) {
+        if (fileEncodingPolicy != null) {
+            this.fileEncodingPolicy = fileEncodingPolicy;
         }
     }
 

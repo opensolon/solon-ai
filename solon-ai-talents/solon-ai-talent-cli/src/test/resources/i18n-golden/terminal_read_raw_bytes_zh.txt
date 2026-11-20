@@ -1,6 +1,6 @@
---- File: gbk.txt (Lines: 1 - 2, Size: 0.02 KB) ---
+--- File: raw.txt (Lines: 1 - 2, Size: 0.02 KB, Encoding: unknown, 5 undecodable bytes shown as U+FFFD) ---
 --------------------------------------------------
-     1 | // ����
+     1 | // �����
      2 | int x = 1;
 
 

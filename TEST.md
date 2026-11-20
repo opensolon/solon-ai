@@ -23,3 +23,4 @@
 | solon-ai-repo-redis          | ok | ok |    |
 | solon-ai-repo-tcvectordb     | ok | ok |    |
 | solon-ai-repo-vectorex       | ok |    |    |
+| solon-ai-repo-zvec           | ok | ok | 嵌入式，无需外部服务 |

@@ -75,7 +75,8 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
     @Override
     public void initRepository() {
         synchronized (config) {
-            if (config.collection == null) {
+            //句柄可能被同一路径的其它 Repository（或 dropRepository）关掉/删掉，失效时重新打开
+            if (config.collection == null || config.collection.isOpen() == false) {
                 CollectionRegistry.initNative();
 
                 CollectionOptions options = config.collectionOptions();
@@ -104,25 +105,51 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
     }
 
     /**
+     * 获取集合句柄（句柄失效时重新打开）
+     */
+    private Collection collection() {
+        initRepository();
+
+        Collection collection = config.collection;
+        if (collection == null) {
+            throw new IllegalStateException("The zvec collection is not initialized");
+        }
+
+        return collection;
+    }
+
+    /**
      * 构建 schema（新建 collection 时使用）
      */
     private CollectionSchema readSchema() {
         CollectionSchema schema = new CollectionSchema(config.collectionName);
 
-        schema.addField(new FieldSchema(config.contentFieldName, DataType.STRING, true, 0));
-        schema.addField(new FieldSchema(config.metadataFieldName, DataType.STRING, true, 0));
-
-        for (MetadataField metadataField : config.metadataFields) {
-            FieldSchema fieldSchema = new FieldSchema(metadataField.getName(), metadataField.getDataType(), true, 0);
-            if (metadataField.isIndexed()) {
-                fieldSchema.setIndexParams(IndexParams.createInvert(true, true));
-            }
-            schema.addField(fieldSchema);
+        //addField 是深拷贝，字段定义用完即可释放（否则原生内存泄漏）
+        try (FieldSchema contentField = new FieldSchema(config.contentFieldName, DataType.STRING, true, 0)) {
+            schema.addField(contentField);
         }
 
-        FieldSchema vectorField = new FieldSchema(config.embeddingFieldName, DataType.VECTOR_FP32, false, config.dimensions);
-        vectorField.setIndexParams(IndexParams.createHNSW(config.metricType, config.hnswM, config.hnswEfConstruction));
-        schema.addField(vectorField);
+        try (FieldSchema metadataField = new FieldSchema(config.metadataFieldName, DataType.STRING, true, 0)) {
+            schema.addField(metadataField);
+        }
+
+        for (MetadataField metadataField : config.metadataFields) {
+            try (FieldSchema fieldSchema = new FieldSchema(metadataField.getName(), metadataField.getDataType(), true, 0)) {
+                if (metadataField.isIndexed()) {
+                    try (IndexParams indexParams = IndexParams.createInvert(true, true)) {
+                        fieldSchema.setIndexParams(indexParams);
+                    }
+                }
+                schema.addField(fieldSchema);
+            }
+        }
+
+        try (FieldSchema vectorField = new FieldSchema(config.embeddingFieldName, DataType.VECTOR_FP32, false, config.dimensions)) {
+            try (IndexParams hnsw = IndexParams.createHNSW(config.metricType, config.hnswM, config.hnswEfConstruction)) {
+                vectorField.setIndexParams(hnsw);
+            }
+            schema.addField(vectorField);
+        }
 
         return schema;
     }
@@ -174,8 +201,9 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
                 docs.add(toDoc(doc));
             }
 
-            config.collection().upsert(docs);
+            collection().upsert(docs);
         } finally {
+            //toDoc 中途抛异常也要释放已创建的原生对象
             Doc.freeDocs(docs);
         }
     }
@@ -184,7 +212,7 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
      * 优化索引（把暂存区的向量合并进索引，提升检索速度）
      */
     public void optimize() {
-        config.collection().optimize();
+        collection().optimize();
     }
 
     @Override
@@ -193,7 +221,7 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
             return;
         }
 
-        config.collection().delete(Arrays.asList(ids));
+        collection().delete(Arrays.asList(ids));
     }
 
     @Override
@@ -202,7 +230,7 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
             return false;
         }
 
-        List<Doc> docs = config.collection().fetch(Collections.singletonList(id));
+        List<Doc> docs = collection().fetch(Collections.singletonList(id));
         try {
             return Utils.isNotEmpty(docs);
         } finally {
@@ -240,7 +268,7 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
                 query.setFilter(filter);
             }
 
-            docs = config.collection().query(query);
+            docs = collection().query(query);
 
             Stream<Document> stream = docs.stream().map(this::toDocument);
 
@@ -279,19 +307,19 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
                         zDoc.addStringField(metadataField.getName(), String.valueOf(value));
                         break;
                     case BOOL:
-                        zDoc.addBoolField(metadataField.getName(), (Boolean) value);
+                        zDoc.addBoolField(metadataField.getName(), toBoolean(metadataField, value));
                         break;
                     case INT32:
-                        zDoc.addInt32Field(metadataField.getName(), ((Number) value).intValue());
+                        zDoc.addInt32Field(metadataField.getName(), toNumber(metadataField, value).intValue());
                         break;
                     case INT64:
-                        zDoc.addInt64Field(metadataField.getName(), ((Number) value).longValue());
+                        zDoc.addInt64Field(metadataField.getName(), toNumber(metadataField, value).longValue());
                         break;
                     case FLOAT:
-                        zDoc.addFloatField(metadataField.getName(), ((Number) value).floatValue());
+                        zDoc.addFloatField(metadataField.getName(), toNumber(metadataField, value).floatValue());
                         break;
                     case DOUBLE:
-                        zDoc.addDoubleField(metadataField.getName(), ((Number) value).doubleValue());
+                        zDoc.addDoubleField(metadataField.getName(), toNumber(metadataField, value).doubleValue());
                         break;
                     default:
                         throw new IllegalArgumentException("Unsupported metadata field type: " + metadataField.getDataType());
@@ -300,10 +328,37 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
         }
 
         if (doc.getEmbedding() != null) {
+            if (doc.getEmbedding().length != config.dimensions) {
+                throw new IllegalArgumentException("Document '" + doc.getId() + "' embedding dimensions is "
+                        + doc.getEmbedding().length + ", but the collection is " + config.dimensions);
+            }
+
             zDoc.addVectorFP32Field(config.embeddingFieldName, doc.getEmbedding());
         }
 
         return zDoc;
+    }
+
+    /**
+     * 元数据值转为 Zvec 标量值（类型不匹配时给出明确提示，而不是掷 ClassCastException）
+     */
+    private static Number toNumber(MetadataField field, Object value) {
+        if (value instanceof Number) {
+            return (Number) value;
+        }
+
+        throw new IllegalArgumentException("Metadata field '" + field.getName() + "' is declared as "
+                + field.getDataType() + " but the value is " + value.getClass().getName() + ": " + value);
+    }
+
+    private static boolean toBoolean(MetadataField field, Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+
+        //不做字符串宽松转换：否则写入时是 true、内存二次过滤时又是 "true"，两套语义会对不上
+        throw new IllegalArgumentException("Metadata field '" + field.getName() + "' is declared as BOOL"
+                + " but the value is " + value.getClass().getName() + ": " + value);
     }
 
     /**
@@ -358,9 +413,13 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
 
         private String collectionName = "solon_ai";
 
-        private final String contentFieldName = "content";
-        private final String metadataFieldName = "metadata";
-        private final String embeddingFieldName = "embedding";
+        private static final String CONTENT_FIELD_NAME = "content";
+        private static final String METADATA_FIELD_NAME = "metadata";
+        private static final String EMBEDDING_FIELD_NAME = "embedding";
+
+        private final String contentFieldName = CONTENT_FIELD_NAME;
+        private final String metadataFieldName = METADATA_FIELD_NAME;
+        private final String embeddingFieldName = EMBEDDING_FIELD_NAME;
 
         private List<MetadataField> metadataFields = new ArrayList<>();
         private MetricType metricType = MetricType.COSINE;
@@ -383,6 +442,15 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
          * 集合名（一个集合对应 basePath 下的一个子目录）
          */
         public Builder collectionName(String collectionName) {
+            if (Utils.isEmpty(collectionName)) {
+                throw new IllegalArgumentException("The collectionName cannot be empty");
+            }
+            if (collectionName.indexOf('/') >= 0 || collectionName.indexOf('\\') >= 0
+                    || collectionName.indexOf("..") >= 0) {
+                //集合名会拼成子目录，不允许跳目录
+                throw new IllegalArgumentException("The collectionName cannot contain path separators or '..': " + collectionName);
+            }
+
             this.collectionName = collectionName;
             return this;
         }
@@ -402,6 +470,33 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
                 this.metadataFields = Arrays.asList(metadataFields);
             }
             return this;
+        }
+
+        /**
+         * 检查元数据字段定义（重名、与内置列冲突）
+         */
+        private void checkMetadataFields() {
+            Set<String> names = new HashSet<>();
+
+            for (MetadataField metadataField : metadataFields) {
+                if (metadataField == null) {
+                    throw new IllegalArgumentException("The metadataFields cannot contain null");
+                }
+
+                String name = metadataField.getName();
+                if (Utils.isEmpty(name)) {
+                    throw new IllegalArgumentException("The metadata field name cannot be empty");
+                }
+
+                if (CONTENT_FIELD_NAME.equals(name) || METADATA_FIELD_NAME.equals(name)
+                        || EMBEDDING_FIELD_NAME.equals(name)) {
+                    throw new IllegalArgumentException("The metadata field name is reserved: " + name);
+                }
+
+                if (names.add(name) == false) {
+                    throw new IllegalArgumentException("The metadata field is duplicated: " + name);
+                }
+            }
         }
 
         /**
@@ -475,10 +570,12 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
 
         /**
          * 可下推的过滤列（表达式里出现其它列时，交由内存二次过滤）
+         *
+         * <p>注意：不能包含 content 与 metadata。solon-ai 的过滤表达式是在文档 metadata 上求值的，
+         * 而 content 是正文列，下推出去会把“按正文过滤”当成“按 metadata.content 过滤”，语义不一致。</p>
          */
         private Set<String> filterColumns() {
             Set<String> columns = new HashSet<>();
-            columns.add(contentFieldName);
 
             for (MetadataField metadataField : metadataFields) {
                 columns.add(metadataField.getName());
@@ -487,19 +584,28 @@ public class ZvecRepository implements RepositoryStorable, RepositoryLifecycle {
             return columns;
         }
 
-        private Collection collection() {
-            if (collection == null) {
-                throw new IllegalStateException("The zvec collection is not initialized");
-            }
-
-            return collection;
-        }
 
         public ZvecRepository build() {
+            if (embeddingModel == null) {
+                throw new IllegalArgumentException("The embeddingModel cannot be null");
+            }
+            if (Utils.isEmpty(basePath)) {
+                throw new IllegalArgumentException("The basePath cannot be empty");
+            }
+            if (metricType == null) {
+                throw new IllegalArgumentException("The metricType cannot be null");
+            }
+
+            checkMetadataFields();
+
             try {
                 this.dimensions = embeddingModel.dimensions();
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to get embedding dimensions", e);
+            }
+
+            if (this.dimensions <= 0) {
+                throw new IllegalStateException("Invalid embedding dimensions: " + this.dimensions);
             }
 
             return new ZvecRepository(this);
