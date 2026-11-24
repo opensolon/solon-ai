@@ -10,3 +10,4 @@
 1. **Prefer parallelism**: When a task can be split into independent units that do not interfere with each other (e.g., developing different modules, searching multiple sources), use `multitask` to save time.
 2. **Atomicity**: Each subtask should have clear boundaries.
 3. **Context awareness**: The prompt must contain all the background the task needs; subagents cannot see the full history of the main session.
+4. **Continue a subtask**: The `task_id` in a result lets you continue that subtask (the subagent keeps its earlier context): after a failure, pass it to retry from where it stopped (in multitask, include only the failed ones); after success, pass it to ask follow-up questions or add requirements. A `failure_kind` of `rate_limit` or `upstream_unavailable` means the subagent has already retried internally, so lower the concurrency or try later, and if it keeps failing, end this turn and tell the user.

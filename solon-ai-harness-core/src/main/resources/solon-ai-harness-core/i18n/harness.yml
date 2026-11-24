@@ -14,6 +14,7 @@ task.instruction.strategy: |-
   1. **Prefer parallelism**: When a task can be split into independent units that do not interfere with each other (e.g., developing different modules, searching multiple sources), use `multitask` to save time.
   2. **Atomicity**: Each subtask should have clear boundaries.
   3. **Context awareness**: The prompt must contain all the background the task needs; subagents cannot see the full history of the main session.
+  4. **Continue a subtask**: The `task_id` in a result lets you continue that subtask (the subagent keeps its earlier context): after a failure, pass it to retry from where it stopped (in multitask, include only the failed ones); after success, pass it to ask follow-up questions or add requirements. A `failure_kind` of `rate_limit` or `upstream_unavailable` means the subagent has already retried internally, so lower the concurrency or try later, and if it keeps failing, end this turn and tell the user.
 task.error.nested_task: |-
   Subagents are not allowed to delegate further subtasks (one level at most). Complete the current task directly, or put what you need into the prompt and do it yourself.
 task.error.nested_multitask: |-
@@ -52,6 +53,12 @@ task.result.spilled: |-
   ...[Content too long and truncated: original length {length} characters, the first {kept} characters are kept here; the full result has been saved to {path}. Read that file page by page as needed, and do not delegate this task again]
 task.result.truncated: |-
   ...[Content too long and truncated, original length {length} characters]
+task.resume.not_found: |-
+  Subtask {task_id} does not exist or has expired and cannot be continued; delegate it anew.
+task.resume.busy: |-
+  Subtask {task_id} is still running; wait until it ends before continuing it.
+task.resume.duplicate: |-
+  Subtask {task_id} is used more than once in the same call; this entry is ignored.
 
 # ---- Subagent generation (generate) ----
 generate.error.bad_name: |-
@@ -202,3 +209,19 @@ input.attachments_default: |-
   Please help me with these attachments
 run.cancelled: |-
   The task was cancelled by the user.
+
+# ---- Project instructions (AGENTS.md) ----
+project_rules.description: |-
+  Project instructions: AGENTS.md files in the workspace (shared by the main agent and all subagents)
+project_rules.source: |-
+  Instructions from: {path}
+project_rules.truncated: |-
+  (Truncated; read `{path}` for the full content)
+project_rules.update.removed: |-
+  The instructions from {path} no longer apply.
+project_rules.update.added: |-
+  New instructions apply from:
+project_rules.update.changed: |-
+  The instructions changed:
+project_rules.update.all_removed: |-
+  Previously loaded instructions no longer apply.

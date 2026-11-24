@@ -134,6 +134,7 @@ public class HarnessEngine {
     private final DefaultAgentCatalog agentCatalog;
 
     private final CodeTalent codeTalent;
+    private final ProjectRulesTalent projectRulesTalent;
     private final TodoTalent todoTalent;
     private final TaskTalent taskTalent;
     private final GenerateTalent generateTalent;
@@ -460,6 +461,15 @@ public class HarnessEngine {
 
     public CodeTalent getCodeTalent() {
         return codeTalent;
+    }
+
+    /**
+     * 项目规范才能（AGENTS.md）：主代理与所有子代理都挂
+     *
+     * @since 4.2.0
+     */
+    public ProjectRulesTalent getProjectRulesTalent() {
+        return projectRulesTalent;
     }
 
     public MemoryTalent getMemoryTalent() {
@@ -1830,6 +1840,10 @@ public class HarnessEngine {
         this.todoTalent = new TodoTalent(options.getStateSource(), "sessions/");
         //语言只走请求（prompt）：CODE.md 已有则沿用其语言，新建时用本轮请求语言（引擎默认语言已并入请求）
         this.codeTalent = new CodeTalent(options.getWorkspace(), options.getHarnessHome());
+        //项目规范（AGENTS.md）：只读项目各层（通用约定）；用户级、工具专属目录等位置属宿主产品约定，由宿主自行处理（如并入 systemPrompt）
+        //经工作区来源读取（可以是本地目录，也可以是数据库等实现），每次运行现读进系统提示词，运行中途的变更由拦截器以消息追加
+        this.projectRulesTalent = new ProjectRulesTalent(getWorkspaceSource(), options.getWorkspace());
+        this.projectRulesTalent.setEnabled(options.isProjectRulesEnabled());
         this.taskTalent = new TaskTalent(this, options.getTaskExecutor());
         // 将配置面的默认并发推送到执行者（yaml / Builder / setter 三种入口都只写 options）
         this.taskTalent.setDefaultConcurrency(options.getSubagentDefaultConcurrency());
@@ -1932,6 +1946,10 @@ public class HarnessEngine {
      */
     public AgentSession getSession(String instanceId) {
         return options.getSessionProvider().getSession(instanceId, true);
+    }
+
+    public AgentSession getSession(String instanceId, boolean createIfAbsent) {
+        return options.getSessionProvider().getSession(instanceId, createIfAbsent);
     }
 
     /**
@@ -2632,6 +2650,26 @@ public class HarnessEngine {
 
         public Builder subagentEnabled(Boolean subagentEnabled) {
             options.setSubagentEnabled(subagentEnabled);
+            return this;
+        }
+
+        /**
+         * 是否注入项目规范（AGENTS.md，缺省 true）
+         *
+         * <p>开启时，主代理与所有子代理都会带上 AGENTS.md（同 opencode，代理定义里没有单独的开关；文件名写死，不读 CLAUDE.md），
+         * 规则见 {@link ProjectRulesTalent}（参考 opencode）：经工作区来源读取本轮工作目录由近及远到工作区根每一层的 AGENTS.md；
+         * 每次运行现读进系统提示词，运行中途的变更以消息追加；read / ls 读到子目录时按需加载该处的规范。</p>
+         *
+         * <p>只处理项目各层这一通用约定。用户级规范（如 {@code ~/.xxx/AGENTS.md}）、工具专属目录里的规范等位置因产品而异，
+         * 框架不读，由宿主自行读取（例如并入 {@link #systemPrompt}）。</p>
+         *
+         * <p>这里的「规范」指 AGENTS.md 项目说明（opencode 文档称 Project rules），
+         * 与权限规则（{@link #permissionRuleAdd(PermissionRule)}）无关，关闭它不影响权限判定。</p>
+         *
+         * @since 4.2.0
+         */
+        public Builder projectRulesEnabled(Boolean projectRulesEnabled) {
+            options.setProjectRulesEnabled(projectRulesEnabled);
             return this;
         }
 

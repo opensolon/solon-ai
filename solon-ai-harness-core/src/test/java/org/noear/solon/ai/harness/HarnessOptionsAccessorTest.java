@@ -159,6 +159,11 @@ class HarnessOptionsAccessorTest {
         o.setSubagentEnabled(null);
         assertFalse(o.isSubagentEnabled());
 
+        assertTrue(o.isProjectRulesEnabled(), "项目规范缺省开启");
+        o.setProjectRulesEnabled(false);
+        o.setProjectRulesEnabled(null);
+        assertFalse(o.isProjectRulesEnabled());
+
         o.setBashAsyncEnabled(true);
         o.setBashAsyncEnabled(null);
         assertTrue(o.isBashAsyncEnabled());
@@ -454,7 +459,8 @@ class HarnessOptionsAccessorTest {
                 "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount",
                 "setMemorySummaryLength", "setSandboxEnabled", "setSandboxAllowUserHome",
                 "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",
-                "setSubagentEnabled", "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
+                "setSubagentEnabled", "setProjectRulesEnabled",
+                "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
                 "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel", "setLocale",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",

@@ -72,6 +72,12 @@ public final class HarnessI18nKeys {
      * 变量：length
      */
     public static final String TASK_RESULT_TRUNCATED = "task.result.truncated";
+    /** 续跑目标不存在 / 已过期 / 不属于本会话 / 上次没跑起来；参数 task_id */
+    public static final String TASK_RESUME_NOT_FOUND = "task.resume.not_found";
+    /** 续跑目标仍在执行；参数 task_id */
+    public static final String TASK_RESUME_BUSY = "task.resume.busy";
+    /** 同一次调用里重复续跑同一任务；参数 task_id */
+    public static final String TASK_RESUME_DUPLICATE = "task.resume.duplicate";
     public static final String GENERATE_ERROR_BAD_NAME = "generate.error.bad_name";
     /**
      * 变量：name
@@ -185,4 +191,22 @@ public final class HarnessI18nKeys {
     public static final String INPUT_ATTACHMENT = "input.attachment";
     public static final String INPUT_ATTACHMENTS_DEFAULT = "input.attachments_default";
     public static final String RUN_CANCELLED = "run.cancelled";
+
+    // ---- 项目规范（AGENTS.md，见 ProjectRulesTalent）----
+    public static final String PROJECT_RULES_DESCRIPTION = "project_rules.description";
+    /**
+     * 变量：path
+     */
+    public static final String PROJECT_RULES_SOURCE = "project_rules.source";
+    /**
+     * 变量：path
+     */
+    public static final String PROJECT_RULES_TRUNCATED = "project_rules.truncated";
+    /**
+     * 变量：path
+     */
+    public static final String PROJECT_RULES_UPDATE_REMOVED = "project_rules.update.removed";
+    public static final String PROJECT_RULES_UPDATE_ADDED = "project_rules.update.added";
+    public static final String PROJECT_RULES_UPDATE_CHANGED = "project_rules.update.changed";
+    public static final String PROJECT_RULES_UPDATE_ALL_REMOVED = "project_rules.update.all_removed";
 }

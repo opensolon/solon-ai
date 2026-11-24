@@ -86,7 +86,7 @@ public class TaskTalentSchedulingTest {
 
         Object ctx = context(1);
 
-        Method m = TaskTalent.class.getDeclaredMethod("aggregate", List.class,
+        Method m = TaskTalent.class.getDeclaredMethod("aggregate", List.class, List.class,
                 Class.forName("org.noear.solon.ai.harness.agent.TaskTalent$MultitaskContext"));
         m.setAccessible(true);
 
@@ -94,7 +94,7 @@ public class TaskTalentSchedulingTest {
         String out = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
                 java.time.Duration.ofSeconds(2), () -> {
                     Thread.currentThread().interrupt();
-                    return ((ToolResult) m.invoke(talent, futures, ctx)).getContent();
+                    return ((ToolResult) m.invoke(talent, futures, null, ctx)).getContent();
                 });
 
         assertTrue(out.contains("已中断"), "应说明是中断导致放弃等待: " + out);

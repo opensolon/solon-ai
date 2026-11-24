@@ -1,0 +1,1 @@
+<task_result><task_id>task-0123456789abcdef0123456789abcdef</task_id><description>d1</description><agent_name>explore</agent_name><result_status>failure</result_status><failure_kind>rate_limit</failure_kind><result_content><![CDATA[ERROR: boom]]></result_content></task_result>

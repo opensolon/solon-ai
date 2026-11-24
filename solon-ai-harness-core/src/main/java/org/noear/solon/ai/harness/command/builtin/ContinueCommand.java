@@ -17,9 +17,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
-import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
-import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
@@ -83,11 +81,8 @@ public class ContinueCommand extends AbsCommand {
             return;
         }
 
-        if (Agent.ID_END.equals(trace.getRoute())) {
-            // 说明有结束节点，重新回到思考点
-            trace.setRoute(ReActAgent.ID_REASON);
-            trace.setFinalAnswer(null, false);
-
+        // 结束态回到思考点（顺带清掉上次的模型错误类型），再撤掉末尾那条 ai 回复让它重新生成
+        if (TraceUtil.reopen(trace)) {
             ChatMessage workMessage = trace.getWorkingMemory().getLastMessage();
             if (workMessage instanceof AssistantMessage) {
                 trace.getWorkingMemory().removeLastMessage();

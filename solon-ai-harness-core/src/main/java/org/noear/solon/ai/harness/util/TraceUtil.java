@@ -3,7 +3,10 @@ package org.noear.solon.ai.harness.util;
 
 import org.noear.solon.ai.harness.session.HarnessAttrs;
 import org.noear.solon.ai.harness.session.SessionSelections;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.LlmErrorEvent;
+import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.core.util.Assert;
 
@@ -53,6 +56,27 @@ public final class TraceUtil {
         }
 
         return trace instanceof ReActTrace ? (ReActTrace) trace : null;
+    }
+
+    /**
+     * 让已结束的轨迹可以接着跑（主代理 /continue 与子任务续跑共用）：结束态回到推理点、清掉最终答案，
+     * 并清掉上次的模型错误类型（续跑不走 reset，不清的话本次结束时会读到上次的值、被误判为失败）。
+     *
+     * <p>不动消息：要不要撤掉末尾的回复由调用方决定。</p>
+     *
+     * @return 原来是否处于结束态
+     * @since 4.2.0
+     */
+    public static boolean reopen(ReActTrace trace) {
+        trace.getExtras().remove(LlmErrorEvent.TRACE_ERROR_TYPE_KEY);
+
+        if (Agent.ID_END.equals(trace.getRoute())) {
+            trace.setRoute(ReActAgent.ID_REASON);
+            trace.setFinalAnswer(null, false);
+            return true;
+        }
+
+        return false;
     }
 
     public static void removeCurrentTrace(AgentSession session) {

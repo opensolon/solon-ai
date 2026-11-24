@@ -1,6 +1,7 @@
 package features.ai.harness.i18n;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.harness.agent.ProjectRulesGoldenTest;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.i18n.testkit.I18nKeyCoverage;
 
@@ -16,7 +17,8 @@ import java.util.List;
 public class HarnessI18nCoverageTest {
     static final List<String> PRODUCTION = Collections.singletonList("org.noear.solon.ai.harness.");
     static final List<Class<?>> FACADES = Collections.singletonList(HarnessI18n.class);
-    static final List<Class<?>> SUITES = Arrays.<Class<?>>asList(HarnessRenderGoldenTest.class, HarnessI18nScenarioTest.class);
+    static final List<Class<?>> SUITES = Arrays.<Class<?>>asList(HarnessRenderGoldenTest.class, HarnessI18nScenarioTest.class,
+            ProjectRulesGoldenTest.class);
 
     @Test
     public void testEveryKeyIsExercised() throws Throwable {

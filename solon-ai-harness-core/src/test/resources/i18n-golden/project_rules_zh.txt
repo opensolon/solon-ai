@@ -1,0 +1,7 @@
+项目规范：工作区里的 AGENTS.md（主代理与所有子代理共用）
+----
+规范来源：app/AGENTS.md
+App module: keep answers short.
+
+规范来源：AGENTS.md
+Build: mvn test. Never use fully qualified class names.

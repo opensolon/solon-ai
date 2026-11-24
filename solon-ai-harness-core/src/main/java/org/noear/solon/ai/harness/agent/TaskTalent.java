@@ -24,13 +24,15 @@ import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.LlmErrorClassifier;
 import org.noear.solon.ai.agent.react.ReActOptionsAmend;
+import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.trace.Metrics;
 import org.noear.solon.ai.harness.scope.InputScope;
 import org.noear.solon.ai.agent.react.RunEndEvent;
-import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -38,6 +40,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.i18n.HarnessI18n;
 import org.noear.solon.ai.harness.i18n.HarnessI18nKeys;
+import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.ai.i18n.AiI18n;
 import org.noear.solon.ai.mount.source.MountSource;
 import org.noear.solon.ai.mount.source.FileMountSource;
@@ -55,10 +58,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
@@ -114,7 +124,51 @@ public class TaskTalent extends AbsTalent {
     /** 单条结果的字符上限：避免单个子代理的输出独占父会话上下文 */
     private static final int MAX_RESULT_CHARS = 20000;
 
+    /**
+     * 子任务信息在子会话 context 里的键（随快照落盘，重启后仍可校验归属）。
+     * 值为 Map：parentSessionId / agentName / traceKey / description / status / failureKind
+     * （status 取 {@link #STATUS_RUNNING} 等，failureKind 只在失败时有；二者只供宿主展示，如回放时的成败图标，引擎不据此拦截续跑）。
+     * 宿主读子 trace 请用 {@link #subtaskTraceOf(AgentSession)}，不要自己拼键。
+     *
+     * @since 4.2
+     */
+    public static final String META_SUBTASK = "__subtask";
+
+    /**
+     * task / multitask 工具结果（ToolMessage metadata）上的子任务索引键，供宿主按 taskId 找回子会话（如过程回放）。
+     * 值为 List&lt;Map&gt;：taskId / index / agentName / description。不发给模型。
+     *
+     * @since 4.2
+     */
+    public static final String META_SUBTASKS = "_subtasks";
+
+    /** 任务 ID（即子会话 ID）= 前缀 + {@code Utils.guid()}；判断请用 {@link #isTaskId(String)}，不要只比对前缀 */
+    private static final String TASK_ID_PREFIX = "task-";
+
+    /**
+     * 是否子代理任务 ID（即子会话 ID）：{@code task-} 加 32 位小写十六进制，与生成和续跑校验同一口径。
+     * 子会话与主会话共用引擎的 sessionProvider，宿主据此分流（如不常驻内存）、清理过期子会话或拒绝外部访问，
+     * 这是判断子会话的唯一标准。
+     *
+     * @since 4.2
+     */
+    public static boolean isTaskId(String id) {
+        return id != null && id.startsWith(TASK_ID_PREFIX);
+    }
+
+    /** {@link #META_SUBTASK} 里 status 的取值（running 在进程崩溃或父流取消后会一直留着，宿主按「已中断」展示） */
+    public static final String STATUS_RUNNING = "running";
+    public static final String STATUS_SUCCESS = "success";
+    public static final String STATUS_FAILURE = "failure";
+
+    /** 父流被取消 / 中断时已启动子任务的 failure_kind（其余取模型服务错误分类或 max_turns，见 {@link #failureKindOf}） */
+    private static final String FAILURE_CANCELLED = "cancelled";
+    private static final String FAILURE_INTERRUPTED = "interrupted";
+
     private final HarnessEngine engine;
+
+    /** 正在执行的子任务（进程内运行锁：同一任务不能并发续跑） */
+    private final Set<String> runningTasks = ConcurrentHashMap.newKeySet();
 
     /**
      * 子代理默认并发上限（模型未配置时生效）。
@@ -279,8 +333,10 @@ public class TaskTalent extends AbsTalent {
     /**
      * 委派单一任务
      *
-     * <p>嵌套调用、找不到代理、定义加载失败、子代理执行异常返回 {@link ToolResult#error(String)}；
-     * 子代理正常结束返回成功（不解读它返回的内容）。文本不变（失败项带 {@code ERROR: } 与 result_status）。</p>
+     * <p>嵌套调用、找不到代理、定义加载失败、子代理执行异常、子代理因模型服务错误或回合用尽而结束，
+     * 返回 {@link ToolResult#error(String)}；其余正常结束返回成功（不解读它返回的内容）。失败项带 {@code ERROR: } 与 result_status。
+     * 子代理跑起来过的结果（成败都算）带 {@code <task_id>}，失败另带 {@code <failure_kind>}；模型传 {@code task_id}
+     * 即在原子会话上接着做（同 opencode 的 {@code task_id}/{@code sessionID}：失败时从断点重试，完成后可追问）。</p>
      *
      * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
      * @since 4.2
@@ -303,14 +359,16 @@ public class TaskTalent extends AbsTalent {
         taskOp.agent_name = taskSpec.agent_name;
         taskOp.description = taskSpec.description;
         taskOp.prompt = taskSpec.prompt;
+        taskOp.task_id = taskSpec.task_id;
 
         MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId,1, null, null, null);
 
         TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession), ctx.locale);
 
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
-        String text = runTask(ctx, plan, false, Utils.uuid());
-        return ctx.succeeded.get() > 0 ? ToolResult.success(text) : ToolResult.error(text);
+        String text = runTask(ctx, plan, false, plan.taskId);
+        ToolResult result = ctx.succeeded.get() > 0 ? ToolResult.success(text) : ToolResult.error(text);
+        return withSubtasks(result, Collections.singletonList(plan));
     }
 
     /**
@@ -363,7 +421,27 @@ public class TaskTalent extends AbsTalent {
 
         dispatchQueued(plans, futures, ctx, parentSink, cap);
 
-        return aggregate(futures, ctx);
+        return withSubtasks(aggregate(futures, plans, ctx), plans);
+    }
+
+    /** 结果上挂子任务索引（只列本次确实跑起来的任务：被拒的续跑不列，否则前端会按索引隐藏掉那条拒绝信息） */
+    private static ToolResult withSubtasks(ToolResult result, List<TaskPlan> plans) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (TaskPlan plan : plans) {
+            if (plan.started == false) {
+                continue;
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("taskId", plan.taskId);
+            item.put("index", plan.op.index);
+            item.put("agentName", plan.op.agent_name);
+            item.put("description", plan.op.description);
+            list.add(item);
+        }
+        if (list.isEmpty() == false) {
+            result.metas().put(META_SUBTASKS, list);
+        }
+        return result;
     }
 
     // ========== 预解析 ==========
@@ -377,23 +455,33 @@ public class TaskTalent extends AbsTalent {
         /** 子代理自己声明的技能 / MCP（null = 未声明，继承父代理的选择；见 {@link AgentSelections}） */
         final List<String> ownSkills;
         final List<String> ownMcps;
+        /** 任务 ID：贯穿流事件、子会话 ID、落盘目录与结果里的 {@code <task_id>}；续跑时沿用原 ID */
+        final String taskId;
+        /** 非空表示续跑：已取回的子会话 */
+        final AgentSession resumeSession;
+        /** 子代理是否已在子会话里跑起来（worker 线程写、调用线程读） */
+        volatile boolean started;
 
         TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason) {
-            this(op, agentBuilder, invalidReason, null, null);
+            this(op, agentBuilder, invalidReason, null, null, null);
         }
 
         TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason,
-                 @Nullable List<String> ownSkills, @Nullable List<String> ownMcps) {
+                 @Nullable List<String> ownSkills, @Nullable List<String> ownMcps,
+                 @Nullable AgentSession resumeSession) {
             this.op = op;
             this.agentBuilder = agentBuilder;
             this.invalidReason = invalidReason;
             this.ownSkills = ownSkills;
             this.ownMcps = ownMcps;
+            this.resumeSession = resumeSession;
+            this.taskId = resumeSession != null ? resumeSession.getSessionId() : TASK_ID_PREFIX + Utils.guid();
         }
     }
 
     private List<TaskPlan> preparePlans(AgentSession session, List<MultiTaskOp> tasks, String sessionModel, Locale locale) {
         final List<TaskPlan> plans = new ArrayList<>(tasks.size());
+        final Set<String> resumeIds = new HashSet<>();
 
         for (int i = 0; i < tasks.size(); i++) {
             MultiTaskOp op = tasks.get(i);
@@ -409,6 +497,12 @@ public class TaskTalent extends AbsTalent {
                 continue;
             }
 
+            if (Assert.isNotEmpty(op.task_id) && resumeIds.add(op.task_id) == false) {
+                // 同一次调用里重复续跑同一任务：只认第一条
+                plans.add(new TaskPlan(op, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_RESUME_DUPLICATE, "task_id", op.task_id)));
+                continue;
+            }
+
             plans.add(preparePlan(session, op, sessionModel, locale));
         }
 
@@ -420,6 +514,14 @@ public class TaskTalent extends AbsTalent {
         final ReActAgent.Builder agentBuilder;
         final List<String> ownSkills;
         final List<String> ownMcps;
+        AgentSession resumeSession = null;
+
+        if (Assert.isNotEmpty(op.task_id)) {
+            resumeSession = openForResume(session, op);
+            if (resumeSession == null) {
+                return new TaskPlan(op, null, "ERROR: " + HarnessI18n.fmt(locale, HarnessI18nKeys.TASK_RESUME_NOT_FOUND, "task_id", op.task_id));
+            }
+        }
 
         try {
             // 会话感知：本会话的会话级子代理（generate saveToFile=false）优先，其次引擎级。
@@ -440,7 +542,75 @@ public class TaskTalent extends AbsTalent {
             return new TaskPlan(op, null, unknownAgentReason(op, locale));
         }
 
-        return new TaskPlan(op, agentBuilder, null, ownSkills, ownMcps);
+        return new TaskPlan(op, agentBuilder, null, ownSkills, ownMcps, resumeSession);
+    }
+
+    /**
+     * 取回要续跑的子会话：ID 格式非法、不存在、不属于当前父会话、上次没跑起来（没有可续的进度）一律返回 null
+     * （不区分原因，避免探测别的会话；同 opencode 只校验归属，不看上次成败）。
+     * 成功时把 {@code op.agent_name} 改为原任务的代理（续跑以原任务为准）。
+     */
+    private AgentSession openForResume(AgentSession parentSession, MultiTaskOp op) {
+        if (isTaskId(op.task_id) == false) {
+            return null;
+        }
+
+        final AgentSession sub;
+        try {
+            sub = engine.getSession(op.task_id, false);
+        } catch (Throwable e) {
+            LOG.warn("子任务会话读取失败: task_id={}, 原因: {}", op.task_id, e.getMessage());
+            return null;
+        }
+
+        if (sub == null) {
+            return null;
+        }
+
+        Map<String, Object> meta = subtaskMeta(sub);
+        if (parentSession == null || parentSession.getSessionId().equals(meta.get("parentSessionId")) == false) {
+            return null;
+        }
+
+        ReActTrace prior = subtaskTraceOf(sub);
+        if (prior == null || Prompt.isEmpty(prior.getOriginalPrompt())) {
+            return null;
+        }
+
+        Object agentName = meta.get("agentName");
+        if (agentName instanceof String) {
+            if (op.agent_name != null && op.agent_name.equals(agentName) == false) {
+                LOG.warn("续跑子任务时 agent_name 与原任务不一致，以原任务为准: task_id={}, {} -> {}",
+                        op.task_id, op.agent_name, agentName);
+            }
+            op.agent_name = (String) agentName;
+        }
+        if (Assert.isEmpty(op.description) && meta.get("description") instanceof String) {
+            op.description = (String) meta.get("description");
+        }
+
+        return sub;
+    }
+
+    /** 子任务信息（没有时返回空表，只读场景不写回） */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> subtaskMeta(AgentSession sub) {
+        Object v = sub.getContext().get(META_SUBTASK);
+        return v instanceof Map ? (Map<String, Object>) v : new LinkedHashMap<>();
+    }
+
+    /**
+     * 取子会话里子代理的 trace（宿主回放子过程用）；没有子任务信息或 trace 时返回 null。
+     *
+     * @since 4.2
+     */
+    public static @Nullable ReActTrace subtaskTraceOf(AgentSession sub) {
+        Object key = subtaskMeta(sub).get("traceKey");
+        if ((key instanceof String) == false) {
+            return null;
+        }
+        Object trace = sub.getContext().get((String) key);
+        return trace instanceof ReActTrace ? (ReActTrace) trace : null;
     }
 
     private static String unknownAgentReason(MultiTaskOp op, Locale locale) {
@@ -475,7 +645,7 @@ public class TaskTalent extends AbsTalent {
                                 MultitaskContext ctx, FluxSink<AgentEvent> sink, int cap) {
         boolean submitted = SubTaskScheduler.submit(plans.size(), futures, cap, taskExecutor,
                 () -> isCancelled(sink),
-                i -> runTask(ctx, plans.get(i), true, Utils.uuid()),
+                i -> runTask(ctx, plans.get(i), true, plans.get(i).taskId),
                 i -> plans.get(i).invalidReason != null
                         ? formatTaskResp(plans.get(i).op, false, plans.get(i).invalidReason, true)
                         : notStarted(plans.get(i).op, ctx.locale));
@@ -494,30 +664,37 @@ public class TaskTalent extends AbsTalent {
      * 每轮检查取消；一旦取消或中断就放弃等待后续任务。<b>没有截止时间</b>——
      * 超时只是节拍，不当成失败（子任务可能跑数天）。</p>
      *
+     * <p>放弃等待后，当前及剩余任务按「已完成 → 已启动 → 未启动」取结果（见 {@link #abortedLine}），
+     * 不让已跑完的结果和已启动任务的 {@code <task_id>} 随取消一起丢掉。</p>
+     *
      * <p>成败标记：被取消或中断，或一个子任务都没成功，标记失败；部分失败算成功。</p>
+     *
+     * @param plans 与 futures 按下标对应（null 表示不知道哪些已启动，只用于测试）
      */
-    private ToolResult aggregate(List<CompletableFuture<String>> futures, MultitaskContext ctx) {
+    private ToolResult aggregate(List<CompletableFuture<String>> futures, @Nullable List<TaskPlan> plans, MultitaskContext ctx) {
         StringBuilder compositeResult = new StringBuilder();
         compositeResult.append("<multitask_results>\n");
 
         final FluxSink<AgentEvent> sink = streamSinkOf(ctx.parentTrace);
 
-        // 非 null 表示已放弃等待：当前及剩余任务统一按该文案返回
+        // 非 null 表示已放弃等待：当前及剩余任务改走 abortedLine
         String abortedNote = null;
+        String abortedKind = null;
 
         for (int i = 0; i < futures.size(); i++) {
+            CompletableFuture<String> f = futures.get(i);
+
             if (abortedNote != null) {
-                compositeResult.append(abortedNote).append("\n");
+                compositeResult.append(abortedLine(f, plans == null ? null : plans.get(i), abortedNote, abortedKind, ctx)).append("\n");
                 continue;
             }
-
-            CompletableFuture<String> f = futures.get(i);
 
             String line = null;
 
             while (line == null) {
                 if (isCancelled(sink)) {
                     abortedNote = "ERROR: " + HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_AGGREGATE_CANCELLED);
+                    abortedKind = FAILURE_CANCELLED;
                     break;
                 }
 
@@ -531,12 +708,13 @@ public class TaskTalent extends AbsTalent {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     abortedNote = "ERROR: " + HarnessI18n.get(ctx.locale, HarnessI18nKeys.TASK_AGGREGATE_INTERRUPTED);
+                    abortedKind = FAILURE_INTERRUPTED;
                     // 必须跳出：中断标志已置回，下一轮 get 会立即再抛，不退出就是零间隔死循环
                     break;
                 }
             }
 
-            compositeResult.append(abortedNote != null ? abortedNote : line).append("\n");
+            compositeResult.append(abortedNote != null ? abortedLine(f, plans == null ? null : plans.get(i), abortedNote, abortedKind, ctx) : line).append("\n");
         }
 
         compositeResult.append("</multitask_results>");
@@ -556,6 +734,28 @@ public class TaskTalent extends AbsTalent {
         // 被取消/中断，或一个都没成功：整次调用没完成要做的事
         boolean failed = abortedNote != null || ctx.succeeded.get() == 0;
         return failed ? ToolResult.error(compositeResult.toString()) : ToolResult.success(compositeResult.toString());
+    }
+
+    /**
+     * 放弃等待后一条任务的结果：
+     * <ul>
+     *   <li>已完成 → 用真实结果（包括取消后刚退出、由 runTask 自己带上 task_id 的失败结果）；</li>
+     *   <li>已启动但未结束（如卡在长工具调用里）→ 带 task_id 的失败结果，进度在子会话里，可接着做；</li>
+     *   <li>未启动 → 原来的放弃说明。</li>
+     * </ul>
+     */
+    private String abortedLine(CompletableFuture<String> f, @Nullable TaskPlan plan, String abortedNote, String abortedKind,
+                               MultitaskContext ctx) {
+        if (f.isDone() && f.isCompletedExceptionally() == false) {
+            String v = f.getNow(null);
+            return v == null ? "" : v;
+        }
+
+        if (plan != null && plan.started) {
+            return startedResp(ctx, plan.op, plan.taskId, false, abortedNote, abortedKind, true);
+        }
+
+        return abortedNote;
     }
 
     /** 一次调用的共享上下文（避免 runTask 参数过长）；错误统计标记可为 null（单任务路径不统计） */
@@ -601,8 +801,8 @@ public class TaskTalent extends AbsTalent {
          * 把视野与语言写进子代理的选项：子代理自己声明了技能 / MCP 就用自己的，没有才继承父代理的
          * （不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域（强制边界）照旧继承，最后写入。
          *
-         * @param ownSkills 子代理声明的技能（null = 未声明）
-         * @param ownMcps   子代理声明的 MCP 服务（null = 未声明）
+         * @param ownSkills     子代理声明的技能（null = 未声明）
+         * @param ownMcps       子代理声明的 MCP 服务（null = 未声明）
          */
         private void applyScope(ReActOptionsAmend options, @Nullable List<String> ownSkills, @Nullable List<String> ownMcps) {
             options.locale(locale);
@@ -692,61 +892,79 @@ public class TaskTalent extends AbsTalent {
             return formatTaskResp(plan.op, false, unknownAgentReason(plan.op, ctx.locale), isMultitask);
         }
 
+        // 进程内运行锁：新任务的 ID 是新生成的，只有续跑会撞上
+        if (runningTasks.add(taskId) == false) {
+            return formatTaskResp(plan.op, false,
+                    "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_RESUME_BUSY, "task_id", taskId), isMultitask);
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debug("任务开始[{}/{} - {}]: {}", plan.op.index, ctx.total, plan.op.agent_name, ONode.serialize(plan.op));
         }
+
+        final boolean resume = plan.resumeSession != null;
+        AgentSession sub = null;
+        String traceKey = null;
 
         try {
             // 标记委派深度：本线程内再触发 task/multitask 会被拒绝
             TASK_DEPTH.set(Boolean.TRUE);
 
-            ReActAgent agent = plan.agentBuilder.build();
-            final AgentSession session = InMemoryAgentSession.of(agent.name());
+            final ReActAgent agent = plan.agentBuilder.build();
+            traceKey = agent.getConfig().getTraceKey();
+            final AgentSession session = resume ? plan.resumeSession : engine.getSession(taskId, true);
+            sub = session;
 
-            Prompt originalPrompt = Prompt.of(plan.op.prompt);
-            originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID,
-                    k -> session.getSessionId());
+            final ReActTrace prior = session.getContext().getAs(traceKey);
+            final ReActRequest request;
+            final int maxTurns;
 
-            RunEndEvent agentEnd;
+            if (resume) {
+                // 有可续的进度已在 openForResume 校验过
+                prepareResume(prior, session, plan.op.prompt);
+                // 回合计数不随续跑归零：在已用回合数上再给一份完整预算。
+                // autoRethink 下同样要设：否则上限回到初始值，续跑第一回合就越过反思阈值、被插入一条反思提示
+                maxTurns = prior.getTurnCount() + agent.getConfig().getDefaultOptions().getMaxTurns();
+                request = agent.prompt();
+            } else {
+                maxTurns = 0;
+                Prompt originalPrompt = Prompt.of(plan.op.prompt);
+                originalPrompt.attrs().computeIfAbsent(ChatSession.ATTR_SESSIONID, k -> session.getSessionId());
+                request = agent.prompt(originalPrompt);
+            }
 
-            if (ctx.parentTrace == null || ctx.parentTrace.getOptions() == null
-                    || ctx.parentTrace.getOptions().getStreamSink() == null) {
+            markRunning(session, ctx.sessionId, plan.op, traceKey);
+            plan.started = true;
+            // 子 trace 的指标是累计的：续跑只向父 trace 汇总本次增量
+            final Metrics baseline = prior == null ? null : prior.getMetrics().snapshot();
+
+            request.session(session).options(o -> {
+                o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
+                ctx.applyScope(o, plan.ownSkills, plan.ownMcps);
+
+                for (HarnessExtension extension : engine.getExtensions()) {
+                    if (extension.isEnabled()) {
+                        extension.onRequestAssemble(engine, agent.name(), true, o);
+                    }
+                }
+
+                if (maxTurns > 0) {
+                    o.maxTurns(maxTurns);
+                }
+            });
+
+            final FluxSink<AgentEvent> sink = streamSinkOf(ctx.parentTrace);
+            final RunEndEvent agentEnd;
+
+            if (sink == null) {
                 // 同步模式
-                agentEnd = (RunEndEvent) agent.prompt(originalPrompt)
-                        .session(session)
-                        .options(o -> {
-                            o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
-                            o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
-                            ctx.applyScope(o, plan.ownSkills, plan.ownMcps);
-
-                            for (HarnessExtension extension : engine.getExtensions()) {
-                                if (extension.isEnabled()) {
-                                    extension.onRequestAssemble(engine, agent.name(), true, o);
-                                }
-                            }
-                        })
-                        .stream()
+                agentEnd = (RunEndEvent) request.stream()
                         .doOnNext(chunk -> countLlmError(chunk, ctx.rateLimited, ctx.timedOut,
                                 ctx.upstreamUnavailable))
                         .blockLast();
             } else {
                 // 流式模式
-                final FluxSink<AgentEvent> sink = ctx.parentTrace.getOptions().getStreamSink();
-
-                agentEnd = (RunEndEvent) agent.prompt(originalPrompt)
-                        .session(session)
-                        .options(o -> {
-                            o.toolContextPut(HarnessEngine.ATTR_CWD, ctx.cwd);
-                            o.toolContextPut(ChatSession.ATTR_SESSIONID, ctx.sessionId);
-                            ctx.applyScope(o, plan.ownSkills, plan.ownMcps);
-
-                            for (HarnessExtension extension : engine.getExtensions()) {
-                                if (extension.isEnabled()) {
-                                    extension.onRequestAssemble(engine, agent.name(), true, o);
-                                }
-                            }
-                        })
-                        .stream()
+                agentEnd = (RunEndEvent) request.stream()
                         .takeUntil(r -> sink.isCancelled())
                         .doOnNext(chunk -> {
                             countLlmError(chunk, ctx.rateLimited, ctx.timedOut, ctx.upstreamUnavailable);
@@ -761,13 +979,23 @@ public class TaskTalent extends AbsTalent {
                         .blockLast();
             }
 
-            requireEnd(agentEnd, streamSinkOf(ctx.parentTrace), ctx.locale);
+            requireEnd(agentEnd, sink, ctx.locale);
 
             countLlmErrorType(agentEnd.getLlmErrorType(), ctx.rateLimited, ctx.timedOut,
                     ctx.upstreamUnavailable);
 
             if (ctx.parentTrace != null) {
-                ctx.parentTrace.getMetrics().addMetrics(agentEnd.getMetrics());
+                Metrics metrics = agentEnd.getMetrics();
+                ctx.parentTrace.getMetrics().addMetrics(baseline == null ? metrics : metrics.deltaSince(baseline));
+            }
+
+            // 模型服务失败 / 回合用尽：子代理是「正常结束」的，但任务没完成，要报失败才会被重试
+            final String failureKind = failureKindOf(agentEnd);
+            if (failureKind != null) {
+                LOG.warn("任务失败[{}/{} - {}]: task_id={}, kind={}", plan.op.index, ctx.total, plan.op.agent_name,
+                        taskId, failureKind);
+                markEnded(session, STATUS_FAILURE, failureKind);
+                return startedResp(ctx, plan.op, taskId, false, "ERROR: " + agentEnd.getText(), failureKind, isMultitask);
             }
 
             if (LOG.isDebugEnabled()) {
@@ -777,21 +1005,110 @@ public class TaskTalent extends AbsTalent {
 
             // 超长结果落盘到本轮会话工作目录：模型的文件工具按 __cwd 解析相对路径
             // 先拼好结果再计数：拼结果时抛异常会走失败分支，不会误计
-            String resp = formatTaskResp(plan.op, Utils.uuid(), true, agentEnd.getText(), isMultitask, ctx.cwd, ctx.locale);
+            String resp = startedResp(ctx, plan.op, taskId, true, agentEnd.getText(), null, isMultitask);
+            markEnded(session, STATUS_SUCCESS, null);
             ctx.succeeded.incrementAndGet();
             return resp;
         } catch (Throwable e) {
             LOG.error("任务失败[{}/{} - {}]: {}", plan.op.index, ctx.total, plan.op.agent_name,
                     e.getMessage(), e);
-            countLlmErrorType(LlmErrorClassifier.classify(e), ctx.rateLimited, ctx.timedOut,
-                    ctx.upstreamUnavailable);
+            LlmErrorEvent.Type type = LlmErrorClassifier.classify(e);
+            countLlmErrorType(type, ctx.rateLimited, ctx.timedOut, ctx.upstreamUnavailable);
 
-            return formatTaskResp(plan.op, false,
-                    "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_ERROR_FAILED, "error", e.getMessage()),
-                    isMultitask);
+            String reason = "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_ERROR_FAILED, "error", e.getMessage());
+
+            // 子代理已跑起来（有原始提示词）才给 task_id：进度在子会话里
+            ReActTrace trace = (sub == null || traceKey == null) ? null : sub.getContext().getAs(traceKey);
+            if (trace != null && Prompt.isEmpty(trace.getOriginalPrompt()) == false) {
+                // 父流已取消时与 aggregate 放弃等待的那条同一口径（否则同一次取消会因时序报成 unknown）
+                String kind = isCancelled(streamSinkOf(ctx.parentTrace)) ? FAILURE_CANCELLED
+                        : (type == null ? "error" : type.value());
+                markEnded(sub, STATUS_FAILURE, kind);
+                return startedResp(ctx, plan.op, taskId, false, reason, kind, isMultitask);
+            }
+
+            return formatTaskResp(plan.op, false, reason, isMultitask);
         } finally {
             // 必须清理：池线程会被复用，残留标记会误伤后续任务
             TASK_DEPTH.remove();
+            runningTasks.remove(taskId);
+        }
+    }
+
+    /**
+     * 子代理跑起来过的结果：成败都带 {@code <task_id>}（同 opencode，可接着问或从断点重试），失败另带 {@code <failure_kind>}
+     *
+     * @param failureKind 失败类型（成功为 null）
+     */
+    private String startedResp(MultitaskContext ctx, MultiTaskOp op, String taskId, boolean successful, String result,
+                               @Nullable String failureKind, boolean isMultitask) {
+        return renderTaskResp(op, taskId, true, successful, result, isMultitask, ctx.cwd, ctx.locale, failureKind);
+    }
+
+    /**
+     * 失败类型：模型服务错误取其分类值，回合用尽为 {@code max_turns}；成功返回 null。
+     *
+     * <p>不看 {@code isAbnormal()}：returnDirect 工具与 Feedback 也会标异常结束，但任务是完成了的。</p>
+     *
+     * @since 4.2
+     */
+    public static String failureKindOf(RunEndEvent agentEnd) {
+        LlmErrorEvent.Type type = agentEnd.getLlmErrorType();
+        if (type != null) {
+            return type.value();
+        }
+
+        ReActTrace trace = agentEnd.getTrace();
+        if (trace != null && trace.getOptions() != null && trace.getTurnCount() > trace.getOptions().getMaxTurns()) {
+            return "max_turns";
+        }
+
+        return null;
+    }
+
+    /**
+     * 续跑前修复子 trace：结束态回到推理点（与主代理 /continue 共用 {@link TraceUtil#reopen}），再把 prompt 作为用户消息追加。
+     *
+     * <p>不撤末尾的回复（与 /continue 不同）：成功时它是要被追问的答案，失败时它是错误说明（限流 / 回合用尽），
+     * 留着正好让子代理知道上次为什么停，同 opencode 保留出错的 assistant 消息。</p>
+     *
+     * <p>上次停在工具执行中途（父流取消、进程崩溃）时不追加：用户消息会插在 tool_calls 与工具结果之间，
+     * 上游会拒收；此时从断点接着跑完这一步。</p>
+     */
+    static void prepareResume(ReActTrace trace, AgentSession sub, @Nullable String prompt) {
+        TraceUtil.reopen(trace);
+
+        if (Assert.isNotEmpty(prompt) && ReActAgent.ID_REASON.equals(trace.getRoute())) {
+            ChatMessage message = ChatMessage.ofUser(prompt);
+            trace.getWorkingMemory().addMessage(message);
+            sub.addMessage(message);
+        }
+    }
+
+    /** 登记子任务信息并落一次快照（进程重启后仍可校验归属；running 留到结束前，崩溃后宿主按「已中断」展示） */
+    private static void markRunning(AgentSession sub, String parentSessionId, MultiTaskOp op, String traceKey) {
+        Map<String, Object> meta = new LinkedHashMap<>(subtaskMeta(sub));
+        meta.put("parentSessionId", parentSessionId);
+        meta.put("agentName", op.agent_name);
+        meta.put("traceKey", traceKey);
+        meta.put("description", op.description);
+        meta.put("status", STATUS_RUNNING);
+        meta.remove("failureKind");
+        sub.getContext().put(META_SUBTASK, meta);
+        sub.updateSnapshot();
+    }
+
+    private static void markEnded(AgentSession sub, String status, @Nullable String failureKind) {
+        try {
+            Map<String, Object> meta = new LinkedHashMap<>(subtaskMeta(sub));
+            meta.put("status", status);
+            if (failureKind != null) {
+                meta.put("failureKind", failureKind);
+            }
+            sub.getContext().put(META_SUBTASK, meta);
+            sub.updateSnapshot();
+        } catch (Throwable e) {
+            LOG.warn("子任务状态保存失败: task_id={}, 原因: {}", sub.getSessionId(), e.getMessage());
         }
     }
 
@@ -864,15 +1181,30 @@ public class TaskTalent extends AbsTalent {
      */
     String formatTaskResp(MultiTaskOp task, String taskId, boolean successful, String result, boolean isMultitask,
                           String cwd, Locale locale) {
+        return renderTaskResp(task, taskId, false, successful, result, isMultitask, cwd, locale, null);
+    }
+
+    /**
+     * @param showTaskId  是否输出 {@code <task_id>}：只有子代理跑起来过才给（没跑起来的任务没有子会话可接）
+     * @param failureKind 失败类型（null = 不输出）
+     */
+    private String renderTaskResp(MultiTaskOp task, String taskId, boolean showTaskId, boolean successful, String result,
+                                  boolean isMultitask, String cwd, Locale locale, @Nullable String failureKind) {
         StringBuilder buf = new StringBuilder();
 
         buf.append("<task_result>");
         if (isMultitask) {
             buf.append("<index>").append(task.index).append("</index>");
         }
+        if (showTaskId) {
+            buf.append("<task_id>").append(escapeXml(taskId)).append("</task_id>");
+        }
         buf.append("<description>").append(escapeXml(task.description)).append("</description>");
         buf.append("<agent_name>").append(escapeXml(task.agent_name)).append("</agent_name>");
         buf.append("<result_status>").append(successful ? "success" : "failure").append("</result_status>");
+        if (failureKind != null) {
+            buf.append("<failure_kind>").append(escapeXml(failureKind)).append("</failure_kind>");
+        }
         buf.append("<result_content><![CDATA[").append(toCdata(task, taskId, result, cwd, locale)).append("]]></result_content>");
         buf.append("</task_result>");
 
@@ -995,15 +1327,19 @@ public class TaskTalent extends AbsTalent {
     public static class SingleTaskOp {
         @Param(name = "agent_name", description = "子代理名称")
         public String agent_name;
-        @Param(name = "prompt", description = "发给子代理的详细指令。由于子代理是无状态的（上下文隔离），必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。")
+        @Param(name = "prompt", description = "发给子代理的详细指令。子代理看不到主会话的历史，必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。")
         public String prompt;
         @Param(name = "description", description = "任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。")
         public String description;
+        /** @since 4.2.0 */
+        @Param(name = "task_id", required = false, description = "可选。接着之前的子任务做（取自结果里的 <task_id>，成败均可）：子代理保留之前的全部上下文。失败时从断点重试，prompt 填“继续”或修正说明；完成后可追问或补充要求，prompt 填后续指令。agent_name 以原任务为准。新任务不要填。")
+        public String task_id;
 
         @Override
         public String toString() {
             return "SingleTaskOp{" +
-                    "agent_name='" + agent_name + '\'' +
+                    "task_id='" + task_id + '\'' +
+                    ", agent_name='" + agent_name + '\'' +
                     ", description='" + description + '\'' +
                     '}';
         }

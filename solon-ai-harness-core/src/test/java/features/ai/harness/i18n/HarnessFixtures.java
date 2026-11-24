@@ -204,10 +204,10 @@ public final class HarnessFixtures {
     }
 
     /**
-     * 调用 TaskTalent 私有的 aggregate（multitask 结果汇总）
+     * 调用 TaskTalent 私有的 aggregate（multitask 结果汇总；不带执行计划，即都按未启动处理）
      */
     public static ToolResult aggregate(TaskTalent talent, List<CompletableFuture<String>> futures, Object ctx) throws Throwable {
-        return (ToolResult) invoke(talent, "aggregate", new Class<?>[]{List.class, ctx.getClass()}, futures, ctx);
+        return (ToolResult) invoke(talent, "aggregate", new Class<?>[]{List.class, List.class, ctx.getClass()}, futures, null, ctx);
     }
 
     public static String repeat(char c, int n) {

@@ -1,0 +1,1 @@
+<task_result><description>d1</description><agent_name>explore</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: Subtask task-0123456789abcdef0123456789abcdef is still running; wait until it ends before continuing it.]]></result_content></task_result>

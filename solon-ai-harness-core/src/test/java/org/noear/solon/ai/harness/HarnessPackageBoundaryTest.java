@@ -76,7 +76,8 @@ class HarnessPackageBoundaryTest {
         ALLOWED.put("spi", set("input", "session"));
         ALLOWED.put("input", set("command", "hitl", "scope"));
         ALLOWED.put("command", set("input", "scope", "session", "util"));
-        ALLOWED.put("agent", set("permission", "scope", "session"));
+        // agent -> util：子任务续跑与 /continue 共用 TraceUtil.reopen（util 只依赖 session，不成环）
+        ALLOWED.put("agent", set("permission", "scope", "session", "util"));
         ALLOWED.put("scope", set("agent"));
         ALLOWED.put("util", set("session"));
         ALLOWED.put("i18n", set("util"));

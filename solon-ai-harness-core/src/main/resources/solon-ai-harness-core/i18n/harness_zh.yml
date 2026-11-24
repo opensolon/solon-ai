@@ -14,6 +14,7 @@ task.instruction.strategy: |-
   1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。
   2. **原子性**: 每个子任务应具备明确的边界。
   3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。
+  4. **接着做**: 结果里的 `task_id` 可用来接着该子任务做（子代理保留之前的上下文）：失败时带上它从断点重试（multitask 可只放失败的那几项），完成后也可带上它追问或补充要求；`failure_kind` 为 `rate_limit`、`upstream_unavailable` 表示子代理内部已重试过，请降低并发或稍后再试，短时间内反复失败就结束本轮并告知用户。
 task.error.nested_task: |-
   子代理不允许再委派子任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。
 task.error.nested_multitask: |-
@@ -52,6 +53,12 @@ task.result.spilled: |-
   ...[内容过长已截断：原始长度 {length} 字符，此处保留前 {kept} 字符；完整结果已落盘到 {path}，可按需分页读取该文件，不要重新委派该任务]
 task.result.truncated: |-
   ...[内容过长已截断，原始长度 {length} 字符]
+task.resume.not_found: |-
+  子任务 {task_id} 不存在或已过期，无法接着做，请重新委派。
+task.resume.busy: |-
+  子任务 {task_id} 仍在执行中，请等它结束后再接着做。
+task.resume.duplicate: |-
+  同一次调用里重复使用子任务 {task_id}，已忽略本条。
 
 # ---- 子代理生成（generate）----
 generate.error.bad_name: |-
@@ -202,3 +209,19 @@ input.attachments_default: |-
   请帮我处理这些附件
 run.cancelled: |-
   用户已取消任务.
+
+# ---- 项目规范（AGENTS.md）----
+project_rules.description: |-
+  项目规范：工作区里的 AGENTS.md（主代理与所有子代理共用）
+project_rules.source: |-
+  规范来源：{path}
+project_rules.truncated: |-
+  （已截断，完整内容请用 read 读取 `{path}`）
+project_rules.update.removed: |-
+  来自 {path} 的规范不再适用。
+project_rules.update.added: |-
+  新增规范：
+project_rules.update.changed: |-
+  规范有变化，最新内容：
+project_rules.update.all_removed: |-
+  之前加载的规范均不再适用。

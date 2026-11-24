@@ -42,7 +42,6 @@ import org.noear.solon.ai.i18n.testkit.GoldenFiles;
 import org.noear.solon.lang.Nullable;
 import reactor.core.Disposable;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,6 +52,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -204,6 +204,54 @@ public class HarnessRenderGoldenTest {
                 HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
         out.put("task_result_truncated" + suffix, (String) HarnessFixtures.invoke(new TaskTalent(null), "formatTaskResp", respType,
                 HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
+
+        renderResume(out, engine, talent, s1, trace, locale, suffix);
+    }
+
+    /** 子任务续跑：跑起来过的失败、不存在、重复、仍在执行（走真实的预解析 / 执行入口，固定 task_id 保证快照稳定） */
+    @SuppressWarnings("unchecked")
+    static void renderResume(Map<String, String> out, HarnessEngine engine, TaskTalent talent, AgentSession s1,
+                             ReActTrace trace, Locale locale, String suffix) throws Throwable {
+        final String id = "task-0123456789abcdef0123456789abcdef";
+        Object ctx = HarnessFixtures.multitaskContext(trace, 1, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean());
+        Class<?>[] planType = {AgentSession.class, TaskTalent.MultiTaskOp.class, String.class, Locale.class};
+
+        TaskTalent.MultiTaskOp op = HarnessFixtures.taskOp("explore", 1);
+        out.put("task_resume_failure" + suffix, (String) HarnessFixtures.invoke(talent, "startedResp",
+                new Class<?>[]{ctx.getClass(), TaskTalent.MultiTaskOp.class, String.class, boolean.class, String.class, String.class, boolean.class},
+                ctx, op, id, false, "ERROR: boom", "rate_limit", false));
+
+        op.task_id = id;
+        out.put("task_resume_not_found" + suffix, (String) HarnessFixtures.get(
+                HarnessFixtures.invoke(talent, "preparePlan", planType, s1, op, null, locale), "invalidReason"));
+
+        TaskTalent.MultiTaskOp dup = HarnessFixtures.taskOp("explore", 2);
+        dup.task_id = id;
+        List<Object> plans = (List<Object>) HarnessFixtures.invoke(talent, "preparePlans",
+                new Class<?>[]{AgentSession.class, List.class, String.class, Locale.class}, s1, Arrays.asList(op, dup), null, locale);
+        out.put("task_resume_duplicate" + suffix, (String) HarnessFixtures.get(plans.get(1), "invalidReason"));
+
+        // 跑起来过的子会话：归属本会话，且 trace 有原始提示词
+        AgentSession sub = engine.getSessionProvider().getSession(id, true);
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("parentSessionId", s1.getSessionId());
+        meta.put("agentName", "explore");
+        meta.put("traceKey", "__explore");
+        meta.put("status", "success");
+        sub.getContext().put("__subtask", meta);
+        ReActTrace subTrace = new ReActTrace();
+        HarnessFixtures.set(subTrace, "originalPrompt", Prompt.of("p"));
+        sub.getContext().put("__explore", subTrace);
+
+        Object plan = HarnessFixtures.invoke(talent, "preparePlan", planType, s1, op, null, locale);
+        Set<String> running = (Set<String>) HarnessFixtures.get(talent, "runningTasks");
+        running.add(id);
+        try {
+            out.put("task_resume_busy" + suffix, (String) HarnessFixtures.invoke(talent, "runTask",
+                    new Class<?>[]{ctx.getClass(), plan.getClass(), boolean.class, String.class}, ctx, plan, false, id));
+        } finally {
+            running.remove(id);
+        }
     }
 
     // ---------------- GenerateTalent ----------------

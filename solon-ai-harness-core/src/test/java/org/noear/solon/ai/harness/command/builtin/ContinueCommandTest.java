@@ -2,6 +2,7 @@ package org.noear.solon.ai.harness.command.builtin;
 
 import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
@@ -73,6 +74,7 @@ public class ContinueCommandTest {
         setOriginalPrompt(trace, Prompt.of("帮我修个 bug"));
         trace.setRoute(ReActAgent.ID_END);
         trace.setFinalAnswer("done", false);
+        trace.setExtra(LlmErrorEvent.TRACE_ERROR_TYPE_KEY, LlmErrorEvent.Type.RATE_LIMIT);
         trace.getWorkingMemory().addMessage(ChatMessage.ofAssistant("工作记忆里的尾部 ai"));
         session.getContext().put(TraceUtil.TRACE_KEY_MAIN, trace);
 
@@ -92,6 +94,8 @@ public class ContinueCommandTest {
         // 轨迹重置回思考点
         assertEquals(ReActAgent.ID_REASON, trace.getRoute());
         assertNull(trace.getFinalAnswer());
+        // 上次的模型错误类型清掉（与子任务续跑共用 TraceUtil.reopen），否则本次结束会误报上次的错误
+        assertNull(trace.getExtras().get(LlmErrorEvent.TRACE_ERROR_TYPE_KEY));
 
         // working memory 尾部 Assistant 被移除
         ChatMessage lastWork = trace.getWorkingMemory().getLastMessage();
