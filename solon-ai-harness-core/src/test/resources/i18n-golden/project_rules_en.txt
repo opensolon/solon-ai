@@ -1,0 +1,7 @@
+Project instructions: AGENTS.md files in the workspace (shared by the main agent and all subagents)
+----
+Instructions from: app/AGENTS.md
+App module: keep answers short.
+
+Instructions from: AGENTS.md
+Build: mvn test. Never use fully qualified class names.

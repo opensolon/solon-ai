@@ -1,0 +1,11 @@
+The instructions from app/AGENTS.md no longer apply.
+
+New instructions apply from:
+Instructions from: pkg/AGENTS.md
+Package rule.
+
+The instructions changed:
+Instructions from: AGENTS.md
+Build: mvn verify. Never use fully qualified class names.
+----
+Previously loaded instructions no longer apply.

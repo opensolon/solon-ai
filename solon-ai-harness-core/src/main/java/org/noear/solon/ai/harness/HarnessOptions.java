@@ -107,6 +107,8 @@ class HarnessOptions implements NonSerializable {
     private volatile PermissionContext permissionContext = PermissionContext.create();
     private final Object permissionLock = new Object();
     private volatile boolean subagentEnabled = true;
+    // 项目规范（AGENTS.md 项目说明，与权限规则无关）
+    private volatile boolean projectRulesEnabled = true;
     private volatile boolean bashAsyncEnabled = false;
 
     // ========== 多租户 / 服务端 ==========
@@ -479,6 +481,16 @@ class HarnessOptions implements NonSerializable {
 
     boolean isSubagentEnabled() {
         return subagentEnabled;
+    }
+
+    boolean isProjectRulesEnabled() {
+        return projectRulesEnabled;
+    }
+
+    void setProjectRulesEnabled(Boolean projectRulesEnabled) {
+        if (projectRulesEnabled != null) {
+            this.projectRulesEnabled = projectRulesEnabled;
+        }
     }
 
     void setSubagentEnabled(Boolean subagentEnabled) {

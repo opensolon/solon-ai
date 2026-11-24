@@ -1,0 +1,9 @@
+Instructions from: app/AGENTS.md
+App module: kee
+
+(Truncated; read `app/AGENTS.md` for the full content)
+
+Instructions from: AGENTS.md
+Build: mvn test. Nev
+
+(Truncated; read `AGENTS.md` for the full content)

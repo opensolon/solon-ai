@@ -1,0 +1,11 @@
+来自 app/AGENTS.md 的规范不再适用。
+
+新增规范：
+规范来源：pkg/AGENTS.md
+Package rule.
+
+规范有变化，最新内容：
+规范来源：AGENTS.md
+Build: mvn verify. Never use fully qualified class names.
+----
+之前加载的规范均不再适用。
