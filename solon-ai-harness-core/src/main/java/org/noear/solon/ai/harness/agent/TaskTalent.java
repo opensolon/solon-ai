@@ -32,9 +32,11 @@ import org.noear.solon.ai.agent.react.RunEndEvent;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatSession;
+import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
+import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolResult;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
@@ -126,7 +128,8 @@ public class TaskTalent extends AbsTalent {
 
     /**
      * 子任务信息在子会话 context 里的键（随快照落盘，重启后仍可校验归属）。
-     * 值为 Map：parentSessionId / agentName / traceKey / description / status / failureKind
+     * 值为 Map：parentSessionId / parentCallId / agentName / traceKey / description / status / failureKind
+     * （parentCallId 为最近一次启动它的父调用，取不到时没有）
      * （status 取 {@link #STATUS_RUNNING} 等，failureKind 只在失败时有；二者只供宿主展示，如回放时的成败图标，引擎不据此拦截续跑）。
      * 宿主读子 trace 请用 {@link #subtaskTraceOf(AgentSession)}，不要自己拼键。
      *
@@ -142,6 +145,20 @@ public class TaskTalent extends AbsTalent {
      */
     public static final String META_SUBTASKS = "_subtasks";
 
+    /**
+     * 父 trace extras 上「执行中的 task / multitask 调用 → 本次委派的子任务索引」的键，供宿主在工具返回前（运行中刷新、
+     * 进程中途退出后重启）按调用找回子会话。
+     *
+     * <p>值为 Map&lt;callId, List&lt;Map&gt;&gt;：callId 即 {@link ReActTrace#getActingCallId()}（等于 lastReasonMessage 中对应
+     * ToolCall 的 uuid、流式工具事件的 callId），列表项同 {@link #META_SUBTASKS}（taskId / index / agentName / description）。
+     * 委派前在调用线程里登记并落一次父快照（连同 lastReasonMessage）；工具返回后不删（下一轮 reset 清空，
+     * 登记时顺手去掉不属于当前 lastReasonMessage 的旧条目）。宿主应只对「还没写进工作记忆的那一步」里的调用使用它，
+     * 并用子会话 {@link #META_SUBTASK} 的 parentCallId 反向校验（不等即丢弃：还没启动，或已被后来的调用续跑）。</p>
+     *
+     * @since 4.2
+     */
+    public static final String EXTRA_RUNNING_SUBTASKS = "_runningSubtasks";
+
     /** 任务 ID（即子会话 ID）= 前缀 + {@code Utils.guid()}；判断请用 {@link #isTaskId(String)}，不要只比对前缀 */
     private static final String TASK_ID_PREFIX = "task-";
 
@@ -153,8 +170,10 @@ public class TaskTalent extends AbsTalent {
      * @since 4.2
      */
     public static boolean isTaskId(String id) {
-        return id != null && id.startsWith(TASK_ID_PREFIX);
+        return id != null && TASK_ID_PATTERN.matcher(id).matches();
     }
+
+    private static final Pattern TASK_ID_PATTERN = Pattern.compile(TASK_ID_PREFIX + "[0-9a-f]{32}");
 
     /** {@link #META_SUBTASK} 里 status 的取值（running 在进程崩溃或父流取消后会一直留着，宿主按「已中断」展示） */
     public static final String STATUS_RUNNING = "running";
@@ -364,6 +383,7 @@ public class TaskTalent extends AbsTalent {
         MultitaskContext ctx = new MultitaskContext(__parentTrace, __cwd, __sessionId,1, null, null, null);
 
         TaskPlan plan = preparePlan(__parentSession, taskOp, sessionModelOf(__parentSession), ctx.locale);
+        registerRunning(ctx, __parentSession, Collections.singletonList(plan));
 
         // 单任务不排队：上限按调用生效，本次只有 1 个任务，起 worker 反而是多余的一次线程投递
         String text = runTask(ctx, plan, false, plan.taskId);
@@ -409,6 +429,7 @@ public class TaskTalent extends AbsTalent {
         // 预解析一次并向下传递：执行时不再重走 getModelOrDef，避免「默认模型」的 fallback
         // 在并发下取到与分派时不同的实例
         final List<TaskPlan> plans = preparePlans(__parentSession, tasks, sessionModel, ctx.locale);
+        registerRunning(ctx, __parentSession, plans);
 
         // 生效上限按调用算一个数：取会话模型的 concurrency（未配置回退默认值）
         final int cap = resolveConcurrency(concurrencyOf(sessionModel), defaultConcurrency);
@@ -431,17 +452,72 @@ public class TaskTalent extends AbsTalent {
             if (plan.started == false) {
                 continue;
             }
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("taskId", plan.taskId);
-            item.put("index", plan.op.index);
-            item.put("agentName", plan.op.agent_name);
-            item.put("description", plan.op.description);
-            list.add(item);
+            list.add(indexItemOf(plan));
         }
         if (list.isEmpty() == false) {
             result.metas().put(META_SUBTASKS, list);
         }
         return result;
+    }
+
+    /** 子任务索引项（{@link #META_SUBTASKS} 与 {@link #EXTRA_RUNNING_SUBTASKS} 共用） */
+    private static Map<String, Object> indexItemOf(TaskPlan plan) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("taskId", plan.taskId);
+        item.put("index", plan.op.index);
+        item.put("agentName", plan.op.agent_name);
+        item.put("description", plan.op.description);
+        return item;
+    }
+
+    /**
+     * 委派前登记「这次调用 → 将要启动的子任务」并落一次父快照（见 {@link #EXTRA_RUNNING_SUBTASKS}）。
+     *
+     * <p>在调用线程里一次写好：taskId 在预解析时已确定，multitask 也只落一次盘。这次快照把正在执行的 lastReasonMessage
+     * 一起存下（工具执行期间父会话本不保存），进程中途退出后宿主才有起点可回放。取不到调用 id（文本模式、测试直调）时不登记。
+     * 失败只告警：索引只供展示，不能影响委派。</p>
+     */
+    private static void registerRunning(MultitaskContext ctx, AgentSession parentSession, List<TaskPlan> plans) {
+        if (ctx.callId == null) {
+            return;
+        }
+
+        try {
+            List<Map<String, Object>> items = new ArrayList<>();
+            for (TaskPlan plan : plans) {
+                if (plan.invalidReason == null && plan.agentBuilder != null) {
+                    items.add(indexItemOf(plan));
+                }
+            }
+            if (items.isEmpty()) {
+                return;
+            }
+
+            // 只保留当前这一步的调用：同一步里先跑完的 task 结果还没进工作记忆，它的索引不能丢
+            Set<String> live = new HashSet<>();
+            AssistantMessage lastReason = ctx.parentTrace.getLastReasonMessage();
+            if (lastReason != null && lastReason.getToolCalls() != null) {
+                for (ToolCall call : lastReason.getToolCalls()) {
+                    live.add(call.getUuid());
+                }
+            }
+
+            Map<String, Object> next = new LinkedHashMap<>();
+            Object prev = ctx.parentTrace.getExtra(EXTRA_RUNNING_SUBTASKS);
+            if (prev instanceof Map) {
+                for (Map.Entry<?, ?> entry : ((Map<?, ?>) prev).entrySet()) {
+                    if (live.contains(String.valueOf(entry.getKey()))) {
+                        next.put(String.valueOf(entry.getKey()), entry.getValue());
+                    }
+                }
+            }
+            next.put(ctx.callId, items);
+
+            ctx.parentTrace.setExtra(EXTRA_RUNNING_SUBTASKS, next);
+            parentSession.updateSnapshot();
+        } catch (Throwable e) {
+            LOG.warn("子任务索引登记失败: session={}, 原因: {}", ctx.sessionId, e.getMessage());
+        }
     }
 
     // ========== 预解析 ==========
@@ -761,6 +837,8 @@ public class TaskTalent extends AbsTalent {
     /** 一次调用的共享上下文（避免 runTask 参数过长）；错误统计标记可为 null（单任务路径不统计） */
     private static final class MultitaskContext {
         private final ReActTrace parentTrace;
+        /** 发起本次委派的父工具调用 id（在调用线程里取；取不到为 null） */
+        private final String callId;
         private final String cwd;
         private final String sessionId;
         private final int total;
@@ -784,6 +862,7 @@ public class TaskTalent extends AbsTalent {
                          int total, AtomicBoolean rateLimited, AtomicBoolean timedOut,
                          AtomicBoolean upstreamUnavailable) {
             this.parentTrace = parentTrace;
+            this.callId = parentTrace.getActingCallId();
             this.cwd = cwd;
             this.sessionId = sessionId;
             this.total = total;
@@ -933,7 +1012,7 @@ public class TaskTalent extends AbsTalent {
                 request = agent.prompt(originalPrompt);
             }
 
-            markRunning(session, ctx.sessionId, plan.op, traceKey);
+            markRunning(session, ctx.sessionId, ctx.callId, plan.op, traceKey);
             plan.started = true;
             // 子 trace 的指标是累计的：续跑只向父 trace 汇总本次增量
             final Metrics baseline = prior == null ? null : prior.getMetrics().snapshot();
@@ -1086,9 +1165,15 @@ public class TaskTalent extends AbsTalent {
     }
 
     /** 登记子任务信息并落一次快照（进程重启后仍可校验归属；running 留到结束前，崩溃后宿主按「已中断」展示） */
-    private static void markRunning(AgentSession sub, String parentSessionId, MultiTaskOp op, String traceKey) {
+    private static void markRunning(AgentSession sub, String parentSessionId, @Nullable String parentCallId,
+                                    MultiTaskOp op, String traceKey) {
         Map<String, Object> meta = new LinkedHashMap<>(subtaskMeta(sub));
         meta.put("parentSessionId", parentSessionId);
+        if (parentCallId != null) {
+            meta.put("parentCallId", parentCallId);
+        } else {
+            meta.remove("parentCallId");
+        }
         meta.put("agentName", op.agent_name);
         meta.put("traceKey", traceKey);
         meta.put("description", op.description);

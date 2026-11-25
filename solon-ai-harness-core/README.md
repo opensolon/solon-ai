@@ -1159,6 +1159,7 @@ config.setConcurrency(2);                     // 模型级并发上限（配了�
 - 提供者按实例缓存会话时，子会话建议不进缓存（每次从存储打开），否则会常驻内存；存数据库 / Redis 的宿主会多出大量 `task-*` 记录，按过期清理（soloncode 为 7 天）；
 - 提供者在 `getSession(id, false)` 时不返回已有子会话（如每次都新建一个内存会话），接着做会安全地报「不存在」；
 - 对外入口应拒绝直接打开 `task-` 会话；回放子过程时按工具结果 metadata 里的 `TaskTalent.META_SUBTASKS` 找到子会话，用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace。
+- 工具还没返回时（子任务运行中刷新、进程在子任务中途退出后重启），结果消息还不存在，这次调用也还没写进父 trace 的工作记忆（引擎等一步的工具全部执行完才成对写入），只在 `trace.getLastReasonMessage()` 里。此时按父 trace extras 的 `TaskTalent.EXTRA_RUNNING_SUBTASKS`（`_runningSubtasks`：调用 id → 子任务索引，调用 id 即 ToolCall 的 uuid、流式工具事件的 callId）找子会话，并核对子会话 `META_SUBTASK` 里的 `parentCallId` 与该调用相等（不等即还没启动，或已被后来的调用接着做，应忽略）。索引在委派前登记并落一次父快照（连同 `lastReasonMessage`），工具返回后不删，下一轮开始时清空；只应对「还没写进工作记忆的那一步」里的调用使用。引擎经 `ReActTrace#getActingCallId()` 取得正在执行的调用 id（不动工具参数）；取不到时（文本模式）不登记。
 - 「仍在执行」的运行锁只在单个进程内有效：多个实例共用同一个 `sessionProvider` 时，同一个 `task_id` 可能被同时接着做，需要时由宿主自己加分布式锁。
 
 ### 6.4 运行时创建子代理

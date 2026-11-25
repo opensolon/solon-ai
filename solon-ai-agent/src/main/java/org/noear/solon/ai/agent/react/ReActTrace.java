@@ -148,6 +148,11 @@ public class ReActTrace implements AgentTrace {
     private transient List<ContentBlock> finalMediaBlocks;
 
     /**
+     * 正在执行的工具调用 id（原生模式即 ToolCall#getUuid）；仅在工具执行期间有值，不落盘。
+     */
+    private transient volatile String actingCallId;
+
+    /**
      * 计划
      */
     private final List<String> plans = new CopyOnWriteArrayList<>();
@@ -444,6 +449,27 @@ public class ReActTrace implements AgentTrace {
 
     public void setLastReasonMessage(AssistantMessage lastReasonMessage) {
         this.lastReasonMessage = lastReasonMessage;
+    }
+
+    /**
+     * 正在执行的工具调用 id（原生模式下等于 {@link #getLastReasonMessage()} 中对应 ToolCall 的 uuid，
+     * 也即流式工具事件里的 callId）。
+     * <p>只在工具执行期间有值（父代理的工具是顺序执行的），其余时间为 null。工具可据此把自己派生的状态
+     * （如子会话）关联回发起它的那次调用。</p>
+     *
+     * @since 4.2.0
+     */
+    public @Nullable String getActingCallId() {
+        return actingCallId;
+    }
+
+    /**
+     * 由引擎在执行工具前后设置与清空（外部不要调用）。
+     *
+     * @since 4.2.0
+     */
+    public void setActingCallId(@Nullable String actingCallId) {
+        this.actingCallId = actingCallId;
     }
 
     public List<ContentBlock> getFinalMediaBlocks() {

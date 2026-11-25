@@ -515,10 +515,16 @@ public class ActionTask {
                 //合并工具上下文和参数，形成请求
                 final ToolRequest toolReq = new ToolRequest(null, trace.getOptions().getToolContext(), exchanger.getArgs());
                 final ToolResult result;
-                if (trace.getOptions().getInterceptors().isEmpty()) {
-                    result = tool.call(toolReq.getArgs());
-                } else {
-                    result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
+                //登记正在执行的调用：工具可据此把自己派生的状态关联回这次调用（不动参数，避免外部工具收到多余字段）
+                trace.setActingCallId(exchanger.getCallId());
+                try {
+                    if (trace.getOptions().getInterceptors().isEmpty()) {
+                        result = tool.call(toolReq.getArgs());
+                    } else {
+                        result = new ToolChain(trace.getOptions().getInterceptors(), tool).doIntercept(toolReq);
+                    }
+                } finally {
+                    trace.setActingCallId(null);
                 }
                 trace.incrementToolCallCount();
 
