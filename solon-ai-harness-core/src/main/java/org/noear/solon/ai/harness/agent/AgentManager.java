@@ -31,6 +31,7 @@ import java.util.stream.Collectors;
 public class AgentManager {
     private final AgentCatalog agentCatalog;
     private final Map<String, AgentDefinition> agentMap = new ConcurrentHashMap<>();
+    private final Set<String> disallowedAgents = ConcurrentHashMap.newKeySet();
 
 
     /**
@@ -43,7 +44,8 @@ public class AgentManager {
     private volatile boolean sealed;
 
     /**
-     * 封口（SERVER 模式在 {@code build()} 末尾调用）：之后 {@link #addAgent} 与 {@link #clear} 抛
+     * 封口（SERVER 模式在 {@code build()} 末尾调用）：之后 {@link #addAgent}、{@link #clear}、
+     * {@link #disallowAgent} 与 {@link #allowAgent} 抛
      * {@link IllegalStateException}。{@link #addAgentIfAbsent} 不受封口影响：它永不覆盖、也不遮蔽已有定义，
      * 运行期新增全局子代理由调用方的策略把关（如 {@code agentPersistPolicy}）。
      *
@@ -80,46 +82,79 @@ public class AgentManager {
         agentMap.put(agentDefinition.getName(), agentDefinition);
     }
 
+    /**
+     * 禁用代理（按名字，内置与自定义同口径）：禁用后列表不再列出、按名字也解析不到，定义本身保留。
+     *
+     * @since 4.2.0
+     */
+    public void disallowAgent(String... agentNames) {
+        assertNotSealed("disallowAgent");
+        disallowedAgents.addAll(Arrays.asList(agentNames));
+    }
 
+    /**
+     * 解除禁用（只撤销 {@link #disallowAgent} 的名单；定义里 {@code enabled: false} 的仍不可用）
+     *
+     * @since 4.2.0
+     */
+    public void allowAgent(String... agentNames) {
+        assertNotSealed("allowAgent");
+        disallowedAgents.removeAll(Arrays.asList(agentNames));
+    }
+
+    /**
+     * 被禁用的代理名单（只读视图）
+     *
+     * @since 4.2.0
+     */
+    public Collection<String> getDisallowedAgents() {
+        return Collections.unmodifiableSet(disallowedAgents);
+    }
+
+    /**
+     * 定义是否可用：{@code enabled} 为 true 且名字不在禁用名单里
+     *
+     * @since 4.2.0
+     */
+    public boolean isAvailable(AgentDefinition definition) {
+        return definition != null
+                && definition.getMetadata().isEnabled()
+                && disallowedAgents.contains(definition.getName()) == false;
+    }
+
+    /**
+     * 获取可用的代理（不存在或不可用时为 null）
+     */
     public AgentDefinition getAgentOrNil(String agentName) {
         // 内置与运行时注册的代理优先；挂载代理按当前目录读取，避免刷新后返回旧定义。
-        AgentDefinition cached = agentMap.get(agentName);
-        if (cached != null) {
-            return cached;
-        }
+        // 优先的那条不可用时不再往后找：同名定义标了 enabled: false 就是要停用它。
+        AgentDefinition definition = agentMap.get(agentName);
 
-        if (agentCatalog != null) {
+        if (definition == null && agentCatalog != null) {
             AgentDescriptor agentMd = agentCatalog.getAgent(agentName);
             if (agentMd != null) {
-                return loadFromAgentMd(agentMd);
+                definition = loadFromAgentMd(agentMd);
             }
         }
 
-        return null;
+        return isAvailable(definition) ? definition : null;
     }
 
     /**
-     * 获取指定名称的代理（支持自定义代理）
+     * 获取可用的代理（支持自定义代理）
+     *
+     * @throws IllegalArgumentException 不存在或不可用
      */
     public AgentDefinition getAgent(String agentName) {
-        // 内置与运行时注册的代理优先；挂载代理按当前目录读取，避免刷新后返回旧定义。
-        AgentDefinition cached = agentMap.get(agentName);
-        if (cached != null) {
-            return cached;
+        AgentDefinition definition = getAgentOrNil(agentName);
+        if (definition == null) {
+            throw new IllegalArgumentException("Agent not found or disabled: " + agentName);
         }
-
-        if (agentCatalog != null) {
-            AgentDescriptor agentMd = agentCatalog.getAgent(agentName);
-            if (agentMd != null) {
-                return loadFromAgentMd(agentMd);
-            }
-        }
-
-        throw new IllegalArgumentException("Agent not found: " + agentName);
+        return definition;
     }
 
     /**
-     * 检查代理是否已注册
+     * 名字是否已被占用（含不可用的定义；用于防止同名创建）
      */
     public boolean hasAgent(String agentName) {
         if (agentMap.containsKey(agentName)) {
@@ -132,7 +167,7 @@ public class AgentManager {
     }
 
     /**
-     * 获取所有已注册的代理
+     * 获取所有可用且不隐藏的代理
      */
     public Collection<AgentDefinition> getAgents() {
         Map<String, AgentDefinition> all = new LinkedHashMap<>(agentMap);
@@ -147,7 +182,7 @@ public class AgentManager {
         }
 
         return all.values().stream()
-                .filter(a -> !a.getMetadata().isHidden())
+                .filter(a -> !a.getMetadata().isHidden() && isAvailable(a))
                 .collect(Collectors.toList());
     }
 

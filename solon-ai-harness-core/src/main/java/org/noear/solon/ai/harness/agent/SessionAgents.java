@@ -73,7 +73,7 @@ public final class SessionAgents {
             return null;
         }
         AgentDefinition def = AgentDefinition.fromParsedMarkdown(
-                MarkdownUtil.resolve(Arrays.asList(md.split("\\R", -1)), true));
+                MarkdownUtil.resolve(Arrays.asList(md.split("\\R", -1))));
         def.getMetadata().setName(name);
         return def;
     }

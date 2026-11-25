@@ -91,14 +91,13 @@ public class GenerateTalent extends AbsTalent {
         }
 
         // 保留名（main / general / 内置代理）不可创建：同名会把所有会话的内置代理换成模型生成的提示词
-        if (engine.isReservedAgentName(name)) {
+        // 被禁用的名字也不可创建：建出来也解析不到
+        if (engine.isReservedAgentName(name) || engine.getAgentManager().getDisallowedAgents().contains(name)) {
             return err(HarnessI18n.fmt(locale, HarnessI18nKeys.GENERATE_ERROR_RESERVED, "name", name));
         }
 
         try {
-            AgentDefinition definition = engine.getAgentManager()
-                    .getAgent(AgentDefinition.AGENT_GENERAL)
-                    .copy();
+            AgentDefinition definition = new AgentDefinition();
 
             definition.setSystemPrompt(systemPrompt);
 

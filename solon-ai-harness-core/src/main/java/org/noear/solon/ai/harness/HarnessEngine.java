@@ -1907,6 +1907,7 @@ public class HarnessEngine {
         skillTalent = new SkillTalent(this.skillCatalog);
 
         agentManager = new AgentManager(this.agentCatalog);
+        agentManager.disallowAgent(options.getDisallowedAgents().toArray(new String[0]));
 
         terminalTalent.setBashAsyncEnabled(options.isBashAsyncEnabled());
         terminalTalent.setSandboxEnabled(options.isSandboxEnabled());
@@ -2108,8 +2109,9 @@ public class HarnessEngine {
 
     /**
      * 会话感知的子代理解析：先本会话的会话级子代理（{@link SessionAgents}），再引擎级（含挂载目录）。
+     * 两层都只返回可用的定义（见 {@link AgentManager#isAvailable}）。
      *
-     * @return 不存在时为 null
+     * @return 不存在或不可用时为 null
      * @since 4.2.0
      */
     @Nullable
@@ -2118,7 +2120,10 @@ public class HarnessEngine {
             return null;
         }
         AgentDefinition local = SessionAgents.get(session, agentName);
-        return local != null ? local : agentManager.getAgentOrNil(agentName);
+        if (local != null) {
+            return agentManager.isAvailable(local) ? local : null;
+        }
+        return agentManager.getAgentOrNil(agentName);
     }
 
     /**
@@ -2739,6 +2744,27 @@ public class HarnessEngine {
 
         public Builder disallowedToolsAdd(Collection<String> tools) {
             options.getDisallowedTools().addAll(tools);
+            return this;
+        }
+
+        /**
+         * 禁用子代理（按名字，内置与自定义同口径）：禁用后列表不再列出、按名字也解析不到。
+         * 运行期用 {@code engine.getAgentManager().disallowAgent(...)} / {@code allowAgent(...)}（SERVER 模式封口后不可改）。
+         *
+         * @since 4.2.0
+         */
+        public Builder disallowedAgentsAdd(String... agentNames) {
+            options.getDisallowedAgents().addAll(Arrays.asList(agentNames));
+            return this;
+        }
+
+        /**
+         * 禁用子代理（同 {@link #disallowedAgentsAdd(String...)}）
+         *
+         * @since 4.2.0
+         */
+        public Builder disallowedAgentsAdd(Collection<String> agentNames) {
+            options.getDisallowedAgents().addAll(agentNames);
             return this;
         }
 

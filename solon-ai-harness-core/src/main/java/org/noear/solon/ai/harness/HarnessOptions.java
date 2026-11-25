@@ -80,6 +80,9 @@ class HarnessOptions implements NonSerializable {
     // 禁用工具（全局）
     private Set<String> disallowedTools = new CopyOnWriteArraySet<>();
 
+    // 禁用子代理（构建期名单，构造时写入 AgentManager）
+    private Set<String> disallowedAgents = new CopyOnWriteArraySet<>();
+
     // ========== 执行控制 ==========
     private volatile int maxTurns = 20;
     /** 受理占位时限（毫秒）：handle 返回 TASK 后宿主始终不开流时，会话最多被占这么久 */
@@ -306,6 +309,10 @@ class HarnessOptions implements NonSerializable {
 
     Set<String> getDisallowedTools() {
         return disallowedTools;
+    }
+
+    Set<String> getDisallowedAgents() {
+        return disallowedAgents;
     }
 
     int getMaxTurns() {
