@@ -474,7 +474,7 @@ public class ModelOptionsAmend<T extends ModelOptionsAmend, X> {
      * <ul>
      *   <li>{@code thinking(false)} 关闭优先，压过本选项</li>
      *   <li>仅设本选项时：对需要显式开关的模型（Anthropic / Gemini / Qwen / DeepSeek / Kimi / 智谱 / MiniMax 等）
-     *   <b>隐式开启 thinking</b>（对齐 OpenCode variants：选 effort 档位即带上 enabled/adaptive 等）；
+     *   <b>隐式开启 thinking</b>（选 effort 档位即带上 enabled/adaptive 等）；
      *   OpenAI 系仅写 effort，无独立 enable 位</li>
      *   <li>也可与 {@code thinking(true)} 并用：开关 + 深度</li>
      * </ul></p>

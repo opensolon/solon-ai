@@ -41,9 +41,9 @@ import java.util.Set;
  * 项目规范拦截器（与 {@link ProjectRulesTalent} 成对挂到代理上）：
  *
  * <ul>
- *   <li><b>变更消息</b>（opencode 每一步推理前的 InstructionState.prepare）：推理前重新读取规范，与模型当前看到的版本
+ *   <li><b>变更消息</b>：每一步推理前重新读取规范，与模型当前看到的版本
  *   （工作记忆里最近一条变更消息告知的版本，没有时为才能记在本次提示词上的系统提示词版本）比较，不同就追加一条变更消息；</li>
- *   <li><b>子目录按需加载</b>（opencode 的 read 工具）：read / ls 成功后，把目标附近新发现的规范以消息注入；
+ *   <li><b>子目录按需加载</b>：read / ls 成功后，把目标附近新发现的规范以消息注入；
  *   工作记忆里已注入过的不再重复（压缩后不可见了会重新注入）。</li>
  * </ul>
  *
@@ -103,7 +103,8 @@ final class ProjectRulesInterceptor extends AbsReActInterceptor {
 
         try {
             String cwd = cwdOf(trace);
-            List<Part> found = new ArrayList<>();
+            Set<String> injected = null; // 工作记忆里已注入过的（用到时才收集）；discover 会把本次发现的加进去
+            List<Part> fresh = new ArrayList<>();
             for (ToolExchanger exchanger : toolCalls) {
                 boolean isLs = ToolName.TOOL_LS.getName().equals(exchanger.getToolName());
                 if (isLs == false && ToolName.TOOL_READ.getName().equals(exchanger.getToolName()) == false) {
@@ -115,25 +116,20 @@ final class ProjectRulesInterceptor extends AbsReActInterceptor {
                 }
                 Object path = exchanger.getArgs() == null ? null : exchanger.getArgs().get(isLs ? "path" : "file_path");
                 if (path instanceof String) {
-                    found.addAll(talent.discover(cwd, (String) path, isLs));
-                }
-            }
-            if (found.isEmpty()) {
-                return;
-            }
-
-            // 去重：工作记忆里已注入过的、本次重复发现的
-            Set<String> known = injectedPaths(trace.getWorkingMemory().getMessages());
-            List<Part> fresh = new ArrayList<>();
-            List<String> paths = new ArrayList<>();
-            for (Part part : found) {
-                if (known.add(part.getPath())) {
-                    fresh.add(part);
-                    paths.add(part.getPath());
+                    if (injected == null) {
+                        injected = injectedPaths(trace.getWorkingMemory().getMessages());
+                    }
+                    // 去重在读取前：已注入过的、本步前面的调用已发现的，都不再读取
+                    fresh.addAll(talent.discover(cwd, (String) path, isLs, injected));
                 }
             }
             if (fresh.isEmpty()) {
                 return;
+            }
+
+            List<String> paths = new ArrayList<>();
+            for (Part part : fresh) {
+                paths.add(part.getPath());
             }
 
             ChatMessage message = ChatMessage.ofUser(ProjectRulesTalent.render(fresh, HarnessI18n.localeOf(trace)));

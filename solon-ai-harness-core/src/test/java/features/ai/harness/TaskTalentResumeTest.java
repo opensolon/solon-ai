@@ -128,7 +128,7 @@ public class TaskTalentResumeTest {
         AgentSession sub = engine.getSessionProvider().getSession(id, false);
         assertEquals("failure", meta(sub).get("status"));
 
-        // 上次的错误说明保留（同 opencode），补充指令追加其后，最后是本次的回复
+        // 上次的错误说明保留，补充指令追加其后，最后是本次的回复
         List<ChatMessage> messages = new ArrayList<>(sub.getMessages());
         assertEquals(4, messages.size(), messages.toString());
         assertTrue(messages.get(0) instanceof UserMessage);
@@ -164,7 +164,7 @@ public class TaskTalentResumeTest {
         String multi = talent.multitask(ops, ws.toString(), "s1", null).getContent();
         assertTrue(multi.contains("<index>2</index><description>d2</description>"), multi);
 
-        // 不限次数、不看上次成败（同 opencode）：已成功的任务也能接着做（追问）
+        // 不限次数、不看上次成败：已成功的任务也能接着做（追问）
         meta(engine.getSessionProvider().getSession(id, false)).put("status", "success");
         for (int i = 0; i < 3; i++) {
             assertEquals(id, taskIdOf(talent.task(op(id, "继续"), ws.toString(), "s1", null)));

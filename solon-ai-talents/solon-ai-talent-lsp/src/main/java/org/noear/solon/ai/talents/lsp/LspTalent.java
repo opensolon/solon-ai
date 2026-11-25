@@ -46,9 +46,9 @@ import java.util.concurrent.*;
 import java.util.function.BiFunction;
 
 /**
- * LSP 工具包 - 对齐 OpenCode 的 LSP 使用模型
+ * LSP 工具包
  *
- * <p>分工上分三层（与 OpenCode 一致）：
+ * <p>分工上分三层：
  * <ul>
  *   <li>诊断：不依赖模型主动调用，由 write/edit 写入后自动注入（{@link #reportFileDiagnostics}）</li>
  *   <li>预热：read 后异步 touch，只为让语言服务器提前索引（{@link #warmupFile}）</li>
@@ -64,7 +64,7 @@ public class LspTalent extends AbsTalent {
     /**
      * 写入后等待诊断的最长时长（毫秒）。
      *
-     * <p>这个等待直接叠加在每次 write/edit 上，故默认比 OpenCode 的 5s 更保守；
+     * <p>这个等待直接叠加在每次 write/edit 上，故默认等待时间取得较短；
      * 超时只是拿不到本轮新诊断，不影响写入结果。
      */
     private static final long DIAGNOSTICS_WAIT_MS = Long.getLong("lsp.diagnosticsWait", 2000L);

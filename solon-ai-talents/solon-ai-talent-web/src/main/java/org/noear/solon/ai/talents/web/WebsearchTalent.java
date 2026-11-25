@@ -91,7 +91,7 @@ public class WebsearchTalent extends AbsTalent {
             result = RetryUtil.callWithRetry(maxRetries, () ->
                     getMcpClient().callTool("web_search_exa", args));
         } catch (Exception e) {
-            // 如果是超时相关的异常，转换为与 opencode 一致的文案
+            // 如果是超时相关的异常，转换为统一的文案
             if (e.getMessage() != null && e.getMessage().toLowerCase().contains("timeout")) {
                 throw new RuntimeException("Search request timed out");
             }

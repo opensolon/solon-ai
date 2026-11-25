@@ -269,7 +269,7 @@ public class LspClientImpl implements LspClient {
                 JdtlsSupport.isJdtls(command == null || command.length == 0 ? null : command[0]),
                 longProp("lsp.readyTimeout", READY_TIMEOUT_DEFAULT));
 
-        // 1. 启动语言服务器进程（对齐 OpenCode：必须继承父进程环境变量）
+        // 1. 启动语言服务器进程（必须继承父进程环境变量）
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(new File(rootDir));
         // 合并父进程环境变量 + 用户自定义环境变量
@@ -319,7 +319,7 @@ public class LspClientImpl implements LspClient {
         launcher.startListening();
         this.remoteServer = launcher.getRemoteProxy();
 
-        // 3. 协议握手流程 (必须执行，对齐 OpenCode 的初始化模式)
+        // 3. 协议握手流程 (必须执行)
         InitializeParams initParams = new InitializeParams();
         initParams.setRootUri(this.rootUri);
         initParams.setRootPath(this.rootDir);

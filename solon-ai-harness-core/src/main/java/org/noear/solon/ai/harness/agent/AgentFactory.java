@@ -93,7 +93,7 @@ public class AgentFactory {
             builder.defaultToolContextPut(HarnessEngine.ATTR_CWD, engine.getWorkspace());
         }
 
-        // 项目规范（AGENTS.md）：与工具无关，所有代理都挂（同 opencode，代理定义里没有单独的开关；整体关闭用 Builder.projectRulesEnabled(false)）。
+        // 项目规范（AGENTS.md）：与工具无关，所有代理都挂（代理定义里没有单独的开关；整体关闭用 Builder.projectRulesEnabled(false)）。
         // 最先挂：才能指令按挂载顺序拼接，内容稳定的放前面，利于提示词缓存。
         // 走才能而不是拼进 systemPrompt：每次运行现读，且角色段被整段替换（子代理正文 / HarnessInput.systemPrompt）也不会丢
         // 拦截器成对挂：运行中途的规范变更以消息追加，read / ls 读到子目录时按需加载该处的规范
@@ -103,7 +103,6 @@ public class AgentFactory {
         }
 
         if (Assert.isNotEmpty(metadata.getTools())) {
-            //目前参考了： https://opencode.ai/docs/zh-cn/permissions/
             TerminalTalentProxy terminalTalentProxy = new TerminalTalentProxy(engine.getTerminalTalent());
 
             for (String toolName : metadata.getTools()) {

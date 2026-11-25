@@ -2656,14 +2656,14 @@ public class HarnessEngine {
         /**
          * 是否注入项目规范（AGENTS.md，缺省 true）
          *
-         * <p>开启时，主代理与所有子代理都会带上 AGENTS.md（同 opencode，代理定义里没有单独的开关；文件名写死，不读 CLAUDE.md），
-         * 规则见 {@link ProjectRulesTalent}（参考 opencode）：经工作区来源读取本轮工作目录由近及远到工作区根每一层的 AGENTS.md；
+         * <p>开启时，主代理与所有子代理都会带上 AGENTS.md（代理定义里没有单独的开关；文件名写死，不读 CLAUDE.md），
+         * 规则见 {@link ProjectRulesTalent}：经工作区来源读取本轮工作目录由近及远到工作区根每一层的 AGENTS.md；
          * 每次运行现读进系统提示词，运行中途的变更以消息追加；read / ls 读到子目录时按需加载该处的规范。</p>
          *
          * <p>只处理项目各层这一通用约定。用户级规范（如 {@code ~/.xxx/AGENTS.md}）、工具专属目录里的规范等位置因产品而异，
          * 框架不读，由宿主自行读取（例如并入 {@link #systemPrompt}）。</p>
          *
-         * <p>这里的「规范」指 AGENTS.md 项目说明（opencode 文档称 Project rules），
+         * <p>这里的「规范」指 AGENTS.md 项目说明（Project rules），
          * 与权限规则（{@link #permissionRuleAdd(PermissionRule)}）无关，关闭它不影响权限判定。</p>
          *
          * @since 4.2.0

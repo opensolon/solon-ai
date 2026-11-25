@@ -355,7 +355,7 @@ public class TaskTalent extends AbsTalent {
      * <p>嵌套调用、找不到代理、定义加载失败、子代理执行异常、子代理因模型服务错误或回合用尽而结束，
      * 返回 {@link ToolResult#error(String)}；其余正常结束返回成功（不解读它返回的内容）。失败项带 {@code ERROR: } 与 result_status。
      * 子代理跑起来过的结果（成败都算）带 {@code <task_id>}，失败另带 {@code <failure_kind>}；模型传 {@code task_id}
-     * 即在原子会话上接着做（同 opencode 的 {@code task_id}/{@code sessionID}：失败时从断点重试，完成后可追问）。</p>
+     * 即在原子会话上接着做（失败时从断点重试，完成后可追问）。</p>
      *
      * @param __locale 请求语言（由工具上下文注入；null 为默认语言）
      * @since 4.2
@@ -623,7 +623,7 @@ public class TaskTalent extends AbsTalent {
 
     /**
      * 取回要续跑的子会话：ID 格式非法、不存在、不属于当前父会话、上次没跑起来（没有可续的进度）一律返回 null
-     * （不区分原因，避免探测别的会话；同 opencode 只校验归属，不看上次成败）。
+     * （不区分原因，避免探测别的会话；只校验归属，不看上次成败）。
      * 成功时把 {@code op.agent_name} 改为原任务的代理（续跑以原任务为准）。
      */
     private AgentSession openForResume(AgentSession parentSession, MultiTaskOp op) {
@@ -1115,7 +1115,7 @@ public class TaskTalent extends AbsTalent {
     }
 
     /**
-     * 子代理跑起来过的结果：成败都带 {@code <task_id>}（同 opencode，可接着问或从断点重试），失败另带 {@code <failure_kind>}
+     * 子代理跑起来过的结果：成败都带 {@code <task_id>}（可接着问或从断点重试），失败另带 {@code <failure_kind>}
      *
      * @param failureKind 失败类型（成功为 null）
      */
@@ -1149,7 +1149,7 @@ public class TaskTalent extends AbsTalent {
      * 续跑前修复子 trace：结束态回到推理点（与主代理 /continue 共用 {@link TraceUtil#reopen}），再把 prompt 作为用户消息追加。
      *
      * <p>不撤末尾的回复（与 /continue 不同）：成功时它是要被追问的答案，失败时它是错误说明（限流 / 回合用尽），
-     * 留着正好让子代理知道上次为什么停，同 opencode 保留出错的 assistant 消息。</p>
+     * 留着正好让子代理知道上次为什么停。</p>
      *
      * <p>上次停在工具执行中途（父流取消、进程崩溃）时不追加：用户消息会插在 tool_calls 与工具结果之间，
      * 上游会拒收；此时从断点接着跑完这一步。</p>

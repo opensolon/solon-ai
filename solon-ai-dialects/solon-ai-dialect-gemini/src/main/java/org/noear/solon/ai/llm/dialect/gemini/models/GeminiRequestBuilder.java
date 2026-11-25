@@ -659,7 +659,7 @@ public class GeminiRequestBuilder {
             if (useBudget) {
                 tc.set("thinkingBudget", 0);
             } else {
-                // Gemini 3.x：minimal 表示关闭/极低思考（对齐 OpenCode smallOptions）
+                // Gemini 3.x：minimal 表示关闭/极低思考
                 tc.set("thinkingLevel", "minimal");
             }
             root.getOrNew("generationConfig").set("thinkingConfig", tc);
@@ -675,7 +675,7 @@ public class GeminiRequestBuilder {
         }
 
         if (Boolean.TRUE.equals(thinkingSwitch)) {
-            // 开启且无 effort：2.5 用 medium 预算；3.x 默认 high（对齐 OpenCode options）
+            // 开启且无 effort：2.5 用 medium 预算；3.x 默认 high
             String defaultEffort = useBudget ? "medium" : "high";
             applyReasoningEffortToGenerationConfig(root, config, defaultEffort, options);
         }
@@ -685,7 +685,7 @@ public class GeminiRequestBuilder {
      * 将统一 reasoning_effort 映射到 generationConfig.thinkingConfig。
      * <p>若用户已显式配置 thinkingConfig，则不覆盖。</p>
      * <p>Gemini 2.5 仅写 {@code thinkingBudget}；Gemini 3.x 仅写 {@code thinkingLevel}，
-     * 避免双写冲突（对齐 OpenCode ProviderTransform）。</p>
+     * 避免双写冲突。</p>
      *
      * @since 4.0.4
      */
@@ -732,7 +732,7 @@ public class GeminiRequestBuilder {
      */
     private boolean usesThinkingBudget(ChatConfig config) {
         String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
-        // 2.5 / 2-5 → budget；其它默认 level（与 OpenCode 一致）
+        // 2.5 / 2-5 → budget；其它默认 level
         return model.contains("2.5") || model.contains("2-5");
     }
 
@@ -755,7 +755,7 @@ public class GeminiRequestBuilder {
 
     /**
      * reasoning_effort → thinkingBudget（Gemini 2.5）。
-     * <p>对齐 OpenCode：high=16k；max 对 2.5 pro=32768，其余 2.5（含 flash）=24576。</p>
+     * <p>high=16k；max 对 2.5 pro=32768，其余 2.5（含 flash）=24576。</p>
      */
     private Integer mapEffortToThinkingBudget(String effort, ChatConfig config) {
         String model = config == null || config.getModel() == null ? "" : config.getModel().toLowerCase();
@@ -778,7 +778,7 @@ public class GeminiRequestBuilder {
 
     /**
      * reasoning_effort → thinkingLevel 字符串（Gemini 3.x）。
-     * <p>对齐 OpenCode googleThinkingLevelEfforts：
+     * <p>映射：
      * flash → minimal/low/medium/high；pro → low/medium/high；
      * 统一 API 的 max → high；非 flash 的 minimal → low。</p>
      */

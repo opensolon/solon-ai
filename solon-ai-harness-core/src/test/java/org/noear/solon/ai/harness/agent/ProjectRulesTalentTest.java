@@ -38,11 +38,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -54,7 +57,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 项目规范（AGENTS.md，参考 opencode）契约：经工作区来源读取、由近及远分层、主代理与子代理都带上、
+ * 项目规范（AGENTS.md）契约：经工作区来源读取、由近及远分层、主代理与子代理都带上、
  * 角色段被替换也不丢、{@code #{...}} 原样、可整体关闭；每次运行现读、运行中途的变更以消息追加；
  * read / ls 触发的子目录按需加载。
  */
@@ -234,12 +237,12 @@ public class ProjectRulesTalentTest {
     }
 
     @Test
-    public void noBudgetLikeOpencode() throws Exception {
+    public void noTotalBudget() throws Exception {
         write(ws.resolve("AGENTS.md"), repeat('r', 30000));
 
         HarnessEngine engine = engine(null);
         String ins = engine.getProjectRulesTalent().getInstruction(prompt(ws.toString(), Locale.ENGLISH));
-        assertTrue(ins.startsWith("Instructions from: AGENTS.md\n"), "opencode 格式: " + ins.substring(0, 40));
+        assertTrue(ins.startsWith("Instructions from: AGENTS.md\n"), "来源行格式: " + ins.substring(0, 40));
         assertTrue(ins.contains(repeat('r', 30000)), "完整注入");
         assertFalse(ins.contains("read `"), "没截断就不提示");
     }
@@ -430,7 +433,7 @@ public class ProjectRulesTalentTest {
         assertFalse(lastSystemPrompt().contains("[Talent: " + ProjectRulesTalent.NAME + "]"), "没有 AGENTS.md 时不出现该段");
     }
 
-    // ---------- 每次运行现读 + 运行中途的变更消息（opencode InstructionState） ----------
+    // ---------- 每次运行现读 + 运行中途的变更消息 ----------
 
     /** 最后一次请求里，由项目规范注入的用户消息 */
     private List<String> lastInjected() {
@@ -567,7 +570,7 @@ public class ProjectRulesTalentTest {
         assertTrue(msg.contains("RULE-V2") && msg.contains("The instructions changed"), msg);
     }
 
-    // ---------- 子目录按需加载（opencode read 工具） ----------
+    // ---------- 子目录按需加载（read / ls 触发） ----------
 
     @Test
     public void readInSubdirectoryInjectsNearbyRulesOnce() throws Throwable {
@@ -614,6 +617,47 @@ public class ProjectRulesTalentTest {
         assertTrue(talent.discover(null, "a/AGENTS.md", false).isEmpty(), "被读的就是规范文件：不再注入它");
         assertTrue(talent.discover(null, outside.resolve("x.txt").toString(), false).isEmpty(), "工作区外不处理");
         assertTrue(talent.discover(null, "@pool/x.txt", false).isEmpty(), "逻辑路径不处理");
+    }
+
+    @Test
+    public void discoverSkipsInjectedWithoutReading() throws Exception {
+        write(ws.resolve("a/AGENTS.md"), "a");
+        write(ws.resolve("a/b/AGENTS.md"), "ab");
+        write(ws.resolve("a/b/c/x.txt"), "x");
+        write(ws.resolve("a/b/c/y.txt"), "y");
+        FlakySource source = new FlakySource(FileMountSource.of(ws));
+        ProjectRulesTalent talent = new ProjectRulesTalent(source, ws.toString());
+
+        Set<String> injected = new HashSet<>(Collections.singletonList("a/AGENTS.md"));
+        assertEquals(Arrays.asList("a/b/AGENTS.md"), labels(talent.discover(null, "a/b/c/x.txt", false, injected)),
+                "已注入过的不再返回");
+        assertFalse(source.statted.contains("a/AGENTS.md"), "已注入过的不读取: " + source.statted);
+        assertTrue(injected.contains("a/b/AGENTS.md"), "本次发现的加进已注入集合");
+
+        source.statted.clear();
+        assertTrue(talent.discover(null, "a/b/c/y.txt", false, injected).isEmpty(), "同一步后续调用不再返回");
+        assertFalse(source.statted.contains("a/AGENTS.md") || source.statted.contains("a/b/AGENTS.md"),
+                "同一步后续调用不再读取: " + source.statted);
+        assertTrue(source.statted.contains("a/b/c/AGENTS.md"), "没注入过的层照常查找: " + source.statted);
+    }
+
+    @Test
+    public void discoverSkipsSymlinkAliasOfInjected() throws Exception {
+        write(ws.resolve("a/AGENTS.md"), "a");
+        write(ws.resolve("a/b/x.txt"), "x");
+        try {
+            Files.createSymbolicLink(ws.resolve("a/b/AGENTS.md"), ws.resolve("a/AGENTS.md"));
+        } catch (UnsupportedOperationException | IOException | SecurityException e) {
+            assumeTrue(false, "不支持软链接: " + e);
+        }
+        ProjectRulesTalent talent = new ProjectRulesTalent(FileMountSource.of(ws), ws.toString());
+
+        // a/b/AGENTS.md 是 a/AGENTS.md 的别名：近层已注入过，远层同一文件也不再注入
+        Set<String> injected = new HashSet<>(Collections.singletonList("a/b/AGENTS.md"));
+        assertTrue(talent.discover(null, "a/b/x.txt", false, injected).isEmpty(),
+                "经别名到达的已注入文件不重复");
+        assertEquals(Arrays.asList("a/b/AGENTS.md"), labels(talent.discover(null, "a/b/x.txt", false)),
+                "不传已注入集合时行为不变：同一文件只收一次");
     }
 
     // ---------- 关闭 ----------
@@ -666,12 +710,13 @@ public class ProjectRulesTalentTest {
         return new String(a);
     }
 
-    /** 委托式来源：可模拟 stat / 读取出错，并统计实际读取的字节数 */
+    /** 委托式来源：可模拟 stat / 读取出错，并统计实际读取的字节数与被 stat 的路径 */
     private static final class FlakySource implements MountSource {
         final MountSource d;
         volatile boolean failStat;
         volatile boolean failRead;
         final AtomicLong bytesRead = new AtomicLong();
+        final List<String> statted = new CopyOnWriteArrayList<>();
 
         FlakySource(MountSource d) {
             this.d = d;
@@ -679,6 +724,7 @@ public class ProjectRulesTalentTest {
 
         @Override
         public MountEntry stat(String path) throws IOException {
+            statted.add(path);
             if (failStat) {
                 throw new IOException("source unavailable");
             }

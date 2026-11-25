@@ -478,9 +478,9 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
                 // 统一推理水平 → 顶层 reasoning_effort（Chat Completions / 兼容协议）
                 // 仅归一化本字段后写出；非法值不落库，避免污染请求
-                // 国产模型族（qwen/kimi/glm/minimax）默认不写顶层 effort（对齐 OpenCode variants 空）
+                // 国产模型族（qwen/kimi/glm/minimax）默认不写顶层 effort
                 // OpenRouter：嵌套 reasoning.effort
-                // 注意：effort 字段本身不在此开启 thinking；循环结束后按 OpenCode 语义隐式开启
+                // 注意：effort 字段本身不在此开启 thinking；循环结束后再隐式开启
                 if ("reasoning_effort".equals(key)) {
                     if (shouldSkipChatCompletionsReasoningEffort(config)) {
                         continue;
@@ -516,7 +516,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
                 n.set(key, ONode.ofBean(value));
             }
 
-            // 对齐 OpenCode variants：选了 effort 档位时，对需要显式开关的模型隐式开启 thinking
+            // 选了 effort 档位时，对需要显式开关的模型隐式开启 thinking
             // thinking(false) / 显式 Map thinking 优先，不覆盖
             maybeEnableThinkingFromReasoningEffort(n, config, options);
 
@@ -1401,7 +1401,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     /**
-     * 对齐 OpenCode：用户设置 {@code reasoning_effort} 时，对需要显式思考开关的模型隐式开启 thinking。
+     * 用户设置 {@code reasoning_effort} 时，对需要显式思考开关的模型隐式开启 thinking。
      * <p>优先级：{@code thinking(false)} 关闭优先；显式 Map/对象 {@code thinking} 不覆盖；
      * 已写出 {@code enable_thinking}/{@code thinking.type} 时不重复写。</p>
      * <p>OpenAI 系（wire=NONE）effort 本身即推理控制，无需额外开关。</p>
@@ -1450,7 +1450,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
 
     /**
      * 是否抑制 Chat Completions 顶层 reasoning_effort。
-     * <p>对齐 OpenCode：qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
+     * <p>qwen / deepseek / kimi / glm / minimax 等不做 effort 变体，
      * 仅靠 thinking 开关；显式 optionSet 其它供应商字段仍可用。</p>
      * <p>例外：DeepSeek 官方认 high/max，仍写出；GLM-5.2 支持 high/max effort 变体，仍写出；
      * OpenRouter 走嵌套不走本抑制。</p>
@@ -1469,7 +1469,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         if (isDeepSeekOfficialEffort(config)) {
             return false;
         }
-        // GLM-5.2：OpenCode variants 有 high/max（openai-compatible / openrouter），不抑制
+        // GLM-5.2：支持 high/max（openai-compatible / openrouter），不抑制
         if (isGlm52EffortModel(config)) {
             return false;
         }
@@ -1479,7 +1479,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
         String apiUrl = config.getApiUrl() == null ? "" : config.getApiUrl().toLowerCase(Locale.ROOT);
         String hint = model + ' ' + provider + ' ' + apiUrl;
 
-        // 与 OpenCode variants() 空表一致：这些模型族不写顶层 effort（glm-5.2 已在上方豁免）
+        // 这些模型族不写顶层 effort（glm-5.2 已在上方豁免）
         return containsAny(model, "qwen", "qwq", "minimax", "glm", "zhipu", "kimi", "moonshot", "k2p",
                 "deepseek", "doubao", "seed-")
                 || containsAny(provider, "qwen", "dashscope", "minimax", "zhipu", "zai", "glm",
@@ -1489,7 +1489,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
     /**
-     * GLM-5.2 支持 effort 变体（对齐 OpenCode：high/max 或 OpenRouter 的 high/xhigh）。
+     * GLM-5.2 支持 effort 变体（high/max 或 OpenRouter 的 high/xhigh）。
      *
      * @since 4.0.4
      */

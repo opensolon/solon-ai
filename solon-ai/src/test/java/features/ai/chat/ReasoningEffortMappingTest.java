@@ -169,7 +169,7 @@ public class ReasoningEffortMappingTest {
         Assertions.assertTrue(tcHigh.get("includeThoughts").getBoolean());
         Assertions.assertFalse(tcHigh.hasKey("thinkingBudget"));
 
-        // Gemini 3 pro 支持 medium（对齐 OpenCode）
+        // Gemini 3 pro 支持 medium
         ChatOptions med = ChatOptions.of().reasoning_effort("medium");
         ONode rootMed = builder.build(config("gemini-3-pro"), med, userMsg(), false);
         Assertions.assertEquals("medium", rootMed.get("generationConfig").get("thinkingConfig").get("thinkingLevel").getString());
@@ -519,7 +519,7 @@ public class ReasoningEffortMappingTest {
     }
 
     @Test
-    @DisplayName("Chat Completions: 仅 reasoning_effort 时隐式开启 thinking（对齐 OpenCode）")
+    @DisplayName("Chat Completions: 仅 reasoning_effort 时隐式开启 thinking")
     public void testChatCompletionsEffortImpliesThinkingOn() {
         AbstractChatDialect dialect = OpenaiChatDialect.getInstance();
     

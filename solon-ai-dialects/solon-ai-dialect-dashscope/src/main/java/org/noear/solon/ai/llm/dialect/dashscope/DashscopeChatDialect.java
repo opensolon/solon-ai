@@ -209,7 +209,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                     n1.set(key, ONode.ofBean(value));
                 }
             
-                // 对齐 OpenCode：仅设 reasoning_effort 时隐式开启 enable_thinking；
+                // 仅设 reasoning_effort 时隐式开启 enable_thinking；
                 // thinking(false) 优先；已写出 enable_thinking 不覆盖
                 if (hasReasoningEffort
                         && !Boolean.FALSE.equals(thinkingSwitch)

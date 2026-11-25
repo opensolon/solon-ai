@@ -35,7 +35,7 @@ import java.util.regex.Pattern;
 /**
  * LSP 服务器管理器，负责多语言服务器的生命周期管理与路由
  *
- * <p>参考 OpenCode 的 LSP 配置模型：
+ * <p>LSP 配置模型：
  * <ul>
  *   <li>按文件扩展名路由到对应的 LSP 服务器</li>
  *   <li>延迟启动（首次使用时才创建连接）</li>

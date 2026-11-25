@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * LSP 服务器配置参数（对齐 OpenCode 的 lsp 配置模式）
+ * LSP 服务器配置参数
  *
  * <pre>
  * // config.yml 配置示例：

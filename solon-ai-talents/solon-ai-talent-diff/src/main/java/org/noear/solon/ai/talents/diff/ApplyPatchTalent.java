@@ -266,7 +266,7 @@ public class ApplyPatchTalent extends AbsTalent {
             } else if (line.equals("*** End Patch")) {
                 current = null;
             } else if (line.startsWith("*** Move to:") && current != null) {
-                // 对齐 OpenCode 的 move_path 映射
+                // "*** Move to:" 映射为 move_path
                 current.move_path = line.substring(12).trim();
             } else if (current != null) {
                 if ("add".equals(current.type)) {

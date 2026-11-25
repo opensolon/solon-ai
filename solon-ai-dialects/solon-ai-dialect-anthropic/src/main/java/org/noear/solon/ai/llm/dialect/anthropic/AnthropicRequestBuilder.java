@@ -988,7 +988,7 @@ public class AnthropicRequestBuilder {
                 budget = 10000;
                 break;
             case "high":
-                // 向 OpenCode 靠拢：high≈16k
+                // high≈16k
                 budget = 16000;
                 break;
             case "max":
@@ -1017,8 +1017,7 @@ public class AnthropicRequestBuilder {
 
     /**
      * Claude adaptive thinking：type=adaptive + output_config.effort（无 budget_tokens）。
-     * <p>opus-4.7+ / sonnet-5+ 等默认 display=omitted，需强制 summarized 才能拿到思考摘要
-     * （对齐 OpenCode anthropicOmitsThinking）。</p>
+     * <p>opus-4.7+ / sonnet-5+ 等默认 display=omitted，需强制 summarized 才能拿到思考摘要。</p>
      * <p>effort 位于 {@code output_config.effort}（Messages API OutputConfig，对齐官方 SDK
      * OutputConfig.Effort：low/medium/high/xhigh/max）；顶层并无该字段。</p>
      *
@@ -1036,7 +1035,7 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * 是否 Anthropic adaptive 模型族（按 model 名启发，对齐 OpenCode）。
+     * 是否 Anthropic adaptive 模型族（按 model 名启发）。
      * <p>覆盖：opus/sonnet 4.6；opus-4.7+；sonnet-5+；fable-5；
      * 以及 SAP 等倒置命名 {@code claude-4.7-opus} / {@code claude-5-sonnet}。</p>
      *
@@ -1060,7 +1059,7 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * 新 adaptive 模型默认 display=omitted，需写 summarized（对齐 OpenCode）。
+     * 新 adaptive 模型默认 display=omitted，需写 summarized。
      *
      * @since 4.0.4
      */
@@ -1075,7 +1074,7 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * opus-4.7+ 或 claude-4.7-opus 倒置命名（对齐 OpenCode anthropicOpus47OrLater）。
+     * opus-4.7+ 或 claude-4.7-opus 倒置命名。
      *
      * @since 4.0.4
      */
@@ -1101,7 +1100,7 @@ public class AnthropicRequestBuilder {
     }
 
     /**
-     * sonnet-5+ 或 claude-5-sonnet 倒置命名（对齐 OpenCode anthropicSonnet5OrLater）。
+     * sonnet-5+ 或 claude-5-sonnet 倒置命名。
      *
      * @since 4.0.4
      */

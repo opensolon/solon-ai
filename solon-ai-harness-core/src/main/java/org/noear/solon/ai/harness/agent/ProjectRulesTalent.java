@@ -49,27 +49,27 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 项目规范才能（AGENTS.md 约定，参考 opencode 的指令发现）：主代理与所有子代理共用。
+ * 项目规范才能（AGENTS.md 约定）：主代理与所有子代理共用。
  *
  * <p><b>为什么是才能</b>：才能指令追加在系统提示词模板（角色段）渲染之后，所以代理定义正文、引擎 systemPrompt、
  * {@code HarnessInput.systemPrompt} 任一整段替换角色段都不会把它丢掉，内容里的 {@code #{...}} 也原样保留。</p>
  *
  * <p><b>读取</b>：一律经工作区来源（{@link MountSource}）读取，不直接访问本地磁盘——工作区来源可以是本地目录，
- * 也可以是数据库等实现。与 opencode 一致文件名写死为 {@code AGENTS.md}（与 opencode 不同，不读 CLAUDE.md——
- * 那是 Claude Code 的规范，不是本约定）。从本轮工作目录（{@code __cwd}）往上到工作区根，由近及远收集每一层；
- * 工作目录在工作区外时只读工作区根（opencode 往上可走到用户目录；这里以工作区为界，不读工作区之外的文件）。</p>
+ * 也可以是数据库等实现。文件名写死为 {@code AGENTS.md}（不读 CLAUDE.md——那是 Claude Code 的规范，不是本约定）。
+ * 从本轮工作目录（{@code __cwd}）往上到工作区根，由近及远收集每一层；
+ * 工作目录在工作区外时只读工作区根（以工作区为界，不读工作区之外的文件）。</p>
  *
- * <p><b>只管通用约定</b>：项目各层的 AGENTS.md 是各工具共认的约定；用户级规范（opencode 的 {@code <配置目录>/AGENTS.md}）、
+ * <p><b>只管通用约定</b>：项目各层的 AGENTS.md 是各工具共认的约定；用户级规范（如 {@code <配置目录>/AGENTS.md}）、
  * 工具专属目录里的规范、配置里的 instructions 等位置因产品而异，本才能不读，由宿主自行处理（例如并入引擎 systemPrompt）。</p>
  *
  * <p><b>每次运行现读</b>：每次运行开始时读取并写进系统提示词（文件改了，下一次运行的系统提示词随之变化）；
  * 运行中途文件改了，由 {@link #getInterceptor() 拦截器}在推理前追加一条变更消息（不再适用 / 新增 / 有变化的整段原文）。</p>
  *
- * <p><b>子目录按需加载</b>（对齐 opencode 的 read 工具）：read 读文件、ls 列目录成功后，从文件所在目录（列目录时为该目录本身）
+ * <p><b>子目录按需加载</b>：read 读文件、ls 列目录成功后，从文件所在目录（列目录时为该目录本身）
  * 往上找规范文件，直到本轮工作目录（不含，工作目录及以上已在系统提示词里）；以消息注入本次运行，按工作记忆里的注入记录去重，
  * 压缩后不可见了，再读到时会重新注入。</p>
  *
- * <p><b>篇幅</b>：与 opencode 一致不设总预算；单个文件最多读 1MB 作为安全上限，超出部分不读，并提示模型用 read 读原文。</p>
+ * <p><b>篇幅</b>：不设总预算；单个文件最多读 1MB 作为安全上限，超出部分不读，并提示模型用 read 读原文。</p>
  *
  * <p><b>健壮性</b>：读取出错时沿用上次读到的内容（只有条目确实不存在才去掉）；同一个文件经不同层（如软链接别名）到达时只收一次；
  * 判断工作目录是否在工作区内时按真实路径比较（与 cwdPolicy 一致）。</p>
@@ -170,14 +170,23 @@ public class ProjectRulesTalent extends AbsTalent {
     }
 
     /**
+     * 子目录按需发现（不跳过任何路径），见 {@link #discover(String, String, boolean, Set)}
+     */
+    List<Part> discover(@Nullable String cwd, @Nullable String toolPath, boolean isDir) {
+        return discover(cwd, toolPath, isDir, null);
+    }
+
+    /**
      * 子目录按需发现（read / ls 成功后调用）：从目标所在目录往上，直到本轮工作目录或工作区根（不含）。
      *
      * @param cwd      本轮工作目录（为空时按工作区根）
      * @param toolPath 工具参数里的路径（相对工作目录或绝对路径；逻辑路径 {@code @xxx} 不处理）
      * @param isDir    目标是否目录（ls 为 true：从该目录本身开始找）
-     * @return 由近及远的规范段（不含被读的文件本身；工作区外的目标返回空）
+     * @param injected 已注入过的规范路径（可为 null）：命中的直接跳过、不读取；本次发现的会加进去，
+     *                 同一步里后续的 read / ls 不再重复读取
+     * @return 由近及远的规范段（不含被读的文件本身、不含已注入过的；工作区外的目标返回空）
      */
-    List<Part> discover(@Nullable String cwd, @Nullable String toolPath, boolean isDir) {
+    List<Part> discover(@Nullable String cwd, @Nullable String toolPath, boolean isDir, @Nullable Set<String> injected) {
         if (workspaceSource == null || Assert.isEmpty(workspace) || Assert.isEmpty(toolPath) || toolPath.startsWith("@")) {
             return Collections.emptyList();
         }
@@ -205,7 +214,17 @@ public class ProjectRulesTalent extends AbsTalent {
                 if (path.equals(targetRel)) {
                     continue; // 被读的就是它：模型已经看到，不再注入
                 }
+                if (injected != null && injected.contains(path)) {
+                    seen.add(identityOf(path)); // 已注入过：不读取；仍记下身份，经软链接别名到达的同一文件也跳过
+                    continue;
+                }
                 addFile(parts, seen, path);
+            }
+
+            if (injected != null) {
+                for (Part part : parts) {
+                    injected.add(part.getPath());
+                }
             }
             return parts;
         } catch (Throwable e) {
@@ -245,7 +264,7 @@ public class ProjectRulesTalent extends AbsTalent {
     // ---------------- 渲染 ----------------
 
     /**
-     * 渲染为一段指令（opencode 格式：每段「来源行 + 内容」，段间空一行；读取时截断的段带上用 read 读原文的提示）
+     * 渲染为一段指令（每段「来源行 + 内容」，段间空一行；读取时截断的段带上用 read 读原文的提示）
      */
     static String render(List<Part> parts, @Nullable Locale locale) {
         StringBuilder buf = new StringBuilder();
@@ -264,7 +283,7 @@ public class ProjectRulesTalent extends AbsTalent {
     }
 
     /**
-     * 变更消息（opencode 的 renderUpdate 顺序：先列不再适用的，再列新增的，最后是有变化的；新增与有变化的给整段原文）
+     * 变更消息（顺序：先列不再适用的，再列新增的，最后是有变化的；新增与有变化的给整段原文）
      *
      * @return 没有可见变化时返回 null
      */
