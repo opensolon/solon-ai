@@ -68,7 +68,7 @@ class QuickstartSampleTest {
             return HarnessEngine.of(ws.toString(), ".solon/")
                     .deployMode(DeployMode.SERVER)
                     .stateSource(stateSrc)
-                    .sessionProvider((id, create) -> create
+                    .sessionProvider((id, parentId, create) -> create
                             ? store.computeIfAbsent(id, InMemoryAgentSession::of)
                             : store.get(id))
                     .modelAdd(model)

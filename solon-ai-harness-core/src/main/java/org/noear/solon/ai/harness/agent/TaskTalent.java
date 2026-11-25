@@ -20,6 +20,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.react.LlmErrorEvent;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.LlmErrorClassifier;
@@ -51,6 +52,7 @@ import org.noear.solon.ai.talents.gateway.McpGatewayTalent;
 import org.noear.solon.annotation.Body;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.lang.Internal;
 import org.noear.solon.lang.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,7 +166,9 @@ public class TaskTalent extends AbsTalent {
 
     /**
      * 是否子代理任务 ID（即子会话 ID）：{@code task-} 加 32 位小写十六进制，与生成和续跑校验同一口径。
-     * 子会话与主会话共用引擎的 sessionProvider，宿主据此分流（如不常驻内存）、清理过期子会话或拒绝外部访问，
+     * 子会话与主会话共用引擎的 sessionProvider，一律带父会话标识取
+     * （{@link AgentSessionProvider#getSession(String, String, boolean)}，宿主可把它存在父会话之下，
+     * 删父会话时一并删除）。宿主据此分流（如不常驻内存）、清理过期子会话或拒绝外部访问，
      * 这是判断子会话的唯一标准。
      *
      * @since 4.2
@@ -186,8 +190,20 @@ public class TaskTalent extends AbsTalent {
 
     private final HarnessEngine engine;
 
-    /** 正在执行的子任务（进程内运行锁：同一任务不能并发续跑） */
-    private final Set<String> runningTasks = ConcurrentHashMap.newKeySet();
+    /**
+     * 正在执行的子任务 → 父会话标识（本进程内）。
+     *
+     * <p>一张表、一步原子登记，管三件事：</p>
+     * <ul>
+     * <li>运行锁：同一任务不能并发续跑（新任务的 ID 是新生成的，只有续跑会撞上）；</li>
+     * <li>能否删除：父流被取消后子任务线程可能还在跑（如卡在长工具调用里），此时父会话已不忙，
+     *     但删掉它，子任务结束时会把子会话写回来——宿主删除前看 {@code engine.status(session).isRemovable()}；</li>
+     * <li>能否回收：{@link HarnessEngine#isQuiescent()} 也看它，引擎池不会回收还有子任务在跑的引擎。</li>
+     * </ul>
+     *
+     * <p>按会话标识登记（不放会话 attrs）：会话实例被移出内存再重建也不丢。</p>
+     */
+    private final Map<String, String> runningTasks = new ConcurrentHashMap<>();
 
     /**
      * 子代理默认并发上限（模型未配置时生效）。
@@ -269,6 +285,42 @@ public class TaskTalent extends AbsTalent {
         }
 
         return value;
+    }
+
+    /**
+     * 指定父会话下正在执行的子任务数（本进程内）。
+     *
+     * <p>供引擎汇集 {@code engine.status(session)} 时读取。宿主请看会话状态的
+     * {@code isRemovable()} / {@code getRunningSubtaskCount()}，不要直接调本方法。</p>
+     *
+     * @since 4.2.0
+     */
+    @Internal
+    public int getRunningSubtaskCount(@Nullable String parentSessionId) {
+        if (parentSessionId == null) {
+            return 0;
+        }
+
+        // 同时在跑的子任务受并发线程约束，遍历开销可忽略
+        int count = 0;
+        for (String parent : runningTasks.values()) {
+            if (parentSessionId.equals(parent)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 是否有正在执行的子任务（任意父会话，本进程内）。
+     *
+     * <p>供引擎判定 {@link HarnessEngine#isQuiescent()}，宿主不要直接调本方法。</p>
+     *
+     * @since 4.2.0
+     */
+    @Internal
+    public boolean hasRunningSubtasks() {
+        return runningTasks.isEmpty() == false;
     }
 
     /**
@@ -627,13 +679,14 @@ public class TaskTalent extends AbsTalent {
      * 成功时把 {@code op.agent_name} 改为原任务的代理（续跑以原任务为准）。
      */
     private AgentSession openForResume(AgentSession parentSession, MultiTaskOp op) {
-        if (isTaskId(op.task_id) == false) {
+        if (parentSession == null || isTaskId(op.task_id) == false) {
             return null;
         }
 
         final AgentSession sub;
         try {
-            sub = engine.getSession(op.task_id, false);
+            // 子会话挂在父会话之下：支持嵌套存储的提供者用别的父会话直接取不到
+            sub = engine.getSession(op.task_id, parentSession.getSessionId(), false);
         } catch (Throwable e) {
             LOG.warn("子任务会话读取失败: task_id={}, 原因: {}", op.task_id, e.getMessage());
             return null;
@@ -643,8 +696,9 @@ public class TaskTalent extends AbsTalent {
             return null;
         }
 
+        // 仍校验元数据：不理会父会话标识的提供者（平铺存储）只能靠它守归属
         Map<String, Object> meta = subtaskMeta(sub);
-        if (parentSession == null || parentSession.getSessionId().equals(meta.get("parentSessionId")) == false) {
+        if (parentSession.getSessionId().equals(meta.get("parentSessionId")) == false) {
             return null;
         }
 
@@ -971,8 +1025,8 @@ public class TaskTalent extends AbsTalent {
             return formatTaskResp(plan.op, false, unknownAgentReason(plan.op, ctx.locale), isMultitask);
         }
 
-        // 进程内运行锁：新任务的 ID 是新生成的，只有续跑会撞上
-        if (runningTasks.add(taskId) == false) {
+        // 运行锁与按父会话登记一步完成（见 runningTasks）。先于建子会话：父会话在此之后就不能被删
+        if (runningTasks.putIfAbsent(taskId, ctx.sessionId) != null) {
             return formatTaskResp(plan.op, false,
                     "ERROR: " + HarnessI18n.fmt(ctx.locale, HarnessI18nKeys.TASK_RESUME_BUSY, "task_id", taskId), isMultitask);
         }
@@ -991,7 +1045,7 @@ public class TaskTalent extends AbsTalent {
 
             final ReActAgent agent = plan.agentBuilder.build();
             traceKey = agent.getConfig().getTraceKey();
-            final AgentSession session = resume ? plan.resumeSession : engine.getSession(taskId, true);
+            final AgentSession session = resume ? plan.resumeSession : engine.getSession(taskId, ctx.sessionId, true);
             sub = session;
 
             final ReActTrace prior = session.getContext().getAs(traceKey);

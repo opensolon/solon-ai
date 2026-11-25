@@ -35,7 +35,7 @@ class MultiTenantContractTest {
         model.setApiUrl("http://localhost:1/v1");
         model.setApiKey("test");
         return HarnessEngine.of(ws, workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model)
                 .defaultModel("fake");
     }

@@ -52,7 +52,7 @@ class EffectiveAgentMemoryTest {
         c.setApiKey("k");
 
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id))
                 .memoryProvider(cwd -> null)
                 .modelAdd(c)
                 .defaultModel("m")

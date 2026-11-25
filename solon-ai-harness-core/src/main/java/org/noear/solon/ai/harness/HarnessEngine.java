@@ -351,8 +351,12 @@ public class HarnessEngine {
     private final Set<AdmissionGate.Hold> admissions = ConcurrentHashMap.newKeySet();
 
     /**
-     * 是否静默（可安全回收）：没有已受理、尚未结束的请求，且所有扩展都没有需要本引擎继续存活的后台工作
+     * 是否静默（可安全回收）：没有已受理、尚未结束的请求，没有还在跑的子任务，且所有扩展都没有需要本引擎继续存活的后台工作
      * （见 {@link HarnessExtension#isQuiescent}，如活跃的 goal、定时任务）。供宿主按空闲回收引擎（如 host 模块的引擎池）。
+     *
+     * <p>子任务单独算：父流被取消后子任务线程可能还在跑（如卡在长工具调用里），此时请求已结束。
+     * 若引擎在这时被回收、同租户新建一个引擎，新引擎看不到这些子任务，
+     * {@code status(session).isRemovable()} 会放行删除，子任务结束时就把刚删掉的子会话写回来。</p>
      *
      * <p>「尚未结束」从受理算起（{@code handle} 返回 TASK、宿主还没订阅时已算），到本轮经
      * {@code InputOutcome#afterRun} 登记的回调执行完为止：回调里续发积压时，引擎不会在两轮之间的空档里被回收。
@@ -361,7 +365,7 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     public boolean isQuiescent() {
-        if (activeRuns.get() > 0 || hasLiveAdmission()) {
+        if (activeRuns.get() > 0 || hasLiveAdmission() || taskTalent.hasRunningSubtasks()) {
             return false;
         }
 
@@ -1944,12 +1948,24 @@ public class HarnessEngine {
      *
      * <p>只想取已存在的会话、不想顺带新建时，用 {@link #getSessionOrNull(String)}。</p>
      */
-    public AgentSession getSession(String instanceId) {
-        return options.getSessionProvider().getSession(instanceId, true);
+    public AgentSession getSession(String sessionId) {
+        return options.getSessionProvider().getSession(sessionId, null, true);
     }
 
-    public AgentSession getSession(String instanceId, boolean createIfAbsent) {
-        return options.getSessionProvider().getSession(instanceId, createIfAbsent);
+    public AgentSession getSession(String sessionId, boolean createIfAbsent) {
+        return options.getSessionProvider().getSession(sessionId, null, createIfAbsent);
+    }
+
+    /**
+     * 获取子会话（如子代理任务会话）：带父会话标识，提供者可据此把它存在父会话之下，
+     * 删除父会话时一并删除。语义见 {@link AgentSessionProvider#getSession(String, String, boolean)}。
+     *
+     * @param parentSessionId 父会话标识（null = 顶层会话，等同 {@link #getSession(String, boolean)}）
+     * @since 4.2.0
+     */
+    @Nullable
+    public AgentSession getSession(String sessionId, @Nullable String parentSessionId, boolean createIfAbsent) {
+        return options.getSessionProvider().getSession(sessionId, parentSessionId, createIfAbsent);
     }
 
     /**
@@ -1961,11 +1977,11 @@ public class HarnessEngine {
      * @since 4.2.0
      */
     @Nullable
-    public AgentSession getSessionOrNull(String instanceId) {
-        if (instanceId == null || instanceId.isEmpty()) {
+    public AgentSession getSessionOrNull(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
             return null;
         }
-        return options.getSessionProvider().getSession(instanceId, false);
+        return options.getSessionProvider().getSession(sessionId, null, false);
     }
 
     /**

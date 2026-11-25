@@ -36,7 +36,7 @@ class HarnessServerModeTest {
         Path state = Files.createDirectories(tmp.resolve("state"));
         return HarnessEngine.of(ws.toString(), ".solon/")
                 .deployMode(DeployMode.SERVER)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
                 .defaultModel("fake")
@@ -63,7 +63,7 @@ class HarnessServerModeTest {
                 .sandboxEnabled(false)
                 .scopeRequired(false)
                 .deployMode(DeployMode.SERVER)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
                 .build();
@@ -75,7 +75,7 @@ class HarnessServerModeTest {
         HarnessEngine last = HarnessEngine.of(tmp.resolve("w-last").toString(), ".solon/")
                 .deployMode(DeployMode.SERVER)
                 .deployMode(DeployMode.STANDALONE)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
         assertEquals(DeployMode.STANDALONE, last.getDeployMode());
         assertTrue(last.getTerminalTalent().isSandboxSelfBootstrap());
@@ -87,7 +87,7 @@ class HarnessServerModeTest {
     @Test
     void standaloneKeepsExistingDefaults() throws Exception {
         HarnessEngine engine = HarnessEngine.of(tmp.toString(), ".solon/")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
         assertEquals(DeployMode.STANDALONE, engine.getDeployMode());
         assertTrue(engine.getTerminalTalent().isSandboxSelfBootstrap());
@@ -102,14 +102,14 @@ class HarnessServerModeTest {
         // 未显式配置 stateSource
         IllegalStateException e1 = assertThrows(IllegalStateException.class, () ->
                 HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
-                        .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                        .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                         .modelAdd(model()).build());
         assertTrue(e1.getMessage().contains("stateSource"));
 
         // stateSource 在工作区内
         IllegalStateException e2 = assertThrows(IllegalStateException.class, () ->
                 HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
-                        .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                        .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(ws.resolve(".solon")))
                         .modelAdd(model()).build());
         assertTrue(e2.getMessage().contains("outside the workspace"));
@@ -117,7 +117,7 @@ class HarnessServerModeTest {
         // 没有模型
         assertThrows(IllegalStateException.class, () ->
                 HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
-                        .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                        .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(tmp.resolve("s2"))).build());
 
         // defaultModel 不存在
@@ -128,7 +128,7 @@ class HarnessServerModeTest {
         // 要求作用域（scopeRequired）却没有 scopeResolver：每轮输入都会被拒，构建期就报错
         IllegalStateException e5 = assertThrows(IllegalStateException.class, () ->
                 HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
-                        .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                        .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                         .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s5"))))
                         .modelAdd(model()).defaultModel("fake").build());
         assertTrue(e5.getMessage().contains("scopeResolver"), e5.getMessage());
@@ -136,7 +136,7 @@ class HarnessServerModeTest {
         // 显式关掉 scopeRequired 则不要求解析器
         HarnessEngine noScope = HarnessEngine.of(ws.toString(), ".solon/").deployMode(DeployMode.SERVER)
                 .scopeRequired(false)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("s6"))))
                 .modelAdd(model()).defaultModel("fake").build();
         assertFalse(noScope.isScopeRequired());

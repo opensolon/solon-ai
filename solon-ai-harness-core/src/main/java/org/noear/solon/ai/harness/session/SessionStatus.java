@@ -54,7 +54,9 @@ import java.util.function.BinaryOperator;
  *
  * <p><b>注意 busy 的口径</b>：{@link #isBusy()} 只表示「有活跃运行流」。
  * 「不能接新输入」通常是 {@link #isOccupied()}（忙碌或待审批），两者刻意分开——
- * HITL 挂起时引擎里并没有运行流，但它显然不能被新输入顶掉。</p>
+ * HITL 挂起时引擎里并没有运行流，但它显然不能被新输入顶掉。
+ * 「能不能永久删除」又是另一个口径 {@link #isRemovable()}：父流被取消后子任务可能还在跑，
+ * 此时会话可以接新输入（不算占用），但不能删除。</p>
  *
  * @author noear
  * @since 4.2.0
@@ -65,15 +67,18 @@ public final class SessionStatus {
     private final int pendingHitl;
     private final int cancelGeneration;
     private final boolean admitting;
+    private final int runningSubtaskCount;
     private final Map<Key<?>, Object> facts;
 
     private SessionStatus(boolean busy, int activeRunCount, int pendingHitl,
-                          int cancelGeneration, boolean admitting, Map<Key<?>, Object> facts) {
+                          int cancelGeneration, boolean admitting, int runningSubtaskCount,
+                          Map<Key<?>, Object> facts) {
         this.busy = busy;
         this.activeRunCount = activeRunCount;
         this.pendingHitl = pendingHitl;
         this.cancelGeneration = cancelGeneration;
         this.admitting = admitting;
+        this.runningSubtaskCount = runningSubtaskCount;
         this.facts = facts;
     }
 
@@ -165,6 +170,30 @@ public final class SessionStatus {
     }
 
     /**
+     * 本会话委派出去、仍在执行的子任务数（本进程内）。
+     *
+     * <p>只在 {@code engine.status(session)} 里有值；静态 {@link #of(AgentSession)} 恒为 0。</p>
+     *
+     * @since 4.2.0
+     */
+    public int getRunningSubtaskCount() {
+        return runningSubtaskCount;
+    }
+
+    /**
+     * 是否可以永久删除：不占用（{@link #isOccupied()} 为假）<b>且</b>没有仍在执行的子任务。
+     *
+     * <p>宿主删除 / 清空会话前用它判定：父流被取消后子任务线程可能还卡在长工具调用里，
+     * 这时删掉父会话，子任务结束时会把它的子会话写回来（子会话存在父会话之下时就是把已删的目录重建出来）。
+     * 子任务刻意不算进 {@link #isOccupied()}：它不妨碍接新输入，算进去会让积压续发等「空闲后再做」的逻辑被它卡住。</p>
+     *
+     * @since 4.2.0
+     */
+    public boolean isRemovable() {
+        return isOccupied() == false && runningSubtaskCount <= 0;
+    }
+
+    /**
      * 当前取消代数（异步宿主可用于「取消早于订阅」的窗口判定）
      */
     public int getCancelGeneration() {
@@ -178,6 +207,9 @@ public final class SessionStatus {
                 .append(", runs=").append(activeRunCount)
                 .append(", hitl=").append(pendingHitl)
                 .append(", admitting=").append(admitting);
+        if (runningSubtaskCount > 0) {
+            buf.append(", subtasks=").append(runningSubtaskCount);
+        }
         for (Map.Entry<Key<?>, Object> kv : facts.entrySet()) {
             buf.append(", ").append(kv.getKey().getName()).append('=').append(kv.getValue());
         }
@@ -267,6 +299,7 @@ public final class SessionStatus {
         private final int pendingHitl;
         private final int cancelGeneration;
         private final boolean admitting;
+        private int runningSubtaskCount;
         private final Map<Key<?>, Object> facts = new LinkedHashMap<>();
 
         private Builder(@Nullable AgentSession session) {
@@ -298,11 +331,23 @@ public final class SessionStatus {
             return this;
         }
 
+        /**
+         * 仍在执行的子任务数（引擎汇集快照时填入；扩展不要调用）。
+         *
+         * @since 4.2.0
+         */
+        @Internal
+        public Builder runningSubtaskCount(int count) {
+            this.runningSubtaskCount = Math.max(0, count);
+            return this;
+        }
+
         public SessionStatus build() {
             Map<Key<?>, Object> snapshot = facts.isEmpty()
                     ? Collections.<Key<?>, Object>emptyMap()
                     : Collections.unmodifiableMap(new LinkedHashMap<>(facts));
-            return new SessionStatus(busy, activeRunCount, pendingHitl, cancelGeneration, admitting, snapshot);
+            return new SessionStatus(busy, activeRunCount, pendingHitl, cancelGeneration, admitting,
+                    runningSubtaskCount, snapshot);
         }
     }
 }

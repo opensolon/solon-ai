@@ -32,7 +32,7 @@ class GoalTalentErrorFlagTest {
     private GoalExtension newExtension() {
         GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
         return ext;

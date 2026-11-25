@@ -49,7 +49,7 @@ class ReferenceHostsTest {
                 Map<String, AgentSession> store = stores.computeIfAbsent(t, k -> new ConcurrentHashMap<>());
                 return HarnessEngine.of(Files.createDirectories(tmp.resolve("ws").resolve(t)).toString(),
                                 tmp.resolve("home").resolve(t).toString())
-                        .sessionProvider((id, c) -> c ? store.computeIfAbsent(id, InMemoryAgentSession::of) : store.get(id))
+                        .sessionProvider((id, parentId, c) -> c ? store.computeIfAbsent(id, InMemoryAgentSession::of) : store.get(id))
                         .modelAdd(model)
                         .defaultModel("fake")
                         .extensionAdd(QueueExtension.builder().build())

@@ -51,7 +51,7 @@ class LoopExtensionTest {
 
     private HarnessEngine engine(HarnessExtension... extensions) {
         HarnessEngine.Builder b = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id));
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id));
         for (HarnessExtension e : extensions) {
             b.extensionAdd(e);
         }
@@ -106,7 +106,7 @@ class LoopExtensionTest {
         assertFalse(loop.scheduler().isPersistent(), "挂接前只在内存");
 
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id))
                 .stateSource(FileMountSource.of(state))
                 .extensionAdd(loop)
                 .build();

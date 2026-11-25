@@ -151,7 +151,7 @@ public class TaskTalentRunningIndexTest {
                 .modelAdd(model)
                 .defaultModel("srv")
                 .autoRethink(false)
-                .sessionProvider((id, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(new HarnessExtension() {
                     @Override
                     public void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend o) {

@@ -5,13 +5,19 @@ import org.noear.solon.ai.harness.input.HarnessInput;
 import org.noear.solon.ai.harness.HarnessResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.noear.solon.ai.agent.Agent;
 import org.noear.solon.ai.agent.AgentEvent;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.ReActOptions;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
+import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.harness.util.TraceUtil;
 import org.noear.solon.ai.harness.extension.goal.GoalExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopExtension;
 import org.noear.solon.ai.harness.extension.loop.LoopSpec;
@@ -33,6 +39,7 @@ import org.noear.solon.ai.harness.input.InputOrigin;
 import org.noear.solon.ai.harness.input.RejectReason;
 import org.noear.solon.ai.harness.session.SessionOwnership;
 
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -40,6 +47,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -179,7 +187,7 @@ class HarnessHostContractTest {
     private HarnessEngine.Builder builder() throws Exception {
         Path ws = Files.createDirectories(tmp.resolve("ws"));
         return HarnessEngine.of(ws.toString(), tmp.resolve("home").toString())
-                .sessionProvider((id, create) -> create
+                .sessionProvider((id, parentId, create) -> create
                         ? sessions.computeIfAbsent(id, InMemoryAgentSession::of)
                         : sessions.get(id))
                 .modelAdd(model())
@@ -543,6 +551,72 @@ class HarnessHostContractTest {
         }
     }
 
+    /**
+     * 父流已结束（不占用）但子任务还在跑：closeSession 必须拒绝（否则子任务收尾会把已删的子会话写回来），
+     * 子任务结束后才删。用「建子会话时阻塞」的提供者把子任务定格在运行中。
+     */
+    @Test
+    void closeSessionRefusesWhileSubtaskStillRunning() throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        HarnessEngine engine = builder()
+                .sessionProvider((id, parentId, create) -> {
+                    if (TaskTalent.isTaskId(id) && create) {
+                        entered.countDown();
+                        try {
+                            release.await(10, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                    return create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id);
+                })
+                .build();
+        HarnessHost host = HarnessHost.builder().engines(k -> engine).build();
+        Thread worker = null;
+        try {
+            host.openSession("t", "s1", "u1");
+            bindTrace(engine.getSession("s1"));
+
+            TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
+            op.agent_name = "explore";
+            op.description = "d";
+            op.prompt = "p";
+            worker = new Thread(() -> engine.getTaskTalent().task(op, tmp.toString(), "s1", null));
+            worker.start();
+            assertTrue(entered.await(10, TimeUnit.SECONDS), "子任务应已开始");
+            assertFalse(engine.status(engine.getSessionOrNull("s1")).isOccupied(), "前提：父会话不占用");
+
+            boolean[] cleaned = {false};
+            assertFalse(host.closeSession("t", "s1", () -> cleaned[0] = true), "子任务未结束：拒绝删除");
+            assertFalse(cleaned[0], "拒绝时不删存储");
+            assertNotNull(engine.getSessionOrNull("s1"));
+
+            release.countDown();
+            worker.join(30_000);
+            assertFalse(worker.isAlive());
+            assertTrue(host.closeSession("t", "s1", () -> cleaned[0] = true), "子任务结束后可以删除");
+            assertTrue(cleaned[0]);
+        } finally {
+            release.countDown();
+            if (worker != null) {
+                worker.join(30_000);
+            }
+            engine.shutdown();
+        }
+    }
+
+    /** 让会话的「当前轨迹」指向一条空轨迹（TaskTalent 从这里取父轨迹） */
+    private static void bindTrace(AgentSession session) throws Exception {
+        ReActTrace trace = new ReActTrace();
+        Field options = ReActTrace.class.getDeclaredField("options");
+        options.setAccessible(true);
+        options.set(trace, new ReActOptions((ChatModel) null));
+        session.getContext().put(Agent.KEY_CURRENT_UNIT_TRACE_KEY, "__host_trace");
+        session.getContext().put("__host_trace", trace);
+        session.getContext().put(TraceUtil.TRACE_KEY_MAIN, trace);
+    }
+
     @Test
     void sessionsOfAnotherTenantAreNotFound() throws Exception {
         // 隔离来自「每个租户一个会话提供者」：这是宿主侧的责任（每个租户一个工作区 / 一个存储命名空间）。
@@ -552,11 +626,11 @@ class HarnessHostContractTest {
         Map<String, AgentSession> storeB = new ConcurrentHashMap<>();
         HarnessEngine engineA = builder()
                 .extensionAdd(QueueExtension.builder().build())
-                .sessionProvider((id, create) -> create
+                .sessionProvider((id, parentId, create) -> create
                         ? storeA.computeIfAbsent(id, InMemoryAgentSession::of) : storeA.get(id)).build();
         HarnessEngine engineB = builder()
                 .extensionAdd(QueueExtension.builder().build())
-                .sessionProvider((id, create) -> create
+                .sessionProvider((id, parentId, create) -> create
                         ? storeB.computeIfAbsent(id, InMemoryAgentSession::of) : storeB.get(id)).build();
         engineB.getSession("sb");
 

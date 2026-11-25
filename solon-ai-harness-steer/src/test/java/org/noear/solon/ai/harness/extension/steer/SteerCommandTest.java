@@ -127,7 +127,7 @@ class SteerCommandTest {
     @Test
     void attachedEngineNotBusyRollsBack() {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
         SteerExtension ext = SteerExtension.builder().maxBoxSize(7).build();
         engine.addExtension(ext);

@@ -163,7 +163,7 @@ public class ProjectRulesTalentTest {
                 .modelAdd(model)
                 .defaultModel("srv")
                 .autoRethink(false)
-                .sessionProvider((id, create) -> create
+                .sessionProvider((id, parentId, create) -> create
                         ? sessions.computeIfAbsent(id, InMemoryAgentSession::of)
                         : sessions.get(id));
         if (custom != null) {

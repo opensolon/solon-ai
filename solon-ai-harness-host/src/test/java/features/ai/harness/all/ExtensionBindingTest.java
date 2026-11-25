@@ -41,7 +41,7 @@ class ExtensionBindingTest {
         model.setApiUrl("http://localhost:1/v1");
         model.setApiKey("test");
         HarnessEngine.Builder builder = HarnessEngine.of(Files.createDirectories(tmp.resolve("ws")).toString(), tmp.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .modelAdd(model)
                 .defaultModel("fake");
         for (HarnessExtension extension : extensions) {

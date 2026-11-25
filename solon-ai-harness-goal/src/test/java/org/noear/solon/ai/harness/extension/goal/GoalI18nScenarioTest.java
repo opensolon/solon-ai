@@ -55,7 +55,7 @@ public class GoalI18nScenarioTest {
         Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
         GoalExtension ext = GoalExtension.builder().jobManager(null).defaultValidators(false).build();
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .locale(Locale.ENGLISH)
                 .extensionAdd(ext)
                 .build();

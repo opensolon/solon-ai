@@ -141,7 +141,7 @@ class CommandInputTest {
     @Test
     void effectiveLocaleComesFromEngine() {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .locale(Locale.ENGLISH)
                 .build();
 

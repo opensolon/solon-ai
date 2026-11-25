@@ -143,6 +143,9 @@ final class SessionControl {
                     LOG.warn("Extension contributeSessionStatus failed: {}", extension.getClass().getName(), e);
                 }
             }
+            // 子任务按父会话标识登记在 TaskTalent 里（父流取消后可能还在跑），只影响 isRemovable。
+            // 放在扩展回调之后写：引擎事实以引擎为准，扩展拿到 builder 也覆盖不了
+            builder.runningSubtaskCount(engine.getTaskTalent().getRunningSubtaskCount(session.getSessionId()));
         }
         return builder.build();
     }

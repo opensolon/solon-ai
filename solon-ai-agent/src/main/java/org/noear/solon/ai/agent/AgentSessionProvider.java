@@ -21,7 +21,7 @@ import org.noear.solon.lang.Preview;
 /**
  * Agent 会话提供者（Session 工厂/加载器）
  *
- * <p>核心职责：基于业务实例标识维护和检索 Agent 运行状态。</p>
+ * <p>核心职责：基于会话标识维护和检索 Agent 运行状态。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -30,7 +30,7 @@ import org.noear.solon.lang.Preview;
 @FunctionalInterface
 public interface AgentSessionProvider {
     /**
-     * 获取指定实例的会话
+     * 获取指定会话
      *
      * <p>逻辑约定：</p>
      * <ul>
@@ -40,11 +40,23 @@ public interface AgentSessionProvider {
      *     （不建实例、不写存储、不建目录、不放入缓存）。</li>
      * </ul>
      *
-     * @param instanceId     会话实例标识
-     * @param createIfAbsent 不存在时是否新建
+     * <p>{@code parentSessionId} 是<b>存储位置的提示</b>，不是会话身份的一部分：</p>
+     * <ul>
+     * <li>null 表示顶层会话；非 null 表示子会话（如子代理任务会话），提供者可以把它存在父会话之下
+     *     （如 {@code sessions/<父>/subtasks/<子>/}），这样删除父会话时子会话随之删除；也可以不理会（平铺存储）。</li>
+     * <li>同一个 {@code sessionId} 必须始终带同一个 {@code parentSessionId} 来取；带别的父会话标识取不到是正常的。</li>
+     * <li>按父会话嵌套存储的实现，若收到的是子会话标识（宿主按自己的规则识别）却没有父会话标识：可以只读（如兼容旧的平铺数据），
+     *     但不要在顶层新建——否则这份数据不会随父会话删除。</li>
+     * </ul>
+     *
+     * <p>不关心父子关系的实现直接忽略它即可：{@code (id, parentId, create) -> ...}。</p>
+     *
+     * @param sessionId       会话标识
+     * @param parentSessionId 父会话标识（null = 顶层会话）
+     * @param createIfAbsent  不存在时是否新建
      * @return 关联的 AgentSession 实例；仅当 {@code createIfAbsent=false} 且不存在时为 null
      * @since 4.2.0
      */
     @Nullable
-    AgentSession getSession(String instanceId, boolean createIfAbsent);
+    AgentSession getSession(String sessionId, @Nullable String parentSessionId, boolean createIfAbsent);
 }

@@ -50,7 +50,7 @@ class HarnessEngineAccessorTest {
     /** 带模型 + 记忆方案的完整引擎：多数 setter 会连带操作 talent / 重建主代理，缺任一会 NPE */
     private HarnessEngine engine() {
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .memoryProvider(cwd -> null)
                 .modelAdd(withEndpoint("acc"))
                 .defaultModel("acc")
@@ -60,7 +60,7 @@ class HarnessEngineAccessorTest {
     /** 最小引擎：仅 sessionProvider，用于验证「默认值」与「未配置时的容错」 */
     private HarnessEngine bareEngine() {
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
     }
 
@@ -76,7 +76,7 @@ class HarnessEngineAccessorTest {
     @Test
     void pathAccessorsDeriveFromWorkspaceAndHarnessHome() {
         HarnessEngine e = HarnessEngine.of(workspace.toString(), ".hh")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
 
         assertEquals(".hh/", e.getHarnessHome());

@@ -41,7 +41,7 @@ public class GoalLocaleTest {
 
     private HarnessEngine engine(Locale engineLocale, AbsHarnessExtension... extensions) {
         HarnessEngine.Builder b = HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .locale(engineLocale);
         for (AbsHarnessExtension e : extensions) {
             b.extensionAdd(e);

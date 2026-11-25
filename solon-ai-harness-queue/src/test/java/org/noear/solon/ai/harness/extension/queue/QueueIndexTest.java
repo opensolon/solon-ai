@@ -57,7 +57,7 @@ class QueueIndexTest {
 
     private final Map<String, AgentSession> store = new ConcurrentHashMap<>();
 
-    private AgentSession sessionOf(String id, boolean create) {
+    private AgentSession sessionOf(String id, String parentId, boolean create) {
         return create ? store.computeIfAbsent(id, InMemoryAgentSession::of) : store.get(id);
     }
 

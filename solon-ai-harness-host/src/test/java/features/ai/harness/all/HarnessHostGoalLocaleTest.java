@@ -45,7 +45,7 @@ class HarnessHostGoalLocaleTest {
         model.setApiUrl("http://localhost:1/v1");
         model.setApiKey("test");
         HarnessEngine engine = HarnessEngine.of(Files.createDirectories(tmp.resolve("ws")).toString(), tmp.resolve("home").toString())
-                .sessionProvider((id, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .modelAdd(model)
                 .defaultModel("fake")
                 .extensionAdd(GoalExtension.builder().jobManager(null).defaultValidators(false).build())

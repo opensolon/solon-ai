@@ -281,7 +281,7 @@ public class MinimalHost {
 
     public MinimalHost(String workspace) {
         this.engine = HarnessEngine.of(workspace, ".solon/")
-                .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填
+                .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id)) // 必填
                 .modelAdd(new ChatConfig().then(cfg -> {
                     cfg.setName("deepseek");
                     cfg.setApiUrl("https://api.deepseek.com");
@@ -372,7 +372,7 @@ public class FullHost {
 
     public FullHost(String workspace) {
         this.engine = HarnessEngine.of(workspace, ".solon/")
-                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id))
                 .modelAdd(new ChatConfig().then(cfg -> {
                     cfg.setName("deepseek");
                     cfg.setApiUrl("https://api.deepseek.com");

@@ -73,7 +73,7 @@ class GoalIndexReadFailureTest {
         return HarnessEngine.of(Files.createDirectories(workspace.resolve("ws")).toString(),
                         workspace.resolve("home").toString())
                 .stateSource(state)
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
     }

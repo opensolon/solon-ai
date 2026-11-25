@@ -21,7 +21,7 @@ class HarnessStateSourceTest {
     @Test
     void defaultStateSourceKeepsLegacyLayout() throws Exception {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), ".solon")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
         engine.getTodoTalent().writeTodo(null, "s1", "- [ ] a");
         assertTrue(Files.exists(workspace.resolve(".solon/sessions/s1/TODO.md")),
@@ -32,7 +32,7 @@ class HarnessStateSourceTest {
     void customStateSourceIsUsedAndNotMounted() throws Exception {
         InMemoryMountSource data = new InMemoryMountSource("tenant-data");
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), ".solon")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(data)
                 .build();
 
@@ -48,7 +48,7 @@ class HarnessStateSourceTest {
     @Test
     void workspaceSourceWritesArtifacts() throws Exception {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), ".solon")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
         engine.getWorkspaceSource().writeString(".files/task/t1/result.txt", "x");
         assertTrue(Files.exists(workspace.resolve(".files/task/t1/result.txt")));

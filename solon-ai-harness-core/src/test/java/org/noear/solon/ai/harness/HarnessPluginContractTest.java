@@ -69,7 +69,7 @@ class HarnessPluginContractTest {
         model.setApiUrl("http://localhost:1/v1");
         model.setApiKey("test");
         return HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model)
                 .defaultModel("fake")
                 .build();
@@ -281,7 +281,7 @@ class HarnessPluginContractTest {
     void removeSessionIgnoresBlankIdAndNeverTouchesSessionProvider() {
         AtomicInteger providerCalls = new AtomicInteger();
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> {
+                .sessionProvider((id, parentId, c) -> {
                     providerCalls.incrementAndGet();
                     return InMemoryAgentSession.of(id);
                 })
@@ -303,7 +303,7 @@ class HarnessPluginContractTest {
     void getSessionOrNullDoesNotCreate() {
         java.util.Map<String, AgentSession> sessions = new java.util.concurrent.ConcurrentHashMap<>();
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .build();
 
         assertNull(engine.getSessionOrNull("s1"));
@@ -563,7 +563,7 @@ class HarnessPluginContractTest {
         // 构建期：同一实例重复 extensionAdd 只算一次；null 忽略
         Counting one = new Counting();
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .extensionAdd(one)
                 .extensionAdd(one)
                 .extensionAdd(null)

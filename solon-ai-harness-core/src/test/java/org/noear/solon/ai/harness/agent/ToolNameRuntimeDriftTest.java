@@ -42,7 +42,7 @@ class ToolNameRuntimeDriftTest {
     @Test
     void talentToolNamesMatchMapping() {
         HarnessEngine engine = HarnessEngine.of(workspace.toString(), ".solon/")
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .build();
 
         Map<String, Talent> talents = new LinkedHashMap<>();

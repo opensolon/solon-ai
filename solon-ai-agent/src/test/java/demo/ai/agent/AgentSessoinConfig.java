@@ -23,7 +23,7 @@ public class AgentSessoinConfig {
     @Bean
     public AgentSessionProvider redisSession(RedisClient redisClient) {
         Map<String, AgentSession> map = new ConcurrentHashMap<>();
-        return (sessionId, createIfAbsent) -> createIfAbsent
+        return (sessionId, parentId, createIfAbsent) -> createIfAbsent
                 ? map.computeIfAbsent(sessionId, k -> new RedisAgentSession(k, redisClient))
                 : map.get(sessionId);
     }
@@ -32,7 +32,7 @@ public class AgentSessoinConfig {
     @Bean
     public AgentSessionProvider inMemorySessoin() {
         Map<String, AgentSession> map = new ConcurrentHashMap<>();
-        return (sessionId, createIfAbsent) -> createIfAbsent
+        return (sessionId, parentId, createIfAbsent) -> createIfAbsent
                 ? map.computeIfAbsent(sessionId, k -> new InMemoryAgentSession(k))
                 : map.get(sessionId);
     }
@@ -44,7 +44,7 @@ public class AgentSessoinConfig {
         ReActAgent reActAgent;
 
         public String test() throws Throwable{
-            AgentSession session = sessionProvider.getSession("test", true);
+            AgentSession session = sessionProvider.getSession("test", null, true);
 
             return reActAgent.prompt("你好呀!")
                     .session(session)

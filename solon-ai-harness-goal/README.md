@@ -289,7 +289,7 @@ L0 与 L1 的装配写法相同；本章之后的执行器（4.4）与第五、�
 GoalExtension goal = GoalExtension.builder().build();
 
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")
-        .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 生产环境应缓存实例
+        .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id)) // 生产环境应缓存实例
         .modelAdd(chatConfig)
         .defaultModel("deepseek")
         .extensionAdd(goal)              // 构建期挂接：onAttach 内装配运行态、调度、/goal 命令与模型工具
@@ -328,7 +328,7 @@ GoalExtension goal = GoalExtension.builder()
 ```java
 GoalExtension ext = GoalExtension.builder().jobManager(null).build(); // 显式关闭调度，不打 warn
 HarnessEngine engine = HarnessEngine.of(workspace, home)
-        .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+        .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
         .extensionAdd(ext)
         .build();
 

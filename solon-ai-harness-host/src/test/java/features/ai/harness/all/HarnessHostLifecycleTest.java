@@ -69,7 +69,7 @@ class HarnessHostLifecycleTest {
 
     private final Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
 
-    private AgentSession sessionOf(String id, boolean create) {
+    private AgentSession sessionOf(String id, String parentId, boolean create) {
         return create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id);
     }
 
@@ -341,7 +341,7 @@ class HarnessHostLifecycleTest {
 
         CountDownLatch loading = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        HarnessEngine engine = engine(null, (id, create) -> {
+        HarnessEngine engine = engine(null, (id, parentId, create) -> {
             if ("s1".equals(id) && create == false && loading.getCount() > 0) {
                 loading.countDown();   // 恢复正在加载积压会话：卡住它
                 try {
@@ -350,7 +350,7 @@ class HarnessHostLifecycleTest {
                     Thread.currentThread().interrupt();
                 }
             }
-            return sessionOf(id, create);
+            return sessionOf(id, parentId, create);
         });
         engine.getSession("s2");
         RecordingSink sink = new RecordingSink();
@@ -559,7 +559,7 @@ class HarnessHostLifecycleTest {
 
         ThreadLocal<String> tenant = new ThreadLocal<>();
         // 会话存储按租户上下文取：上下文缺失时什么都查不到
-        HarnessEngine engine = engine(null, (id, create) -> "acme".equals(tenant.get()) ? sessionOf(id, create) : null);
+        HarnessEngine engine = engine(null, (id, parentId, create) -> "acme".equals(tenant.get()) ? sessionOf(id, parentId, create) : null);
         RecordingSink sink = new RecordingSink();
         HarnessHost host = HarnessHost.builder().engines(k -> engine).sink(sink).executor(new ManualExecutor())
                 .wrap((t, r) -> () -> {

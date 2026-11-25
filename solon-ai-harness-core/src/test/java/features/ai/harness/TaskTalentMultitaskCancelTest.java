@@ -30,7 +30,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -148,7 +147,7 @@ public class TaskTalentMultitaskCancelTest {
                 .modelAdd(model)
                 .defaultModel("srv")
                 .autoRethink(false)
-                .sessionProvider((id, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(new HarnessExtension() {
                     @Override
                     public void onRequestAssemble(HarnessEngine engine, String agentName, boolean isDelegated, ReActOptionsAmend o) {
@@ -196,8 +195,8 @@ public class TaskTalentMultitaskCancelTest {
 
             // 放行后原线程退出、释放运行锁，再带 task_id 接着做
             releaseSlow.countDown();
-            Set<String> running = (Set<String>) HarnessFixtures.get(talent, "runningTasks");
-            assertTrue(waitUntil(() -> running.contains(id) == false), "原子任务线程应已退出");
+            Map<String, String> running = (Map<String, String>) HarnessFixtures.get(talent, "runningTasks");
+            assertTrue(waitUntil(() -> running.containsKey(id) == false), "原子任务线程应已退出");
 
             HarnessFixtures.bindTrace(engine.getSession("s1"), HarnessFixtures.trace(null, false));
             TaskTalent.SingleTaskOp again = new TaskTalent.SingleTaskOp();

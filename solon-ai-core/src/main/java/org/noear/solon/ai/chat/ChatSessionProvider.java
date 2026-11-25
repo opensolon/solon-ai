@@ -21,7 +21,7 @@ import org.noear.solon.lang.Preview;
 /**
  * Chat 会话提供者（Session 工厂/加载器）
  *
- * <p>核心职责：基于业务实例标识维护和检索 ChatModel 运行状态。</p>
+ * <p>核心职责：基于会话标识维护和检索 ChatModel 运行状态。</p>
  *
  * @author noear
  * @since 3.8.1
@@ -30,7 +30,7 @@ import org.noear.solon.lang.Preview;
 @FunctionalInterface
 public interface ChatSessionProvider {
     /**
-     * 获取指定实例的会话
+     * 获取指定会话
      *
      * <p>逻辑约定：</p>
      * <ul>
@@ -38,9 +38,9 @@ public interface ChatSessionProvider {
      * <li>若不存在，则按需创建（Lazy loading）并初始化新会话。</li>
      * </ul>
      *
-     * @param instanceId 会话实例标识
+     * @param sessionId 会话标识
      * @return 关联的 ChatSession 实例
      */
     @NonNull
-    ChatSession getSession(String instanceId);
+    ChatSession getSession(String sessionId);
 }

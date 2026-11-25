@@ -373,7 +373,7 @@ public class GoalRenderGoldenTest {
     private static HarnessEngine engine(Path ws, Map<String, AgentSession> sessions, Locale locale, GoalExtension ext) throws Exception {
         Files.createDirectories(ws);
         HarnessEngine.Builder b = HarnessEngine.of(ws.toString(), ws.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id));
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id));
         if (locale != null) {
             b.locale(locale);
         }

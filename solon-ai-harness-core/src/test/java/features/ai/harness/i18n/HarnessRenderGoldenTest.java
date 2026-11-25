@@ -52,7 +52,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -232,7 +231,7 @@ public class HarnessRenderGoldenTest {
         out.put("task_resume_duplicate" + suffix, (String) HarnessFixtures.get(plans.get(1), "invalidReason"));
 
         // 跑起来过的子会话：归属本会话，且 trace 有原始提示词
-        AgentSession sub = engine.getSessionProvider().getSession(id, true);
+        AgentSession sub = engine.getSessionProvider().getSession(id, null, true);
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("parentSessionId", s1.getSessionId());
         meta.put("agentName", "explore");
@@ -244,8 +243,8 @@ public class HarnessRenderGoldenTest {
         sub.getContext().put("__explore", subTrace);
 
         Object plan = HarnessFixtures.invoke(talent, "preparePlan", planType, s1, op, null, locale);
-        Set<String> running = (Set<String>) HarnessFixtures.get(talent, "runningTasks");
-        running.add(id);
+        Map<String, String> running = (Map<String, String>) HarnessFixtures.get(talent, "runningTasks");
+        running.put(id, "s1");
         try {
             out.put("task_resume_busy" + suffix, (String) HarnessFixtures.invoke(talent, "runTask",
                     new Class<?>[]{ctx.getClass(), plan.getClass(), boolean.class, String.class}, ctx, plan, false, id));

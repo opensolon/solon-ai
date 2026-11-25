@@ -62,7 +62,7 @@ class GoalSessionRemoveTest {
 
     private HarnessEngine engine(GoalExtension ext) {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
     }
@@ -111,7 +111,7 @@ class GoalSessionRemoveTest {
         // 另一个引擎用独立的会话存储（goal 状态在会话属性里，共用会触发单槽限制）
         Map<String, AgentSession> otherSessions = new ConcurrentHashMap<>();
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? otherSessions.computeIfAbsent(id, InMemoryAgentSession::of) : otherSessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? otherSessions.computeIfAbsent(id, InMemoryAgentSession::of) : otherSessions.get(id))
                 .extensionAdd(b)
                 .build();
 

@@ -1,6 +1,7 @@
 package org.noear.solon.ai.harness.extension.goal;
 
 import org.junit.jupiter.api.Test;
+import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 
 import java.util.Collections;
 
@@ -125,7 +126,7 @@ class GoalChannelExecutorRegistrationTest {
     void facadeChannelRegistrationReachesRuntime() {
         GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
                 .build();
 
@@ -148,7 +149,7 @@ class GoalChannelExecutorRegistrationTest {
     void jobManagerNullDisablesScheduling() {
         GoalExtension ext = GoalExtension.builder().jobManager(null).build();
         org.noear.solon.ai.harness.HarnessEngine.of("ws", "home")
-                .sessionProvider((id, c) -> org.noear.solon.ai.agent.session.InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .extensionAdd(ext)
                 .build();
 

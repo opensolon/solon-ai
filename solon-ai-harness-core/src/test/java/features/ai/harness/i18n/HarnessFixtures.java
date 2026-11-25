@@ -61,7 +61,7 @@ public final class HarnessFixtures {
         return HarnessEngine.of(workspace.toString(), null)
                 .modelAdd(model)
                 .defaultModel("fake")
-                .sessionProvider((id, create) -> create
+                .sessionProvider((id, parentId, create) -> create
                         ? sessions.computeIfAbsent(id, InMemoryAgentSession::of)
                         : sessions.get(id));
     }

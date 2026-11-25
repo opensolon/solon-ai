@@ -25,7 +25,7 @@ class GoalRuntimeIntegrationTest {
 
     private HarnessEngine engine() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .extensionAdd(GoalExtension.builder().jobManager(null).build())
                 .build();
     }

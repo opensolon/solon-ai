@@ -58,7 +58,7 @@ class HarnessExtensionLifecycleTest {
 
     private HarnessEngine.Builder builder() {
         return HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id));
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id));
     }
 
     @Test

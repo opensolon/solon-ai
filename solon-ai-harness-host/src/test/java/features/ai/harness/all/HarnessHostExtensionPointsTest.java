@@ -65,7 +65,7 @@ class HarnessHostExtensionPointsTest {
         model.setApiUrl("http://localhost:1/v1");
         model.setApiKey("test");
         HarnessEngine.Builder b = HarnessEngine.of(Files.createDirectories(tmp.resolve("ws")).toString(), tmp.resolve("home").toString())
-                .sessionProvider((id, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, create) -> create ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .modelAdd(model)
                 .defaultModel("fake")
                 .extensionAdd(QueueExtension.builder().build())

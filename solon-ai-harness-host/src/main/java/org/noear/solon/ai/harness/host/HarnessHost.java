@@ -263,7 +263,7 @@ public final class HarnessHost {
      * 关闭（永久删除）会话：判忙 → 通知全部扩展（撤掉定时任务等）→ 删除存储。
      *
      * @param storageCleanup 删除存储（可空：宿主自行在返回值之后删除）
-     * @return true = 已关闭或本来就不存在；false = 会话忙（有运行流 / 待审批 / 受理窗口），未做任何事
+     * @return true = 已关闭或本来就不存在；false = 会话忙（有运行流 / 待审批 / 受理窗口 / 子任务未结束），未做任何事
      */
     public boolean closeSession(String tenant, String sessionId, @Nullable Runnable storageCleanup) {
         Objects.requireNonNull(sessionId, "sessionId");
@@ -272,7 +272,7 @@ public final class HarnessHost {
         if (session == null) {
             return true;
         }
-        if (engine.status(session).isOccupied()) {
+        if (engine.status(session).isRemovable() == false) {
             return false;
         }
         engine.removeSession(sessionId);

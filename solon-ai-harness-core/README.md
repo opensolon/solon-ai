@@ -62,7 +62,7 @@
 ```java
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区, 引擎根目录
         .systemPrompt("你是一名 AI 编程助手")
-        .sessionProvider((id, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「八、扩展点」）
+        .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「八、扩展点」）
         .modelAdd(new ChatConfig().then(cfg -> {
             cfg.setName("deepseek");                               // 模型别名
             cfg.setApiUrl("https://api.deepseek.com");
@@ -138,11 +138,11 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 
 > 三个拦截器位（压缩 / 刹车 / HITL）不配时都会在**构造期自建默认实现**，自建时机早于 `build()` 末尾的 `extension.onAttach(engine)`——所以扩展在 `onAttach` 里通过 `engine.getCompressionInterceptor()` 等拿到的必是最终实例。
 
-**会话提供者**（`AgentSessionProvider#getSession(id, createIfAbsent)`）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。生产实现应缓存实例：
+**会话提供者**（`AgentSessionProvider#getSession(sessionId, parentSessionId, createIfAbsent)`，唯一方法）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。`parentSessionId` 为 null 表示顶层会话；非 null 表示子会话（子代理任务），可据此存在父会话之下、删父会话时连带删除，不关心就忽略（见「子会话的存储与清理」）。生产实现应缓存实例：
 
 ```java
 Map<String, AgentSession> map = new ConcurrentHashMap<>();
-AgentSessionProvider provider = (id, create) -> create
+AgentSessionProvider provider = (id, parentId, create) -> create
         ? map.computeIfAbsent(id, InMemoryAgentSession::of)
         : map.get(id);
 ```
@@ -528,7 +528,7 @@ public class EngineShell {
 
     public EngineShell(String workspace) {
         this.engine = HarnessEngine.of(workspace, ".solon/")
-                .sessionProvider((id, create) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id))
                 .modelAdd(new ChatConfig().then(cfg -> {
                     cfg.setName("deepseek");
                     cfg.setApiUrl("https://api.deepseek.com");
@@ -1156,6 +1156,11 @@ config.setConcurrency(2);                     // 模型级并发上限（配了�
 **子会话的存储与清理（宿主须知）**：每个子任务都在引擎的 `sessionProvider` 里开一个子会话（成败都保留，供接着做与过程回放），ID 形如 `task-<32 位小写十六进制>`。引擎不删子会话，清理归宿主：
 
 - 判断是否子会话一律用 `TaskTalent.isTaskId(id)`（完整格式，不要只比前缀）；
+- 引擎一律带父会话 ID 取子会话：`getSession(taskId, parentSessionId, createIfAbsent)`。提供者据此把子会话存在父会话之下（soloncode 为 `sessions/<父>/subtasks/<taskId>/`），删父会话时一并删除；忽略它则是平铺存储，归属仍由引擎比对子会话元数据校验；
+- 删除父会话前用 `engine.status(session).isRemovable()` 判定（不是 `isOccupied()`）：父流被取消后子任务可能还在跑，这时删掉，它收尾时会把子会话写回来。还要注意两点：
+  - **不可删是暂时状态**：子任务只在收到下一条输出时才发现父流已取消，卡在长工具调用里时要等到该调用结束或超时。对外建议返回 409「子任务收尾中，请稍后重试」，不要当成删除失败；
+  - **只对本进程有效**：运行中的子任务只登记在跑它的那个引擎里（同 `isBusy()`）。多节点部署时删除请求必须路由到持有该会话的节点，否则别的节点看到的恒为可删。同一进程内，引擎池不会回收还有子任务在跑的引擎（`isQuiescent()` 把它算在内）；
+- 连带删除只对「按父会话分目录 / 分键存储」的提供者自动生效：引擎删会话（`removeSession`）只通知扩展，不通知提供者，也不会去删子会话。内存提供者即使收到父会话 ID，子会话也不会随父会话消失，需要时由宿主在删父会话时按自己的存储结构一并清掉；
 - 提供者按实例缓存会话时，子会话建议不进缓存（每次从存储打开），否则会常驻内存；存数据库 / Redis 的宿主会多出大量 `task-*` 记录，按过期清理（soloncode 为 7 天）；
 - 提供者在 `getSession(id, false)` 时不返回已有子会话（如每次都新建一个内存会话），接着做会安全地报「不存在」；
 - 对外入口应拒绝直接打开 `task-` 会话；回放子过程时按工具结果 metadata 里的 `TaskTalent.META_SUBTASKS` 找到子会话，用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace。

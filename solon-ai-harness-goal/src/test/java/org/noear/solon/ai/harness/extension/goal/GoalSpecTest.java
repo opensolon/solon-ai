@@ -53,7 +53,7 @@ class GoalSpecTest {
                 .build();
 
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, k -> InMemoryAgentSession.of(k)) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
         return ext;

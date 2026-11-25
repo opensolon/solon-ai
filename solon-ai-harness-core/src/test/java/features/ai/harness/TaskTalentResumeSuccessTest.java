@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -171,7 +170,7 @@ public class TaskTalentResumeSuccessTest {
         assertTrue(ok.getContent().contains("done"), ok.getContent());
         assertEquals(id, taskIdOf(ok), "成功结果同样给 task_id（可追问）");
 
-        AgentSession sub = engine.getSessionProvider().getSession(id, false);
+        AgentSession sub = engine.getSessionProvider().getSession(id, null, false);
         assertEquals(TaskTalent.STATUS_SUCCESS, meta(sub).get("status"));
         assertNull(meta(sub).get("failureKind"));
         ReActTrace trace = TaskTalent.subtaskTraceOf(sub);
@@ -200,7 +199,7 @@ public class TaskTalentResumeSuccessTest {
         ToolResult ok = talent.task(op(id, "继续"), ws.toString(), "s1", null);
         assertFalse(ok.isError(), ok.getContent());
 
-        ReActTrace sub = TaskTalent.subtaskTraceOf(engine.getSessionProvider().getSession(id, false));
+        ReActTrace sub = TaskTalent.subtaskTraceOf(engine.getSessionProvider().getSession(id, null, false));
         assertEquals(30, sub.getMetrics().getTotalTokens(), "子 trace 指标累计");
         assertEquals(30, parent.getMetrics().getTotalTokens(), "父 trace 只加本次增量");
     }
@@ -222,7 +221,7 @@ public class TaskTalentResumeSuccessTest {
         assertFalse(followUp.isError(), followUp.getContent());
         assertEquals(id, taskIdOf(followUp));
 
-        AgentSession sub = engine.getSessionProvider().getSession(id, false);
+        AgentSession sub = engine.getSessionProvider().getSession(id, null, false);
         List<ChatMessage> messages = new ArrayList<>(sub.getMessages());
         assertEquals(4, messages.size(), messages.toString());
         assertEquals("p1", messages.get(0).getContent());
@@ -242,8 +241,8 @@ public class TaskTalentResumeSuccessTest {
         script.add("429");
         String id = taskIdOf(talent.task(op(null, "p1"), ws.toString(), "s1", null));
 
-        Set<String> running = (Set<String>) HarnessFixtures.get(talent, "runningTasks");
-        running.add(id);
+        Map<String, String> running = (Map<String, String>) HarnessFixtures.get(talent, "runningTasks");
+        running.put(id, "s1");
         try {
             ToolResult rejected = talent.task(op(id, "继续"), ws.toString(), "s1", null);
             assertTrue(rejected.isError(), rejected.getContent());

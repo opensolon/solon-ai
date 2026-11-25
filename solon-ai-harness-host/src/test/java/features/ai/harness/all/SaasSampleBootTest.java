@@ -48,7 +48,7 @@ class SaasSampleBootTest {
         HarnessEngine engine = HarnessEngine.of(ws.toString(), ".solon/")
                 .deployMode(DeployMode.SERVER)
                 .stateSource(stateSrc)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .modelAdd(model())
                 .defaultModel("fake")
                 .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))
@@ -85,7 +85,7 @@ class SaasSampleBootTest {
 
         HarnessEngine engine = HarnessEngine.of(ws.toString(), ".solon/")
                 .deployMode(DeployMode.SERVER)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(state))
                 .modelAdd(model())
                 .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))

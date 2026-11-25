@@ -34,7 +34,7 @@ class GoalDeployModeDefaultsTest {
         model.setApiKey("test");
         return HarnessEngine.of(ws.toString(), ".solon/")
                 .deployMode(mode)
-                .sessionProvider((id, c) -> InMemoryAgentSession.of(id))
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
                 .stateSource(FileMountSource.of(Files.createDirectories(tmp.resolve("state-" + mode))))
                 .modelAdd(model)
                 .scopeResolver(InputScopeResolver.byPrincipal(p -> InputScope.builder(p).build()))

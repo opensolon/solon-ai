@@ -56,7 +56,7 @@ class GoalSchedulerTickTest {
     void manyGoalsShareOneTickAndRespectConcurrency() throws Exception {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).roundConcurrency(2).build();
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
 
@@ -122,7 +122,7 @@ class GoalSchedulerTickTest {
         Path home = workspace.resolve("home");
         GoalExtension ext1 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine e1 = HarnessEngine.of(workspace.toString(), home.toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext1)
                 .build();
 
@@ -135,7 +135,7 @@ class GoalSchedulerTickTest {
         jobs.clear();
         GoalExtension ext2 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine.of(workspace.toString(), home.toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext2)
                 .build();
 
@@ -157,7 +157,7 @@ class GoalSchedulerTickTest {
         Path home = workspace.resolve("home");
         GoalExtension ext1 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine e1 = HarnessEngine.of(workspace.toString(), home.toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext1)
                 .build();
         ext1.getGoalScheduler().schedule("cli", false);
@@ -167,7 +167,7 @@ class GoalSchedulerTickTest {
         jobs.clear();
         GoalExtension ext2 = GoalExtension.builder().jobManager(jobManager()).build();
         HarnessEngine.of(workspace.toString(), home.toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext2)
                 .build();
 
@@ -183,7 +183,7 @@ class GoalSchedulerTickTest {
         GoalExtension ext = GoalExtension.builder().jobManager(jobManager()).build();
         assertTrue(ext.getToolNames().isEmpty(), "未挂载时不声明");
         HarnessEngine.of(workspace.toString(), workspace.resolve("home").toString())
-                .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                 .extensionAdd(ext)
                 .build();
         assertTrue(ext.getToolNames().containsAll(Arrays.asList("goal_get", "goal_update")));
@@ -196,7 +196,7 @@ class GoalSchedulerTickTest {
         GoalExtension n2 = GoalExtension.builder().jobManager(jobManager()).build();
         for (GoalExtension ext : Arrays.asList(n1, n2)) {
             HarnessEngine.of(workspace.toString(), home.toString())
-                    .sessionProvider((id, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
+                    .sessionProvider((id, parentId, c) -> c ? sessions.computeIfAbsent(id, InMemoryAgentSession::of) : sessions.get(id))
                     .extensionAdd(ext)
                     .build();
         }
