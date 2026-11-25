@@ -1,15 +1,26 @@
 package org.noear.solon.ai.harness;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.agent.react.intercept.HITL;
+import org.noear.solon.ai.agent.react.intercept.HITLInterceptor;
+import org.noear.solon.ai.agent.react.intercept.HITLStrategy;
+import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import org.noear.solon.ai.harness.hitl.BashToolStrategy;
+import org.noear.solon.ai.harness.hitl.HitlCard;
 import org.noear.solon.ai.harness.hitl.RememberedApprovals;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 
+import java.lang.reflect.Field;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -24,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class HitlRememberedRuleTest {
 
+    @TempDir
+    Path workspace;
+
     private static Map<String, Object> cmd(String c) {
         Map<String, Object> m = new HashMap<>();
         m.put("command", c);
@@ -32,6 +46,15 @@ class HitlRememberedRuleTest {
 
     private static String evalBash(PermissionContext ctx, String command) {
         return new BashToolStrategy().permissionContextSupplier(() -> ctx).evaluate(null, cmd(command));
+    }
+
+    /** 按拦截器里登记的策略求值（策略表是私有的，测试经反射读取）；该工具没有登记策略时返回 null */
+    @SuppressWarnings("unchecked")
+    private static String evalTool(HITLInterceptor hitl, String toolName, Map<String, Object> args) throws Exception {
+        Field f = HITLInterceptor.class.getDeclaredField("strategyMap");
+        f.setAccessible(true);
+        HITLStrategy strategy = ((Map<String, HITLStrategy>) f.get(hitl)).get(toolName);
+        return strategy == null ? null : strategy.evaluate(null, args);
     }
 
     @Test
@@ -44,6 +67,50 @@ class HitlRememberedRuleTest {
         assertNull(evalBash(ctx, "rm -rf build/*"), "批准过的那一条应免审");
         assertNotNull(evalBash(ctx, "rm -rf build/; echo pwn"), "原文里的 * 不得被当作通配符");
         assertNotNull(evalBash(ctx, "RM -RF BUILD/*"), "精确匹配区分大小写");
+    }
+
+    /** 引擎默认审批：bash_start 与 bash 同一套判定（否则换用 bash_start 就绕过）；bash_wait 只作用于已启动的会话，不单独审批 */
+    @Test
+    void defaultHitlJudgesBashStartLikeBash() throws Exception {
+        HarnessEngine engine = HarnessEngine.of(workspace.toString(), null)
+                .sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id))
+                .permissionRuleAdd(PermissionRule.ask("bash", "touch *"))
+                .build();
+        HITLInterceptor hitl = engine.getHitlInterceptor();
+
+        assertNotNull(evalTool(hitl, "bash", cmd("touch a.txt")));
+        assertNotNull(evalTool(hitl, "bash_start", cmd("touch a.txt")), "bash_start 不得绕过审批");
+        assertNull(evalTool(hitl, "bash_start", cmd("echo hi")), "未命中规则的命令与 bash 一样放行");
+
+        Map<String, Object> stdin = new HashMap<>();
+        stdin.put("session_id", "x");
+        stdin.put("chars", "touch a.txt\n");
+        assertNull(evalTool(hitl, "bash_wait", stdin));
+    }
+
+    /** 经 bash_start 批准的「总是允许」记成 bash 规则：策略按 bash 求值，记成 bash_start 永远命不中 */
+    @Test
+    void bashStartApprovalIsRememberedAsBash() {
+        PermissionRule rule = HarnessEngine.rememberedRuleOf("bash_start", cmd("mvn clean"));
+        assertEquals(HarnessEngine.rememberedRuleOf("bash", cmd("mvn clean")), rule);
+
+        PermissionContext ctx = PermissionContext.create().addRule(PermissionRule.ask("bash")).addRule(rule);
+        assertNull(evalBash(ctx, "mvn clean"), "批准过的那一条应免审");
+        assertNotNull(evalBash(ctx, "mvn install"));
+    }
+
+    /** bash_start 也会弹审批卡：宿主靠 isBash() 把命令原文提到显眼处（如 CLI 的审批提示） */
+    @Test
+    void bashStartCardShowsCommandLikeBash() {
+        AgentSession session = InMemoryAgentSession.of();
+        session.getContext().put(HITL.PENDING_TASKS, new ArrayList<>(Arrays.asList(
+                new HITLTask("c1", "bash_start", cmd("mvn test"), null),
+                new HITLTask("c2", "bash_wait", cmd("ignored"), null))));
+
+        List<HitlCard> cards = HitlCard.list(session);
+        assertTrue(cards.get(0).isBash());
+        assertEquals("mvn test", cards.get(0).getCommand());
+        assertFalse(cards.get(1).isBash(), "bash_wait 只向已启动的会话写入，不当作命令卡");
     }
 
     @Test

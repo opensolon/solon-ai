@@ -104,9 +104,11 @@ public final class HitlCard {
 
     /**
      * 该卡是否为 bash 调用（宿主的确认界面通常要把命令原文提到最显眼处）
+     *
+     * <p>含 {@code bash_start}（异步启动命令，与 bash 同一套审批、同样带 command 参数）。</p>
      */
     public boolean isBash() {
-        return "bash".equals(toolName);
+        return "bash".equals(toolName) || "bash_start".equals(toolName);
     }
 
     /**

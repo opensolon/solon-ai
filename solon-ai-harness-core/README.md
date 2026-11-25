@@ -110,7 +110,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 权限 | `toolsAdd(...)` / `disallowedToolsAdd(...)` | 空 | 主代理工具权限（§7） |
 | 权限 | `permissionRuleAdd(PermissionRule)` | 空 | 权限规则 |
 | 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§9.2） |
-| 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` |
+| 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` 与 `bash_start` |
 | 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
 | 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；会话模型配了 `AiConfig#concurrency` 以模型为准，§6.3） |
 | 子代理 | `disallowedAgentsAdd(String... / Collection)` | 空 | 按名字禁用子代理（内置的、自定义的都适用；SERVER 下只能这样或在 `onAttach` 里改，§6.1） |
@@ -1581,7 +1581,7 @@ engine.addExtension(new HarnessExtension() {
 | `WriteToolStrategy` | 写入路径防御 + 规则引擎 |
 | `WebToolStrategy` | 域名黑名单 + 规则引擎 |
 
-**默认只有 `BashToolStrategy` 绑定到 `bash`**（`initHitlDefault`）。`Write` / `Web` 两套策略需自行绑定，且两者构造器都要传 `toolName`：
+**默认只有 `BashToolStrategy` 绑定到 `bash` 与 `bash_start`**（`initHitlDefault`）。`bash_start`（开启 `bashAsyncEnabled` 时提供）与 `bash` 执行同一种命令，同一策略按 `bash` 求值，权限规则只需写 `bash`，「总是允许」也记成 `bash` 规则；`bash_wait`（写 stdin）与 `bash_stop` 只作用于启动时已审过的会话，不单独审批。宿主自建 `HITLInterceptor` 审批命令时，同样要把 `bash_start` 一起登记，否则开启异步命令会话后可绕过。`Write` / `Web` 两套策略需自行绑定，且两者构造器都要传 `toolName`：
 
 ```java
 engine.getHitlInterceptor()
@@ -1680,7 +1680,7 @@ org.noear.solon.ai.harness
 9. **`options(Consumer)` 是累加语义**——`getRequest()` 之后再追加 `options` 是安全的叠加。
 10. **`getRequest().stream()` 是冷流**——何时订阅、在哪个线程订阅由调用方决定；引擎不内置 `subscribeOn`。
 11. **`STANDALONE` 模式下 `build()` 只校验 `sessionProvider`**——缺模型时 `build()` 只告警，构建后仍没补上要到首次 `handle` 才报 `chatModel is required`；`SERVER` 模式在构建期就报。
-12. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
+12. **HITL 默认只绑了 `bash` 与 `bash_start`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错；自建审批拦截器管命令时别漏了 `bash_start`。
 13. **新建子代理要注册，被禁用的子代理会回落**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理；被禁用（`disallowAgent` 或 `enabled: false`）的子代理同样回落，程序化指定前用 `resolveAgent(...) != null` 判断，不要用 `hasAgent`（§6.1）。
 14. **`InterruptMode.INTERRUPT_ALL` 会连带清队列**——它不是「只停当前流」。要「停当前、留队列」用 `CANCEL_STREAM`；`interrupt` 返回 `false` 也不代表什么都没发生（取消代数仍推进，能拦住随后才订阅的幽灵流）。
 15. **取消以 `onComplete` 收尾，不走 `onError`**——别用 `doOnError` 判定本轮失败；取消的轮次也不会推 `RunEndEvent`。
