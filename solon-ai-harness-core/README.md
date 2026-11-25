@@ -23,10 +23,12 @@
 | 你想做什么 | 读哪里 |
 |---|---|
 | 先把引擎跑起来 | 第一章（1.1 依赖 → 1.2 构建 → 1.3 跑第一轮） |
+| 让代理遵守项目约定（AGENTS.md） | §1.6 |
 | 搞清楚一份输入能装什么 | 第二章（input 的装配能力） |
 | 接一个真产品（自己处理流、审批、停止） | 第三章（二段处理的完整示例） |
 | 照着场景抄代码 | 第四章（CLI / Web SSE / IM / 同步问答 / 多模态 / 子代理 / 命令任务 / 排队 / 程序轮次 / 多租户） |
 | 加命令 / 子代理 / 扩展 | 第五章、第六章、第八章 |
+| 子代理对话的持久化、存储与清理 | §6.3 |
 | 调权限与安全 | 第七章、第九章 |
 | 输出英文或多语言 | §1.5（国际化） |
 | 查结构 / 躲坑 | 第十章、第十一章 |
@@ -69,7 +71,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
             cfg.setApiKey(System.getenv("DEEPSEEK_API_KEY"));
             cfg.setModel("deepseek-chat");
             cfg.setContextLength(128_000);
-            cfg.setConcurrency(5);                                 // 该模型的并发上限（子代理取槽用）
+            cfg.setConcurrency(5);                                 // 会话选用该模型时，multitask 的并发上限（§6.3）
         }))
         .defaultModel("deepseek")
         .toolsAdd(ToolName.TOOL_ALL_FULL)                           // 主代理工具权限（§7）
@@ -85,6 +87,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 分类 | 方法 | 默认值 | 说明 |
 |---|---|---|---|
 | 提示词 | `systemPrompt(String)` | `null` | 主代理系统提示词 |
+| 提示词 | `projectRulesEnabled(Boolean)` | `true` | 给主代理与所有子代理注入工作区里的 `AGENTS.md`（§1.6）；与权限规则无关 |
 | HTTP | `userAgent(String)` | `null` | 引擎级 User-Agent |
 | HTTP | `httpProxy(host, port)` / `httpProxy(Proxy)` | 直连 | 引擎级代理；传 `null`（Proxy 形式）表示直连 |
 | HTTP | `httpCustomizeAdd(Consumer<HttpUtils>)` | — | 每次 LLM 请求创建 `HttpUtils` 后执行，可覆盖/追加 proxy、header、timeout 等 |
@@ -109,7 +112,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§9.2） |
 | 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` |
 | 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
-| 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；模型配了 `AiConfig#concurrency` 以模型为准） |
+| 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；会话模型配了 `AiConfig#concurrency` 以模型为准，§6.3） |
 | 工具 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
 | 重试 | `apiRetries` / `mcpRetries` / `modelRetries` | 各 `3` | OpenAPI / MCP / 模型调用重试次数 |
 | 资源 | `modelAdd(ChatConfig)` / `defaultModel(String)` | 空 | 模型与默认模型 |
@@ -122,7 +125,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 前缀 | `commandPrefix(String)` | `"/"` | 命令前缀，支持多字符（§5.5） |
 | 前缀 | `agentPrefix(String)` | `"@"` | 子代理提及前缀，支持多字符（§5.5） |
 | 刹车 | `stopLoopInterceptor(StopLoopInterceptor)` | `StopLoopInterceptor(3, 8)` | 重复调用刹车；不配时构造期自建 |
-| 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（§3.7） |
+| 受理 | `admissionTimeoutMs(Long)` | `60000` | `handle` 返回 `TASK` 后占位的时限（§3.6） |
 | 存储 | `stateSource(MountSource)` | `<workspace>/<harnessHome>` 本地目录 | harness 状态来源（会话级状态、goal 索引、loop 任务等），模型不可见 |
 | 语言 | `locale(Locale)` | `null`（全局默认语言，中文） | 引擎实例的默认语言：输入没带语言时用它；goal 后台轮次先用目标创建时记下的语言，没有才用它；loop 后台轮次总是用它（§1.5） |
 | 服务端 | `deployMode(DeployMode)` | `STANDALONE` | 部署模式（本机单用户 / 多租户服务端）；`SERVER` 的缺省见本表「服务端为」各项，完整对照见 [SAAS.md](docs/SAAS.md) §2.1 |
@@ -131,14 +134,14 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | 会话工作目录的边界策略：`setSessionCwd` 与终端工具使用端都按真实路径校验，不满足抛 `SecurityException` |
 | 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置；为 `false` 时命令与子代理注册表在 `build()` 末尾封口 |
 | 服务端 | `agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition>)` | 跟随 `runtimeMutable`（STANDALONE 允许，SERVER 拒绝） | `generate(saveToFile=true)` 是否允许创建全局子代理（§6.4） |
-| 资源 | `taskExecutor(ExecutorService)` | 引擎私有，上限 64 线程 | 子代理执行器；宿主注入的共享执行器由宿主关闭，引擎 `shutdown` 不动它 |
+| 资源 | `taskExecutor(ExecutorService)` | 引擎私有，上限 64 线程 | 子代理执行器（引擎池可共用一个有界池）；宿主注入的共享执行器由宿主关闭，引擎 `shutdown` 不动它 |
 | 服务端 | `memorySessionIsolation(boolean)` | `false`（SERVER 为 `true`） | 长期记忆按会话隔离 |
 | 服务端 | `sandboxSelfBootstrap(boolean)` | `true`（SERVER 为 `false`） | 是否由引擎自行初始化进程级 OS 沙盒 |
 | 服务端 | `protectedStatePaths(List<String>)` | `sessions, memory, channels, tasks.json, loop, goal` | 相对 harnessHome，模型文件工具与 bash 都不得读写 |
 
 > 三个拦截器位（压缩 / 刹车 / HITL）不配时都会在**构造期自建默认实现**，自建时机早于 `build()` 末尾的 `extension.onAttach(engine)`——所以扩展在 `onAttach` 里通过 `engine.getCompressionInterceptor()` 等拿到的必是最终实例。
 
-**会话提供者**（`AgentSessionProvider#getSession(sessionId, parentSessionId, createIfAbsent)`，唯一方法）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。`parentSessionId` 为 null 表示顶层会话；非 null 表示子会话（子代理任务），可据此存在父会话之下、删父会话时连带删除，不关心就忽略（见「子会话的存储与清理」）。生产实现应缓存实例：
+**会话提供者**（`AgentSessionProvider#getSession(sessionId, parentSessionId, createIfAbsent)`，唯一方法）：`createIfAbsent=false` 且会话不存在时必须返回 null 且无副作用（不建实例、不写存储、不放缓存）。`parentSessionId` 为 null 表示顶层会话；非 null 表示子会话（子代理任务），可据此存在父会话之下、删父会话时连带删除，不关心就忽略。子代理对话的持久化也由它决定（下面的内存写法重启即丢，落盘写法见 §6.3「子代理对话的持久化」）。生产实现应缓存实例：
 
 ```java
 Map<String, AgentSession> map = new ConcurrentHashMap<>();
@@ -152,7 +155,7 @@ AgentSessionProvider provider = (id, parentId, create) -> create
 最简形态：一份 `HarnessInput` + 一次 `handle` + 订阅装配好的请求（两段式的全部内容见第三章）。
 
 ```java
-AgentSession session = engine.getSession("demo");               // 不存在则新建（见 1.4 的取会话口径）
+AgentSession session = engine.getSession("demo");               // 不存在则新建（取会话口径见下表）
 
 InputOutcome outcome = engine.handle(HarnessInput.of(session, "看下当前项目结构"));
 if (outcome.getKind() == InputOutcome.Kind.TASK) {
@@ -165,13 +168,15 @@ String answer = engine.handle(HarnessInput.of(session, "总结一下这个仓库
         .getContent();
 ```
 
-三个取会话的方法别混用：
+取会话的几个方法别混用：
 
 | 方法 | 语义 |
 |---|---|
 | `engine.getSession(id)` | 不存在就**新建**（终端、一次性场景） |
 | `engine.getSessionOrNull(id)` | 只取不建，不存在返回 null（管理接口、只读查询） |
 | `engine.requireSession(id)` | 不存在抛 `IllegalArgumentException`（外部传入的 ID 先校验） |
+| `engine.getSession(id, createIfAbsent)` | 顶层会话，按参数决定建不建 |
+| `engine.getSession(id, parentId, createIfAbsent)` | 子会话（子代理任务）：带父会话 ID 交给提供者，可存在父会话之下（§6.3） |
 
 ### 1.4 装配会话插件
 
@@ -231,7 +236,31 @@ AiI18n.setDefaultLocale(Locale.ENGLISH);
 
 资源包位置、扩展新语言（如加 `_ja.yml`）、覆盖文案、内置子代理多语言与测试，见 [docs/I18n.md](docs/I18n.md)。
 
-### 1.6 运行时目录
+### 1.6 项目规范（AGENTS.md）
+
+引擎缺省给主代理和**所有子代理**注入工作区里的 `AGENTS.md`（`ProjectRulesTalent`，`engine.getProjectRulesTalent()` 可取）。整体关闭用 `Builder.projectRulesEnabled(false)`，代理定义里没有单独的开关。
+
+```java
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
+        .projectRulesEnabled(true)     // 缺省即开启；不想要时传 false
+        /* ... */
+        .build();
+```
+
+| 规则 | 说明 |
+|---|---|
+| 文件 | 只认 `AGENTS.md`（不读 `CLAUDE.md`，那不是本约定） |
+| 范围 | 从本轮工作目录（`__cwd`）往上到工作区根，每层一份、由近及远；工作目录在工作区外时只读工作区根，不读工作区之外的文件 |
+| 读取 | 经工作区来源（`getWorkspaceSource()`，可以是本地目录，也可以是数据库等实现）；按 UTF-8 读，单个文件最多 1MB，超出部分不读并提示模型用 `read` 读原文 |
+| 时机 | 每次运行开始时现读，写进系统提示词；运行中途文件改了，下一次推理前追加一条变更消息（不再适用 / 新增 / 有变化的整段原文） |
+| 子目录 | `read` / `ls` 成功后，从目标所在目录往上找到工作目录为止（不含），把途经的 `AGENTS.md` 以消息注入本次运行；按工作记忆里的注入记录去重，压缩后看不到了、再读到时会重新注入 |
+| 容错 | 读取出错时沿用上次读到的内容（条目确实不存在才去掉）；同一个文件经软链接别名到达只收一次；工作目录是否在工作区内按真实路径判断（与 `cwdPolicy` 一致） |
+
+- **为什么是才能**：才能指令追加在系统提示词的角色段之后，子代理定义正文、引擎 `systemPrompt`、`HarnessInput.systemPrompt` 任一整段替换角色段都不会把它丢掉；它挂在所有才能最前面（内容稳定，利于提示词缓存）。
+- **只管项目各层这一通用约定**：用户级规范（如 `~/.xxx/AGENTS.md`）、工具专属目录里的规范、配置里的 instructions 等位置因产品而异，框架不读，由宿主自行读取后并入 `systemPrompt`。
+- 这里的「规范」指项目说明（Project rules），与权限规则（`permissionRuleAdd`）无关，关闭它不影响权限判定。
+
+### 1.7 运行时目录
 
 ```
 {harnessHome}/          # 默认 .solon/
@@ -249,7 +278,7 @@ AiI18n.setDefaultLocale(Locale.ENGLISH);
 > 会话快照的存放位置由 `sessionProvider` 决定。`protectedStatePaths`（缺省 `sessions, memory, channels, tasks.json, loop, goal`，
 > 相对 harnessHome）对模型的文件工具与 bash 不可读写。
 
-### 1.7 生命周期
+### 1.8 生命周期
 
 ```java
 engine.addMcpServer("slack", mcpServerParams);       // 运行期加资源
@@ -696,13 +725,16 @@ public class EngineShell {
 | 本批尚有未决卡 | `isHitlApplied()==true` 且 `getPendingHitlCount()>0` | 展示 / 等待下一张卡；**切勿续流**（会带走未决任务） |
 | 过期审批卡 | `isHitlApplied()==false` | 提示卡已失效并丢弃；**切勿续流**（空提示词会回落 `originalPrompt`，把上一轮问题重跑一遍） |
 
-### 3.6 受理控制：三个容易写错的判定
+### 3.6 受理控制：几个容易写错的判定
 
 | 判定 | 含义 | 用在哪 |
 |---|---|---|
 | `engine.status(session).isBusy()` | 有活跃流 | 流生命周期、事件编排 |
 | `engine.status(session).isOccupied()` | 不应开新回合（含 HITL 挂起、受理窗口） | **受理判定** |
 | `engine.status(session).hasPendingHitl()` | 有待决策的工具调用 | 提示文案、前端状态 |
+| `engine.status(session).isRemovable()` | 不占用**且**没有仍在执行的子任务（`getRunningSubtaskCount()`，本进程内） | **删除 / 清空会话前**（§6.3） |
+
+> 子任务刻意不算进 `isOccupied()`：父流被取消后子任务可能还在跑，它不妨碍接新输入（算进去会卡住积压续发），但这时删掉会话，子任务结束时会把子会话写回来。
 
 - **占位跟着请求走**：返回 `TASK` 时会话保持占用，直到 `getRequest().stream()` 被订阅（订阅时运行流先登记、占位后释放，无空档——把订阅调度到别的线程也安全）或 `call()` 结束；
 - 拿到 `TASK` 却不执行时调 `outcome.discard()`（幂等），否则要等 `admissionTimeoutMs` 超时才释放；
@@ -891,7 +923,7 @@ InputOutcome o = engine.handle(...);
 System.out.println(o.getAgentName());     // "bash" 或 null（主代理）
 ```
 
-主代理还会在运行中通过工具自动委派（宿主无需写代码）：`task`（串行，默认不在 `*` 里，只有 `**` 包含）、`multitask`（并行，按每个任务实际路由到的模型分别限流）。子代理只能用一层委派、且不能使用 `hitl`（挂起后无人能决策）。细节见第六章。
+主代理还会在运行中通过工具自动委派（宿主无需写代码）：`task`（单个任务）、`multitask`（并行，按会话所选模型的并发上限排队），两者都不在 `*` 里，只有 `**` 包含。子代理只能用一层委派、且不能使用 `hitl`（挂起后无人能决策）。细节见第六章。
 
 ### 4.7 命令驱动的二段任务
 
@@ -970,7 +1002,7 @@ HarnessEngine engine = HarnessEngine.of(wsRoot, ".solon/")
 engine.handle(HarnessInput.of(session, text).principal(userId));
 ```
 
-- 引擎池 `HarnessEnginePool`（也在 core）按 key 管理多个引擎实例，回收前用 `engine.isQuiescent()` 判断是否还有后台工作：
+- 引擎池 `HarnessEnginePool`（也在 core）按 key 管理多个引擎实例，回收前用 `engine.isQuiescent()` 判断是否还有后台工作（已受理未结束的请求、仍在执行的子任务、各扩展的后台工作如活跃 goal / 定时任务）：
 
 ```java
 HarnessEnginePool pool = HarnessEnginePool.builder(key -> buildEngine(key))
@@ -981,7 +1013,7 @@ HarnessEnginePool pool = HarnessEnginePool.builder(key -> buildEngine(key))
 HarnessEngine engine = pool.get(tenantId);
 ```
 
-- 会话归属：`engine.checkOwner(session)` / `requireOwner(id)`；非持有节点返回 `REJECTED(not_owner)`，`getRejectDetail()` 是持有者标识，据此转发。
+- 会话归属：`engine.checkOwner(session)` / `requireOwner(id)`；非持有节点返回 `REJECTED(not_owner)`，`getRejectDetail()` 是持有者标识，据此转发。删除会话的请求同样要路由到持有节点（`isRemovable()` 只对本进程有效，§6.3）。
 - 隔离模型、存储、容量与上线清单见 [docs/SAAS.md](docs/SAAS.md)。
 
 ---
@@ -1143,17 +1175,95 @@ explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent
 
 ```java
 engine.setSubagentEnabled(true);              // 默认 true
-engine.setSubagentDefaultConcurrency(5);      // 子代理任务默认并发上限（模型未配置时生效）
+engine.setSubagentDefaultConcurrency(5);      // 默认并发上限（会话模型没配 concurrency 时生效）
 config.setConcurrency(2);                     // 模型级并发上限（配了就完全覆盖默认值，不再取 min）
 ```
 
-- 生效上限 = 模型 `AiConfig#concurrency`（0 = 未设置）?: `subagentDefaultConcurrency`（默认 5，取值 1~10）；**不存在「不限制」**（不限会退化为只受任务数约束，最容易打爆上游与 OOM）；
-- 超限不报错，在调用线程排队；排队时「谁的目标模型有空配额就提交谁」；限流是引擎级、跨会话共享的；
-- 结果外壳：每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA，**有 20000 字符上限**；超出时完整结果落盘到 `<workspace>/.files/task/<task_id>/result.txt`，头部保留截断说明与相对路径；
-- 用户取消时父代理不再逐个等到底：中断在跑的子任务，不再等待剩余任务；
-- 接着做（同 opencode 的 `task_id`）：子代理跑起来过的结果成败都带 `<task_id>`，模型带上它再调 `task` / `multitask`，就在原子会话上继续（失败时从断点重试，完成后追问）；只校验归属（必须是本会话委派的），不限次数。
+#### 并发
 
-**子会话的存储与清理（宿主须知）**：每个子任务都在引擎的 `sessionProvider` 里开一个子会话（成败都保留，供接着做与过程回放），ID 形如 `task-<32 位小写十六进制>`。引擎不删子会话，清理归宿主：
+- 上限**按每次调用**算一个数：取当前会话所选模型的 `AiConfig#concurrency`（0 = 未设置），未设置取 `subagentDefaultConcurrency`（默认 5，取值 1~10）；**不存在「不限制」**（不限会退化为只受任务数约束，最容易打爆上游与 OOM）；
+- `multitask` 的任务进一个 FIFO 队列，起「上限」个 worker 自取，跑完一个取下一个；超限不报错，只是排队。`task` 只有一个任务，直接在调用线程上跑；
+- 多次调用之间（包括不同会话）不共享额度。引擎级的兜底只有执行器线程上限（私有执行器 64 线程，超出时少起 worker，由已起的 worker 消化），引擎池可用 `Builder.taskExecutor(...)` 共用一个有界池；
+- 不设超时：子任务可能跑很久，只会因父流取消或线程中断提前结束。
+
+#### 结果
+
+- 每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA，**有 20000 字符上限**；超出时完整结果落盘到 `<workspace>/.files/task/<task_id>/result.txt`，头部保留截断说明与相对路径；`multitask` 的结果按入参下标顺序排在 `<multitask_results>` 里，遇到限流 / 上游不可用 / 超时时另附 `<multitask_advice>`；
+- 子代理跑起来过的结果成败都带 `<task_id>`；失败另带 `<failure_kind>`（模型服务错误取其分类值，回合用尽为 `max_turns`，父流取消 / 中断为 `cancelled` / `interrupted`）；
+- 失败标记（`ToolResult.isError()`）：`task` 失败即标失败；`multitask` 只在被取消 / 中断、或一个都没成功时标失败，部分失败算成功（每项成败写在 `result_status` 里）；
+- 用户取消时父代理不再逐个等到底，剩余任务按状态给结果：**已完成**的照常返回真实结果；**已启动未结束**的返回带 `<task_id>` 的失败结果（进度在子会话里，可接着做）；**未启动**的返回放弃说明。在跑的子任务在收到下一条输出时发现父流已取消并自行收尾。
+
+#### 接着做（`task_id`）
+
+- 同 opencode 的 `task_id`：模型带上它再调 `task` / `multitask`，就在原子会话上继续（失败时从断点重试，完成后追问），子代理以原任务为准（传了不同的 `agent_name` 会被改回去）；
+- 只校验归属（必须是本会话委派的），不看上次成败、不限次数。ID 格式不对、不存在、不属于本会话、上次没跑起来，统一报「不存在或已过期」（不区分原因，避免探测别的会话）；
+- 同一任务仍在执行时再接着做，报「仍在执行中」；同一次 `multitask` 里重复的 `task_id` 只认第一条。这把运行锁只在单个进程内有效：多个实例共用同一个 `sessionProvider` 时，同一个 `task_id` 可能被同时接着做，需要时由宿主自己加分布式锁。
+
+#### 子代理对话的持久化（怎么配）
+
+没有单独的开关：子代理对话存不存、存在哪，完全跟引擎的 `sessionProvider` 走。每个子任务在同一个提供者里开一个子会话（ID 形如 `task-<32 位小写十六进制>`），引擎取它时多带一个父会话 ID：`getSession(taskId, parentSessionId, createIfAbsent)`。提供者选什么，子代理对话就有什么样的持久性：
+
+| 提供者 | 子代理对话 | 重启之后 |
+|---|---|---|
+| 内存（`InMemoryAgentSession`） | 只在进程内 | 丢失：接着做报「不存在或已过期」，回放找不到子过程 |
+| 文件（`FileAgentSession`） | 落盘（消息 + 快照） | 可接着做、可回放 |
+| 自建（数据库 / Redis 等） | 按实现 | 须保证 `updateSnapshot` 写下的快照在重新打开会话时能读回，否则同内存 |
+
+子任务写进存储的内容：
+
+| 内容 | 位置 | 何时写 |
+|---|---|---|
+| 任务说明（含接着做时追加的说明）与最终回答 | 子会话消息（`addMessage`） | 开始时、结束时 |
+| 子代理 trace：完整工作记忆（含工具调用与结果）、回合数、指标 | 子会话快照，键为子代理的 traceKey（用 `TaskTalent.subtaskTraceOf(sub)` 取） | 开始时、每步工具执行完、结束时 |
+| 子任务信息 `META_SUBTASK`（父会话、调用 id、代理名、状态、失败类别） | 子会话快照 | 启动时（`running`）、结束时（`success` / `failure`） |
+| 子会话索引（`META_SUBTASKS` / `EXTRA_RUNNING_SUBTASKS`） | 父会话（工具结果消息 / 父 trace） | 委派前、工具返回时 |
+| 超过 20000 字符的完整结果 | 本轮工作目录下 `.files/task/<task_id>/result.txt`（不经提供者） | 结果超长时 |
+
+> 工具调用过程只在快照里（子会话消息只有首尾）。所以自建存储只存消息、不存快照时，子代理对话看似留下了，接着做和过程回放却都用不了。
+
+要持久化，就让提供者把子会话也落到持久存储里。推荐按父会话分目录（下面是文件存储的写法，soloncode 同此布局）：
+
+```java
+Path sessionsDir = Paths.get(harnessHome, "sessions");   // 在 protectedStatePaths 里，模型工具读写不到
+Map<String, AgentSession> cache = new ConcurrentHashMap<>();
+
+AgentSessionProvider provider = (id, parentId, create) -> {
+    // id / parentId 须先校验为单段名（防 ../ 越界），此处从略
+    if (parentId != null && TaskTalent.isTaskId(id)) {
+        // 子会话：存在父会话目录之下，删父会话目录即连带删除；不进缓存，每次从磁盘打开
+        Path parentDir = sessionsDir.resolve(parentId);
+        Path dir = parentDir.resolve("subtasks").resolve(id);
+        if (Files.isDirectory(dir)) {
+            return new FileAgentSession(id, dir.toString());
+        }
+        if (create == false) {
+            return null;                                  // 只取不建：不存在就返回 null，不建目录
+        }
+        if (Files.isDirectory(parentDir) == false) {
+            throw new IllegalStateException("Parent session not found: " + parentId); // 不为已删除的父会话建空壳
+        }
+        return new FileAgentSession(id, dir.toString());
+    }
+
+    Path dir = sessionsDir.resolve(id);
+    if (create) {
+        return cache.computeIfAbsent(id, k -> new FileAgentSession(k, dir.toString()));
+    }
+    // FileAgentSession 构造即建目录，只取时必须先判存在；返回 null 时 computeIfAbsent 不写入
+    return cache.computeIfAbsent(id, k -> Files.isDirectory(dir) ? new FileAgentSession(k, dir.toString()) : null);
+};
+```
+
+要点：
+
+- 父会话 ID 只用来决定存放位置，不用于鉴权：归属由引擎比对子会话 `META_SUBTASK` 里的 `parentSessionId` 校验，提供者忽略它（平铺存储）也不影响接着做；
+- 子会话不进缓存，否则每个子任务都常驻内存。同一任务同一时刻只有一个写入方（`TaskTalent` 的运行锁，仅限本进程，见「接着做」）；
+- 只想要顶层会话持久、子代理对话不落盘：子会话分支改返回内存会话。放进内存表的，接着做与过程回放在本进程内可用（会常驻内存，要自己清）；每次新建、`getSession(id, false)` 返回 null 的，接着做一律报「不存在」，工具返回后也回放不了子过程；
+- 直接指定子代理（`explicitAgent` / `@提及`，§6.2）不开子会话，对话就记在当前会话里，随当前会话持久化。
+
+#### 子会话的存储与清理（宿主须知）
+
+子会话成败都保留（供接着做与过程回放）。引擎不删子会话，清理归宿主：
 
 - 判断是否子会话一律用 `TaskTalent.isTaskId(id)`（完整格式，不要只比前缀）；
 - 引擎一律带父会话 ID 取子会话：`getSession(taskId, parentSessionId, createIfAbsent)`。提供者据此把子会话存在父会话之下（soloncode 为 `sessions/<父>/subtasks/<taskId>/`），删父会话时一并删除；忽略它则是平铺存储，归属仍由引擎比对子会话元数据校验；
@@ -1161,11 +1271,26 @@ config.setConcurrency(2);                     // 模型级并发上限（配了�
   - **不可删是暂时状态**：子任务只在收到下一条输出时才发现父流已取消，卡在长工具调用里时要等到该调用结束或超时。对外建议返回 409「子任务收尾中，请稍后重试」，不要当成删除失败；
   - **只对本进程有效**：运行中的子任务只登记在跑它的那个引擎里（同 `isBusy()`）。多节点部署时删除请求必须路由到持有该会话的节点，否则别的节点看到的恒为可删。同一进程内，引擎池不会回收还有子任务在跑的引擎（`isQuiescent()` 把它算在内）；
 - 连带删除只对「按父会话分目录 / 分键存储」的提供者自动生效：引擎删会话（`removeSession`）只通知扩展，不通知提供者，也不会去删子会话。内存提供者即使收到父会话 ID，子会话也不会随父会话消失，需要时由宿主在删父会话时按自己的存储结构一并清掉；
-- 提供者按实例缓存会话时，子会话建议不进缓存（每次从存储打开），否则会常驻内存；存数据库 / Redis 的宿主会多出大量 `task-*` 记录，按过期清理（soloncode 为 7 天）；
+- 子会话会越积越多（尤其是长期不删的父会话），存文件 / 数据库 / Redis 的宿主都应按过期兜底清理 `task-*`（soloncode 为 7 天）；
 - 提供者在 `getSession(id, false)` 时不返回已有子会话（如每次都新建一个内存会话），接着做会安全地报「不存在」；
-- 对外入口应拒绝直接打开 `task-` 会话；回放子过程时按工具结果 metadata 里的 `TaskTalent.META_SUBTASKS` 找到子会话，用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace。
-- 工具还没返回时（子任务运行中刷新、进程在子任务中途退出后重启），结果消息还不存在，这次调用也还没写进父 trace 的工作记忆（引擎等一步的工具全部执行完才成对写入），只在 `trace.getLastReasonMessage()` 里。此时按父 trace extras 的 `TaskTalent.EXTRA_RUNNING_SUBTASKS`（`_runningSubtasks`：调用 id → 子任务索引，调用 id 即 ToolCall 的 uuid、流式工具事件的 callId）找子会话，并核对子会话 `META_SUBTASK` 里的 `parentCallId` 与该调用相等（不等即还没启动，或已被后来的调用接着做，应忽略）。索引在委派前登记并落一次父快照（连同 `lastReasonMessage`），工具返回后不删，下一轮开始时清空；只应对「还没写进工作记忆的那一步」里的调用使用。引擎经 `ReActTrace#getActingCallId()` 取得正在执行的调用 id（不动工具参数）；取不到时（文本模式）不登记。
-- 「仍在执行」的运行锁只在单个进程内有效：多个实例共用同一个 `sessionProvider` 时，同一个 `task_id` 可能被同时接着做，需要时由宿主自己加分布式锁。
+- 超长结果文件（`.files/task/<task_id>/result.txt`）在工作目录下、不经提供者，删父会话不会连带删除，需要时另行清理；
+- 对外入口应拒绝直接打开 `task-` 会话。
+
+#### 过程回放：找到子会话
+
+| 时机 | 怎么找 |
+|---|---|
+| 工具已返回 | 工具结果（ToolMessage）metadata 里的 `TaskTalent.META_SUBTASKS`（`_subtasks`：`taskId / index / agentName / description`，只列确实跑起来的任务） |
+| 工具还没返回（子任务运行中刷新、进程在子任务中途退出后重启） | 父 trace extras 的 `TaskTalent.EXTRA_RUNNING_SUBTASKS`（`_runningSubtasks`：调用 id → 同样的索引列表） |
+
+找到子会话后用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace；子会话 `META_SUBTASK` 里的 `status`（`running / success / failure`）与 `failureKind` 只供展示（`running` 在进程崩溃或父流取消后会一直留着，按「已中断」展示）。
+
+工具还没返回时的细节：
+
+- 结果消息还不存在，这次调用也还没写进父 trace 的工作记忆（引擎等一步的工具全部执行完才成对写入），只在 `trace.getLastReasonMessage()` 里；调用 id 即 ToolCall 的 uuid、流式工具事件的 callId；
+- 必须核对子会话 `META_SUBTASK` 里的 `parentCallId` 与该调用相等，不等即还没启动，或已被后来的调用接着做，应忽略；
+- 索引在委派前登记并落一次父快照（连同 `lastReasonMessage`），工具返回后不删，下一轮开始时清空；只应对「还没写进工作记忆的那一步」里的调用使用；
+- 引擎经 `ReActTrace#getActingCallId()` 取得正在执行的调用 id（不动工具参数）；取不到时（文本模式）不登记。
 
 ### 6.4 运行时创建子代理
 
@@ -1363,7 +1488,7 @@ engine.addExtension(new HarnessExtension() {
 | `isQuiescent` | `engine.isQuiescent()`（引擎池回收前） | **否**（事实类；异常按「不静默」） |
 | `getToolNames` | 作用域守卫 | **否**（声明类） |
 
-**删除会话的固定顺序**：判忙（忙则拒绝）→ `engine.removeSession(id)` → 移出内存 → 删除存储。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来。
+**删除会话的固定顺序**：判可删（`engine.status(session).isRemovable()`，不可删则拒绝，建议 409）→ `engine.removeSession(id)` → 移出内存 → 删除存储（连同子会话，§6.3）。`removeSession` 必须在删存储之前，否则定时任务可能在中间触发，把会话重新建出来；判可删不能只看 `isOccupied()`，否则还在跑的子任务收尾时会把子会话写回来。
 
 #### `onAgentBuild` vs `onRequestAssemble` 的分工
 
@@ -1482,14 +1607,14 @@ org.noear.solon.ai.harness
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、BusyPolicy、RejectReason、AgentMentions
 ├── command/                      命令框架：Command / CommandInput / CommandOutput / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
-├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent；SubTaskScheduler 包内
+├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent、ProjectRulesTalent（AGENTS.md）；SubTaskScheduler / ProjectRulesInterceptor 包内
 ├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
 ├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership / OwnerCheck / NotOwnerException
 ├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、RememberedApprovals
 ├── permission/                   权限引擎（PermissionRule / PermissionContext / PermissionBehavior / PermissionEngine）
 ├── i18n/                         引擎内建文案资源
-└── util/                         ErrorClassifier / HarnessIds / TraceUtil
+└── util/                         ErrorClassifier / HarnessIds / TraceUtil（含 reopen：让已结束的轨迹接着跑）
 ```
 
 子包之间只允许两个双包循环：`{input, command}` 与 `{agent, scope}`，其余依赖单向。白名单与循环检测由包边界测试守护，新建子包必须先登记。
@@ -1535,7 +1660,11 @@ org.noear.solon.ai.harness
 18. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`getSession(id)` 不存在就新建。
 19. **引擎 `shutdown()` 之后不要再用旧引用**——之后的 `handle` 返回 `REJECTED(engine_closed)`；引擎池模式下重新 `pool.get(key)` 即可。
 20. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`）。服务端请用引擎级 `scopeResolver`。
-21. **插件相关的坑在各插件 README 的「注意事项」**——goal 执行器注册时机、queue 续发、steer 拦截器与「interrupt 之后不要再 steer」、job 名前缀、没有「只关命令」的开关等。
+21. **删除会话前看 `isRemovable()`，不是 `isOccupied()`**——父流取消后子任务可能还在跑，这时删掉，它收尾时会把子会话写回来；不可删是暂时状态（返回 409 让用户稍后重试），且只对本进程有效。
+22. **子会话不会自己消失**——引擎不删 `task-*` 子会话，`removeSession` 也不通知会话提供者；要么按 `parentSessionId` 存在父会话之下一并删，要么按过期清理。判断子会话用 `TaskTalent.isTaskId(id)`，不要只比前缀。
+23. **`AGENTS.md` 缺省就会注入**——主代理与所有子代理都带，只读工作区内各层、不读 `CLAUDE.md` 与用户级规范；不想要用 `projectRulesEnabled(false)`，用户级规范由宿主并入 `systemPrompt`（§1.6）。
+24. **子代理对话没有单独的持久化开关**——跟 `sessionProvider` 走：内存提供者重启即丢（接着做报「不存在或已过期」）；自建存储要连快照一起存，工具调用过程只在快照里（§6.3）。
+25. **插件相关的坑在各插件 README 的「注意事项」**——goal 执行器注册时机、queue 续发、steer 拦截器与「interrupt 之后不要再 steer」、job 名前缀、没有「只关命令」的开关等。
 
 ---
 
