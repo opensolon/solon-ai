@@ -113,6 +113,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` |
 | 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
 | 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；会话模型配了 `AiConfig#concurrency` 以模型为准，§6.3） |
+| 子代理 | `disallowedAgentsAdd(String... / Collection)` | 空 | 按名字禁用子代理（内置的、自定义的都适用；SERVER 下只能这样或在 `onAttach` 里改，§6.1） |
 | 工具 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
 | 重试 | `apiRetries` / `mcpRetries` / `modelRetries` | 各 `3` | OpenAPI / MCP / 模型调用重试次数 |
 | 资源 | `modelAdd(ChatConfig)` / `defaultModel(String)` | 空 | 模型与默认模型 |
@@ -132,7 +133,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 服务端 | `scopeResolver(InputScopeResolver)` / `scopeRequired(boolean)` | `null` / `false`（SERVER 为 `true`） | 输入级作用域（只能收窄的强制边界）；解析器在归属检查之后、会话锁之外调用 |
 | 服务端 | `sessionOwnership(SessionOwnership)` | `SessionOwnership.LOCAL` | 多节点单写者租约；引擎池里共用同一个实现时用 `SessionOwnership.namespaced(tenantId, delegate)` |
 | 服务端 | `cwdPolicy(Predicate<String>)` | 不校验 | 会话工作目录的边界策略：`setSessionCwd` 与终端工具使用端都按真实路径校验，不满足抛 `SecurityException` |
-| 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置；为 `false` 时命令与子代理注册表在 `build()` 末尾封口 |
+| 服务端 | `runtimeMutable(boolean)` | `true`（SERVER 为 `false`） | 运行期是否允许改引擎级全局配置；为 `false` 时命令与子代理注册表（含子代理禁用名单）在 `build()` 末尾封口 |
 | 服务端 | `agentPersistPolicy(BiPredicate<AgentSession, AgentDefinition>)` | 跟随 `runtimeMutable`（STANDALONE 允许，SERVER 拒绝） | `generate(saveToFile=true)` 是否允许创建全局子代理（§6.4） |
 | 资源 | `taskExecutor(ExecutorService)` | 引擎私有，上限 64 线程 | 子代理执行器（引擎池可共用一个有界池）；宿主注入的共享执行器由宿主关闭，引擎 `shutdown` 不动它 |
 | 服务端 | `memorySessionIsolation(boolean)` | `false`（SERVER 为 `true`） | 长期记忆按会话隔离 |
@@ -1152,6 +1153,34 @@ HarnessEngine.of("/data/work", ".solon/")
 | `plan` | `list, read, grep, glob, skill, webfetch, websearch, codesearch` | 方案规划（无写权限） |
 | `git-summary` | 无（`hidden: true`） | 生成提交摘要 |
 
+内置子代理默认全部注册。不想要某个，按名字禁用；想换成自己的版本，注册同名定义（`addAgent` 优先于挂载目录，也可在构建期 `mountAdd` 的目录里放同名文件）：
+
+```java
+// 构建期禁用（SERVER 模式下也生效）
+HarnessEngine engine = HarnessEngine.builder()
+        // ...
+        .disallowedAgentsAdd("bash")
+        .build();
+
+// 运行期禁用 / 恢复（STANDALONE；SERVER 只能在扩展的 onAttach 里调，build() 之后调抛 IllegalStateException）
+engine.getAgentManager().disallowAgent("plan");
+engine.getAgentManager().allowAgent("plan");
+engine.getAgentManager().getDisallowedAgents();   // 只读视图
+
+// 替换：同名定义优先于内置
+engine.getAgentManager().addAgent(AgentDefinition.builder()
+        .name("explore").description("...").systemPrompt("...").toolsAdd("read", "grep").build());
+```
+
+可用的判定（`AgentManager#isAvailable`）：定义没有标 `enabled: false`，且名字不在禁用名单里。不可用的子代理：
+
+- `getAgents()` 不列出（模型看到的 `<available_agents>`、CLI 补全等都看不到），`getAgent` 抛异常，`getAgentOrNil` 与 `engine.resolveAgent` 返回 `null`；
+- 按名字也调不到：`task` / `multitask` 报找不到子代理，`@提及`、`explicitAgent`、`selectedAgent` 视为无效，**整段回落主代理**。宿主若程序化指定某个子代理（如 `selectedAgent("git-summary")`），调用前应先判 `engine.resolveAgent(session, name) != null`，否则会悄悄由主代理执行；
+- 运行时注册的同名定义不可用时，不再往挂载目录里找：同名覆盖文件写 `enabled: false` 就是停用该代理（含内置代理）；
+- `hasAgent` 仍按「名字已被占用」判断，禁用的名字也不能被 `generate` 拿去重建（§6.4）；
+- 禁用名单按名字拦截，对同名的替换定义、会话级子代理同样生效，「禁用」与「替换」不要对同一个名字混用；
+- `allowAgent` 只撤销名单，定义里 `enabled: false` 的仍不可用。
+
 ```java
 // 推荐：走两段式，由引擎装配请求（含命令识别与附件装配）
 InputOutcome outcome = engine.handle(
@@ -1167,7 +1196,7 @@ outcome.getRequest().stream().blockLast();
 explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent（选择器兜底）
 ```
 
-无有效提及时整段原样交给主代理；名字不存在时同样不剥离（除非 `agentNameValidator` 判定失败）。统一入口是 `engine.resolveAgent(session, name)`：先会话级，再引擎级。
+无有效提及时整段原样交给主代理；名字不存在或子代理不可用（§6.1）时同样不剥离（除非 `agentNameValidator` 判定失败）。统一入口是 `engine.resolveAgent(session, name)`：先会话级，再引擎级，两层都只返回可用的定义。判断某个名字能否选用请用它，不要用 `hasAgent`（后者只表示名字被占用，禁用的也算）。
 
 ### 6.3 主代理委派（`task` / `multitask`）
 
@@ -1301,10 +1330,10 @@ AgentSessionProvider provider = (id, parentId, create) -> {
 | `false`（缺省） | 只有创建它的会话 | 会话上下文（`session.agents`），随会话快照保存，重启后仍可调用 | 每会话最多 16 个；不得与全局子代理同名 |
 | `true` | 本引擎所有会话 | 工作区代理目录 `<harnessAgents>/<name>.md` | 受 `agentPersistPolicy` 约束（STANDALONE 缺省允许、SERVER 缺省拒绝）；同名文件或同名代理已存在时拒绝，不覆盖 |
 
-两级都不允许使用保留名（`main`、`general` 及内置挂载提供的代理名，见 `engine.isReservedAgentName`）。
+两级都不允许使用保留名（`main`、`general` 及内置挂载提供的代理名，见 `engine.isReservedAgentName`），也不允许使用禁用名单里的名字（建出来也调不到）。生成的定义从空白定义开始，不依赖 `general`：`general` 被禁用时 `generate` 照常可用，`general` 覆盖文件里的 `model` 等字段也不会被继承。会话级子代理读回时带完整定义（含正文提示词）。
 
 ```java
-// 一行式：复用 general 定义改写（就是面向 LLM 的 generate 工具方法；返回 ToolResult，失败时 isError() 为 true）
+// 一行式：就是面向 LLM 的 generate 工具方法（返回 ToolResult，失败时 isError() 为 true）
 ToolResult result = engine.getGenerateTalent().generate(
         "code_reviewer",                        // name（仅字母数字_-）
         "代码审查专家",                          // description
@@ -1360,9 +1389,9 @@ enabled: true
 | `tools` | 工具名或快捷权限 `pi` / `*` / `**`（`skills` / `mcpServers` 走定义里同名字段） |
 | `disallowedTools` | 在 `tools` 结果上做减法 |
 | `model` | 指定模型 |
-| `hidden` | 不在列表里展示 |
+| `hidden` | 不在列表里展示（按名字仍可调用，区别于 `enabled: false`） |
 | `primary` | 是否为主代理。**只有主代理能使用 `hitl`**：子代理即使配了 `hitl` 或 `**` 也不会被挂载（子代理挂起后无人能决策，而父代理正阻塞等待它，互等不可解） |
-| `enabled` | 是否启用 |
+| `enabled` | 是否启用；`false` 时列表不展示、按名字也调不到（§6.1） |
 | `permissionRules` | 权限规则（`toolName` / `behavior` / `pattern` / `priority`） |
 
 > `memory` / `hooks` / `background` / `isolation` / `teamName` 已标记 `@Deprecated`，保留字段但不再解析。技能与 MCP 现在走**挂载**与 `engine.addMcpServer(...)`。
@@ -1652,7 +1681,7 @@ org.noear.solon.ai.harness
 10. **`getRequest().stream()` 是冷流**——何时订阅、在哪个线程订阅由调用方决定；引擎不内置 `subscribeOn`。
 11. **`STANDALONE` 模式下 `build()` 只校验 `sessionProvider`**——缺模型时 `build()` 只告警，构建后仍没补上要到首次 `handle` 才报 `chatModel is required`；`SERVER` 模式在构建期就报。
 12. **HITL 默认只绑了 `bash`**——`Write` / `Web` 两套策略需自行 `onTool(...)` 绑定，否则不生效且不报错。
-13. **新建子代理要注册**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理。
+13. **新建子代理要注册，被禁用的子代理会回落**——`AgentDefinition` 构造完必须 `getAgentManager().addAgent(def)`，否则 `explicitAgent("xxx")` 回落主代理；被禁用（`disallowAgent` 或 `enabled: false`）的子代理同样回落，程序化指定前用 `resolveAgent(...) != null` 判断，不要用 `hasAgent`（§6.1）。
 14. **`InterruptMode.INTERRUPT_ALL` 会连带清队列**——它不是「只停当前流」。要「停当前、留队列」用 `CANCEL_STREAM`；`interrupt` 返回 `false` 也不代表什么都没发生（取消代数仍推进，能拦住随后才订阅的幽灵流）。
 15. **取消以 `onComplete` 收尾，不走 `onError`**——别用 `doOnError` 判定本轮失败；取消的轮次也不会推 `RunEndEvent`。
 16. **命令文本与门面调用是同一个动作，别把两者的返回值当一回事**——`engine.handle(HarnessInput.of(s, "/queue 跑测试"))` 得到的是 `Kind.REPLY` + 人读回执，`queue.enqueue(s, "跑测试")` 得到的是 `HarnessResult<Integer>`（OK 时值为位置）。要程序判定走门面，要现成文案走文本路径；**两条都走会入队两次**（命令路径无幂等保护）。
