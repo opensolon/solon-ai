@@ -798,7 +798,7 @@ engine.interrupt(session, InterruptMode.INTERRUPT_ALL);  // HarnessResult<Boolea
 | `enqueue` | 返回 `HarnessResult`：`FULL`（队列已满）/ `INVALID`（文本为空或超长）/ `CONFLICT`（id 重复）/ `DISABLED`（扩展已停用）/ `NOT_OWNER` | 提示用户稍后再试，或改为直接发送 |
 | `steer` | 返回 `HarnessResult<SteerReceipt>`，`isOk() == false`，细分码见 [steer README](../../solon-ai-harness-steer/README.md) 的结果码表 | `hasReason(SteerExtension.REASON_NOT_RUNNING)` → 改走 queue；`hasReason(SteerExtension.REASON_BOX_FULL)` → 改走 queue 或直发 |
 | `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息、不改快照；**但队列已被中断回调 `onSessionInterrupt` 清空**（见 §3.5 第 ① 步） |
-| `create` | 抛 `IllegalStateException`：已有进行中 goal | 回 409，提示先 `/goal clear` |
+| `create` | 返回 `HarnessResult`：`CONFLICT`（已有非终态 goal）/ `INVALID`（规格不合法）/ `NOT_FOUND`（会话不存在）/ `NOT_OWNER` | 按 `httpStatus()` 回应；`CONFLICT` 提示先 `/goal clear` |
 
 ### 3.4 取消语义与运行期开关
 
@@ -976,14 +976,14 @@ try (InterruptPlan plan = engine.prepareInterrupt(session)) {
 
 | 能力 | 能看什么 | 能改什么 | 入口 |
 |---|---|---|---|
-| goal | `goal.get(sessionId)` / `GoalSnapshot.toMap()` | 暂停 / 恢复 / 改配置 / 清除 | `pause` · `resume` · `update(sid, GoalPatch, stopper)` · `clear`（[goal README](../../solon-ai-harness-goal/README.md)） |
+| goal | `goal.get(sessionId)` / `GoalSnapshot.toMap()` | 暂停 / 恢复 / 改配置 / 清除 | `pause` · `resume` · `update(sid, GoalPatch, stopper)` · `remove`（[goal README](../../solon-ai-harness-goal/README.md)） |
 | queue | `queue.list(session)`（运行中在首位） | 取消单条 / 置顶 / 清空 / 再入队 | `cancelItem` · `promote` · `clearPending` · `enqueue`（[queue README](../../solon-ai-harness-queue/README.md)） |
 | steer | `steer.pending(session)` | 取消单条 / 批量 / 清空 | `steer` · `cancelOnRun` · `cancelPending`（[steer README](../../solon-ai-harness-steer/README.md)） |
-| 停 | — | 停流 + 清队列 | `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`（本节） |
+| 停 | — | 停流（`INTERRUPT_ALL` 另清队列、写取消消息） | `engine.interrupt(session, InterruptMode.INTERRUPT_ALL / CANCEL_STREAM)`（本节） |
 
 三个容易搞混的边界：
 
-- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `clearPending` 不动 in-flight。真正“现在立刻停”只有 `InterruptMode.INTERRUPT_ALL`。
+- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `clearPending` 不动 in-flight。“现在立刻停”要用 `engine.interrupt`：用户停止用 `INTERRUPT_ALL`（顺带清队列、写取消消息），只停 goal / loop 这类程序轮次用 `CANCEL_STREAM`。要连 goal 一起停，先 `pause` 再停流（goal README 6.8）。
 - **steer 没有“改”的能力**。已入邮箱的插话只能取消后重新投递，不支持就地编辑——文本不可变，且邮箱里若已满 5 条，取消一条才能再投一条。
 - **goal 与 queue/steer 不同层**。goal 是会话级持续轮次，queue/steer 服务于单次任务；一个会话可以有 goal 同时又有排队任务，但 goal 的每轮也会走 `SessionStatus.isOccupied()` 守卫，不与宿主正在跑的任务抢。
 

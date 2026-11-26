@@ -147,7 +147,7 @@ stateDiagram-v2
 | 每一轮的语言 | 本轮输入带上目标的语言（创建时记下，没有时为引擎语言），协议指令、工具文案与提示词一致；`/goal` 通过 `host.submit` 提交时，给输入带上用户的语言（`HarnessInput.locale`）即可。解析链始终是「目标的语言 > 引擎语言 > 全局默认语言」；已有目标要换语言，给 `GoalPatch.locale` 传新值即可（不调或传 null = 保持） |
 | 每一轮的结论 | 出错 → 抛给插件参与熔断；被中断 → `skip("cancelled")`；没有最终回答 → `skip("no final answer")`；会话不存在 → `skip("session not found")`；未受理（忙、待审批）→ `skip`，不计失败；其余按 `done(结果文本, 有无证据工具调用, token)` |
 | 完成证据 | 只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`） |
-| 停止 | `host.interrupt` / `admin.interrupt` 同样能停 goal 的那一轮 |
+| 停止 | `host.interrupt` / `admin.interrupt` 同样能停 goal 的那一轮（被停的一轮按 `skip("cancelled")` 计，不计错误）；停流不改 goal 状态，要连 goal 一起停见 3.4 的 `stop` |
 | 续发 | 每轮结束后自动续发积压（goal 一轮占用期间用户发来的 `/goal pause` 等会先于下一轮执行） |
 | 管理态 | `host.admin(tenant).call(...)` 依次检查：`sessionId` 为空 → `INVALID`；扩展未装配 → `DISABLED`；非持有节点 → `NOT_OWNER`；会话不存在 → `NOT_FOUND`；成功后自动续发积压 |
 
@@ -266,11 +266,10 @@ public class GoalAdminController {
     @Post
     @Mapping("stop")
     public Result<Boolean> stop(String tenant, String sid, Context ctx) {
-        // 界面「立即停止」：pause 只拦下一轮，要停当前这一轮先 interrupt 再 pause
+        // 界面「立即停止」：先 pause（摘调度），再停当前这一轮；顺序与 update 相同（6.3）
         SessionAdmin admin = admin("goal.write", tenant, sid, ctx);
-        HarnessResult<Boolean> r = admin.interrupt(sid, InterruptMode.CANCEL_STREAM);
-        admin.call(sid, GoalExtension.class, (goal, s) -> goal.pause(sid));
-        return reply(r, ctx);
+        admin.call(sid, GoalExtension.class, (goal, s) -> goal.pause(sid));  // 非 PURSUING 时 CONFLICT，不影响停流
+        return reply(admin.interrupt(sid, InterruptMode.CANCEL_STREAM), ctx); // 只停当前轮，保留排队
     }
 }
 ```
@@ -596,7 +595,7 @@ public class ImGoalHost {
 3. **`done` 必须带真实证据**：执行型目标（含 `fix`、`build`、`修改` 等关键词）的完成复核依赖 `hasToolCalls`；固定传 `false` 会让这类目标永远无法达成。
 4. **会话忙由插件判**：调度轮次先判 `engine.isIdle(session)`，执行器不需要再判；本通道此刻不能执行（如前端未连接）时返回 `GoalOutcome.skip(...)`，不要返回失败，否则会计入熔断。判空闲与开轮之间仍有窗口：`HarnessInput.ofProgram(...)` 是程序轮次，忙时返回 `REJECTED("busy")`、不进积压，执行器应在非 `TASK` 时返回 `skip`（缺省执行器即如此）。
 5. **轮次结束要续发队列**：goal 的一轮占用会话期间，用户输入（包括 `/goal pause`、`/goal clear`）由 `handle` 入积压并返回 `DEFERRED`。执行器结束时 `drain`；而 goal 调度在队列有积压时也不会开下一轮，所以排队的 `/goal pause` 一定先于下一轮执行。
-6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮。要立刻停，用宿主停止入口 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`，再 `goal.pause(sid)`；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（6.3）。
+6. **想立刻停下当前一轮**：`/goal pause` 只阻止下一轮，不打断正在跑的这一轮；反过来，停流也不改 goal 状态，被停的一轮跳过后，调度 5 秒后照常开下一轮。要连 goal 一起立刻停，见 6.8 第 3 条（先 `goal.pause(sid)`，再停流）；改目标走管理态 `goal.update(...)`，它自带"暂停 → 停流 → 等停稳 → 改写 → 恢复"的时序（6.3）。
 7. **单槽冲突在回执里**：已有非终态 goal 时命令只回执 `WARN`；管理态 `create` 返回 `HarnessResult.Code.CONFLICT`。
 8. **审批挂起**：goal 的一轮触发 HITL 审批时，会话处于占用状态，调度会持续跳过；审批决策输入（`input.hitl(...)`）与续流（`input.resume(true)`）在 `handle` 的受理判定中天然豁免，其余普通输入返回 `REJECTED`（`RejectReason.HITL_PENDING`）；续流完成后 goal 才继续。
 
@@ -824,7 +823,16 @@ engine.setExtensionEnabled(goal, true);  // 重新开启（不会自动重挂已
 
 1. **会话只取不建**：门面按 sessionId 经 `engine.getSessionOrNull` 取会话，不存在时 `get` 返回 null、写方法返回 `NOT_FOUND`，不会把外部传入的 ID 建成新会话；宿主仍需做自己的用户归属校验。
 2. **不需要判忙**：管理接口随时可调。会话忙时 `create` 照常建目标，首轮由调度器等到会话空闲再跑；`update` 自己负责停流与等待。
-3. **立即停下当前一轮**：`pause` 只阻止下一轮。界面上的「停止」按钮应先调宿主的停止入口（如 `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)`），再 `goal.pause(sid)`。
+3. **立即停下当前一轮**：`pause` 只阻止下一轮，停流也不改 goal 状态，两者要配合使用，并且**先 `goal.pause(sid)`，再停流**（与 `update` 内部顺序相同）：
+   - 先停流再 pause：被停的一轮收尾时 goal 仍是 `PURSUING`，调度在 5 秒后又会开一轮，pause 调晚了就拦不住；直连引擎（L1）时，被打断的一轮若以异常结束，还会计入连续错误，可能把 goal 熔断成 `BLOCKED`。先 pause 后，goal 不再处于追踪态，这一轮的结局不计错误，调度也已摘掉。
+   - 停流用 `InterruptMode.CANCEL_STREAM`：只停 goal 这一轮，保留用户排队的消息，也不在历史里写取消消息（缺省 `update` 也用它）。`INTERRUPT_ALL` 是用户级停止，会清空排队并写入取消消息，只在本来就要停掉整个会话时用（例如对话里的通用「停止」按钮；产品要求它顺带停 goal 时，同样先 pause 再停）。
+
+   ```java
+   goal.pause(sid);                                                       // 非 PURSUING 时 CONFLICT，不影响下一步
+   engine.interrupt(engine.getSessionOrNull(sid), InterruptMode.CANCEL_STREAM);
+   ```
+
+   用 L0 时写法见 3.4 的 `stop`（停流改为 `admin.interrupt`，宿主的终态与取消屏障才会生效）。
 4. **终态只能清除**：`ACHIEVED` / `BUDGET_LIMITED` / `ITERATION_LIMITED` 不能 `update`、不能恢复，想扩大预算只能清除后重建；界面上对终态行只保留「清除」按钮。
 5. **列表与 loop 混排**：`GoalSnapshot.toMap()` 只输出 goal 自己的字段（`id`、`type = "GOAL"`、`prompt`、`running`、`currentIteration`、预算与 `goal` 子对象），不再带 loop 的 `enabled` / `intervalMinutes` / `runNow` / `cancelled`；混排列表需要这些列时由宿主补齐。分流时用 `goal.get(sid)` 取快照，比较行 id 是否等于 `getId()`，是则走 goal 门面，否则走 loop。
 6. **删除会话先调 `engine.removeSession`**：它回调 `onSessionRemove` 注销该会话的 job；调度轮次只用 `getSessionOrNull`，会话不存在时 job 自行注销，不会把会话重新建出来。

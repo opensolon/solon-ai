@@ -568,6 +568,20 @@ public Result<Boolean> stop(String tenant, String sid, Context ctx) {
 
 停止就是停止：中断受理之后本轮**不再收到 `event`**，终态一定是 `CANCELLED`。任何时刻都可以调——输入还在受理（`submit` 尚未返回）时，它开出的那一轮同样以 `CANCELLED` 收尾，宿主不用处理「句柄还没拿到」的竞态。返回值为 `true` 时由本轮的 `finished(CANCELLED)` 负责收尾；为 `false` 时没有轮次会收尾，推送型界面应自己补一个结束信号。其它中断方式见 [§9.2 SessionAdmin](#92-sessionadmin)。
 
+宿主只调这一次；归属检查、取消屏障、先落取消消息再停流这些顺序都在框架内部完成。**不要绕过 host 直接调 `engine.interrupt`**：流能停，但取消屏障不生效、受理中的输入拦不住，终态原因变成 `EXTERNAL`。
+
+用户停止（`host.interrupt`）会影响哪些东西：
+
+| 对象 | 停止后的表现 |
+|---|---|
+| 当前一轮 | 停下。靠线程中断实现：卡在不可中断的阻塞调用里时，要等这次调用返回才真正结束（`finished` 也在那时才到） |
+| 子代理（`task` / `multitask`） | 一起停下，按失败返回、可凭 `task_id` 接着做（core README §6.3）。收尾完成前会话不可删（§7.2） |
+| 排队 | 清空。想保留排队用 `RunHandle.cancel()` 或 `admin.interrupt(sid, CANCEL_STREAM)` |
+| 插话 | 插不进被停的那一轮；`STEER` 输入按 §4.7 处理（会话已空闲就直接开新一轮） |
+| 待审批卡 | 不撤销：挂起时没有在跑的轮次，返回 `false`，卡仍可 `decide` |
+| goal | 不暂停：被停的那一轮跳过，5 秒后照常调度下一轮。「停止」要连 goal 一起停，**先**经 `admin.call` 调 goal 的 `pause`，再停流；只停 goal 这一轮用 `admin.interrupt(sid, CANCEL_STREAM)`（goal README 3.4） |
+| loop | 只停当前一轮，定时任务保留 |
+
 ### 4.7 忙时策略
 
 会话忙（正在运行 / 受理窗口 / 有积压）时，`HarnessInput.whenBusy(BusyPolicy)` 决定这条输入怎么处理（`QUEUE` / `REJECT` 由引擎在受理的会话锁内判定，不会出现「先判空闲、再被别的输入抢先、结果进了积压」的窗口）：
@@ -887,7 +901,8 @@ public Result<Void> delete(String tenant, String sid, Context ctx) {
 
 - `submit` / `decide` / `admin.call` 都**只查不建**：没开通的会话返回 `session_not_found`（404）。
 - 主体设置后不可改：同一会话再用不同主体 `openSession` 抛 `SecurityException`；相同主体重复调用是幂等的。
-- 「忙」包含运行流、待审批、受理窗口：`closeSession` 返回 false 时什么都没做。
+- 「忙」按 `isRemovable()` 判定，包含运行流、待审批、受理窗口，以及还没收尾的子任务（父轮刚被停止时常见）：`closeSession` 返回 false 时什么都没做。这是暂时状态，对外返回 409 让用户稍后重试即可。
+- 「忙」只对本进程有效：多节点部署时删除请求要路由到持有该会话的节点。
 
 ### 7.3 多节点
 
@@ -983,7 +998,7 @@ assertEquals(404, host.submit("acme", "ghost", HarnessInput.of("x")).httpStatus(
 |---|---|---|
 | `builder()` | `Builder` | 见 §8.1 |
 | `openSession(tenant, sid, principal)` | `AgentSession` | 开通会话并写入主体，一次完成。引擎要求作用域（SERVER）时主体必填，否则 `IllegalArgumentException`；会话已有不同主体时 `SecurityException`；相同主体重复调用幂等 |
-| `closeSession(tenant, sid, storageCleanup)` | `boolean` | 永久删除：判忙 → 通知全部扩展（撤掉调度等）→ 执行 `storageCleanup`（可空，异常只记日志）。true = 已关闭或本来不存在；false = 会话忙，什么都没做 |
+| `closeSession(tenant, sid, storageCleanup)` | `boolean` | 永久删除：判忙（`isRemovable()`，含未收尾的子任务）→ 通知全部扩展（撤掉调度等）→ 执行 `storageCleanup`（可空，异常只记日志）。true = 已关闭或本来不存在；false = 会话忙，什么都没做（见 §7.2） |
 | `closeSession(tenant, sid)` | `boolean` | 同上，不删存储（返回 true 后宿主自行删除） |
 | `submit(tenant, sid, input)` | `SubmitResult` | 提交一条用户输入（含斜杠命令），见 §8.2、§9.3。调用线程上完成受理；开流在执行器上 |
 | `submit(tenant, sid, input, observer)` | `SubmitResult` | 同上，并附加只作用于本次那一轮的 `RunSink`（可空） |

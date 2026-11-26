@@ -64,7 +64,7 @@
 ```java
 HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区, 引擎根目录
         .systemPrompt("你是一名 AI 编程助手")
-        .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见「八、扩展点」）
+        .sessionProvider((id, parentId, create) -> InMemoryAgentSession.of(id)) // 必填（生产环境应缓存实例，见本节下方「会话提供者」）
         .modelAdd(new ChatConfig().then(cfg -> {
             cfg.setName("deepseek");                               // 模型别名
             cfg.setApiUrl("https://api.deepseek.com");
@@ -230,7 +230,7 @@ AiI18n.setDefaultLocale(Locale.ENGLISH);
 | 续流（`decide`、`resume(true)`、`/continue`） | 沿用原来那一轮的语言（会话重新加载后也一样）；续流输入显式带了语言时以输入为准 |
 | goal / loop 后台轮次、插件门面 | 引擎实例的语言 `engine.getLocale()` |
 | 命令 | `input.getLocale()`（即本次输入的生效语言），`description(Locale)` / `examples(Locale)` 按它输出 |
-| 自己要按会话出文案 | `engine.localeOf(session)`；取消回执用 `HarnessI18n.get(engine.localeOf(session), HarnessI18nKeys.RUN_CANCELLED)`（当前文案：`用户已取消任务.`） |
+| 自己要按会话出文案 | `engine.localeOf(session)`；取消回执用 `InterruptPlan.cancelText(session)`（当前文案：`用户已取消任务.`） |
 
 > 才能（Talent）不保存语言，需要时从请求里取：指令用 `prompt.locale()`，工具返回文案用工具方法末尾的 `String __locale` 参数（框架注入，不进 schema；直接调用工具方法时传 `null` 表示默认语言）。
 > 工具描述与参数说明只给模型看，不做国际化。
@@ -735,7 +735,7 @@ public class EngineShell {
 | `engine.status(session).hasPendingHitl()` | 有待决策的工具调用 | 提示文案、前端状态 |
 | `engine.status(session).isRemovable()` | 不占用**且**没有仍在执行的子任务（`getRunningSubtaskCount()`，本进程内） | **删除 / 清空会话前**（§6.3） |
 
-> 子任务刻意不算进 `isOccupied()`：父流被取消后子任务可能还在跑，它不妨碍接新输入（算进去会卡住积压续发），但这时删掉会话，子任务结束时会把子会话写回来。
+> 子任务刻意不算进 `isOccupied()`：父流被取消后子任务可能还在收尾，它不妨碍接新输入（算进去会卡住积压续发），但这时删掉会话，子任务结束时会把子会话写回来。
 
 - **占位跟着请求走**：返回 `TASK` 时会话保持占用，直到 `getRequest().stream()` 被订阅（订阅时运行流先登记、占位后释放，无空档——把订阅调度到别的线程也安全）或 `call()` 结束；
 - 拿到 `TASK` 却不执行时调 `outcome.discard()`（幂等），否则要等 `admissionTimeoutMs` 超时才释放；
@@ -744,18 +744,35 @@ public class EngineShell {
 
 ### 3.7 停止
 
+停一个会话只需要一次调用（`/interrupt` 命令走的也是它）：
+
 ```java
 engine.interrupt(session, InterruptMode.INTERRUPT_ALL);   // 停流 + 清空队列（用户点「停止」的默认解）
 engine.interrupt(session, InterruptMode.CANCEL_STREAM);   // 只停流：不写取消消息、不动队列
 engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：不推取消代数
 ```
 
+> 用 `HarnessHost` 发起运行的宿主，停止要调 `host.interrupt(tenant, sid)`，不要直接调 `engine.interrupt`：流虽然能停，但 host 不知道这一轮被取消了，取消屏障不生效，终态原因记为 `EXTERNAL`（见 host README §4.6）。
+
 | 写法 | 队列 | 取消消息 | 取消代数 | 适用 |
 |---|---|---|---|---|
 | `INTERRUPT_ALL` | 清空 | 补写（带 `META_RUN_ID`） | 推进 | 用户主动停 |
 | `CANCEL_STREAM` | 不动 | 不写 | 推进 | 新目标顶掉旧轮次（goal / 自动循环） |
 | `PREEMPT_STREAM` | 不动 | 不写 | **不推进** | 旧流本该自然结束（Stop-Replace） |
-| `InterruptPlan#writeCancelEarly()` | 不动 | 只补写 | 不动 | 流已停但取消消息丢失 |
+
+三种方式都先检查会话归属：多节点部署时，非持有节点什么都不做，返回 `NOT_OWNER`（`getOwner()` 为持有者，由宿主转发）。
+
+停止会影响哪些东西：
+
+| 对象 | 停止后的表现 |
+|---|---|
+| 当前一轮 | 三种方式都停。靠线程中断实现：卡在不可中断的阻塞调用里时，要等这次调用返回才停下 |
+| 子代理（`task` / `multitask`） | 三种方式都会一起停下，结果按失败（`cancelled` / `interrupted`）返回，可凭 `task_id` 接着做（§6.3「结果」） |
+| 积压（queue） | 只有 `INTERRUPT_ALL` 清空（`QueueExtension#onSessionInterrupt`）；另外两种保留，本轮结束后续发 |
+| 插话（steer） | 停止后再插话一律 `NOT_RUNNING`（§4.8） |
+| 待审批（HITL） | 不撤销：审批挂起时本来就没有在跑的流，停止返回 `false`，卡仍可决策续流 |
+| goal | 不暂停：被停的那一轮跳过，5 秒后照常调度下一轮。要连 goal 一起停，**先** `goal.pause(sid)` 再停流，只停 goal 这一轮用 `CANCEL_STREAM`（goal README 6.8） |
+| loop | 只停当前一轮，定时任务保留（loop 有意不实现 `onSessionInterrupt`） |
 
 四条必知语义：
 
@@ -765,19 +782,20 @@ engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：�
 - 需要自定义终态时序（Web 要先落库、发 error/done、最后才停流）时用两段式：
 
 ```java
-String cancelText = HarnessI18n.get(engine.localeOf(session), HarnessI18nKeys.RUN_CANCELLED);
-
 try (InterruptPlan plan = engine.prepareInterrupt(session)) {
-    if (plan == null || !plan.hasActiveRun()) { emitFallbackDone(); return; }
+    if (plan == null) { return; }                    // 只在 session 为 null 时出现
+    if (plan.isNotOwner()) { forwardTo(plan.getOwner()); return; }   // 非持有节点：空计划，什么都没做
+    if (!plan.hasActiveRun()) { emitFallbackDone(); return; }        // 没有在跑的流（队列已清、代数已推进）
 
-    plan.writeCancelEarly();                        // ① 提前落库（幂等）
-    emitError(cancelText);                          // ② 渠道事件（文案见 §1.5）
+    plan.writeCancelEarly();                        // ① 取消消息先落库（幂等）
+    emitError(InterruptPlan.cancelText(session));   // ② 渠道事件（按会话语言取文案，§1.5）
     emitDoneOnce();                                 // ③ 停流前发 done
-    plan.commit();                                  // ④ 停流（幂等）
+    plan.commit();                                  // ④ 停流（幂等；已提前落库就不再写）
 }
 ```
 
 > 必须闭合：认领意味着句柄已从登记表摘下，忘记 `commit()` 会留下一条再也无法取消的孤儿流（`close()` 等价 `commit()`）。
+> `writeCancelEarly()` 只在 `hasActiveRun()==true` 时生效，用途是让取消消息先于渠道事件落库；不调用时由 `commit()` 补写，一次中断只写一次。
 
 ---
 
@@ -1157,7 +1175,7 @@ HarnessEngine.of("/data/work", ".solon/")
 
 ```java
 // 构建期禁用（SERVER 模式下也生效）
-HarnessEngine engine = HarnessEngine.builder()
+HarnessEngine engine = HarnessEngine.of(ws, ".solon/")
         // ...
         .disallowedAgentsAdd("bash")
         .build();
@@ -1213,14 +1231,17 @@ config.setConcurrency(2);                     // 模型级并发上限（配了�
 - 上限**按每次调用**算一个数：取当前会话所选模型的 `AiConfig#concurrency`（0 = 未设置），未设置取 `subagentDefaultConcurrency`（默认 5，取值 1~10）；**不存在「不限制」**（不限会退化为只受任务数约束，最容易打爆上游与 OOM）；
 - `multitask` 的任务进一个 FIFO 队列，起「上限」个 worker 自取，跑完一个取下一个；超限不报错，只是排队。`task` 只有一个任务，直接在调用线程上跑；
 - 多次调用之间（包括不同会话）不共享额度。引擎级的兜底只有执行器线程上限（私有执行器 64 线程，超出时少起 worker，由已起的 worker 消化），引擎池可用 `Builder.taskExecutor(...)` 共用一个有界池；
-- 不设超时：子任务可能跑很久，只会因父流取消或线程中断提前结束。
+- 不设超时：子任务可能跑很久，只会因父代理被停止或线程中断提前结束。
 
 #### 结果
 
 - 每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA，**有 20000 字符上限**；超出时完整结果落盘到 `<workspace>/.files/task/<task_id>/result.txt`，头部保留截断说明与相对路径；`multitask` 的结果按入参下标顺序排在 `<multitask_results>` 里，遇到限流 / 上游不可用 / 超时时另附 `<multitask_advice>`；
 - 子代理跑起来过的结果成败都带 `<task_id>`；失败另带 `<failure_kind>`（模型服务错误取其分类值，回合用尽为 `max_turns`，父流取消 / 中断为 `cancelled` / `interrupted`）；
 - 失败标记（`ToolResult.isError()`）：`task` 失败即标失败；`multitask` 只在被取消 / 中断、或一个都没成功时标失败，部分失败算成功（每项成败写在 `result_status` 里）；
-- 用户取消时父代理不再逐个等到底，剩余任务按状态给结果：**已完成**的照常返回真实结果；**已启动未结束**的返回带 `<task_id>` 的失败结果（进度在子会话里，可接着做）；**未启动**的返回放弃说明。在跑的子任务在收到下一条输出时发现父流已取消并自行收尾。
+- 父代理被停止（§3.7 三种方式都算）时，子代理会被主动停下，不再逐个等到底：
+  - `multitask`：**已完成**的照常返回真实结果；**已启动未结束**的被停下，返回带 `<task_id>` 的失败结果（进度在子会话里，可接着做）；**排队中**的不再启动，返回放弃说明；
+  - `task`：子代理被停下，同样返回带 `<task_id>` 的失败结果；
+  - 停止与子代理正常结束撞在一起时，在子代理发出结束事件那一刻判定一次：父代理已被停止，就按 `cancelled` / `interrupted` 报失败，结束事件不转给前端；还没被停止，就定为成功，之后的停止不再改判，父代理最多再等 10 秒拿它的真实结果。前端看到的、模型收到的、子会话记下的三者一致。
 
 #### 接着做（`task_id`）
 
@@ -1296,8 +1317,8 @@ AgentSessionProvider provider = (id, parentId, create) -> {
 
 - 判断是否子会话一律用 `TaskTalent.isTaskId(id)`（完整格式，不要只比前缀）；
 - 引擎一律带父会话 ID 取子会话：`getSession(taskId, parentSessionId, createIfAbsent)`。提供者据此把子会话存在父会话之下（soloncode 为 `sessions/<父>/subtasks/<taskId>/`），删父会话时一并删除；忽略它则是平铺存储，归属仍由引擎比对子会话元数据校验；
-- 删除父会话前用 `engine.status(session).isRemovable()` 判定（不是 `isOccupied()`）：父流被取消后子任务可能还在跑，这时删掉，它收尾时会把子会话写回来。还要注意两点：
-  - **不可删是暂时状态**：子任务只在收到下一条输出时才发现父流已取消，卡在长工具调用里时要等到该调用结束或超时。对外建议返回 409「子任务收尾中，请稍后重试」，不要当成删除失败；
+- 删除父会话前用 `engine.status(session).isRemovable()` 判定（不是 `isOccupied()`）：父流被取消后子任务可能还在收尾，这时删掉，它收尾时会把子会话写回来。还要注意两点：
+  - **不可删是暂时状态**：父代理停止时子任务会被打断，但卡在不可中断的阻塞调用里时要等这次调用返回，之后还要落盘收尾。对外建议返回 409「子任务收尾中，请稍后重试」，不要当成删除失败；
   - **只对本进程有效**：运行中的子任务只登记在跑它的那个引擎里（同 `isBusy()`）。多节点部署时删除请求必须路由到持有该会话的节点，否则别的节点看到的恒为可删。同一进程内，引擎池不会回收还有子任务在跑的引擎（`isQuiescent()` 把它算在内）；
 - 连带删除只对「按父会话分目录 / 分键存储」的提供者自动生效：引擎删会话（`removeSession`）只通知扩展，不通知提供者，也不会去删子会话。内存提供者即使收到父会话 ID，子会话也不会随父会话消失，需要时由宿主在删父会话时按自己的存储结构一并清掉；
 - 子会话会越积越多（尤其是长期不删的父会话），存文件 / 数据库 / Redis 的宿主都应按过期兜底清理 `task-*`（soloncode 为 7 天）；
@@ -1312,7 +1333,7 @@ AgentSessionProvider provider = (id, parentId, create) -> {
 | 工具已返回 | 工具结果（ToolMessage）metadata 里的 `TaskTalent.META_SUBTASKS`（`_subtasks`：`taskId / index / agentName / description`，只列确实跑起来的任务） |
 | 工具还没返回（子任务运行中刷新、进程在子任务中途退出后重启） | 父 trace extras 的 `TaskTalent.EXTRA_RUNNING_SUBTASKS`（`_runningSubtasks`：调用 id → 同样的索引列表） |
 
-找到子会话后用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace；子会话 `META_SUBTASK` 里的 `status`（`running / success / failure`）与 `failureKind` 只供展示（`running` 在进程崩溃或父流取消后会一直留着，按「已中断」展示）。
+找到子会话后用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace；子会话 `META_SUBTASK` 里的 `status`（`running / success / failure`）与 `failureKind` 只供展示（父代理停止时会写成 `failure` + `cancelled` / `interrupted`；`running` 只在进程崩溃等来不及收尾时留下，按「已中断」展示）。
 
 工具还没返回时的细节：
 
@@ -1689,7 +1710,7 @@ org.noear.solon.ai.harness
 18. **外部传入的会话 ID 用 `requireSession` / `getSessionOrNull`**——`getSession(id)` 不存在就新建。
 19. **引擎 `shutdown()` 之后不要再用旧引用**——之后的 `handle` 返回 `REJECTED(engine_closed)`；引擎池模式下重新 `pool.get(key)` 即可。
 20. **显式 `HarnessInput.scope(...)` 进积压时只保存名单类维度**——续发时与最新解析结果取交集（只会变窄）；带 `chatModel` / `attr` 的显式作用域在忙时被拒绝（`scope_not_deferrable`）。服务端请用引擎级 `scopeResolver`。
-21. **删除会话前看 `isRemovable()`，不是 `isOccupied()`**——父流取消后子任务可能还在跑，这时删掉，它收尾时会把子会话写回来；不可删是暂时状态（返回 409 让用户稍后重试），且只对本进程有效。
+21. **删除会话前看 `isRemovable()`，不是 `isOccupied()`**——父流取消后子任务可能还在收尾，这时删掉，它收尾时会把子会话写回来；不可删是暂时状态（返回 409 让用户稍后重试），且只对本进程有效。
 22. **子会话不会自己消失**——引擎不删 `task-*` 子会话，`removeSession` 也不通知会话提供者；要么按 `parentSessionId` 存在父会话之下一并删，要么按过期清理。判断子会话用 `TaskTalent.isTaskId(id)`，不要只比前缀。
 23. **`AGENTS.md` 缺省就会注入**——主代理与所有子代理都带，只读工作区内各层、不读 `CLAUDE.md` 与用户级规范；不想要用 `projectRulesEnabled(false)`，用户级规范由宿主并入 `systemPrompt`（§1.6）。
 24. **子代理对话没有单独的持久化开关**——跟 `sessionProvider` 走：内存提供者重启即丢（接着做报「不存在或已过期」）；自建存储要连快照一起存，工具调用过程只在快照里（§6.3）。

@@ -272,7 +272,7 @@ public class RedisOwnership implements SessionOwnership {
 | steer 邮箱、受理占位、运行句柄、派发事务（`session.run.dispatch`） | 进程内存 | — | 不落盘；重启后未注入的插话丢失 |
 | 工作区文件 | 引擎工作区（本地目录） | 宿主 | 模型的文件工具、bash、LSP 都直接操作本地目录；远程工作区需要宿主自己做同步 |
 
-会话提供者的契约：`getSession(id, createIfAbsent=false)` 在会话不存在时必须返回 `null` 且无副作用（不建实例、不写存储、不放缓存）。生产实现应缓存实例，并设上限与淘汰策略。
+会话提供者的契约（唯一方法 `getSession(sessionId, parentSessionId, createIfAbsent)`）：`createIfAbsent=false` 且会话不存在时必须返回 `null` 且无副作用（不建实例、不写存储、不放缓存）。`parentSessionId` 为 null 是顶层会话，非 null 是子代理任务的子会话，只用来决定存放位置（见 core README §6.3）。生产实现应缓存实例，并设上限与淘汰策略。
 宿主探测会话是否存在时用 `engine.getSessionOrNull(sid)`（只查不建）或 `engine.requireSession(sid)`（不存在抛 `IllegalArgumentException`），**不要用 `getSession`**：它会凭空新建会话。
 
 ### 5.1 受保护状态路径
