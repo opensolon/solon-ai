@@ -1118,6 +1118,12 @@ class GoalRuntime {
     // ==================== 异常分级熔断 ====================
 
     private void handleExecutionError(AgentSession session, Goal gs, Exception e) {
+        if (gs.getStatus() == GoalStatus.PAUSED) {
+            // 轮次进行中被暂停（用户停止会话、update 先暂停再停流）：这一轮是被打断的，不是失败，
+            // 不记错误、不覆盖上一轮的结果（暂停时已落盘）
+            LOG.debug("Goal '{}' round ended after pause: {}", gs.getId(), e.toString());
+            return;
+        }
         String errorType = ErrorClassifier.classifyError(e);
         String summary = extractErrorSummary(e);
         int sameTypeCount = gs.recordError(errorType, summary);

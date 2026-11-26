@@ -660,7 +660,7 @@ Command cmd = engine.resolveCommand(input);   // 未以命令前缀开头 / 只�
 
 | 契约 | 类型 | 提供方 | 消费方 |
 |---|---|---|---|
-| `HarnessExtension#onSessionInterrupt` | 钩子（广播） | 引擎 `interrupt` / `prepareInterrupt` 先于停流回调 | queue 清队列 |
+| `HarnessExtension#onSessionInterrupt` | 钩子（广播） | 引擎 `interrupt(session, INTERRUPT_ALL)` / `prepareInterrupt` 先于停流回调 | queue 清队列、goal 暂停 |
 | `HarnessExtension#onSessionRemove` | 钩子（广播） | 引擎 `removeSession`（宿主永久删除会话时，先于删存储调用） | loop 删该会话任务、goal 注销该会话 job |
 | `HarnessExtension#contributeSessionStatus` | 钩子（汇集） | 引擎 `status` 读快照时回调 | 各插件贡献**自己定义**的键：queue `QueueExtension.STATUS_PENDING`、steer `SteerExtension.STATUS_PENDING`、goal `GoalExtension.STATUS_GOAL`、loop `LoopExtension.STATUS_TASKS`（只供展示/宿主业务，内核不读） |
 | `spi.InputBacklog` | 能力接口（`offer(session, HarnessInput)` / `hasPending`） | queue | 引擎 `handle` 受理判定（有无积压能力、忙时 `offer` 入积压、`hasPending` 保先进先出）、`engine.isIdle`、steer 残留转积压（`getExtension(InputBacklog.class)`） |
@@ -797,7 +797,7 @@ engine.interrupt(session, InterruptMode.INTERRUPT_ALL);  // HarnessResult<Boolea
 |---|---|---|
 | `enqueue` | 返回 `HarnessResult`：`FULL`（队列已满）/ `INVALID`（文本为空或超长）/ `CONFLICT`（id 重复）/ `DISABLED`（扩展已停用）/ `NOT_OWNER` | 提示用户稍后再试，或改为直接发送 |
 | `steer` | 返回 `HarnessResult<SteerReceipt>`，`isOk() == false`，细分码见 [steer README](../../solon-ai-harness-steer/README.md) 的结果码表 | `hasReason(SteerExtension.REASON_NOT_RUNNING)` → 改走 queue；`hasReason(SteerExtension.REASON_BOX_FULL)` → 改走 queue 或直发 |
-| `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息、不改快照；**但队列已被中断回调 `onSessionInterrupt` 清空**（见 §3.5 第 ① 步） |
+| `interrupt` | 返回 `false`：当前没有在跑的流 | 不写取消消息；**但 `INTERRUPT_ALL` 已回调 `onSessionInterrupt`：队列被清空、在跑的 goal 被暂停**（见 §3.5 第 ① 步） |
 | `create` | 返回 `HarnessResult`：`CONFLICT`（已有非终态 goal）/ `INVALID`（规格不合法）/ `NOT_FOUND`（会话不存在）/ `NOT_OWNER` | 按 `httpStatus()` 回应；`CONFLICT` 提示先 `/goal clear` |
 
 ### 3.4 取消语义与运行期开关
@@ -864,18 +864,18 @@ OK 时值 `true` = 确实停掉了一个正在执行的流；`false` = 当前没
 
 | 写法 | 队列 | 取消消息 | 取消代数 | 适用 |
 |---|---|---|---|---|
-| `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)` | 清空 | 补写（带 `META_RUN_ID`） | 推进 | 用户主动停（默认逃这个） |
+| `engine.interrupt(session, InterruptMode.INTERRUPT_ALL)` | 清空 | 补写（带 `META_RUN_ID`） | 推进 | 用户主动停（默认选这个；顺带暂停 goal） |
 | `engine.interrupt(session, InterruptMode.CANCEL_STREAM)` | 不动 | 不写 | 推进 | 只停流：新目标顶掉旧轮次、后续由程序重发新轮（goal / 自动循环） |
 | `engine.interrupt(session, InterruptMode.PREEMPT_STREAM)` | 不动 | 不写 | **不推进** | 「新一轮腾位」：旧流本该自然结束，推代数会把新轮收尾牵连进去（Stop-Replace） |
-| `InterruptPlan#writeCancelEarly()` | 不动 | 只补写 | 不动 | 流已停但取消消息丢失（Web 端超时/崩溃恢复） |
 
 三种方式返回值语义一致（值 `true` = 确有活跃流被停）；取消代数差异详见 `InterruptMode` javadoc。
+两段式里的 `InterruptPlan#writeCancelEarly()` 不是第四种中断方式：它只在 `hasActiveRun()==true` 时生效，把取消消息提前到渠道事件之前落库，一次中断只写一次。
 
 它与此前的 `/interrupt` 命令**同源**（`/interrupt` 命令即调 `InterruptMode.INTERRUPT_ALL`），内部四步顺序是语义的一部分：
 
 | # | 动作 | 为何要这个顺序 |
 |---|---|---|
-| ① | 清排队（queue 插件的 `onSessionInterrupt`，含已被 drain 暂存的项） | **必须早于停流**：停流后宿主常在终态回调里续发队首，顺序颠倒会把刚停掉的任务重新推起来 |
+| ① | 扩展参与（`onSessionInterrupt`）：queue 清排队（含已被 drain 暂存的项），goal 暂停并摘调度 | **必须早于停流**：停流后宿主常在终态回调里续发队首、goal 调度会拉起下一轮，顺序颠倒会把刚停掉的任务重新推起来 |
 | ② | 取消 `SessionRuns` 登记的全部运行句柄 | 无活跃句柄时直接返回 `false`，不写取消消息（但**取消代数仍会推进**，见下） |
 | ③ | 补写取消消息（带 `META_RUN_ID`） | 让前端把气泡挂到正确轮次 |
 | ④ | `updateSnapshot()` | 中断时 agent 收尾被跳过，trace 与取消消息需一并持久化 |
@@ -983,7 +983,7 @@ try (InterruptPlan plan = engine.prepareInterrupt(session)) {
 
 三个容易搞混的边界：
 
-- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `clearPending` 不动 in-flight。“现在立刻停”要用 `engine.interrupt`：用户停止用 `INTERRUPT_ALL`（顺带清队列、写取消消息），只停 goal / loop 这类程序轮次用 `CANCEL_STREAM`。要连 goal 一起停，先 `pause` 再停流（goal README 6.8）。
+- **goal 的暂停与 queue 的清空不会停当前这轮**。它们只影响「下一轮还跑不跑」：goal 的 `pause` 是状态机转 `PAUSED`，当前轮内已经在执行的工具调用不会被打断；queue 的 `clearPending` 不动 in-flight。“现在立刻停”要用 `engine.interrupt`：用户停止用 `INTERRUPT_ALL`（顺带清队列、写取消消息、暂停 goal），只停 goal / loop 这类程序轮次用 `CANCEL_STREAM`（不动 goal 状态）。
 - **steer 没有“改”的能力**。已入邮箱的插话只能取消后重新投递，不支持就地编辑——文本不可变，且邮箱里若已满 5 条，取消一条才能再投一条。
 - **goal 与 queue/steer 不同层**。goal 是会话级持续轮次，queue/steer 服务于单次任务；一个会话可以有 goal 同时又有排队任务，但 goal 的每轮也会走 `SessionStatus.isOccupied()` 守卫，不与宿主正在跑的任务抢。
 

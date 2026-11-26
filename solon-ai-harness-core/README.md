@@ -747,7 +747,7 @@ public class EngineShell {
 停一个会话只需要一次调用（`/interrupt` 命令走的也是它）：
 
 ```java
-engine.interrupt(session, InterruptMode.INTERRUPT_ALL);   // 停流 + 清空队列（用户点「停止」的默认解）
+engine.interrupt(session, InterruptMode.INTERRUPT_ALL);   // 停流 + 清空队列 + 暂停 goal（用户点「停止」的默认解）
 engine.interrupt(session, InterruptMode.CANCEL_STREAM);   // 只停流：不写取消消息、不动队列
 engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：不推取消代数
 ```
@@ -756,8 +756,8 @@ engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：�
 
 | 写法 | 队列 | 取消消息 | 取消代数 | 适用 |
 |---|---|---|---|---|
-| `INTERRUPT_ALL` | 清空 | 补写（带 `META_RUN_ID`） | 推进 | 用户主动停 |
-| `CANCEL_STREAM` | 不动 | 不写 | 推进 | 新目标顶掉旧轮次（goal / 自动循环） |
+| `INTERRUPT_ALL` | 清空 | 补写（带 `META_RUN_ID`） | 推进 | 用户主动停（回调各扩展的 `onSessionInterrupt`） |
+| `CANCEL_STREAM` | 不动 | 不写 | 推进 | 程序停流：新目标顶掉旧轮次（goal / 自动循环） |
 | `PREEMPT_STREAM` | 不动 | 不写 | **不推进** | 旧流本该自然结束（Stop-Replace） |
 
 三种方式都先检查会话归属：多节点部署时，非持有节点什么都不做，返回 `NOT_OWNER`（`getOwner()` 为持有者，由宿主转发）。
@@ -771,7 +771,7 @@ engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：�
 | 积压（queue） | 只有 `INTERRUPT_ALL` 清空（`QueueExtension#onSessionInterrupt`）；另外两种保留，本轮结束后续发 |
 | 插话（steer） | 停止后再插话一律 `NOT_RUNNING`（§4.8） |
 | 待审批（HITL） | 不撤销：审批挂起时本来就没有在跑的流，停止返回 `false`，卡仍可决策续流 |
-| goal | 不暂停：被停的那一轮跳过，5 秒后照常调度下一轮。要连 goal 一起停，**先** `goal.pause(sid)` 再停流，只停 goal 这一轮用 `CANCEL_STREAM`（goal README 6.8） |
+| goal | `INTERRUPT_ALL` 在停流之前把 goal 暂停并摘调度（`GoalExtension#onSessionInterrupt`），可用 `goal.resume(sid)` 恢复；另外两种不动 goal，被停的那一轮跳过、下一轮照常调度（goal README 6.8） |
 | loop | 只停当前一轮，定时任务保留（loop 有意不实现 `onSessionInterrupt`） |
 
 四条必知语义：
@@ -1518,7 +1518,7 @@ engine.addExtension(new HarnessExtension() {
                                         │
                     输入通过受理判定 ──onInput──────────> [HITL/命令/委派]
                           每次请求装配 ──onRequestAssemble──> [ReActRequest]
-                          用户级中断   ──onSessionInterrupt─> [先清积压再停流]
+                          用户级中断   ──onSessionInterrupt─> [停流之前：清积压、暂停 goal]
                           读会话状态   ──contributeSessionStatus─> [插件事实]
                           永久删除会话 ──onSessionRemove────> [撤掉该会话的定时任务]
                                         │
@@ -1532,7 +1532,7 @@ engine.addExtension(new HarnessExtension() {
 | `onAgentBuild` | `AgentFactory.create()` 末尾，无条件 | **否**（停用由扩展自己传播给子组件） |
 | `onInput` | `handle()` 第 0 步受理判定通过之后（被排队 / 拒绝的输入不触发；排队的输入续发时触发一次） | 是 |
 | `onRequestAssemble` | `ReActRequest.options(...)` 内 | 是 |
-| `onSessionInterrupt` | `interrupt()` / `prepareInterrupt()`，先于停流 | **否**（清理类） |
+| `onSessionInterrupt` | `interrupt(session, INTERRUPT_ALL)` / `prepareInterrupt()`，先于停流（queue 清队列、goal 暂停） | **否**（清理类） |
 | `contributeSessionStatus` | `status()` | **否**（事实类） |
 | `onSessionRemove` | `removeSession()`（永久删除；只移出内存不触发） | **否**（清理类） |
 | `isQuiescent` | `engine.isQuiescent()`（引擎池回收前） | **否**（事实类；异常按「不静默」） |

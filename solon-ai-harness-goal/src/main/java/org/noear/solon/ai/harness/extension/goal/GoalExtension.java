@@ -81,6 +81,7 @@ import java.util.function.Predicate;
  *
  * <p><b>钩子</b>：{@code onAttach} 装配运行态、调度与命令；{@code onRequestAssemble} 给顶层请求挂
  * {@link GoalTalent}（委派不挂）；{@code contributeSessionStatus} 贡献 {@link #STATUS_GOAL}；
+ * {@code onSessionInterrupt} 在用户停止时暂停 goal；
  * {@code onSessionRemove} 注销该会话的 job；{@code onDetach} 卸载全部 job。
  * 调度轮次只取已存在的会话（{@code getSessionOrNull}），会话已不存在时 job 自行注销，不会把会话重新建出来。</p>
  *
@@ -225,6 +226,33 @@ public class GoalExtension extends AbsHarnessExtension {
         Goal gs = goalRuntime.state(session);
         if (gs != null) {
             builder.put(STATUS_GOAL, gs.getStatus());
+        }
+    }
+
+    /**
+     * 用户停止会话（{@code INTERRUPT_ALL}，含 {@code /interrupt}）：暂停本会话的 goal 并摘调度。
+     *
+     * <p>引擎保证先于停流回调，所以被停的那一轮结束时 goal 已是 PAUSED，调度不会再拉起下一轮；
+     * 宿主只需调一次中断，不用再补 {@code pause}。程序停流（{@code CANCEL_STREAM} / {@code PREEMPT_STREAM}）
+     * 不回调本钩子，goal 状态不变（{@link #update} 内部停流就属于这种）。</p>
+     *
+     * <p>不判开关（停用前建的 goal 也要随用户停止一起停）；只有 PURSUING 会被暂停，
+     * PAUSED / BLOCKED / 终态与没有 goal 时什么都不做；异常只记日志。</p>
+     *
+     * @since 4.2.0
+     */
+    @Override
+    public void onSessionInterrupt(HarnessEngine engine, AgentSession session) {
+        if (goalRuntime == null || isBoundTo(engine) == false) {
+            return;
+        }
+
+        try {
+            if (pause(session)) {
+                LOG.info("[Goal] Goal of session '{}' paused by user interrupt", session.getSessionId());
+            }
+        } catch (Throwable e) {
+            LOG.warn("[Goal] Pause on interrupt failed for session '{}': {}", session.getSessionId(), e.toString());
         }
     }
 

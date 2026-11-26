@@ -42,7 +42,7 @@ import java.util.Collections;
  *
  * 每次请求装配     ──onRequestAssemble─────&gt; [ReActRequest]
  *
- * 用户级中断       ──onSessionInterrupt────&gt; [先于停流：清积压等]
+ * 用户级中断       ──onSessionInterrupt────&gt; [先于停流：清积压、暂停后台目标等]
  *
  * 读取会话状态     ──contributeSessionStatus&gt; [贡献插件自定义的事实键]
  *
@@ -90,7 +90,7 @@ import java.util.Collections;
  *     <tr><td>{@link #onDetach}</td><td><b>否</b></td>
  *         <td>清理不得被开关阻止，否则停用前占用的资源永远无法释放</td></tr>
  *     <tr><td>{@link #onSessionInterrupt}</td><td><b>否</b></td>
- *         <td>同属清理类：停用前积压的任务也必须随用户停止一起作废</td></tr>
+ *         <td>同属清理类：停用前积压的任务、建的 goal 也必须随用户停止一起作废或暂停</td></tr>
  *     <tr><td>{@link #onSessionRemove}</td><td><b>否</b></td>
  *         <td>同属清理类：停用前为该会话建的定时任务也必须随会话一起撤掉</td></tr>
  *     <tr><td>{@link #contributeSessionStatus}</td><td><b>否</b></td>
@@ -289,7 +289,8 @@ public interface HarnessExtension extends AiSwitchable {
      * <p><b>时序保证</b>：引擎在认领并停止运行流<b>之前</b>回调。停流后宿主常在终态回调里续发积压，
      * 若等到那时才清理，会把刚被停掉的任务重新推起来（「先清积压再停流」）。</p>
      *
-     * <p><b>典型用途</b>：积压类插件清空待执行项（queue）。</p>
+     * <p><b>典型用途</b>：积压类插件清空待执行项（queue）；后台自动推进的插件暂停自己的调度（goal）。
+     * 放在这里而不是让宿主在中断前后补调，是为了每个入口只调一次中断、顺序也不会写反。</p>
      *
      * <p><b>注意</b>：不判 {@code isEnabled()}（清理类）；运行在调用线程，<b>不得阻塞</b>；
      * 引擎逐个 try/catch，单个扩展的异常只记告警、不会阻止停流（中断必须总能生效）。</p>

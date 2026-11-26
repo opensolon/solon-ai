@@ -579,7 +579,7 @@ public Result<Boolean> stop(String tenant, String sid, Context ctx) {
 | 排队 | 清空。想保留排队用 `RunHandle.cancel()` 或 `admin.interrupt(sid, CANCEL_STREAM)` |
 | 插话 | 插不进被停的那一轮；`STEER` 输入按 §4.7 处理（会话已空闲就直接开新一轮） |
 | 待审批卡 | 不撤销：挂起时没有在跑的轮次，返回 `false`，卡仍可 `decide` |
-| goal | 不暂停：被停的那一轮跳过，5 秒后照常调度下一轮。「停止」要连 goal 一起停，**先**经 `admin.call` 调 goal 的 `pause`，再停流；只停 goal 这一轮用 `admin.interrupt(sid, CANCEL_STREAM)`（goal README 3.4） |
+| goal | `host.interrupt` 在停流之前把 goal 暂停并摘调度，宿主不用再补 `pause`；界面用 `goal.resume(sid)` 恢复。`RunHandle.cancel()` 与 `admin.interrupt(sid, CANCEL_STREAM)` 不动 goal，被停的那一轮跳过、下一轮照常调度（goal README 3.4） |
 | loop | 只停当前一轮，定时任务保留 |
 
 ### 4.7 忙时策略
