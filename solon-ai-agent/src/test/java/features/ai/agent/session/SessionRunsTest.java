@@ -58,6 +58,43 @@ class SessionRunsTest {
     }
 
     @Test
+    @DisplayName("联动句柄：随取消 dispose，但不算运行流（不占用会话、只有它时取消不算确有活跃流）")
+    void linkedHandleFollowsCancelButIsNotARun() {
+        AgentSession session = InMemoryAgentSession.of("linked");
+        AtomicInteger link = new AtomicInteger();
+
+        assertTrue(SessionRuns.attachLinked(session, handle(link), SessionRuns.cancelCount(session)));
+        assertEquals(0, SessionRuns.activeCount(session), "联动句柄不计入活跃流");
+        assertFalse(SessionRuns.isBusy(session));
+
+        assertFalse(SessionRuns.cancelActive(session), "只有联动句柄：不算确有活跃流被停掉");
+        assertEquals(1, link.get(), "不推进代数的取消同样联动");
+
+        AtomicInteger link2 = new AtomicInteger();
+        AtomicInteger run = new AtomicInteger();
+        assertTrue(SessionRuns.attachLinked(session, handle(link2), SessionRuns.NO_GEN));
+        assertTrue(SessionRuns.attach(session, handle(run)));
+        SessionRuns.Claim claim = SessionRuns.claim(session);
+        assertNotNull(claim, "有运行流时照常认领");
+        assertEquals(0, link2.get(), "认领后到 commit 前不停");
+        claim.close();
+        assertEquals(1, link2.get());
+        assertEquals(1, run.get());
+
+        AtomicInteger late = new AtomicInteger();
+        int gen = SessionRuns.cancelCount(session) - 1;
+        assertFalse(SessionRuns.attachLinked(session, handle(late), gen), "基准之后已取消：登记失败并就地 dispose");
+        assertEquals(1, late.get());
+
+        AtomicInteger detached = new AtomicInteger();
+        Disposable d = handle(detached);
+        assertTrue(SessionRuns.attachLinked(session, d, SessionRuns.NO_GEN));
+        SessionRuns.detach(session, d);
+        SessionRuns.cancelAll(session);
+        assertEquals(0, detached.get(), "注销后不再联动");
+    }
+
+    @Test
     @DisplayName("无运行流时：isBusy 为 false，cancelAll 不推进语义")
     void idleSessionIsNotBusy() {
         AgentSession session = InMemoryAgentSession.of("run-idle");

@@ -109,7 +109,37 @@ public final class SessionRuns {
     }
 
     /**
-     * 按值注销一个运行句柄：只摘自己那一条，不影响同一会话上仍在跑的其他流。
+     * 登记一个联动句柄：会话被取消（{@link #cancelAll} / {@link #claim} / {@link #cancelActive}）时随之 dispose，
+     * 但它不是运行流：不计入 {@link #activeCount} / {@link #isBusy}，只有联动句柄时取消也不算「确有活跃流被停掉」。
+     *
+     * <p>用于「会话被停止时顺带停掉挂在它名下、运行句柄却登记在别处的工作」（如与父代理同线程跑的子代理）。
+     * 用完必须 {@link #detach} 注销。</p>
+     *
+     * @param gen 基准取消代数；{@link #NO_GEN} 表示不校验
+     * @return true = 已登记；false = 参数为空，或自基准以来已被取消（句柄已就地 dispose）
+     * @since 4.2
+     */
+    public static boolean attachLinked(AgentSession session, Disposable link, int gen) {
+        if (session == null || link == null) {
+            return false;
+        }
+
+        Runs runs = runsOf(session, true);
+
+        synchronized (runs) {
+            if (gen != NO_GEN && runs.cancels.get() > gen) {
+                disposeQuietly(link);
+                return false;
+            }
+
+            // 只进取消槽，不进 actives：随取消联动，不算运行流
+            runs.running.add(link);
+            return link.isDisposed() == false;
+        }
+    }
+
+    /**
+     * 按值注销一个运行句柄（或联动句柄）：只摘自己那一条，不影响同一会话上仍在跑的其他流。
      */
     public static void detach(AgentSession session, Disposable run) {
         Runs runs = runsOf(session, false);
@@ -254,10 +284,13 @@ public final class SessionRuns {
         }
 
         Disposable.Composite old;
+        final boolean hadActive;
         synchronized (runs) {
             if (advanceGen) {
                 runs.cancels.incrementAndGet();
             }
+
+            hadActive = runs.actives.isEmpty() == false;
 
             if (runs.running.size() == 0) {
                 // 没有活跃流：不换槽（换掉会让随后到来的 attach 落到已取消槽位）
@@ -269,6 +302,12 @@ public final class SessionRuns {
 
             // 与 attach 共用同一把锁，此处清空不会漏掉并发登记进来的句柄
             runs.actives.clear();
+        }
+
+        if (old != null && hadActive == false) {
+            // 只有联动句柄（attachLinked）：就地停掉，但不算「确有活跃流」
+            disposeQuietly(old);
+            return null;
         }
 
         return old;
