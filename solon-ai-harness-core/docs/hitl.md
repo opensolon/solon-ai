@@ -941,151 +941,103 @@ public class DatabaseStrategy implements HITLInterceptor.InterventionStrategy {
 
 ### 15.1 Controller 模式
 
+用 HarnessEngine 时，对话、审批、续流都走唯一入口 `engine.handle(HarnessInput)`（`engine.prompt(...)` 已弃用）。会话一律经引擎取（`getSession` / `getSessionOrNull`），不要直接调 `AgentSessionProvider`：引擎有会话缓存，绕过它会拿到另一个实例，挂起状态对不上。按事件流推送的完整写法见 [README §3.3](../README.md)；用 `HarnessHost` 时审批同样是一次 `host.submit(...)`（host README）。
+
 ```java
 @Controller
-@Path("/api/agent")
+@Mapping("/api/agent")
 public class AgentController {
-
     @Inject
     HarnessEngine engine;
 
-    @Inject
-    AgentSessionProvider sessionProvider;
-
-    /**
-     * 发起对话
-     */
+    /** 发起对话 */
     @Post
     @Mapping("/chat")
-    public String chat(@Body ChatRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
-        ReActResponse resp = engine.prompt(req.getMessage())
-            .session(session)
-            .call();
-
-        if (session.isPending()) {
-            // 任务被 HITL 拦截，返回审批任务信息
-            HITLTask task = HITL.getPendingTask(session);
-            return JSON.toJSONString(Map.of(
-                "status", "pending",
-                "task", task
-            ));
-        }
-
-        return JSON.toJSONString(Map.of(
-            "status", "done",
-            "content", resp.getContent()
-        ));
+    public Map<String, Object> chat(@Body ChatRequest req) throws Throwable {
+        AgentSession session = engine.getSession(req.getSessionId());
+        return reply(session, engine.handle(HarnessInput.of(session, req.getMessage())));
     }
 
     /**
-     * 人工审批 — 批准
+     * 人工审批：approve / reject / skip 一个接口。
+     * 写决策 + 尝试续流合并为一次 handle：本批齐备才返回 TASK（续流），否则返回 HITL。
      */
     @Post
-    @Mapping("/approve")
-    public String approve(@Body ApproveRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
-        HITLTask task = HITL.getPendingTask(session);
+    @Mapping("/decide")
+    public Map<String, Object> decide(@Body DecideRequest req) throws Throwable {
+        AgentSession session = engine.getSessionOrNull(req.getSessionId());   // 审批不新建会话
+        if (session == null) {
+            return Map.of("status", "not_found");
+        }
+        return reply(session, engine.handle(HarnessInput.of(session, null)
+                .hitl(HITLAction.of(req.getAction()), req.getCallUuid())    // 协议字符串 → 枚举，脏值显式报错
+                .hitlOutput(req.getComment())                               // 可选：改写工具返回值
+                .resume(true)));
+    }
 
+    /**
+     * 批准并修正参数 / 总是允许：这两项 HarnessInput 表达不了，先用 HITL 写决策，再只续流。
+     * 续流前必须确认本批没有未决卡，否则会把未决任务一并带走。
+     */
+    @Post
+    @Mapping("/approve-modified")
+    public Map<String, Object> approveModified(@Body ApproveRequest req) throws Throwable {
+        AgentSession session = engine.getSessionOrNull(req.getSessionId());
+        HITLTask task = session == null ? null : HITL.getPendingTaskByCallUuid(session, req.getCallUuid());
         if (task == null) {
-            return "无挂起任务";
+            return Map.of("status", "expired");                            // 卡已失效：不要续流
         }
-
-        // 构建决策
-        HITLDecision decision = HITLDecision.approve(req.isAlwaysAllow());
-        if (req.getComment() != null) {
-            decision.comment(req.getComment());
-        }
+        HITLDecision decision = HITLDecision.approve(req.isAlwaysAllow()); // 总是允许：只记到本会话（§13）
         if (req.getModifiedArgs() != null) {
             decision.modifiedArgs(req.getModifiedArgs());
         }
-
         HITL.submit(session, task, decision);
 
-        // 恢复执行
-        ReActResponse resp = engine.prompt().session(session).call();
-
-        if (session.isPending()) {
-            // 恢复后又被拦截（可能是下一个工具）
-            HITLTask nextTask = HITL.getPendingTask(session);
-            return JSON.toJSONString(Map.of(
-                "status", "pending",
-                "task", nextTask
-            ));
+        if (HitlCard.pendingCount(session) > 0) {
+            return Map.of("status", "pending", "card", HitlCard.next(session));
         }
-
-        return JSON.toJSONString(Map.of(
-            "status", "done",
-            "content", resp.getContent()
-        ));
+        return reply(session, engine.handle(HarnessInput.of(session, null).resume(true)));
     }
 
-    /**
-     * 人工审批 — 拒绝
-     */
-    @Post
-    @Mapping("/reject")
-    public String reject(@Body RejectRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
-        HITLTask task = HITL.getPendingTask(session);
-
-        if (task == null) {
-            return "无挂起任务";
+    private Map<String, Object> reply(AgentSession session, InputOutcome o) throws Throwable {
+        switch (o.getKind()) {
+            case TASK: {
+                ReActResponse resp = o.call();                              // 同步跑完这一轮
+                if (session.isPending()) {                                  // 又被拦截（可能是下一个工具）
+                    return Map.of("status", "pending", "card", HitlCard.next(session));
+                }
+                return Map.of("status", "done", "content", resp.getContent());
+            }
+            case HITL:
+                if (o.isHitlApplied() == Boolean.FALSE) {
+                    return Map.of("status", "expired");                    // 过期卡：切勿续流
+                }
+                return Map.of("status", "pending", "card", HitlCard.next(session));
+            case REPLY:
+                return Map.of("status", "done", "content", o.getCommandOutput());
+            case DEFERRED:
+                return Map.of("status", "queued", "position", o.getBacklogPosition());
+            case REJECTED:                                                  // 含 hitl_pending：有审批卡未决时普通输入被拒
+                return Map.of("status", "rejected", "reason", o.getRejectReason().code());
+            default:
+                return Map.of("status", "ignored");
         }
-
-        HITL.reject(session, task, req.getReason());
-
-        ReActResponse resp = engine.prompt().session(session).call();
-
-        return JSON.toJSONString(Map.of(
-            "status", "done",
-            "content", resp.getContent()
-        ));
-    }
-
-    /**
-     * 人工审批 — 跳过
-     */
-    @Post
-    @Mapping("/skip")
-    public String skip(@Body SkipRequest req) {
-        AgentSession session = sessionProvider.getSession(req.getSessionId(), null, true);
-        HITLTask task = HITL.getPendingTask(session);
-
-        if (task == null) {
-            return "无挂起任务";
-        }
-
-        HITL.skip(session, task, req.getReason());
-
-        ReActResponse resp = engine.prompt().session(session).call();
-
-        if (session.isPending()) {
-            HITLTask nextTask = HITL.getPendingTask(session);
-            return JSON.toJSONString(Map.of(
-                "status", "pending",
-                "task", nextTask
-            ));
-        }
-
-        return JSON.toJSONString(Map.of(
-            "status", "done",
-            "content", resp.getContent()
-        ));
     }
 }
 ```
 
+`HitlCard` 在 `org.noear.solon.ai.harness.hitl`，`HITLAction` / `HITL` / `HITLDecision` / `HITLTask` 在 `org.noear.solon.ai.agent.react.intercept`。审批卡里给前端的 `callUuid` 取自 `HitlCard#getCallId()`（与 `HITLTask#getCallUuid()` 同值），决策时原样带回。
+
 ### 15.2 前端交互流程
 
 ```
-1. POST /api/agent/chat      → { status: "pending", task: { toolName, args, comment } }
-2. 用户在 UI 上查看任务详情
-3. POST /api/agent/approve   → { status: "done", content: "..." }
-   或
-   POST /api/agent/reject    → { status: "done", content: "操作被拒绝..." }
-   或
-   POST /api/agent/skip      → { status: "done", content: "..." }
+1. POST /api/agent/chat               → { status: "pending", card: { callId, toolName, args, ... } }
+2. 用户在 UI 上查看审批卡
+3. POST /api/agent/decide             → action = approve / reject / skip，带回 callId（作 callUuid 参数）
+     → { status: "done", content: "..." }     本批齐备，已续流跑完
+     → { status: "pending", card: {...} }     本批还有未决卡，或续流后又被拦截
+     → { status: "expired" }                  卡已失效（重复提交、会话已变）
+   需要修正参数或「总是允许」时改调 /api/agent/approve-modified
 ```
 
 ---
