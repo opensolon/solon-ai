@@ -65,6 +65,30 @@ class TerminalTalentStateProtectionTest {
     }
 
     @Test
+    void extraDenyReadOnlyDeniesReadAndKeepsWorkspaceAllowed(@TempDir Path tmp) throws Exception {
+        Path teamRoot = Files.createDirectories(tmp.resolve("team")).toAbsolutePath().normalize();
+        Path ws = Files.createDirectories(teamRoot.resolve("alice/p1"));
+        Path hostState = tmp.resolve("home/.soloncode").toAbsolutePath().normalize();
+        TerminalTalent talent = newTalent(ws, tmp.resolve("home"));
+        talent.setSandboxExtraDenyRead(Arrays.asList(teamRoot.toString(), hostState + "/", teamRoot.toString()));
+
+        Method m = TerminalTalent.class.getDeclaredMethod("buildDynamicFilesystemConfig", Path.class);
+        m.setAccessible(true);
+        FilesystemConfig fs = (FilesystemConfig) m.invoke(talent, (Path) null);
+        assertEquals(Arrays.asList(teamRoot.toString(), hostState.toString()), fs.getDenyRead());
+        // 只禁读：不进写黑名单；工作区（位于团队根内）仍在读写白名单中，作为拒读内的放行例外
+        assertFalse(fs.getDenyWrite() != null && fs.getDenyWrite().contains(teamRoot.toString()));
+        assertTrue(fs.getAllowRead().contains(ws.toString()), String.valueOf(fs.getAllowRead()));
+        assertTrue(fs.getAllowWrite().contains(ws.toString()), String.valueOf(fs.getAllowWrite()));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> talent.setSandboxExtraDenyRead(Arrays.asList("relative/dir")));
+        talent.setSandboxExtraDenyRead(null);
+        FilesystemConfig cleared = (FilesystemConfig) m.invoke(talent, (Path) null);
+        assertTrue(cleared.getDenyRead() == null || !cleared.getDenyRead().contains(teamRoot.toString()));
+    }
+
+    @Test
     void execReturnsStructuredResultAndTimesOut(@TempDir Path tmp) throws Exception {
         if (ShellCommandFactory.detect().isWindowsShell()) {
             return;

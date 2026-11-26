@@ -89,6 +89,8 @@ public class TerminalTalent extends AbsTalent {
     //关闭后仅依赖 Java 层自保护 + 系统提示词软约束，可减少误伤（如构建工具被拦截）。
     //仅在 sandboxEnabled=true 时有意义；默认 false（轻量模式）
     private boolean sandboxSystemRestrict = true;
+    /** OS 沙盒追加拒读的绝对路径（见 setSandboxExtraDenyRead） */
+    private volatile List<String> sandboxExtraDenyRead = Collections.emptyList();
     /** 是否由本实例自行初始化进程级 OS 沙盒（见 setSandboxSelfBootstrap） */
     private volatile boolean sandboxSelfBootstrap = true;
     /**
@@ -313,6 +315,40 @@ public class TerminalTalent extends AbsTalent {
     }
 
     /**
+     * 追加 OS 沙盒的拒读路径（绝对路径，如宿主配置目录、其他用户的数据根目录）。
+     *
+     * <p>只作用于启用 OS 沙盒（sandboxSystemRestrict）时的 bash 命令：这些目录整体不可读，
+     * 但其中被工作区、本轮工作根或挂载放行的子目录仍按原规则可读写（拒读范围内的放行例外）。
+     * 与 {@link #setProtectedStatePaths(Collection)} 不同，这里不禁止写入，也不影响文件工具
+     * （文件工具本就只能访问工作区与挂载）。</p>
+     *
+     * @param absolutePaths 绝对路径；null 或空表示清除
+     */
+    public void setSandboxExtraDenyRead(Collection<String> absolutePaths) {
+        List<String> list = new ArrayList<>();
+        if (absolutePaths != null) {
+            for (String p : absolutePaths) {
+                if (p == null || p.trim().isEmpty()) {
+                    continue;
+                }
+                Path path = Paths.get(p.trim());
+                if (!path.isAbsolute()) {
+                    throw new IllegalArgumentException("Sandbox deny-read path must be absolute: " + p);
+                }
+                String normalized = path.normalize().toString();
+                if (!list.contains(normalized)) {
+                    list.add(normalized);
+                }
+            }
+        }
+        this.sandboxExtraDenyRead = Collections.unmodifiableList(list);
+    }
+
+    public List<String> getSandboxExtraDenyRead() {
+        return sandboxExtraDenyRead;
+    }
+
+    /**
      * 文件工具层（read/write/ls 等）的用户级路径策略。
      *
      * <p>恒返回 null：文件系统的可访问范围只由挂载生成（唯一正向来源），
@@ -447,6 +483,14 @@ public class TerminalTalent extends AbsTalent {
                         denyRead.add(p);
                     }
                 }
+            }
+        }
+
+        // 2.3) 宿主追加的拒读路径（如宿主配置目录、其他用户的数据根）：整体不可读，
+        //      其中被上面工作区/本轮工作根、下面挂载放行的子目录按「拒读内放行」仍可访问。
+        for (String p : sandboxExtraDenyRead) {
+            if (!denyRead.contains(p)) {
+                denyRead.add(p);
             }
         }
 
