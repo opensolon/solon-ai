@@ -9,6 +9,7 @@ import org.noear.solon.ai.agent.session.InMemoryAgentSession;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,8 +64,9 @@ class TaskValueObjectsTest {
         ((TaskTalent.MultiTaskOp) op).index = 3;
 
         AgentEvent real = stubEvent(session);
-        TaskWrapEvent wrapped = new TaskWrapEvent(null, "task-1", (TaskTalent.MultiTaskOp) op, true, real);
+        TaskWrapEvent wrapped = new TaskWrapEvent(null, "call-1", "task-1", (TaskTalent.MultiTaskOp) op, true, real);
 
+        assertEquals("call-1", wrapped.getParentCallId());
         assertEquals("task-1", wrapped.getTaskId());
         assertEquals(3, wrapped.getTaskIndex());
         assertEquals("worker", wrapped.getTaskAgentName());
@@ -86,8 +88,9 @@ class TaskValueObjectsTest {
         op.description = "single";
 
         AgentEvent real = stubEvent(InMemoryAgentSession.of());
-        TaskWrapEvent wrapped = new TaskWrapEvent(null, "task-2", null, false, real);
+        TaskWrapEvent wrapped = new TaskWrapEvent(null, null, "task-2", null, false, real);
 
+        assertNull(wrapped.getParentCallId(), "取不到父调用 id（文本模式、测试直调）时为 null");
         assertFalse(wrapped.isMultitask());
         assertEquals("task-2", wrapped.getTaskId());
     }

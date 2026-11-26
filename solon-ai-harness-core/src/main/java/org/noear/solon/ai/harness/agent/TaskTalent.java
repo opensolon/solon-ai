@@ -141,11 +141,27 @@ public class TaskTalent extends AbsTalent {
 
     /**
      * task / multitask 工具结果（ToolMessage metadata）上的子任务索引键，供宿主按 taskId 找回子会话（如过程回放）。
-     * 值为 List&lt;Map&gt;：taskId / index / agentName / description。不发给模型。
+     * 值为 List&lt;Map&gt;：taskId / index / agentName / description / status / failureKind。不发给模型。
+     *
+     * <p>status / failureKind 是<b>这一次调用</b>的结果（取值同 {@link #META_SUBTASK}，failureKind 只在失败时有），
+     * 不随之后的续跑改变；子会话 {@link #META_SUBTASK} 里的只记最近一次。旧数据没有这两项。</p>
      *
      * @since 4.2
      */
     public static final String META_SUBTASKS = "_subtasks";
+
+    /**
+     * 子会话消息（子 trace 工作记忆里的 ChatMessage metadata）上的调用戳：该消息产生于哪次父 task / multitask 调用，
+     * 值为父工具调用 id（同 {@link TaskWrapEvent#getParentCallId()}）。供宿主按调用切分子过程（同一子任务续跑多次时，
+     * 每次调用只回放自己那段）。
+     *
+     * <p>只在续跑开始前打：用上一次的 parentCallId 给上一次的消息补戳。因此<b>最近一次调用</b>的消息没有戳，
+     * 它们就是最后一条有戳消息之后的部分，归子会话 {@link #META_SUBTASK} 的 parentCallId。
+     * 戳随消息对象走，上下文压缩复制消息时一并保留。取不到调用 id（文本模式、测试直调）时不打。</p>
+     *
+     * @since 4.2
+     */
+    public static final String META_PARENT_CALL_ID = "_parentCallId";
 
     /**
      * 父 trace extras 上「执行中的 task / multitask 调用 → 本次委派的子任务索引」的键，供宿主在工具返回前（运行中刷新、
@@ -519,6 +535,15 @@ public class TaskTalent extends AbsTalent {
         item.put("index", plan.op.index);
         item.put("agentName", plan.op.agent_name);
         item.put("description", plan.op.description);
+        // 本次调用的结果（委派前登记运行中索引时还没有）
+        String status = plan.endStatus;
+        if (status != null) {
+            item.put("status", status);
+            String failureKind = plan.endFailureKind;
+            if (failureKind != null) {
+                item.put("failureKind", failureKind);
+            }
+        }
         return item;
     }
 
@@ -589,6 +614,25 @@ public class TaskTalent extends AbsTalent {
         final AgentSession resumeSession;
         /** 子代理是否已在子会话里跑起来（worker 线程写、调用线程读） */
         volatile boolean started;
+        /** 本次调用的结果（写进 {@link #META_SUBTASKS} 索引项；null = 还没结束） */
+        volatile String endStatus;
+        volatile String endFailureKind;
+        /** 结果已按工具返回给模型的口径定下（放弃等待时），之后 worker 迟到的结论不再覆盖 */
+        private boolean endFrozen;
+
+        /**
+         * 记下本次调用的结果。
+         *
+         * @param freeze 放弃等待时由聚合方调用：以返回给模型的结果为准，冻结后不再改
+         */
+        synchronized void end(String status, @Nullable String failureKind, boolean freeze) {
+            if (endFrozen) {
+                return;
+            }
+            this.endStatus = status;
+            this.endFailureKind = failureKind;
+            this.endFrozen = freeze;
+        }
 
         TaskPlan(MultiTaskOp op, ReActAgent.Builder agentBuilder, String invalidReason) {
             this(op, agentBuilder, invalidReason, null, null, null);
@@ -882,6 +926,8 @@ public class TaskTalent extends AbsTalent {
         }
 
         if (plan != null && plan.started) {
+            // 返回给模型的是失败：索引项的结果与之一致（worker 之后跑完也不改）
+            plan.end(STATUS_FAILURE, abortedKind, true);
             return startedResp(ctx, plan.op, plan.taskId, false, abortedNote, abortedKind, true);
         }
 
@@ -1053,6 +1099,9 @@ public class TaskTalent extends AbsTalent {
             final int maxTurns;
 
             if (resume) {
+                // 封口：上一次调用的消息还没打戳，趁 markRunning 改写 parentCallId 之前按它补上，
+                // 否则会被算到本次调用头上（随 markRunning 的快照一起落盘）
+                sealRun(prior, asString(subtaskMeta(session).get("parentCallId")));
                 // 有可续的进度已在 openForResume 校验过
                 prepareResume(prior, session, plan.op.prompt);
                 // 回合计数不随续跑归零：在已用回合数上再给一份完整预算。
@@ -1106,7 +1155,7 @@ public class TaskTalent extends AbsTalent {
                                 return;
                             }
                             // multitask 并发时串行化 sink.next，避免非线程安全的 FluxSink 丢事件/乱序
-                            emitTaskChunk(sink, new TaskWrapEvent(ctx.parentTrace, taskId, plan.op,
+                            emitTaskChunk(sink, new TaskWrapEvent(ctx.parentTrace, ctx.callId, taskId, plan.op,
                                     isMultitask, chunk));
                         })
                         .blockLast();
@@ -1127,6 +1176,7 @@ public class TaskTalent extends AbsTalent {
             if (failureKind != null) {
                 LOG.warn("任务失败[{}/{} - {}]: task_id={}, kind={}", plan.op.index, ctx.total, plan.op.agent_name,
                         taskId, failureKind);
+                plan.end(STATUS_FAILURE, failureKind, false);
                 markEnded(session, STATUS_FAILURE, failureKind);
                 return startedResp(ctx, plan.op, taskId, false, "ERROR: " + agentEnd.getText(), failureKind, isMultitask);
             }
@@ -1139,6 +1189,7 @@ public class TaskTalent extends AbsTalent {
             // 超长结果落盘到本轮会话工作目录：模型的文件工具按 __cwd 解析相对路径
             // 先拼好结果再计数：拼结果时抛异常会走失败分支，不会误计
             String resp = startedResp(ctx, plan.op, taskId, true, agentEnd.getText(), null, isMultitask);
+            plan.end(STATUS_SUCCESS, null, false);
             markEnded(session, STATUS_SUCCESS, null);
             ctx.succeeded.incrementAndGet();
             return resp;
@@ -1156,10 +1207,12 @@ public class TaskTalent extends AbsTalent {
                 // 父流已取消时与 aggregate 放弃等待的那条同一口径（否则同一次取消会因时序报成 unknown）
                 String kind = isCancelled(streamSinkOf(ctx.parentTrace)) ? FAILURE_CANCELLED
                         : (type == null ? "error" : type.value());
+                plan.end(STATUS_FAILURE, kind, false);
                 markEnded(sub, STATUS_FAILURE, kind);
                 return startedResp(ctx, plan.op, taskId, false, reason, kind, isMultitask);
             }
 
+            plan.end(STATUS_FAILURE, type == null ? "error" : type.value(), false);
             return formatTaskResp(plan.op, false, reason, isMultitask);
         } finally {
             // 必须清理：池线程会被复用，残留标记会误伤后续任务
@@ -1216,6 +1269,31 @@ public class TaskTalent extends AbsTalent {
             trace.getWorkingMemory().addMessage(message);
             sub.addMessage(message);
         }
+    }
+
+    /**
+     * 封口：从尾部往前，给还没打 {@link #META_PARENT_CALL_ID} 的消息补上 callId，碰到已打戳的就停（之前的都已封过）。
+     *
+     * <p>只在续跑开始前调用一次（callId 取上一次调用的 parentCallId）：任何时刻只有最近一次调用的消息没戳，
+     * 夹在已打戳消息之间、没戳的只有压缩摘要。</p>
+     */
+    static void sealRun(@Nullable ReActTrace trace, @Nullable String callId) {
+        if (trace == null || callId == null || trace.getWorkingMemory() == null) {
+            return;
+        }
+
+        List<ChatMessage> messages = trace.getWorkingMemory().getMessages();
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            ChatMessage message = messages.get(i);
+            if (message.hasMetadata(META_PARENT_CALL_ID)) {
+                break;
+            }
+            message.addMetadata(META_PARENT_CALL_ID, callId);
+        }
+    }
+
+    private static String asString(Object v) {
+        return v instanceof String ? (String) v : null;
     }
 
     /** 登记子任务信息并落一次快照（进程重启后仍可校验归属；running 留到结束前，崩溃后宿主按「已中断」展示） */

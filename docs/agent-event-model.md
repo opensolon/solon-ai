@@ -312,7 +312,8 @@ Harness 的扩展点出现在 `task` / `multitask` 调度子代理时：为了�
 | `getRealEvent()` | 被包装的子代理原始 `AgentEvent`；具体事件类型及载荷从这里读取 |
 | `getParentRunId()` | 调度该任务的父 ReAct 运行 `runId` |
 | `getRunId()` | 子代理事件的 `runId`，不是父运行 ID |
-| `getTaskId()` | 本次子任务的唯一标识 |
+| `getTaskId()` | 子任务标识（即子会话 ID；带 `task_id` 续跑时沿用原值） |
+| `getParentCallId()` | 发起本次委派的父 `task` / `multitask` 工具调用 id（等于父流工具事件的 `callId`）；取不到时为 `null` |
 | `getTaskIndex()` | `multitask` 中的任务序号；`task` 路径为 `1` |
 | `getTaskAgentName()` | 任务选择的子代理名称 |
 | `getTaskDescription()` | 任务摘要 |
@@ -358,10 +359,11 @@ engine.prompt("并行检查这些模块").stream()
 - `engine.prompt(...).stream()` 返回的仍是父代理的 `Flux<AgentEvent>`，不是 `Flux<TaskWrapEvent>`。直接 `.ofType(RunEndEvent.class)` 只会匹配未包装的父终态，不会误取子代理终态。
 - 只有父运行采用 `stream()`，且 `task` / `multitask` 实际启动子代理时，子事件才会进入父流。使用 `engine.prompt(...).call()` 时没有面向调用方的子事件流。
 - 子代理使用独立的 Session 和 `runId`。应使用 `getParentRunId()` 关联父运行，并使用 `getTaskId()` 区分同一父运行中的子任务；不要依赖 `agentName` 或最近出现的父工具事件推断归属。
+- 同一子任务可以被模型带 `task_id` 续跑多次（同一轮或跨轮），`taskId` 不变，子代理的 `runId` 也不变。按「每次调用一组」展示时，分组键用 `parentCallId + taskId`（一次 `multitask` 的多个子任务共用 `parentCallId`）；`parentCallId` 为 `null` 时退回按 `taskId` 分组。事后回放同样按调用切分：子会话消息带调用戳 `TaskTalent.META_PARENT_CALL_ID`，父工具结果的 `TaskTalent.META_SUBTASKS` 索引项带这次调用自己的 `status` / `failureKind`。
 - 子代理的 `RunEndEvent` 会被包装，它只表示该子任务结束。Harness 的最终响应仍从未包装的父 `RunEndEvent` 获取。
 - 子代理未处理异常不会作为单独的包装错误事件透传。此时该任务可能没有包装的子 `RunEndEvent`；`TaskTalent` 会把失败转换为 `task` / `multitask` 的工具结果，父 ReAct 是否继续由后续流程决定。
 - 父流取消后不再转发子事件，也不补造子代理或父代理的结束事件。
-- `TaskWrapEvent` 和 `getRealEvent()` 都是运行态对象。跨进程传输时，应投影 `parentRunId`、`taskId`、任务信息、原始事件类型和所需载荷，而不是直接序列化整个对象。
+- `TaskWrapEvent` 和 `getRealEvent()` 都是运行态对象。跨进程传输时，应投影 `parentRunId`、`parentCallId`、`taskId`、任务信息、原始事件类型和所需载荷，而不是直接序列化整个对象。
 
 ## 五、ReAct 生命周期
 
