@@ -237,7 +237,7 @@ public class GoalExtension extends AbsHarnessExtension {
      * 不回调本钩子，goal 状态不变（{@link #update} 内部停流就属于这种）。</p>
      *
      * <p>不判开关（停用前建的 goal 也要随用户停止一起停）；只有 PURSUING 会被暂停，
-     * PAUSED / BLOCKED / 终态与没有 goal 时什么都不做；异常只记日志。</p>
+     * PAUSED / BLOCKED / 终态与没有 goal 时什么都不做；异常由引擎逐个扩展隔离并记日志。</p>
      *
      * @since 4.2.0
      */
@@ -247,12 +247,8 @@ public class GoalExtension extends AbsHarnessExtension {
             return;
         }
 
-        try {
-            if (pause(session)) {
-                LOG.info("[Goal] Goal of session '{}' paused by user interrupt", session.getSessionId());
-            }
-        } catch (Throwable e) {
-            LOG.warn("[Goal] Pause on interrupt failed for session '{}': {}", session.getSessionId(), e.toString());
+        if (pause(session)) {
+            LOG.info("[Goal] Goal of session '{}' paused by user interrupt", session.getSessionId());
         }
     }
 
