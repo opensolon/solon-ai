@@ -69,13 +69,18 @@ public class AgentDefaultTest {
         Assertions.assertTrue(explore.getMetadata().getTools().contains("lsp"));
         Assertions.assertTrue(plan.getMetadata().getTools().contains("lsp"));
 
-        //explore / plan 的描述写着「只读：不修改文件，也不执行命令」，工具集必须与之相符
+        //explore 可执行只读命令（查 git 历史等），只读靠提示词约束
+        Assertions.assertTrue(explore.getMetadata().getTools().contains("bash"));
+        Assertions.assertTrue(explore.getSystemPrompt().contains("shell 只能执行只读命令"));
+
+        //explore / plan 的描述写着「只读」，不能有文件编辑工具；plan 也不执行命令
         for (AgentDefinition readOnly : Arrays.asList(explore, plan)) {
-            for (String tool : Arrays.asList("bash", "edit", "write", "*", "**")) {
+            for (String tool : Arrays.asList("edit", "write", "*", "**")) {
                 Assertions.assertFalse(readOnly.getMetadata().getTools().contains(tool),
                         readOnly.getMetadata().getName() + " 不应声明 " + tool);
             }
         }
+        Assertions.assertFalse(plan.getMetadata().getTools().contains("bash"));
     }
 
     /**
