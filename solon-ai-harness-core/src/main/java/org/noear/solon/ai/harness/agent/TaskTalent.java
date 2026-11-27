@@ -1218,6 +1218,24 @@ public class TaskTalent extends AbsTalent {
                 ? parentTrace.getOptions().getStreamSink() : null;
     }
 
+    /**
+     * 把子代理事件转给父流：先清掉本线程的中断标志，推完还回去。
+     *
+     * <p>父流是 Flux.create 建的，多线程推事件时由正在推的线程把排队的事件一起推下去，
+     * 子任务线程因此可能替父代理写宿主的网络连接；带着停止留下的中断标志写（NIO 通道）会抛
+     * ClosedByInterruptException，连接被直接关掉，宿主漏收本轮余下的事件。</p>
+     */
+    static void forward(FluxSink<AgentEvent> sink, AgentEvent event) {
+        final boolean interrupted = Thread.interrupted();
+        try {
+            sink.next(event);
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     // ========== 停止与收尾 ==========
 
     /**
@@ -1618,7 +1636,7 @@ public class TaskTalent extends AbsTalent {
                                 return;
                             }
                             // 后台任务与父代理会并发推事件：父流是 Flux.create 建的，它的 sink 已对 next 串行化
-                            sink.next(new TaskWrapEvent(ctx.parentTrace, ctx.callId, taskId, plan.op, ctx.background, chunk));
+                            forward(sink, new TaskWrapEvent(ctx.parentTrace, ctx.callId, taskId, plan.op, ctx.background, chunk));
                             if (chunk instanceof RunEndEvent) {
                                 endForwarded.set(true);
                             }
@@ -1750,7 +1768,7 @@ public class TaskTalent extends AbsTalent {
         try {
             RunEndEvent end = new RunEndEvent(trace, new ReActResponse(sub, trace, ChatMessage.ofAssistant(note)));
             markStopKind(end, ctx, plan);
-            sink.next(new TaskWrapEvent(ctx.parentTrace, ctx.callId, plan.taskId, plan.op, ctx.background, end));
+            forward(sink, new TaskWrapEvent(ctx.parentTrace, ctx.callId, plan.taskId, plan.op, ctx.background, end));
         } catch (Throwable e) {
             LOG.warn("子任务停止事件转发失败: task_id={}, 原因: {}", plan.taskId, e.getMessage());
         }
