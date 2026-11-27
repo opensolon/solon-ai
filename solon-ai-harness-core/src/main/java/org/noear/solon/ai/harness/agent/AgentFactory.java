@@ -241,7 +241,10 @@ public class AgentFactory {
 
 
             case "memory": {
-                builder.defaultTalentAdd(engine.getMemoryTalent());
+                //未配置记忆提供者时为 null（见 HarnessEngine 构建），跳过而不是挂空
+                if (engine.getMemoryTalent() != null) {
+                    builder.defaultTalentAdd(engine.getMemoryTalent());
+                }
                 break;
             }
             case "code": {

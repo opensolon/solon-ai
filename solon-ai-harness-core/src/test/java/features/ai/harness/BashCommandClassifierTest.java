@@ -146,9 +146,189 @@ public class BashCommandClassifierTest {
     }
 
     @Test
-    public void testRedirectStderrOnly_Allow() {
-        // 2> 是 stderr 重定向，不算写文件
-        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("cat file 2>err.txt"));
+    public void testRedirectStderrToDevNullOrDup_Allow() {
+        // 丢弃或合并输出流不写文件
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("cat file 2>/dev/null"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("ls missing 2>&1 | head -5"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("cat file >/dev/null"));
+    }
+
+    @Test
+    public void testRedirectStderrToFile_Ask() {
+        // 2>file 同样会创建或截断文件（如 ls x 2>src/Main.java 会清空源文件），不算只读
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("cat file 2>err.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls &>out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls >&out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls >|out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("cat <>file"));
+    }
+
+    // ========== 命令串联：每一段都必须是只读 ==========
+
+    @Test
+    public void testChainedWrite_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls && rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls; rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls || rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls & rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls\nrm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("(rm -rf src)"));
+    }
+
+    @Test
+    public void testChainedRead_Allow() {
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("ls; pwd"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("ls && git status"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("find . -type f | wc -l"));
+    }
+
+    @Test
+    public void testQuotedOperators_Allow() {
+        // 引号内的 | ; > 是普通字符，不是管道、分隔符或重定向
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("grep 'a|b' file"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("grep -n \"->\" file"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("echo \"a;b\""));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sed 's|a|b|g' file"));
+    }
+
+    @Test
+    public void testUnterminatedQuote_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("echo 'abc"));
+    }
+
+    // ========== 命令替换与进程替换 ==========
+
+    @Test
+    public void testSubstitution_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("echo $(rm -rf src)"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("echo `rm -rf src`"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("echo \"$(rm -rf src)\""));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("cat <(rm -rf src)"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ls >(rm -rf src)"));
+    }
+
+    @Test
+    public void testSingleQuotedSubstitution_Allow() {
+        // 单引号内不展开
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("echo '$(rm -rf src)'"));
+    }
+
+    // ========== 白名单命令自带的写文件或执行能力 ==========
+
+    @Test
+    public void testFindActions_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -name '*.tmp' -delete"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -name x -exec rm {} \\;"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -execdir rm {} +"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -ok rm {} \\;"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -fprint out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("find . -fls out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("find . -name '*.java' -print"));
+    }
+
+    @Test
+    public void testSearchToolExec_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("fd -e tmp -x rm"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("fd -e tmp --exec rm"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("rg --pre ./run.sh x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("rg --pre=./run.sh x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("ack --pager=sh x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("bat --pager 'sh -c id' f"));
+    }
+
+    @Test
+    public void testAwkWriteOrExec_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("awk 'BEGIN{system(\"rm -rf src\")}'"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("awk '{print > \"out.txt\"}' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("awk '{print | \"sh\"}' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("awk -i inplace '{print}' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("awk -f prog.awk f"));
+    }
+
+    @Test
+    public void testSedWriteOrExec_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed -ni 's/a/b/' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed -Ei 's/a/b/' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed 's/a/b/w out.txt' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed 's/a/b/e' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed -n 'w out.txt' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed '1e rm -rf src' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed -e p -e 'w out.txt' f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sed -f script.sed f"));
+    }
+
+    @Test
+    public void testSedReadScripts_Allow() {
+        // 正则与替换文本里的 w/e 不是命令
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sed -e 's/x/y/' -e 's/w/e/' f"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sed -n '/error/p' f"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sed -n '1,10p;20q' f"));
+    }
+
+    @Test
+    public void testTextToolOutputFile_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sort -o out.txt f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sort -ro out.txt f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sort --output=out.txt f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("sort --compress-program=sh f"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("uniq in.txt out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("tree -o out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("yq -i '.a = 1' f.yml"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("xmllint --output out.xml f.xml"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("file -C -m magic"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("less -o log.txt f"));
+    }
+
+    @Test
+    public void testTextToolRead_Allow() {
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sort -k2 -t, f"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("sort -u f | uniq -c"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("uniq -c f"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("tree -L 2"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("yq '.a' f.yml"));
+    }
+
+    @Test
+    public void testSystemInfoSideEffects_Ask() {
+        // env 带命令时会执行它
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("env rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("env FOO=1 rm -rf src"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("date -s '2020-01-01'"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("hostname newname"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("env | grep PATH"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("date +%Y-%m-%d"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("hostname"));
+    }
+
+    @Test
+    public void testGitSubcommandWrites_Ask() {
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git branch newbranch"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git branch -m old new"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git branch -f main HEAD~1"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git branch --set-upstream-to=origin/main"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git tag v1.0"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git tag -a v1.0 -m x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git tag -d v1.0"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git remote add up https://x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git remote remove up"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git remote set-url origin https://x"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git diff --output=out.txt"));
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git log -p --output out.txt"));
+    }
+
+    @Test
+    public void testGitSubcommandReads_Allow() {
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git branch --list 'feat*'"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git branch -vv"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git branch --show-current"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git tag"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git tag -l 'v*'"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git remote -v"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git remote show origin"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git remote get-url origin"));
+        Assertions.assertEquals(PermissionBehavior.ALLOW, classifier.classify("git --no-pager log -n 3"));
+        // git -c 可改 pager、外部 diff 等配置去执行任意程序
+        Assertions.assertEquals(PermissionBehavior.ASK, classifier.classify("git -c core.pager=sh log"));
     }
 
     @Test
@@ -176,6 +356,8 @@ public class BashCommandClassifierTest {
         Assertions.assertTrue(classifier.isIncompleteCommand("cat &&"));
         Assertions.assertFalse(classifier.isIncompleteCommand("ls -la"));
         Assertions.assertFalse(classifier.isIncompleteCommand(null));
+        // 转义的分号是 find -exec 的结束符，不是命令分隔
+        Assertions.assertFalse(classifier.isIncompleteCommand("find . -name x -exec rm {} \\;"));
     }
 
     // ========== isGitWriteCommand ==========

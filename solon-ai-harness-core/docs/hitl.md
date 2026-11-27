@@ -503,20 +503,26 @@ HITLInterceptor interceptor = new HITLInterceptor()
 
 ### 8.2 安全检测
 
+只读判定按 shell 语法切分（识别单双引号、`$'...'` 与反斜杠转义），判不准时一律按「非只读」处理。
+
 | 检测项 | 说明 | 示例 |
 |--------|------|------|
-| 不完整命令 | 尾部有 `\|`, `&&`, `\|\|`, `;` | `cat file \|` → DENY |
-| `sed -i` 原地修改 | 检测 `-i` / `--in-place` 标志 | `sed -i 's/a/b/' file` → ASK |
-| 输出重定向 `>` | 逐字符检测，排除 `2>` stderr | `cat file > out.txt` → ASK |
-| `git branch -d/-D` | 检测删除分支标志 | `git branch -D feature` → ASK |
-| 管道分段检查 | 所有段都必须是只读命令 | `cat file \| grep x` → ALLOW |
+| 不完整命令 | 尾部有 `\|`, `&&`, `\|\|`, `;`（转义的 `\;` 不算） | `cat file \|` → DENY |
+| 串联分段检查 | 管道、`;`、`&&`、`\|\|`、`&`、换行切出的每一段都必须只读；引号内的这些符号是普通字符 | `ls && rm -rf src` → ASK；`grep 'a\|b' f` → ALLOW |
+| 命令替换与子 shell | `$(...)`、反引号（双引号内同样展开）、`<(...)`、`>(...)`、`( ... )`、here-doc 不做静态判定 | `echo $(rm x)` → ASK |
+| 输出重定向 | `>`、`>>`、`>\|`、`&>`、`>&file`、`2>file` 都算写文件；只有目标为 `/dev/null`（及 `/dev/stdout`、`/dev/stderr`）或描述符复制（`2>&1`）不算；`<>` 读写打开不算只读 | `ls 2>err.txt` → ASK；`ls 2>&1 \| head` → ALLOW |
+| 白名单命令自带的写/执行能力 | `find -delete/-exec/-execdir/-ok/-okdir/-fprint*/-fls`、`fd -x/--exec`、`rg --pre`、`ag/ack/bat --pager`、`less -o`、`tree -o`、`file -C`、`xmllint --output`、`yq -i`、`sort -o/--compress-program`、`uniq IN OUT` | `find . -delete` → ASK |
+| `sed` | `-i`（含 `-ni` 等组合）、`-f` 脚本文件、`w`/`W`/`e` 命令、`s` 的 `w`/`e` 标志 | `sed 's/a/b/w out' f` → ASK |
+| `awk` | `-f`/`-i`/`-l`/`-E` 等外部程序或扩展、程序内 `system`、`>`、`\|` | `awk 'BEGIN{system("rm x")}'` → ASK |
+| 系统信息命令 | `env` 带命令、`date -s`/位置参数、`hostname NAME`/`-F` | `env rm -rf src` → ASK |
+| git 子命令 | 只放行 `--no-pager` 全局选项（`-c`、`-C` 等不放行）；`git branch/tag` 只认列出模式，带名字或写选项（`-d/-m/-f/-a` 等）即非只读；`git remote` 只认 `-v`/`show`/`get-url`；`log/show/diff/shortlog` 拒绝 `--output`、`--ext-diff` | `git branch new` → ASK；`git branch --list 'f*'` → ALLOW |
 
 ### 8.3 分类结果
 
 | 结果 | 条件 |
 |------|------|
 | `DENY` | 空命令或不完整命令 |
-| `ALLOW` | 只读命令（含管道，所有段都是只读） |
+| `ALLOW` | 只读命令（串联的所有段都是只读） |
 | `ASK` | 其他所有命令 |
 
 ### 8.4 直接使用

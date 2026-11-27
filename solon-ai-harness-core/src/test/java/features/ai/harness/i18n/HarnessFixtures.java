@@ -106,7 +106,10 @@ public final class HarnessFixtures {
     public static String renderSystemPrompt(ReActAgent agent, Locale locale) throws Exception {
         AgentSystemPrompt<ReActTrace> template = (AgentSystemPrompt<ReActTrace>)
                 get(agent.getConfig().getDefaultOptions(), "systemPrompt");
-        return template.getSystemPrompt(trace(locale, false));
+        ReActTrace trace = trace(locale, false);
+        //没有正文的代理（如 general）走 ReAct 默认模板，它要读代理配置（风格等）；自定义正文的模板不读，输出不变
+        set(trace, "config", agent.getConfig());
+        return template.getSystemPrompt(trace);
     }
 
     /**
