@@ -122,8 +122,8 @@ public enum ToolName {
         runtime("websearch", "websearch");
         runtime("codesearch", "codesearch");
         runtime("memory", "memory_search", "memory_recall", "memory_extract", "memory_prune", "memory_consolidate");
-        runtime("task", "task", "multitask");
-        runtime("subagent", "task", "multitask");
+        runtime("task", "task", "task_start", "task_wait", "task_stop");
+        runtime("subagent", "task", "task_start", "task_wait", "task_stop");
         runtime("generate", "generate");
         runtime("mcp", "search_tools", "list_server_tools", "get_tool_detail", "call_tool");
         runtime("openapi", "search_apis", "get_api_detail", "call_api");

@@ -49,7 +49,7 @@ public class TerminalTalentCommandSessionTest {
                             50,
                             2_000,
                             10_000,
-                            workDir.toString(), null).getContent();
+                            workDir.toString(), null, null).getContent();
             assertTrue(first.contains("Process running with session ID"), first);
             String sessionId = extractSessionId(first);
 
@@ -70,7 +70,7 @@ public class TerminalTalentCommandSessionTest {
         try {
             TerminalTalent skill = new TerminalTalent(new MountManager(workDir.toString()));
             String first = skill.bashStart(
-                    "read line; echo got:$line", null, 50, 2_000, 10_000, workDir.toString(), null).getContent();
+                    "read line; echo got:$line", null, 50, 2_000, 10_000, workDir.toString(), null, null).getContent();
             assertTrue(first.contains("Process running with session ID"), first);
             String sessionId = extractSessionId(first);
 

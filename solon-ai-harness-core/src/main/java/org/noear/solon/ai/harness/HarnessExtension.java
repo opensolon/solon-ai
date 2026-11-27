@@ -219,7 +219,7 @@ public interface HarnessExtension extends AiSwitchable {
      * {@link HarnessInput} 的模型/代理/技能等选择项有 setter，可在本钩子内补默认值
      * （这是 {@code void} 签名下唯一能改变后续行为的方式）。</p>
      *
-     * <p><b>不对称点</b>：{@code task}/{@code multitask} 的委派任务不走 {@code handle}
+     * <p><b>不对称点</b>：{@code task}/{@code task_start} 的委派任务不走 {@code handle}
      * （直接调子代理的 {@code prompt}），因此<b>不会</b>触发本钩子；但它们的请求装配仍会触发
      * {@link #onRequestAssemble}（{@code isDelegated = true}）。若需要「所有执行都埋点」，
      * 应同时钩 {@code onRequestAssemble}。</p>
@@ -240,7 +240,7 @@ public interface HarnessExtension extends AiSwitchable {
      * <p><b>调用点</b>：{@code ReActRequest.options(...)} 内，覆盖<b>全部四类请求</b>——
      * 用户新输入（主代理或面板/提及选中的子代理，含 goal 等程序发起的 {@code engine.handle}）、
      * HITL 恢复与 {@code /continue} 等续流、命令触发的任务（此三者 {@code isDelegated = false}）、
-     * {@code task}/{@code multitask} 委派的子代理任务（{@code isDelegated = true}）。</p>
+     * {@code task}/{@code task_start} 委派的子代理任务（{@code isDelegated = true}）。</p>
      *
      * <p><b>埋点边界</b>：只有经 {@code HarnessEngine.handle(...)} / {@code HarnessEngine.prompt(...)}
      * 发起的请求会被埋点。宿主拿 {@code getMainAgent()} / {@code getAgentBuilder(...).build()}
@@ -270,7 +270,7 @@ public interface HarnessExtension extends AiSwitchable {
      *
      * @param engine        引擎
      * @param agentName     生效代理名（顶层请求取实际目标代理，可能是子代理）
-     * @param isDelegated   是否委派执行的子代理任务（{@code task}/{@code multitask}）；
+     * @param isDelegated   是否委派执行的子代理任务（{@code task}/{@code task_start}）；
      *                      {@code false} 表示顶层请求（含面板选中的子代理）
      * @param optionsAmend  本次请求的选项修正器
      * @since 4.2.0

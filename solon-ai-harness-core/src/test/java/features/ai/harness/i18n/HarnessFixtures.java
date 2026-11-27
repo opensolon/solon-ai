@@ -26,14 +26,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -183,31 +179,23 @@ public final class HarnessFixtures {
 
     // ---------------- TaskTalent ----------------
 
-    public static TaskTalent.MultiTaskOp taskOp(String agent, int index) {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+    /** n 只用来区分各任务的 description / prompt */
+    public static TaskTalent.SingleTaskOp taskOp(String agent, int n) {
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = agent;
-        op.description = "d" + index;
-        op.prompt = "p" + index;
-        op.index = index;
+        op.description = "d" + n;
+        op.prompt = "p" + n;
         return op;
     }
 
     /**
-     * 构造 TaskTalent 私有的 MultitaskContext（会话 s1，默认工作目录）
+     * 构造 TaskTalent 私有的 CallContext（会话 s1，默认工作目录，同步 task）
      */
-    public static Object multitaskContext(ReActTrace trace, int total, AtomicBoolean rate, AtomicBoolean timeout,
-                                          AtomicBoolean upstream) throws Exception {
-        Class<?> type = Class.forName(TaskTalent.class.getName() + "$MultitaskContext");
+    public static Object callContext(ReActTrace trace) throws Exception {
+        Class<?> type = Class.forName(TaskTalent.class.getName() + "$CallContext");
         Constructor<?> ctor = type.getDeclaredConstructors()[0];
         ctor.setAccessible(true);
-        return ctor.newInstance(trace, null, "s1", total, rate, timeout, upstream);
-    }
-
-    /**
-     * 调用 TaskTalent 私有的 aggregate（multitask 结果汇总；不带执行计划，即都按未启动处理）
-     */
-    public static ToolResult aggregate(TaskTalent talent, List<CompletableFuture<String>> futures, Object ctx) throws Throwable {
-        return (ToolResult) invoke(talent, "aggregate", new Class<?>[]{List.class, List.class, ctx.getClass()}, futures, null, ctx);
+        return ctor.newInstance(trace, null, "s1", false);
     }
 
     public static String repeat(char c, int n) {

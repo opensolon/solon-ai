@@ -194,6 +194,29 @@ public class FileAgentSessionTest {
                 new FileAgentSession(sessionId, tempDir.toString()).getContext().get("v"));
     }
 
+    /** 被停止的线程（带中断标志）收尾时落盘：快照与消息重写都要写进去，中断标志原样保留 */
+    @Test
+    public void testWriteSurvivesInterruptFlag() throws IOException {
+        FileAgentSession session = new FileAgentSession(sessionId, tempDir.toString());
+        session.addMessage(Arrays.asList(ChatMessage.ofUser("a"), ChatMessage.ofUser("b")));
+        session.getContext().put("v", "first");
+        session.updateSnapshot();
+
+        Thread.currentThread().interrupt();
+        try {
+            session.getContext().put("v", "second");
+            session.updateSnapshot();
+            session.removeLatestMessage(1);
+            Assertions.assertTrue(Thread.currentThread().isInterrupted(), "中断标志应原样保留");
+        } finally {
+            Thread.interrupted();
+        }
+
+        FileAgentSession reopened = new FileAgentSession(sessionId, tempDir.toString());
+        Assertions.assertEquals("second", reopened.getContext().get("v"));
+        Assertions.assertEquals(1, reopened.getMessages().size());
+    }
+
     @Test
     public void testStaleTmpCleanedOnReopen() throws IOException {
         // 模拟上次崩溃遗留的临时文件（时间回拨，超过陈旧阈值）

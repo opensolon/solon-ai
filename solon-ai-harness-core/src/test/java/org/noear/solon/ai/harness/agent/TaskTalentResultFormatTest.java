@@ -46,15 +46,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TaskTalentResultFormatTest {
 
     /** formatTaskResp 不触达 engine，null 引擎即可 */
-    private static String format(boolean successful, String result, boolean isMultitask) {
+    private static String format(boolean successful, String result) {
         TaskTalent talent = new TaskTalent(null);
 
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = "general";
         op.description = "d";
-        op.index = 2;
 
-        return talent.formatTaskResp(op, successful, result, isMultitask);
+        return talent.formatTaskResp(op, successful, result);
     }
 
     private static int count(String text, String token) {
@@ -102,7 +101,7 @@ public class TaskTalentResultFormatTest {
     @Test
     public void cdataTerminatorInResultDoesNotCloseEnvelope() {
         String raw = "示例: <a><![CDATA[x]]></a>";
-        String out = format(true, raw, true);
+        String out = format(true, raw);
 
         assertTrue(out.endsWith("]]></result_content></task_result>"),
                 "外壳必须以一个正常终止符收尾: " + out);
@@ -117,12 +116,11 @@ public class TaskTalentResultFormatTest {
     public void structuredFieldsAreEscaped() {
         TaskTalent talent = new TaskTalent(null);
 
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = "a<b";
         op.description = "x & y";
-        op.index = 1;
 
-        String out = talent.formatTaskResp(op, true, "ok", true);
+        String out = talent.formatTaskResp(op, true, "ok");
 
         assertTrue(out.contains("<agent_name>a&lt;b</agent_name>"), "agent_name 必须转义: " + out);
         assertTrue(out.contains("<description>x &amp; y</description>"), "description 必须转义: " + out);
@@ -136,7 +134,7 @@ public class TaskTalentResultFormatTest {
             sb.append('x');
         }
 
-        String out = format(true, sb.toString(), false);
+        String out = format(true, sb.toString());
 
         assertTrue(out.contains("内容过长已截断"), "超长结果应给出截断说明: " + out.length());
         assertTrue(out.length() < 30000, "输出必须短于原始长度: " + out.length());
@@ -146,7 +144,7 @@ public class TaskTalentResultFormatTest {
     /** 未截断且无危险序列时，内容必须原样保留（不要顺手做 HTML 转义） */
     @Test
     public void normalResultIsKeptVerbatim() {
-        String out = format(false, "a < b && c > d", true);
+        String out = format(false, "a < b && c > d");
 
         assertTrue(out.contains("<![CDATA[a < b && c > d]]></result_content>"),
                 "CDATA 内的 < & 无需转义，不能改写内容: " + out);
@@ -155,11 +153,10 @@ public class TaskTalentResultFormatTest {
 
     // ---------- 超长结果落盘 ----------
 
-    private static TaskTalent.MultiTaskOp op() {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+    private static TaskTalent.SingleTaskOp op() {
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = "general";
         op.description = "d";
-        op.index = 1;
         return op;
     }
 
@@ -182,7 +179,7 @@ public class TaskTalentResultFormatTest {
         String raw = repeat('x', 30000);
         String taskId = "spill-test-1";
 
-        String out = talent.formatTaskResp(op(), taskId, true, raw, false);
+        String out = talent.formatTaskResp(op(), taskId, true, raw);
 
         assertTrue(out.contains("内容过长已截断"), "应保留截断说明: " + out.length());
         assertTrue(out.contains("完整结果已落盘到 .files/task/" + taskId + "/result.txt"),
@@ -210,7 +207,7 @@ public class TaskTalentResultFormatTest {
         TaskTalent talent = engine.getTaskTalent();
         Path cwd = Files.createDirectories(workspace.resolve("module-x"));
 
-        String out = talent.formatTaskResp(op(), "spill-cwd", true, repeat('z', 30000), false, cwd.toString());
+        String out = talent.formatTaskResp(op(), "spill-cwd", true, repeat('z', 30000), cwd.toString());
 
         assertTrue(out.contains("完整结果已落盘到 .files/task/spill-cwd/result.txt"), out);
         assertTrue(Files.isRegularFile(cwd.resolve(".files/task/spill-cwd/result.txt")),
@@ -218,7 +215,7 @@ public class TaskTalentResultFormatTest {
         assertFalse(Files.exists(workspace.resolve(".files")), "不得再写到工作区根");
 
         // cwd 就是工作区根时仍走工作区来源
-        talent.formatTaskResp(op(), "spill-root", true, repeat('z', 30000), false, workspace.toString());
+        talent.formatTaskResp(op(), "spill-root", true, repeat('z', 30000), workspace.toString());
         assertTrue(Files.isRegularFile(workspace.resolve(".files/task/spill-root/result.txt")));
     }
 
@@ -252,7 +249,7 @@ public class TaskTalentResultFormatTest {
                 .build();
         TaskTalent talent = engine.getTaskTalent();
 
-        talent.formatTaskResp(op(), "spill-test-2", true, "ok", false);
+        talent.formatTaskResp(op(), "spill-test-2", true, "ok");
 
         assertFalse(Files.exists(workspace.resolve(".files")),
                 "短结果不应创建 .files 目录");
@@ -267,7 +264,7 @@ public class TaskTalentResultFormatTest {
         TaskTalent talent = engine.getTaskTalent();
 
         String evil = "../../escape";
-        talent.formatTaskResp(op(), evil, true, repeat('y', 30000), false);
+        talent.formatTaskResp(op(), evil, true, repeat('y', 30000));
 
         // 落盘位置在 .files/task 内（分隔符被替换为 _），workspace 之外不得出现文件
         Path sanitized = workspace.resolve(".files").resolve("task").resolve(".._.._escape");

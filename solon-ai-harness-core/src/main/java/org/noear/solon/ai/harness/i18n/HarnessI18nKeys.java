@@ -33,12 +33,6 @@ public final class HarnessI18nKeys {
     public static final String TASK_INSTRUCTION_SESSION_AGENTS_TITLE = "task.instruction.session_agents_title";
     public static final String TASK_INSTRUCTION_STRATEGY = "task.instruction.strategy";
     public static final String TASK_ERROR_NESTED_TASK = "task.error.nested_task";
-    public static final String TASK_ERROR_NESTED_MULTITASK = "task.error.nested_multitask";
-    public static final String TASK_ERROR_EMPTY_TASKS = "task.error.empty_tasks";
-    /**
-     * 变量：index
-     */
-    public static final String TASK_ERROR_NULL_TASK = "task.error.null_task";
     /**
      * 变量：error, name
      */
@@ -53,15 +47,8 @@ public final class HarnessI18nKeys {
      * 变量：error
      */
     public static final String TASK_ERROR_FAILED = "task.error.failed";
-    public static final String TASK_AGGREGATE_CANCELLED = "task.aggregate.cancelled";
-    public static final String TASK_AGGREGATE_INTERRUPTED = "task.aggregate.interrupted";
-    /**
-     * 变量：error
-     */
-    public static final String TASK_AGGREGATE_FAILED = "task.aggregate.failed";
-    public static final String TASK_ADVICE_RATE_LIMIT = "task.advice.rate_limit";
-    public static final String TASK_ADVICE_UPSTREAM = "task.advice.upstream";
-    public static final String TASK_ADVICE_TIMEOUT = "task.advice.timeout";
+    public static final String TASK_STOPPED_CANCELLED = "task.stopped.cancelled";
+    public static final String TASK_STOPPED_INTERRUPTED = "task.stopped.interrupted";
     public static final String TASK_NOT_STARTED_CANCELLED = "task.not_started.cancelled";
     public static final String TASK_NOT_STARTED_INTERRUPTED = "task.not_started.interrupted";
     /**
@@ -76,8 +63,18 @@ public final class HarnessI18nKeys {
     public static final String TASK_RESUME_NOT_FOUND = "task.resume.not_found";
     /** 续跑目标仍在执行；参数 task_id */
     public static final String TASK_RESUME_BUSY = "task.resume.busy";
-    /** 同一次调用里重复续跑同一任务；参数 task_id */
-    public static final String TASK_RESUME_DUPLICATE = "task.resume.duplicate";
+    /** task_start 启动后附给模型的用法提示 */
+    public static final String TASK_START_HINT = "task.start.hint";
+    /** task_start 进入排队时附给模型的用法提示 */
+    public static final String TASK_START_QUEUED_HINT = "task.start.queued_hint";
+    /** task_wait 没有可等的后台任务 */
+    public static final String TASK_WAIT_NONE = "task.wait.none";
+    /** task_wait 等到超时（其后附任务状态清单） */
+    public static final String TASK_WAIT_TIMEOUT = "task.wait.timeout";
+    /** task_wait / task_stop 找不到本轮的后台任务；参数 task_id */
+    public static final String TASK_ASYNC_UNKNOWN = "task.async.unknown";
+    /** task_stop 已停止 */
+    public static final String TASK_STOP_DONE = "task.stop.done";
     public static final String GENERATE_ERROR_BAD_NAME = "generate.error.bad_name";
     /**
      * 变量：name

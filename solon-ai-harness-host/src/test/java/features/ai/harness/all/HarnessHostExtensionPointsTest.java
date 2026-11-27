@@ -531,7 +531,8 @@ class HarnessHostExtensionPointsTest {
         assertTrue(GoalOutcome.isEvidenceTool("bash"));
         assertTrue(GoalOutcome.isEvidenceTool("write"));
         assertFalse(GoalOutcome.isEvidenceTool("task"));
-        assertFalse(GoalOutcome.isEvidenceTool("multitask"));
+        assertFalse(GoalOutcome.isEvidenceTool("task_start"));
+        assertFalse(GoalOutcome.isEvidenceTool("task_wait"));
         assertFalse(GoalOutcome.isEvidenceTool("goal_update"));
         assertFalse(GoalOutcome.isEvidenceTool(null));
     }

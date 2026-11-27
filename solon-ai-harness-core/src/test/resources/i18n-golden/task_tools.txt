@@ -1,13 +1,29 @@
-name: multitask
+name: task
 --- description ---
-并行执行多个互不依赖的子任务。要求任务之间必须没有资源竞争（例如：不同的模块开发、多路搜索）。
+委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。
 --- inputSchema ---
-{"type":"object","properties":{"tasks":{"type":"array","items":{"type":"object","properties":{"agent_name":{"type":"string","description":"子代理名称"},"description":{"type":"string","description":"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。"},"index":{"type":"integer","description":"任务唯一序号，每个任务分配唯一的递增整数（从1开始），以便匹配返回结果","default":1},"prompt":{"type":"string","description":"发给子代理的详细指令。子代理看不到主会话的历史，必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。"},"task_id":{"type":"string","description":"可选。接着之前的子任务做（取自结果里的 <task_id>，成败均可）：子代理保留之前的全部上下文。失败时从断点重试，prompt 填“继续”或修正说明；完成后可追问或补充要求，prompt 填后续指令。agent_name 以原任务为准。新任务不要填。"}},"required":["index","agent_name","prompt","description"]},"description":"任务列表"}},"required":["tasks"]}
+{"type":"object","properties":{"agent_name":{"type":"string","description":"子代理名称"},"description":{"type":"string","description":"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。"},"prompt":{"type":"string","description":"发给子代理的详细指令。子代理看不到主会话的历史，必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。"},"task_id":{"type":"string","description":"可选。接着之前的任务做（取自结果里的 <task_id>，成败均可）：子代理保留之前的全部上下文。失败时从断点重试，prompt 填“继续”或修正说明；完成后可追问或补充要求，prompt 填后续指令。agent_name 以原任务为准。新任务不要填。"}},"required":["agent_name","prompt","description"]}
 
 ===
 
-name: task
+name: task_start
 --- description ---
-委派单一任务给专项子代理。适用于需要深度思考、多步操作或特定领域知识（如文件操作、代码分析）的场景。不支持并行调用（并行请用 multitask）。
+在后台启动一个任务（交给子代理执行），立即返回 task_id，不等它完成。需要同时做几件互不依赖的事时，逐个调用本工具启动（每次一个任务），再用 task_wait 取回结果。本轮回答结束时，未取回的后台任务会被取消。
 --- inputSchema ---
-{"type":"object","properties":{"agent_name":{"type":"string","description":"子代理名称"},"description":{"type":"string","description":"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。"},"prompt":{"type":"string","description":"发给子代理的详细指令。子代理看不到主会话的历史，必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。"},"task_id":{"type":"string","description":"可选。接着之前的子任务做（取自结果里的 <task_id>，成败均可）：子代理保留之前的全部上下文。失败时从断点重试，prompt 填“继续”或修正说明；完成后可追问或补充要求，prompt 填后续指令。agent_name 以原任务为准。新任务不要填。"}},"required":["agent_name","prompt","description"]}
+{"type":"object","properties":{"agent_name":{"type":"string","description":"子代理名称"},"description":{"type":"string","description":"任务内容的极简摘要（如：'重构用户认证逻辑'）。该描述将作为标签出现在执行日志和结果摘要中，用于快速识别任务意图。"},"prompt":{"type":"string","description":"发给子代理的详细指令。子代理看不到主会话的历史，必须在此提供任务所需的所有背景信息、具体要求及预期输出格式。"},"task_id":{"type":"string","description":"可选。接着之前的任务做（取自结果里的 <task_id>，成败均可）：子代理保留之前的全部上下文。失败时从断点重试，prompt 填“继续”或修正说明；完成后可追问或补充要求，prompt 填后续指令。agent_name 以原任务为准。新任务不要填。"}},"required":["agent_name","prompt","description"]}
+
+===
+
+name: task_stop
+--- description ---
+停止 task_start 启动的后台任务。排队中的不再启动；运行中的会被停下，进度保留，之后可用 task 或 task_start 带上 task_id 接着做。
+--- inputSchema ---
+{"type":"object","properties":{"task_id":{"type":"string","description":"要停止的任务（task_start 返回的 task_id）。"}},"required":["task_id"]}
+
+===
+
+name: task_wait
+--- description ---
+等待 task_start 启动的后台任务完成并取回结果（格式同 task）。不传 task_id 时等本轮任意一个未取回的任务，返回最先完成的那个，并列出其余任务的状态；要拿全部结果就反复调用，直到没有待取回的任务。
+--- inputSchema ---
+{"type":"object","properties":{"task_id":{"type":"string","description":"可选。要等的任务（task_start 返回的 task_id）；不传则等最先完成的一个。"},"timeout_ms":{"type":"integer","description":"可选。最多等多久（毫秒）；到时仍未完成就返回各任务的当前状态，任务继续在后台运行。不传或 0 表示一直等到有结果。"}},"required":[]}

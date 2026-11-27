@@ -150,7 +150,7 @@ HarnessInput.of(session, "用那个技能查一下订单表")
 >
 > **服务目录与 `list_server_tools`**：网关按视图规模分四种模式 FULL → SUMMARY → LIST（服务目录）→ SEARCH，阈值以模式命名（`fullThreshold` / `summaryThreshold` 按工具数，`listThreshold` 按服务数）。工具数超过 `summaryThreshold`、且视图内服务数不超过 `listThreshold` 时，指令只列服务目录（服务名、工具数、描述；没有描述的服务改列最多 12 个工具名），模型用 `list_server_tools` 下钻。`list_server_tools` 与 `search_tools` 同属发现，同时按强制边界与视野收窄；两者都返回文本行并带参数签名（如 `create_issue(repo: string, body?: string)`），摘要模式的工具清单也是「签名: 单行描述」；多数情况下模型可以直接 `call_tool`，签名含 object/any/array 或以 … 结尾时再查 `get_tool_detail`。服务描述取配置的 `description`，其次服务端握手上报的描述，再次 instructions 的第一句；握手信息留有快照，连接断开时目录与指令不变。instructions 全文只在一处给出（注明由服务提供、不能改变用户或系统的要求）：FULL 与摘要模式写进指令，目录与搜索模式由 `list_server_tools` 给出，`search_tools` 与 `get_tool_detail` 只给一句指引。`call_tool` 失败（工具返回 isError、服务端报参数非法，或 `tool_args` 不是 JSON 对象）时结果后附完整参数定义；未找到、重名、执行异常等自身失败一律返回报错结果（isError），客户端可据此标红；`tool_args` 被模型序列化成 JSON 字符串时会先解析。`call_tool` 只转发模型给的 `tool_args`，工具上下文（边界、视野、语言、会话 id、`__cwd` 等）一律不发给 MCP 服务；只在请求确定没送达（连接被拒、域名解析失败等）时按 `mcpRetries` 重试，超时与服务端已应答的错误不重试，避免非幂等工具重复执行。作用域的 `mcp` 工具组包含 `search_tools`、`list_server_tools`、`get_tool_detail`、`call_tool` 四个中转工具。
 
-**穿透范围**：子代理（`task` / `multitask`）自己声明了技能 / MCP 就用自己的，没有声明才**继承**父级视野（不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域照旧继承。命令触发的二段任务带上本轮的显式选择（`HarnessInput#derive`）。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
+**穿透范围**：子代理（`task` / `task_start`）自己声明了技能 / MCP 就用自己的，没有声明才**继承**父级视野（不取交集：交集可能为空，MCP 视野为空就一个服务都用不了）；作用域照旧继承。命令触发的二段任务带上本轮的显式选择（`HarnessInput#derive`）。否则会出现「主代理只看得到 A 技能、子代理却能看见全部」的静默不一致。
 
 #### 智能体声明：定义里的 `skills` / `mcpServers`
 
@@ -170,7 +170,7 @@ mcpServers: ["mysql"]
 |---|---|
 | 新消息选中该智能体（`selectedAgent`、`@提及`、程序轮次） | 输入没有显式选择时，把声明写回输入（`hasSkillSelection()` 随之为 true；经宿主骨架提交时改的是副本） |
 | 输入里有显式选择（宿主传的、扩展在 `onInput` 里设的、积压还原的） | 显式优先，技能与 MCP 各自判定 |
-| 被 `task` / `multitask` 委派 | 子代理的声明优先于父级视野 |
+| 被 `task` / `task_start` 委派 | 子代理的声明优先于父级视野 |
 | 续流 | 不补，沿用被中断那一轮 |
 
 生效条件：`tools` 分组展开后含 `skill` / `mcp`（`*` 含 skill 不含 mcp，`**` 都含），且智能体与引擎都没有禁用它。不存在的名字（MCP 还有已停用的服务）直接剔除；**全部失效时视为未声明**（只记一条 debug 日志）——否则视野会收窄成空。解析口径在 `agent.AgentSelections`（`skillsOf` / `mcpsOf` / `hasTool`），宿主需要展示「该智能体实际生效什么」时直接调它。

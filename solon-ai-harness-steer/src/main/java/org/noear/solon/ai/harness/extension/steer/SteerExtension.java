@@ -37,7 +37,7 @@ import java.util.function.BooleanSupplier;
  * <p><b>为何走请求级挂载（而非默认拦截器）</b>：面板/提及选中的子代理也是一个顶层请求，
  * 此时目标代理不是主代理，挂在主代理默认拦截器上的组件根本不会生效，就会出现
  * 「选了子代理就不能插话」。挂到请求级 options 后，无论目标代理是主代理还是面板子代理都能命中；
- * 同时按 {@code isDelegated} 排除 {@code task}/{@code multitask} 委派任务——
+ * 同时按 {@code isDelegated} 排除 {@code task}/{@code task_start} 委派任务——
  * 那些任务跑在临时会话上，没有前端邮箱语义，不应挂。</p>
  *
  * <p><b>输出走 AgentEvent</b>：{@link SteerAppliedEvent} / {@link SteerDroppedEvent} 推入流，

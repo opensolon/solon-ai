@@ -461,7 +461,7 @@ class HarnessOptionsAccessorTest {
                 "setSandboxSystemRestrict", "setHitlEnabled", "setPermissionContext",
                 "setSubagentEnabled", "setProjectRulesEnabled",
                 "setBashAsyncEnabled", "setApiRetries", "setMcpRetries",
-                "setModelRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks", "setCacheControl",
+                "setModelRetries", "setSubagentDefaultConcurrency", "setCacheControl",
                 "setCommandPrefix", "setAgentPrefix", "setDefaultModel", "setLocale",
                 "setSessionProvider", "setCompressionInterceptor", "setStopLoopInterceptor",
                 "setHitlInterceptor", "setMemoryProvider", "setStateSource",

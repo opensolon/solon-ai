@@ -2243,7 +2243,7 @@ public class HarnessEngine {
 
         // 与 targetAgent.prompt(prompt) 等价（ReActAgent 内部即 new ReActRequest(agent, prompt)），
         // 换成能携带受理占位的子类：handle 受理的 TASK 由请求自己在开流时释放占位。
-        return new AdmittedRequest(targetAgent, prompt, activeRuns, admissions)
+        return new AdmittedRequest(targetAgent, prompt, activeRuns, admissions, taskTalent)
                 .options(o -> {
                     o.retryConfig(options.getModelRetries());
                     o.maxTurns(options.getMaxTurns());
@@ -2991,7 +2991,7 @@ public class HarnessEngine {
         }
 
         /**
-         * 子代理（task / multitask）执行器。缺省为引擎私有、线程上限 {@code TaskTalent.DEFAULT_MAX_THREADS}；
+         * 子代理（task / task_start）执行器。缺省为引擎私有、线程上限 {@code TaskTalent.DEFAULT_MAX_THREADS}；
          * 引擎池场景建议注入一个进程级共享的有界池，避免线程数随租户数线性增长。
          * <b>注入的执行器生命周期归宿主</b>，引擎 {@code shutdown} 不会关闭它。执行器拒绝提交时，
          * 已启动的 worker 继续消化剩余子任务，全部被拒时子任务按「未启动」返回给模型。

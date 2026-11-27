@@ -130,8 +130,8 @@ public class TaskTalentRunningIndexTest {
         }
     }
 
-    private static TaskTalent.MultiTaskOp op(int index, String prompt) {
-        TaskTalent.MultiTaskOp op = HarnessFixtures.taskOp("explore", index);
+    private static TaskTalent.SingleTaskOp op(int n, String prompt) {
+        TaskTalent.SingleTaskOp op = HarnessFixtures.taskOp("explore", n);
         op.prompt = prompt;
         return op;
     }
@@ -163,16 +163,16 @@ public class TaskTalentRunningIndexTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void multitaskRegistersOnceBeforeDispatchAndLinksBothWays() throws Throwable {
+    public void taskStartRegistersOnceBeforeDispatchAndLinksBothWays() throws Throwable {
         Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
         CountingSession parent = new CountingSession("s1");
         sessions.put("s1", parent);
         HarnessEngine engine = engine(sessions);
         TaskTalent talent = engine.getTaskTalent();
 
-        // 同一步里：先跑完的 task（结果还没进工作记忆）+ 正在执行的 multitask；另有上一步留下的旧条目
+        // 同一步里：先跑完的 task（结果还没进工作记忆）+ 正在执行的 task_start；另有上一步留下的旧条目
         ToolCall earlier = call(TaskTalent.TOOL_TASK);
-        ToolCall acting = call(TaskTalent.TOOL_MULTITASK);
+        ToolCall acting = call(TaskTalent.TOOL_TASK_START);
         ReActTrace trace = HarnessFixtures.trace(null, false);
         trace.setLastReasonMessage(new AssistantMessage("", null, Arrays.asList(earlier, acting), null));
         Map<String, Object> prior = new LinkedHashMap<>();
@@ -182,44 +182,40 @@ public class TaskTalentRunningIndexTest {
         trace.setActingCallId(acting.getUuid());
         HarnessFixtures.bindTrace(parent, trace);
 
-        List<TaskTalent.MultiTaskOp> ops = new ArrayList<>();
-        ops.add(op(1, "slow-task"));
-        ops.add(op(2, "fast-task"));
+        // 立即返回：子代理在后台跑
+        ToolResult started = talent.taskStart(op(1, "slow-task"), ws.toString(), "s1", null);
+        assertFalse(started.isError(), started.getContent());
+        List<Map<String, Object>> subtasks = (List<Map<String, Object>>) started.metas().get(TaskTalent.META_SUBTASKS);
+        assertEquals(1, subtasks.size(), String.valueOf(subtasks));
+        String slowId = (String) subtasks.get(0).get("taskId");
+        assertTrue(started.getContent().contains("<task_id>" + slowId + "</task_id>"), started.getContent());
+        assertNull(subtasks.get(0).get("status"), "启动时还没有结果");
 
-        ExecutorService caller = Executors.newSingleThreadExecutor();
-        try {
-            Future<ToolResult> pending = caller.submit(() -> talent.multitask(ops, ws.toString(), "s1", null));
-            assertTrue(slowArrived.await(10, TimeUnit.SECONDS), "第 1 条应已发出模型请求");
+        assertTrue(slowArrived.await(10, TimeUnit.SECONDS), "子代理应已发出模型请求");
 
-            // 运行中：索引已登记，且只落了一次父快照
-            Map<String, Object> index = (Map<String, Object>) trace.getExtra(TaskTalent.EXTRA_RUNNING_SUBTASKS);
-            assertNotNull(index);
-            assertTrue(index.containsKey(earlier.getUuid()), "同一步里先跑完的 task 条目不能丢: " + index);
-            assertFalse(index.containsKey("stale-call"), "不属于当前这一步的旧条目应去掉: " + index);
-            List<Map<String, Object>> items = (List<Map<String, Object>>) index.get(acting.getUuid());
-            assertEquals(2, items.size(), String.valueOf(index));
-            assertEquals(1, parent.snapshots.get(), "multitask 只在委派前落一次父快照");
+        // 运行中：索引已登记，且只落了一次父快照
+        Map<String, Object> index = (Map<String, Object>) trace.getExtra(TaskTalent.EXTRA_RUNNING_SUBTASKS);
+        assertNotNull(index);
+        assertTrue(index.containsKey(earlier.getUuid()), "同一步里先跑完的 task 条目不能丢: " + index);
+        assertFalse(index.containsKey("stale-call"), "不属于当前这一步的旧条目应去掉: " + index);
+        List<Map<String, Object>> items = (List<Map<String, Object>>) index.get(acting.getUuid());
+        assertEquals(1, items.size(), String.valueOf(index));
+        assertEquals(slowId, items.get(0).get("taskId"));
+        assertEquals("explore", items.get(0).get("agentName"));
+        assertEquals(1, parent.snapshots.get(), "task_start 只在委派前落一次父快照");
 
-            // 反向：已启动的子会话记下发起它的调用
-            String slowId = (String) items.get(0).get("taskId");
-            Map<String, Object> slowMeta = (Map<String, Object>) sessions.get(slowId).getContext().get(TaskTalent.META_SUBTASK);
-            assertEquals(acting.getUuid(), slowMeta.get("parentCallId"));
-            assertEquals("explore", items.get(0).get("agentName"));
-            assertEquals(1, items.get(0).get("index"));
+        // 反向：已启动的子会话记下发起它的 task_start 调用
+        Map<String, Object> slowMeta = (Map<String, Object>) sessions.get(slowId).getContext().get(TaskTalent.META_SUBTASK);
+        assertEquals(acting.getUuid(), slowMeta.get("parentCallId"));
 
-            releaseSlow.countDown();
-            ToolResult r = pending.get(20, TimeUnit.SECONDS);
-            assertFalse(r.isError(), r.getContent());
+        releaseSlow.countDown();
+        ToolResult r = talent.taskWait(null, null, "s1", null);
+        assertFalse(r.isError(), r.getContent());
+        assertTrue(r.getContent().contains("<task_id>" + slowId + "</task_id>") && r.getContent().contains("done"), r.getContent());
 
-            // 返回后不删：结果进工作记忆前（同一步后续工具执行中）仍要能找到
-            index = (Map<String, Object>) trace.getExtra(TaskTalent.EXTRA_RUNNING_SUBTASKS);
-            assertTrue(index.containsKey(acting.getUuid()));
-            String fastId = (String) items.get(1).get("taskId");
-            Map<String, Object> fastMeta = (Map<String, Object>) sessions.get(fastId).getContext().get(TaskTalent.META_SUBTASK);
-            assertEquals(acting.getUuid(), fastMeta.get("parentCallId"));
-        } finally {
-            caller.shutdownNow();
-        }
+        // 返回后不删：结果进工作记忆前仍要能找到
+        index = (Map<String, Object>) trace.getExtra(TaskTalent.EXTRA_RUNNING_SUBTASKS);
+        assertTrue(index.containsKey(acting.getUuid()));
     }
 
     @Test

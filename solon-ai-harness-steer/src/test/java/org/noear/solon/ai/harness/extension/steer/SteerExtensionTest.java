@@ -73,7 +73,7 @@ class SteerExtensionTest {
 
     @Test
     void requestAssembleMountsInterceptorForTopLevelRequestsOnly() throws Exception {
-        // 源码契约：挂载逻辑必须在 onRequestAssemble 上，且以 isDelegated 排除 task/multitask 委派；
+        // 源码契约：挂载逻辑必须在 onRequestAssemble 上，且以 isDelegated 排除 task/task_start 委派；
         // 不能退回「主代理默认拦截器」——那样面板选中的子代理（同为顶层请求）就命不中。
         String src = src("SteerExtension.java");
         assertTrue(src.contains("optionsAmend.interceptorAdd(interceptor)"),
@@ -81,7 +81,7 @@ class SteerExtensionTest {
         assertTrue(src.contains("public void onRequestAssemble"),
                 "挂载点必须是 onRequestAssemble");
         assertTrue(src.contains("isDelegated == false"),
-                "必须排除 task/multitask 委派的子代理任务（临时会话无插话语义）");
+                "必须排除 task/task_start 委派的子代理任务（临时会话无插话语义）");
         assertFalse(src.contains("agentBuilder.defaultInterceptorAdd(interceptor)"),
                 "不得退回主代理默认拦截器（会丢失面板选中子代理的场景）");
     }

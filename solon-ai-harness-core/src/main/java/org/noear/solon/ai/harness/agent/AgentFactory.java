@@ -226,6 +226,8 @@ public class AgentFactory {
                 engine.getTaskTalent().setEnabled(engine.isSubagentEnabled());
 
                 builder.defaultTalentAdd(engine.getTaskTalent());
+                // 后台子任务（task_start）跟着这一轮走：每次运行开始与结束时收尾
+                builder.defaultInterceptorAdd(engine.getTaskTalent().getInterceptor());
                 break;
             }
             case "generate": {

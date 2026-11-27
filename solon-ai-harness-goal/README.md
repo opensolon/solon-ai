@@ -146,7 +146,7 @@ stateDiagram-v2
 | 每一轮怎么跑 | 与用户轮次走同一条链：`HostSink#open` → `prepare` → `event*` → `finished`，`run.isProgram()` 为 true，`run.getProgramChannel()` 为 `goal`，来源为 `InputOrigin.channel("goal")` |
 | 每一轮的语言 | 本轮输入带上目标的语言（创建时记下，没有时为引擎语言），协议指令、工具文案与提示词一致；`/goal` 通过 `host.submit` 提交时，给输入带上用户的语言（`HarnessInput.locale`）即可。解析链始终是「目标的语言 > 引擎语言 > 全局默认语言」；已有目标要换语言，给 `GoalPatch.locale` 传新值即可（不调或传 null = 保持） |
 | 每一轮的结论 | 出错 → 抛给插件参与熔断；被中断 → `skip("cancelled")`；没有最终回答 → `skip("no final answer")`；会话不存在 → `skip("session not found")`；未受理（忙、待审批）→ `skip`，不计失败；其余按 `done(结果文本, 有无证据工具调用, token)` |
-| 完成证据 | 只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`） |
+| 完成证据 | 只数成功、且不是内部工具（goal / task / task_start / task_wait / task_stop / memory）的调用（`GoalOutcome.isEvidenceTool`） |
 | 停止 | 用户停止会话（`host.interrupt`）先把 goal 暂停并摘调度（插件的 `onSessionInterrupt`），再停流，宿主不用再补 `pause`；程序停流（`RunHandle.cancel()`、`admin.interrupt(sid, CANCEL_STREAM)`）不改 goal 状态。被停的一轮都按 `skip("cancelled")` 计，不计错误 |
 | 续发 | 每轮结束后自动续发积压（goal 一轮占用期间用户发来的 `/goal pause` 等会先于下一轮执行） |
 | 管理态 | `host.admin(tenant).call(...)` 依次检查：`sessionId` 为空 → `INVALID`；扩展未装配 → `DISABLED`；非持有节点 → `NOT_OWNER`；会话不存在 → `NOT_FOUND`；成功后自动续发积压 |

@@ -277,7 +277,7 @@ admin.interrupt(sid, InterruptMode.INTERRUPT_ALL);
 **同一条链**：`open` → `prepare` → `event`* → `finished`（`run.isProgram()` 为 true，`run.getInput().getOrigin()` 为 `channel("goal")` /
 `channel("loop")`，最终文本在 `RunOutcome.getResultText()`），可被 `interrupt` 停止，结束后自动续发积压。
 
-goal 的完成证据由框架判定：只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`）。
+goal 的完成证据由框架判定：只数成功、且不是内部工具（goal / task / task_start / task_wait / task_stop / memory）的调用（`GoalOutcome.isEvidenceTool`）。
 出错抛给插件参与熔断；被中断或没有最终回答时本轮跳过。
 
 同一引擎上挂了多个宿主时，用 `programRuns(sid -> ...)` 只接管自己的会话；不想接入时 `programRuns(false)`，沿用插件自带的缺省执行器。

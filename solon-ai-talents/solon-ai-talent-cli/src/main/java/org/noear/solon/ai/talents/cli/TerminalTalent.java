@@ -1228,6 +1228,8 @@ public class TerminalTalent extends AbsTalent {
      *
      * <p>拒绝执行、沙盒不可用、被硬超时终止返回 {@link ToolResult#error(String)}；
      * 仍在运行或正常结束（不论退出码）为成功，与 {@link #bash} 同口径。</p>
+     *
+     * <p>命令会话记在发起它的代理会话（{@code __sessionId}）名下，见 {@link #stopCommandsOf}。</p>
      */
     @ToolMapping(
             name = "bash_start",
@@ -1238,6 +1240,7 @@ public class TerminalTalent extends AbsTalent {
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
                             @Param(value = "hard_timeout_ms", required = false, defaultValue = "120000", description = "硬超时兜底，超过后终止进程树，单位毫秒。") Integer hardTimeoutMs,
                             String __cwd,
+                            String __sessionId,
                             String __locale) throws IOException {
         Locale locale = AiI18n.toLocale(__locale);
         String danger = support.validateCommandNoKill(command, locale);
@@ -1287,8 +1290,23 @@ public class TerminalTalent extends AbsTalent {
         }
 
         TerminalSessionManager.CommandSnapshot snapshot =
-                bashSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs);
+                bashSessionManager.exec(finalCommand, targetWorkPath, envs, yieldTimeMs, maxOutputChars, hardTimeoutMs, __sessionId);
         return snapshotResult(snapshot);
+    }
+
+    /**
+     * 终止某个代理会话用 bash_start 启动、仍在运行的命令（连同子进程树）。
+     *
+     * <p>程序侧调用（不是模型工具）：如子代理任务被停止时，连带结束它在后台跑的命令，
+     * 不让进程一直跑到硬超时。会话记录保留，之后用 bash_wait 仍能看到终止前的输出。</p>
+     *
+     * @param sessionId 代理会话 id（bash_start 调用时的 {@code __sessionId}）
+     * @param reason    终止原因（写进会话快照的 terminate_reason）
+     * @return 本次终止的命令会话数
+     * @since 4.2.0
+     */
+    public int stopCommandsOf(String sessionId, String reason) {
+        return bashSessionManager.terminateOwnedBy(sessionId, reason);
     }
 
     /**

@@ -43,7 +43,7 @@ public class FileAgentSessionTraceRoundTripTest {
         ToolMessage doneResult = ChatMessage.ofTool("ok", "task", "call_done");
         Map<String, Object> idx = new LinkedHashMap<>();
         idx.put("taskId", "task-aaa");
-        idx.put("index", 1);
+        idx.put("status", "success");
         doneResult.addMetadata("_subtasks", new ArrayList<>(Collections.singletonList(idx)));
         trace.getWorkingMemory().addMessage(doneReason);
         trace.getWorkingMemory().addMessage(doneResult);
@@ -51,17 +51,16 @@ public class FileAgentSessionTraceRoundTripTest {
         //执行中的一步：调用只在 lastReasonMessage 里
         Map<String, Object> runArgs = new HashMap<>();
         runArgs.put("description", "running-one");
-        ToolCall runCall = new ToolCall("0", "call_run", "multitask", "{}", runArgs);
+        ToolCall runCall = new ToolCall("0", "call_run", "task_start", "{}", runArgs);
         trace.setLastReasonMessage(new AssistantMessage("thinking...", "deep", Collections.singletonList(runCall), null));
 
         Map<String, Object> item1 = new LinkedHashMap<>();
         item1.put("taskId", "task-bbb");
-        item1.put("index", 1);
         item1.put("agentName", "explore");
         item1.put("description", "running-one");
         Map<String, Object> item2 = new LinkedHashMap<>(item1);
         item2.put("taskId", "task-ccc");
-        item2.put("index", 2);
+        item2.put("status", "failure");
         Map<String, Object> running = new LinkedHashMap<>();
         running.put(runCall.getUuid(), new ArrayList<>(Arrays.asList(item1, item2)));
         trace.setExtra("_runningSubtasks", running);
@@ -77,7 +76,7 @@ public class FileAgentSessionTraceRoundTripTest {
         Assertions.assertNotNull(lastReason);
         Assertions.assertEquals(1, lastReason.getToolCalls().size());
         Assertions.assertEquals(runCall.getUuid(), lastReason.getToolCalls().get(0).getUuid(), "toolCall uuid 读回后必须保持原值");
-        Assertions.assertEquals("multitask", lastReason.getToolCalls().get(0).getName());
+        Assertions.assertEquals("task_start", lastReason.getToolCalls().get(0).getName());
 
         Map<String, Object> runningBack = back.getExtraAs("_runningSubtasks");
         Assertions.assertNotNull(runningBack);
@@ -89,7 +88,7 @@ public class FileAgentSessionTraceRoundTripTest {
         Assertions.assertEquals("task-bbb", ((Map<?, ?>) items.get(0)).get("taskId"));
         Assertions.assertEquals("explore", ((Map<?, ?>) items.get(0)).get("agentName"));
         Assertions.assertEquals("task-ccc", ((Map<?, ?>) items.get(1)).get("taskId"));
-        Assertions.assertEquals(2, ((Number) ((Map<?, ?>) items.get(1)).get("index")).intValue());
+        Assertions.assertEquals("failure", ((Map<?, ?>) items.get(1)).get("status"));
 
         List<ChatMessage> wm = back.getWorkingMemory().getMessages();
         Assertions.assertEquals(2, wm.size());

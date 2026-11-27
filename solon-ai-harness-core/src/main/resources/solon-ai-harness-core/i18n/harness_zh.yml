@@ -2,27 +2,22 @@
 # 约定：值一律写成 "|-" 块标量，只写正文——值的首尾不留换行或空格（段落之间的换行、空格由代码负责）；占位符用 {name}；禁止出现 ${ 与 #{
 # 协议性前缀（"ERROR: "、"WARNING: "、"[OK] "）由代码补，不写进文案
 
-# ---- 子代理（task / multitask）----
+# ---- 子代理（task / task_start / task_wait / task_stop）----
 task.description: |-
-  多任务调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），支持并行处理以提高效率。
+  子代理调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），互不依赖的任务可在后台并行。
 task.instruction.agents_title: |-
   ## 当前可用的子代理
 task.instruction.session_agents_title: |-
-  ## 本会话专用的子代理（仅当前会话可用，同样通过 task / multitask 调用）
+  ## 本会话专用的子代理（仅当前会话可用，同样通过 task / task_start 调用）
 task.instruction.strategy: |-
   ## 任务分配策略：
-  1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，可使用 `multitask` 节省时间。
-  2. **原子性**: 每个子任务应具备明确的边界。
+  1. **优先并行**: 当任务可以被拆分为互不干扰的独立单元（例如：不同的模块开发、多路搜索）时，用 `task_start` 在后台逐个启动（每次一个任务），再用 `task_wait` 收回结果；只有一个任务时直接用 `task`。
+  2. **原子性**: 每个任务应具备明确的边界。
   3. **上下文感知**: 必须在 prompt 中提供任务所需的全部背景，子代理无法看到主会话的完整历史。
-  4. **接着做**: 结果里的 `task_id` 可用来接着该子任务做（子代理保留之前的上下文）：失败时带上它从断点重试（multitask 可只放失败的那几项），完成后也可带上它追问或补充要求；`failure_kind` 为 `rate_limit`、`upstream_unavailable` 表示子代理内部已重试过，请降低并发或稍后再试，短时间内反复失败就结束本轮并告知用户。
+  4. **接着做**: 结果里的 `task_id` 可用来接着该任务做（子代理保留之前的上下文）：失败时带上它从断点重试，完成后也可带上它追问或补充要求；`failure_kind` 为 `rate_limit`、`upstream_unavailable` 表示子代理内部已重试过，请减少同时启动的任务或稍后再试，短时间内反复失败就结束本轮并告知用户。
+  5. **后台任务**: 启动后可以做与之不冲突的工作（不要改它们正在处理的文件），没有别的事可做就调用 `task_wait`，不要轮询。给出最终回答前，必须收回或停止全部后台任务：本轮结束时未收回的会被取消（之后仍可用 `task_id` 接着做）。
 task.error.nested_task: |-
-  子代理不允许再委派子任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。
-task.error.nested_multitask: |-
-  子代理不允许再委派子任务（最多一层）。请直接完成当前任务；如需并行，请返回后由主代理统一编排。
-task.error.empty_tasks: |-
-  任务列表为空
-task.error.null_task: |-
-  第 {index} 个任务定义为空（null），已跳过。
+  子代理不允许再委派任务（最多一层）。请直接完成当前任务，或把需要的内容整理进 prompt 后自行执行。
 task.error.load_failed: |-
   子代理 '{name}' 定义加载失败: {error}
 task.error.unknown_agent: |-
@@ -33,18 +28,10 @@ task.error.no_response: |-
   子代理未正常完成：未收到正常响应
 task.error.failed: |-
   任务执行失败: {error}
-task.aggregate.cancelled: |-
-  子任务未完成（主流程已取消，未等待）
-task.aggregate.interrupted: |-
-  子任务未完成（已中断，未等待）
-task.aggregate.failed: |-
-  子任务未完成（失败或被中断）: {error}
-task.advice.rate_limit: |-
-  检测到模型服务限流，可能来自中转网关或上游模型服务。后续请优先使用 task 串行执行；如必须使用 multitask，可在模型配置中调低 `concurrency`（未配置时调低引擎的 `subagentDefaultConcurrency`）。
-task.advice.upstream: |-
-  检测到中转网关或上游模型服务暂时不可用，可能与上游限流、服务过载或网关异常有关。请稍后重试，并适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`。
-task.advice.timeout: |-
-  模型服务响应超时。后续请适当调低模型配置的 `concurrency` 或引擎的 `subagentDefaultConcurrency`，必要时改用 task 串行执行。
+task.stopped.cancelled: |-
+  任务未完成（主流程已取消，未等待）
+task.stopped.interrupted: |-
+  任务未完成（已中断，未等待）
 task.not_started.cancelled: |-
   主流程已取消，任务未启动
 task.not_started.interrupted: |-
@@ -54,11 +41,21 @@ task.result.spilled: |-
 task.result.truncated: |-
   ...[内容过长已截断，原始长度 {length} 字符]
 task.resume.not_found: |-
-  子任务 {task_id} 不存在或已过期，无法接着做，请重新委派。
+  任务 {task_id} 不存在或已过期，无法接着做，请重新委派。
 task.resume.busy: |-
-  子任务 {task_id} 仍在执行中，请等它结束后再接着做。
-task.resume.duplicate: |-
-  同一次调用里重复使用子任务 {task_id}，已忽略本条。
+  任务 {task_id} 仍在执行中，请等它结束后再接着做。
+task.start.hint: |-
+  任务已在后台运行。用 task_wait 取回结果（不带 task_id 时返回最先完成的一个），需要时用 task_stop 停止。本轮结束时未取回的后台任务会被取消。
+task.start.queued_hint: |-
+  任务已排队（并发已满），有空位时自动开始。用 task_wait 取回结果（不带 task_id 时返回最先完成的一个），需要时用 task_stop 停止。本轮结束时未取回的后台任务会被取消。
+task.wait.none: |-
+  本轮没有待取回的后台任务。
+task.wait.timeout: |-
+  等待超时，任务仍在后台运行。当前状态：
+task.async.unknown: |-
+  本轮没有后台任务 {task_id}（可能已随之前的轮次结束，或 ID 有误）。如需接着做，请用 task 或 task_start 带上该 task_id。
+task.stop.done: |-
+  已按要求停止。
 
 # ---- 子代理生成（generate）----
 generate.error.bad_name: |-

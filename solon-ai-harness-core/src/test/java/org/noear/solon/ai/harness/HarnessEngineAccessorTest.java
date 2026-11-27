@@ -608,7 +608,7 @@ class HarnessEngineAccessorTest {
 
     /** 本类用例已覆盖的公开配置方法（用于上面的巡检比对） */
     private static final List<String> SWEEP_COVERED = Arrays.asList(
-            "setMaxTurns", "setModelRetries", "setMcpRetries", "setApiRetries", "setSubagentDefaultConcurrency", "setMultitaskMaxConcurrency", "setMultitaskMaxTasks",
+            "setMaxTurns", "setModelRetries", "setMcpRetries", "setApiRetries", "setSubagentDefaultConcurrency",
             "setMemoryEnabled", "setMemoryRelevanceCount", "setMemoryPriorityCount", "setMemorySummaryLength",
             "setSandboxEnabled", "setSandboxAllowUserHome", "setSandboxSystemRestrict",
             "setHitlEnabled", "setSubagentEnabled", "setBashAsyncEnabled", "setSessionWindowSize",

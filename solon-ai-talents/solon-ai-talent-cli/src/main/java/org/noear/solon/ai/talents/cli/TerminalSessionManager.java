@@ -75,6 +75,24 @@ public final class TerminalSessionManager {
             Integer maxOutputChars,
             Integer hardTimeoutMs)
             throws IOException {
+        return exec(command, workdir, env, yieldTimeMs, maxOutputChars, hardTimeoutMs, null);
+    }
+
+    /**
+     * 启动命令会话，并记下发起方（见 {@link #terminateOwnedBy}）
+     *
+     * @param owner 发起方标识（如代理会话 id）；null 表示不归属任何发起方
+     * @since 4.2.0
+     */
+    public CommandSnapshot exec(
+            String command,
+            Path workdir,
+            Map<String, String> env,
+            Integer yieldTimeMs,
+            Integer maxOutputChars,
+            Integer hardTimeoutMs,
+            String owner)
+            throws IOException {
         cleanupCompletedSessions();
         requireNonEmptyCommand(command);
         Path normalizedWorkdir = normalizeWorkdir(workdir);
@@ -102,6 +120,7 @@ public final class TerminalSessionManager {
             CommandSession session =
                     new CommandSession(
                             sessionId,
+                            owner,
                             command,
                             normalizedWorkdir,
                             process,
@@ -136,6 +155,27 @@ public final class TerminalSessionManager {
         return waitAndSnapshot(session, 2_000, maxOutputChars);
     }
 
+    /**
+     * 终止某个发起方启动、仍在运行的全部命令会话（连同子进程树）。会话记录保留，之后仍可查看终止前的输出。
+     *
+     * @param owner 发起方标识（与 {@link #exec(String, Path, Map, Integer, Integer, Integer, String)} 的 owner 一致）
+     * @return 本次终止的会话数
+     * @since 4.2.0
+     */
+    public int terminateOwnedBy(String owner, String reason) {
+        if (owner == null) {
+            return 0;
+        }
+        int count = 0;
+        for (CommandSession session : sessions.values()) {
+            if (owner.equals(session.owner) && session.isRunning()) {
+                session.terminate(reason);
+                count++;
+            }
+        }
+        return count;
+    }
+
     CommandSession getSessionForTest(String sessionId) {
         return sessions.get(sessionId);
     }
@@ -146,6 +186,9 @@ public final class TerminalSessionManager {
         try {
             session.exitFuture().get(waitMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException ignored) {
+        } catch (InterruptedException e) {
+            // 不能吞掉：调用方（代理被停止）靠中断标志停下，吞了它会接着推理、反复等下去
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             LOG.debug("Command session wait failed: {}", e.getMessage());
         }
@@ -461,6 +504,7 @@ public final class TerminalSessionManager {
     static final class CommandSession {
 
         private final String sessionId;
+        private final String owner; // 发起方（如代理会话 id）；可为 null
         private final String command;
         private final Path workdir;
         private final Process process;
@@ -480,6 +524,7 @@ public final class TerminalSessionManager {
 
         CommandSession(
                 String sessionId,
+                String owner,
                 String command,
                 Path workdir,
                 Process process,
@@ -488,6 +533,7 @@ public final class TerminalSessionManager {
                 Charset outputCharset,
                 Runnable cleanup) {
             this.sessionId = sessionId;
+            this.owner = owner;
             this.command = command;
             this.workdir = workdir;
             this.process = process;
@@ -571,6 +617,8 @@ public final class TerminalSessionManager {
             }
             try {
                 readerFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             } catch (Exception ignored) {
             }
         }

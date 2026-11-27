@@ -24,10 +24,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * task / multitask / generate 的成败标记（文本不变，失败标记给宿主看）：
+ * task / task_start / task_wait / generate 的成败标记（文本不变，失败标记给宿主看）：
  * <ul>
- *   <li>task：嵌套、找不到代理等没跑成算失败；</li>
- *   <li>multitask：嵌套、取消/中断、一个都没成功算失败；部分失败算成功；空列表（WARNING）算成功；</li>
+ *   <li>task / task_start：嵌套、找不到代理等没跑成算失败；</li>
+ *   <li>task_wait：没有可等的（WARNING）算成功；找不到任务算失败；</li>
  *   <li>generate：ERROR 分支算失败，[OK] 算成功。</li>
  * </ul>
  */
@@ -58,8 +58,7 @@ public class TaskTalentErrorFlagTest {
             assertError(t);
             assertTrue(t.getContent().startsWith("ERROR: "), t.getContent());
 
-            ToolResult m = talent.multitask(Collections.singletonList(HarnessFixtures.taskOp("explore", 1)),
-                    ws.toString(), "s1", null);
+            ToolResult m = talent.taskStart(HarnessFixtures.taskOp("explore", 1), ws.toString(), "s1", null);
             assertError(m);
             assertTrue(m.getContent().startsWith("ERROR: "), m.getContent());
         } finally {
@@ -68,13 +67,16 @@ public class TaskTalentErrorFlagTest {
     }
 
     @Test
-    public void emptyTasksIsNotError() throws Exception {
+    public void waitWithNothingIsNotError() throws Exception {
         TaskTalent talent = HarnessFixtures.engine(ws).getTaskTalent();
 
-        ToolResult r = talent.multitask(Collections.emptyList(), ws.toString(), "s1", null);
+        ToolResult r = talent.taskWait(null, null, "s1", null);
 
         assertOk(r);
         assertTrue(r.getContent().startsWith("WARNING: "), r.getContent());
+
+        assertError(talent.taskWait("task-0123456789abcdef0123456789abcdef", null, "s1", null));
+        assertError(talent.taskStop("task-0123456789abcdef0123456789abcdef", "s1", null));
     }
 
     @Test
@@ -90,37 +92,7 @@ public class TaskTalentErrorFlagTest {
         single.prompt = "p";
         assertError(talent.task(single, ws.toString(), "s1", null));
 
-        List<TaskTalent.MultiTaskOp> bad = new ArrayList<>();
-        bad.add(HarnessFixtures.taskOp("no-such-a", 1));
-        bad.add(HarnessFixtures.taskOp("no-such-b", 2));
-        ToolResult all = talent.multitask(bad, ws.toString(), "s1", null);
-        assertError(all);
-    }
-
-    /**
-     * 聚合判定：部分成功算成功；一个都没成功、被取消算失败。
-     * 成功数只在 runTask 的成功出口计数，这里直接设置以隔离判定逻辑（真实子代理需要可用模型）。
-     */
-    @Test
-    public void aggregateFlagFollowsSucceededCount() throws Throwable {
-        TaskTalent talent = HarnessFixtures.engine(ws).getTaskTalent();
-        ReActTrace trace = HarnessFixtures.trace(null, false);
-
-        // 部分成功
-        Object partial = ctx(trace);
-        succeeded(partial).set(1);
-        assertOk(HarnessFixtures.aggregate(talent, okAndFailed(), partial));
-
-        // 一个都没成功
-        Object none = ctx(trace);
-        assertError(HarnessFixtures.aggregate(talent, okAndFailed(), none));
-
-        // 被取消：即使已有成功项也算失败
-        Object cancelled = ctx(HarnessFixtures.trace(null, true));
-        succeeded(cancelled).set(1);
-        List<CompletableFuture<String>> pending = new ArrayList<>();
-        pending.add(new CompletableFuture<>());
-        assertError(HarnessFixtures.aggregate(talent, pending, cancelled));
+        assertError(talent.taskStart(HarnessFixtures.taskOp("no-such-a", 1), ws.toString(), "s1", null));
     }
 
     /**
@@ -130,11 +102,10 @@ public class TaskTalentErrorFlagTest {
     public void registeredToolFlags() throws Throwable {
         TaskTalent talent = HarnessFixtures.engine(ws).getTaskTalent();
 
-        FunctionTool multitask = talent.getToolMap().get("multitask");
+        FunctionTool taskWait = talent.getToolMap().get(TaskTalent.TOOL_TASK_WAIT);
         Map<String, Object> args = new LinkedHashMap<>();
-        args.put("tasks", Collections.emptyList());
         args.put("__sessionId", "s1");
-        assertOk(multitask.call(args));
+        assertOk(taskWait.call(args));
 
         ThreadLocal<Boolean> depth = depth();
         depth.set(Boolean.TRUE);
@@ -175,23 +146,5 @@ public class TaskTalentErrorFlagTest {
         args.put("systemPrompt", "sp");
         args.put("__sessionId", "s1");
         assertError(gen.getToolMap().get("generate").call(args));
-    }
-
-    private static Object ctx(ReActTrace trace) throws Exception {
-        return HarnessFixtures.multitaskContext(trace, 2,
-                new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean());
-    }
-
-    private static AtomicInteger succeeded(Object ctx) throws Exception {
-        return (AtomicInteger) HarnessFixtures.get(ctx, "succeeded");
-    }
-
-    private static List<CompletableFuture<String>> okAndFailed() {
-        CompletableFuture<String> failed = new CompletableFuture<>();
-        failed.completeExceptionally(new RuntimeException("boom"));
-        List<CompletableFuture<String>> futures = new ArrayList<>();
-        futures.add(CompletableFuture.completedFuture("ok"));
-        futures.add(failed);
-        return futures;
     }
 }

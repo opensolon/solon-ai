@@ -71,7 +71,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
             cfg.setApiKey(System.getenv("DEEPSEEK_API_KEY"));
             cfg.setModel("deepseek-chat");
             cfg.setContextLength(128_000);
-            cfg.setConcurrency(5);                                 // 会话选用该模型时，multitask 的并发上限（§6.3）
+            cfg.setConcurrency(5);                                 // 会话选用该模型时，后台子任务（task_start）的并发上限（§6.3）
         }))
         .defaultModel("deepseek")
         .toolsAdd(ToolName.TOOL_ALL_FULL)                           // 主代理工具权限（§7）
@@ -111,7 +111,7 @@ HarnessEngine engine = HarnessEngine.of("/data/work", ".solon/")   // 工作区,
 | 权限 | `permissionRuleAdd(PermissionRule)` | 空 | 权限规则 |
 | 权限 | `hitlEnabled(Boolean)` | `false` | HITL 拦截总开关（三条件之一，§9.2） |
 | 权限 | `hitlInterceptor(HITLInterceptor)` | 引擎自建 | 不配时构造期自建，默认只绑 `BashToolStrategy` 到 `bash` 与 `bash_start` |
-| 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `multitask`） |
+| 子代理 | `subagentEnabled(Boolean)` | `true` | 子代理委派功能（`task` / `task_start` / `task_wait` / `task_stop`） |
 | 子代理 | `subagentDefaultConcurrency(Integer)` | `5` | 子代理默认并发上限（`1~10`，`0`=未设置取默认 5；会话模型配了 `AiConfig#concurrency` 以模型为准，§6.3） |
 | 子代理 | `disallowedAgentsAdd(String... / Collection)` | 空 | 按名字禁用子代理（内置的、自定义的都适用；SERVER 下只能这样或在 `onAttach` 里改，§6.1） |
 | 工具 | `bashAsyncEnabled(Boolean)` | `false` | Bash 异步执行 |
@@ -767,7 +767,7 @@ engine.interrupt(session, InterruptMode.PREEMPT_STREAM);  // 新一轮腾位：�
 | 对象 | 停止后的表现 |
 |---|---|
 | 当前一轮 | 三种方式都停。靠线程中断实现：卡在不可中断的阻塞调用里时，要等这次调用返回才停下 |
-| 子代理（`task` / `multitask`） | 三种方式都会一起停下，结果按失败（`cancelled` / `interrupted`）返回，可凭 `task_id` 接着做（§6.3「结果」） |
+| 子代理（`task` / `task_start`） | 三种方式都会一起停下，结果按失败（`cancelled` / `interrupted`）返回，可凭 `task_id` 接着做（§6.3「结果」） |
 | 积压（queue） | 只有 `INTERRUPT_ALL` 清空（`QueueExtension#onSessionInterrupt`）；另外两种保留，本轮结束后续发 |
 | 插话（steer） | 停止后再插话一律 `NOT_RUNNING`（§4.8） |
 | 待审批（HITL） | 不撤销：审批挂起时本来就没有在跑的流，停止返回 `false`，卡仍可决策续流 |
@@ -942,7 +942,7 @@ InputOutcome o = engine.handle(...);
 System.out.println(o.getAgentName());     // "bash" 或 null（主代理）
 ```
 
-主代理还会在运行中通过工具自动委派（宿主无需写代码）：`task`（单个任务）、`multitask`（并行，按会话所选模型的并发上限排队），两者都不在 `*` 里，只有 `**` 包含。子代理只能用一层委派、且不能使用 `hitl`（挂起后无人能决策）。细节见第六章。
+主代理还会在运行中通过工具自动委派（宿主无需写代码）：`task`（单个任务，同步）、`task_start` / `task_wait` / `task_stop`（后台并行，按会话所选模型的并发上限排队），都不在 `*` 里，只有 `**` 包含。子代理只能用一层委派、且不能使用 `hitl`（挂起后无人能决策）。细节见第六章。
 
 ### 4.7 命令驱动的二段任务
 
@@ -1193,7 +1193,7 @@ engine.getAgentManager().addAgent(AgentDefinition.builder()
 可用的判定（`AgentManager#isAvailable`）：定义没有标 `enabled: false`，且名字不在禁用名单里。不可用的子代理：
 
 - `getAgents()` 不列出（模型看到的 `<available_agents>`、CLI 补全等都看不到），`getAgent` 抛异常，`getAgentOrNil` 与 `engine.resolveAgent` 返回 `null`；
-- 按名字也调不到：`task` / `multitask` 报找不到子代理，`@提及`、`explicitAgent`、`selectedAgent` 视为无效，**整段回落主代理**。宿主若程序化指定某个子代理（如 `selectedAgent("git-summary")`），调用前应先判 `engine.resolveAgent(session, name) != null`，否则会悄悄由主代理执行；
+- 按名字也调不到：`task` / `task_start` 报找不到子代理，`@提及`、`explicitAgent`、`selectedAgent` 视为无效，**整段回落主代理**。宿主若程序化指定某个子代理（如 `selectedAgent("git-summary")`），调用前应先判 `engine.resolveAgent(session, name) != null`，否则会悄悄由主代理执行；
 - 运行时注册的同名定义不可用时，不再往挂载目录里找：同名覆盖文件写 `enabled: false` 就是停用该代理（含内置代理）；
 - `hasAgent` 仍按「名字已被占用」判断，禁用的名字也不能被 `generate` 拿去重建（§6.4）；
 - 禁用名单按名字拦截，对同名的替换定义、会话级子代理同样生效，「禁用」与「替换」不要对同一个名字混用；
@@ -1216,7 +1216,7 @@ explicitAgent（请求体显式）  >  输入开头的 @提及  >  selectedAgent
 
 无有效提及时整段原样交给主代理；名字不存在或子代理不可用（§6.1）时同样不剥离（除非 `agentNameValidator` 判定失败）。统一入口是 `engine.resolveAgent(session, name)`：先会话级，再引擎级，两层都只返回可用的定义。判断某个名字能否选用请用它，不要用 `hasAgent`（后者只表示名字被占用，禁用的也算）。
 
-### 6.3 主代理委派（`task` / `multitask`）
+### 6.3 主代理委派（`task` / `task_start`）
 
 主代理通过工具自动委派，宿主无需写代码：
 
@@ -1226,28 +1226,46 @@ engine.setSubagentDefaultConcurrency(5);      // 默认并发上限（会话模�
 config.setConcurrency(2);                     // 模型级并发上限（配了就完全覆盖默认值，不再取 min）
 ```
 
+#### 工具
+
+| 工具 | 作用 |
+|---|---|
+| `task` | 同步委派一个任务，在调用线程上跑完再返回结果 |
+| `task_start` | 后台启动一个任务（参数同 `task`），立即返回 `task_id` 与状态（`running` / `queued`）；要并行就逐个调用 |
+| `task_wait` | 等后台任务完成并取回结果：给 `task_id` 等这一个；不给就等本轮任意一个未取回的完成，并附上其余任务的状态；`timeout_ms` 到了只是先返回，任务继续跑 |
+| `task_stop` | 停一个后台任务：排队中的不再启动，运行中的停下（可凭 `task_id` 接着做），已结束的返回它的结果 |
+
+四个工具跟着子代理开关走（`subagentEnabled`），与 `bashAsyncEnabled` 无关。并行一律用 `task_start` + `task_wait`。主代理自己取结果，引擎不推送完成通知、也不唤醒空闲的父代理。
+
+#### 后台任务的生命周期：跟着父代理这一轮走
+
+- 父代理这一轮结束时（正常结束、人工审批暂停、异常退出都算），还没结束的后台任务一律取消、排队的不再启动，结果记为 `cancelled`；本轮全部后台任务的结果补回各自 `task_start` 结果上的 `_subtasks` 索引项。被取消的子会话保留，下一轮可凭 `task_id` 接着做；
+- 实现分两处：`TaskTalent#getInterceptor()` 在父代理运行结束时收尾（`AgentFactory` 已挂上；宿主自己给代理挂 `TaskTalent` 时要一并挂这个拦截器），引擎在每次运行结束、运行句柄注销之后再兜底一次（异常退出时拦截器的结束回调会被跳过）。兜底时会话又有运行流（下一轮已开出）就不动，留给那一轮收尾；
+- 父代理被停止（§3.7 三种方式都算）时，后台任务随之停下；`task_wait` 等待中被停止时结束等待、按失败返回；
+- 停止是中断子代理线程，子代理还会在每次推理前、每个工具调用前检查一次是否已被停止，已停止就结束（与模型调用被中断时的结束方式一致）。所以即使子代理卡在吞掉中断的工具里，工具一返回它也会停下，不会接着推理、调工具；
+- 子任务被停止（`task_stop`、轮次结束、父代理被停止；`task` 与 `task_start` 一样）时，子代理用 `bash_start` 起、还在跑的命令连同子进程树一并结束（由子任务线程在收尾时做，不阻塞发起停止的一方），不再跑到硬超时；子任务正常结束或执行失败时不动（可能是有意留着的，如启动的服务），主代理自己的 `bash_start` 命令也不动。命令会话按发起它的代理会话（`__sessionId`）归属，定向结束用 `TerminalTalent#stopCommandsOf(sessionId, reason)`；
+- 提示词要求模型：启动后去做不冲突的事，没事可做就 `task_wait`，不要轮询；给出最终回答前收回或停掉全部后台任务。
+
 #### 并发
 
-- 上限**按每次调用**算一个数：取当前会话所选模型的 `AiConfig#concurrency`（0 = 未设置），未设置取 `subagentDefaultConcurrency`（默认 5，取值 1~10）；**不存在「不限制」**（不限会退化为只受任务数约束，最容易打爆上游与 OOM）；
-- `multitask` 的任务进一个 FIFO 队列，起「上限」个 worker 自取，跑完一个取下一个；超限不报错，只是排队。`task` 只有一个任务，直接在调用线程上跑；
-- 多次调用之间（包括不同会话）不共享额度。引擎级的兜底只有执行器线程上限（私有执行器 64 线程，超出时少起 worker，由已起的 worker 消化），引擎池可用 `Builder.taskExecutor(...)` 共用一个有界池；
-- 不设超时：子任务可能跑很久，只会因父代理被停止或线程中断提前结束。
+- 后台任务按**父会话**排队（队列放在父会话的 `attrs()` 里，只在内存、不进快照），多次 `task_start` 共用一个上限：取当前会话所选模型的 `AiConfig#concurrency`（0 = 未设置），未设置取 `subagentDefaultConcurrency`（默认 5，取值 1~10）；**不存在「不限制」**（不限会退化为只受任务数约束，最容易打爆上游与 OOM）；
+- 超出上限的排队，跑完一个补一个，超限不报错（`task_start` 返回 `queued` 并提示「已排队」）。`task` 在调用线程上跑，不占队列；
+- 不同会话之间不共享额度。引擎级的兜底只有执行器线程上限（私有执行器 64 线程，超出时少起 worker，由已起的 worker 消化；一个都起不来时排队的任务按「未启动」结束），引擎池可用 `Builder.taskExecutor(...)` 共用一个有界池；
+- 不设超时：子任务可能跑很久，只会因父代理这一轮结束、被停止或线程中断提前结束。
 
 #### 结果
 
-- 每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA，**有 20000 字符上限**；超出时完整结果落盘到 `<workspace>/.files/task/<task_id>/result.txt`，头部保留截断说明与相对路径；`multitask` 的结果按入参下标顺序排在 `<multitask_results>` 里，遇到限流 / 上游不可用 / 超时时另附 `<multitask_advice>`；
+- 每个子任务包在 `<task_result>` 里，`<result_content>` 用 CDATA，**有 20000 字符上限**；超出时完整结果落盘到 `<workspace>/.files/task/<task_id>/result.txt`，头部保留截断说明与相对路径；
 - 子代理跑起来过的结果成败都带 `<task_id>`；失败另带 `<failure_kind>`（模型服务错误取其分类值，回合用尽为 `max_turns`，父流取消 / 中断为 `cancelled` / `interrupted`）；
-- 失败标记（`ToolResult.isError()`）：`task` 失败即标失败；`multitask` 只在被取消 / 中断、或一个都没成功时标失败，部分失败算成功（每项成败写在 `result_status` 里）；
-- 父代理被停止（§3.7 三种方式都算）时，子代理会被主动停下，不再逐个等到底：
-  - `multitask`：**已完成**的照常返回真实结果；**已启动未结束**的被停下，返回带 `<task_id>` 的失败结果（进度在子会话里，可接着做）；**排队中**的不再启动，返回放弃说明；
-  - `task`：子代理被停下，同样返回带 `<task_id>` 的失败结果；
-  - 停止与子代理正常结束撞在一起时，在子代理发出结束事件那一刻判定一次：父代理已被停止，就按 `cancelled` / `interrupted` 报失败，结束事件不转给前端；还没被停止，就定为成功，之后的停止不再改判，父代理最多再等 10 秒拿它的真实结果。前端看到的、模型收到的、子会话记下的三者一致。
+- 失败标记（`ToolResult.isError()`）：`task` 与 `task_wait` 跟着取回的那个任务的成败；`task_start` 只在没能启动时（找不到代理、续跑目标仍在执行、父代理已被停止等）标失败；
+- 父代理被停止时，`task` 的子代理被停下，返回带 `<task_id>` 的失败结果；停止与子代理正常结束撞在一起时，在子代理发出结束事件那一刻判定一次：父代理已被停止，就按 `cancelled` / `interrupted` 报失败，结束事件照常转发，宿主经 `TaskTalent.failureKindOf` 读到停止类型（`isStopKind` 判定），实时显示「被中断」；还没被停止，就定为成功，之后的停止不再改判，最多再等 10 秒拿它的真实结果。前端看到的、模型收到的、子会话记下的三者一致。`task_stop` 与轮次结束取消后台任务同一口径。
 
 #### 接着做（`task_id`）
 
-- 同 opencode 的 `task_id`：模型带上它再调 `task` / `multitask`，就在原子会话上继续（失败时从断点重试，完成后追问），子代理以原任务为准（传了不同的 `agent_name` 会被改回去）；
+- 同 opencode 的 `task_id`：模型带上它再调 `task` / `task_start`，就在原子会话上继续（失败时从断点重试，完成后追问），子代理以原任务为准（传了不同的 `agent_name` 会被改回去）；
 - 只校验归属（必须是本会话委派的），不看上次成败、不限次数。ID 格式不对、不存在、不属于本会话、上次没跑起来，统一报「不存在或已过期」（不区分原因，避免探测别的会话）；
-- 同一任务仍在执行时再接着做，报「仍在执行中」；同一次 `multitask` 里重复的 `task_id` 只认第一条。这把运行锁只在单个进程内有效：多个实例共用同一个 `sessionProvider` 时，同一个 `task_id` 可能被同时接着做，需要时由宿主自己加分布式锁。
+- 不跨轮记录 `task_id`（与 `bash_start` 的命令会话一致）：每轮开始时工作记忆只带用户消息与最终回答，上一轮工具结果里的 `task_id` 模型看不到；只有它出现在对话里（用户贴出、或模型在回答里提到过）时才能跨轮接着做。不把旧任务写进提示词，是为了不让换了意图的新一轮被旧任务带偏；
+- 同一任务仍在执行或在后台排队时再接着做，报「仍在执行中」（后台任务在 `task_start` 入队时就检查）。这把运行锁只在单个进程内有效：多个实例共用同一个 `sessionProvider` 时，同一个 `task_id` 可能被同时接着做，需要时由宿主自己加分布式锁。
 
 #### 子代理对话的持久化（怎么配）
 
@@ -1330,7 +1348,7 @@ AgentSessionProvider provider = (id, parentId, create) -> {
 
 | 时机 | 怎么找 |
 |---|---|
-| 工具已返回 | 工具结果（ToolMessage）metadata 里的 `TaskTalent.META_SUBTASKS`（`_subtasks`：`taskId / index / agentName / description`，只列确实跑起来的任务） |
+| 工具已返回 | 工具结果（ToolMessage）metadata 里的 `TaskTalent.META_SUBTASKS`（`_subtasks`：`taskId / agentName / description / status / failureKind`，一次调用一项，只在任务确实跑起来时挂；旧版本数据可能一次多项、带 `index`，按列表读、忽略不认识的字段） |
 | 工具还没返回（子任务运行中刷新、进程在子任务中途退出后重启） | 父 trace extras 的 `TaskTalent.EXTRA_RUNNING_SUBTASKS`（`_runningSubtasks`：调用 id → 同样的索引列表） |
 
 找到子会话后用 `TaskTalent.subtaskTraceOf(sub)` 取子 trace；子会话 `META_SUBTASK` 里的 `status`（`running / success / failure`）与 `failureKind` 只供展示（父代理停止时会写成 `failure` + `cancelled` / `interrupted`；`running` 只在进程崩溃等来不及收尾时留下，按「已中断」展示）。
@@ -1503,7 +1521,7 @@ engine.addExtension(new HarnessExtension() {
     @Override
     public void onRequestAssemble(HarnessEngine engine, String agentName,
                                   boolean isDelegated, ReActOptionsAmend o) {
-        // 请求级装配：isDelegated=true 是 task/multitask 委派（临时会话），会话级能力不要挂
+        // 请求级装配：isDelegated=true 是 task/task_start 委派（临时会话），会话级能力不要挂
         if (isDelegated == false) {
             o.interceptorAdd(myRequestInterceptor);
         }
@@ -1561,7 +1579,7 @@ engine.addExtension(new HarnessExtension() {
 | 用户新输入（主代理） | `false` | 主代理名 | 业务会话 |
 | 用户新输入（**面板 / `@` 选中的子代理**） | `false` | **子代理名** | 业务会话 |
 | HITL 恢复 / `/continue` / 队列续发 | `false` | 生效代理名 | 业务会话 |
-| `task` / `multitask` 委派 | **`true`** | 子代理名 | 临时 `InMemoryAgentSession` |
+| `task` / `task_start` 委派 | **`true`** | 子代理名 | 临时 `InMemoryAgentSession` |
 
 > **为什么面板选中的子代理是 `isDelegated = false`**：它是**顶层请求**，只是目标代理换成了子代理。会话能力（如 steer 插话、queue 排队）必须对它生效。反过来，`isDelegated = true` 的委派任务跑在临时会话上，没有前端邮箱语义，必须排除。
 
@@ -1657,7 +1675,7 @@ org.noear.solon.ai.harness
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、BusyPolicy、RejectReason、AgentMentions
 ├── command/                      命令框架：Command / CommandInput / CommandOutput / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
-├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent、ProjectRulesTalent（AGENTS.md）；SubTaskScheduler / ProjectRulesInterceptor 包内
+├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent、ProjectRulesTalent（AGENTS.md）；SubTaskQueue / ProjectRulesInterceptor 包内
 ├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
 ├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership / OwnerCheck / NotOwnerException

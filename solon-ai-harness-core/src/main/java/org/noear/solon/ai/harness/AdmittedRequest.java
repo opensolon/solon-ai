@@ -16,9 +16,12 @@
 package org.noear.solon.ai.harness;
 
 import org.noear.solon.ai.agent.AgentEvent;
+import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActRequest;
 import org.noear.solon.ai.agent.react.ReActResponse;
+import org.noear.solon.ai.agent.session.SessionRuns;
+import org.noear.solon.ai.harness.agent.TaskTalent;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.lang.Nullable;
 import reactor.core.publisher.Flux;
@@ -52,6 +55,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * 运行计数在回调执行完之后才减。否则引擎会在两个空档里被判为可回收：订阅之前（计数还没加），
  * 以及流结束之后、续发还没开出下一轮之前（外层 {@code doFinally} 先于父类注销运行句柄执行）。</p>
  *
+ * <p><b>后台子任务兜底</b>：每次运行结束（先于宿主回调）收尾本会话还没结束的后台子任务（{@link TaskTalent#endRound}）。
+ * 正常结束时拦截器已经收过，这里什么都不做；父代理异常退出时拦截器的结束回调被跳过，靠这里取消。</p>
+ *
  * @author noear
  * @since 4.2.0
  */
@@ -73,14 +79,26 @@ final class AdmittedRequest extends ReActRequest {
      * 正好覆盖「占位已释放、call() 未返回」这段窗口，宿主的续发就发生在这里。</p>
      */
     private final AtomicInteger countedStreams = new AtomicInteger();
+    /** 收尾后台子任务（null = 不收尾） */
+    private final TaskTalent taskTalent;
+    /** 本请求的会话（父类不公开，这里记一份供收尾用） */
+    private volatile AgentSession session;
 
     AdmittedRequest(ReActAgent agent,
                     @Nullable Prompt prompt,
                     AtomicInteger activeRuns,
-                    Set<AdmissionGate.Hold> admissions) {
+                    Set<AdmissionGate.Hold> admissions,
+                    @Nullable TaskTalent taskTalent) {
         super(agent, prompt);
         this.activeRuns = activeRuns;
         this.admissions = admissions;
+        this.taskTalent = taskTalent;
+    }
+
+    @Override
+    public ReActRequest session(AgentSession session) {
+        this.session = session;
+        return super.session(session);
     }
 
     /** 挂上受理占位（仅 handle 第 0 步占到时），并登记到引擎的受理表。 */
@@ -107,6 +125,7 @@ final class AdmittedRequest extends ReActRequest {
     protected void afterRun() {
         // 占位此前已在订阅 / 调用结束时释放；再释放一次兜底（幂等），确保回调里会话可受理
         release();
+        endBackgroundTasks();
         try {
             for (Runnable hook : afterRunHooks) {
                 try {
@@ -121,6 +140,23 @@ final class AdmittedRequest extends ReActRequest {
             if (decrementIfPositive(countedStreams)) {
                 activeRuns.decrementAndGet();
             }
+        }
+    }
+
+    /**
+     * 兜底收尾本会话的后台子任务。会话又有运行流（下一轮已经开出）就不动：那时剩下的任务可能属于新一轮，
+     * 交给新一轮结束时收尾。
+     */
+    private void endBackgroundTasks() {
+        AgentSession s = session;
+        if (taskTalent == null || s == null || SessionRuns.isBusy(s)) {
+            return;
+        }
+
+        try {
+            taskTalent.endRound(s);
+        } catch (Throwable e) {
+            LOG.warn("[Harness] background subtask cleanup failed: session={}", s.getSessionId(), e);
         }
     }
 

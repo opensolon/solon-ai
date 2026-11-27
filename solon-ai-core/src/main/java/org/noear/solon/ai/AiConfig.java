@@ -130,7 +130,7 @@ public class AiConfig implements Serializable {
      * <p>0 表示<b>未设置</b>，由调用方回退到自己的默认值（与 {@link #getContextLength()} 的
      * 0=未设置 语义保持一致）；正数表示该接口实例上允许的并发上限。</p>
      *
-     * <p>当前消费方：harness 的子代理并行调度（{@code multitask}）。其他接口（embedding、
+     * <p>当前消费方：harness 的子代理后台并行调度（{@code task_start}）。其他接口（embedding、
      * reranking 等）虽可配置，暂未被读取。</p>
      *
      * @since 4.2

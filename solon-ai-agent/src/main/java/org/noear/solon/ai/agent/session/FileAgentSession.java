@@ -207,8 +207,22 @@ public class FileAgentSession implements AgentSession {
      * <p>用于快照与消息文件的全量覆盖写。若直接覆盖写在中断时留下半截文件，
      * 消息文件会丢失记录，快照则会连同其他会话级数据（队列、目标等）一并损坏。
      * 原子重命名可保证目标文件要么是旧内容、要么是完整新内容。</p>
+     *
+     * <p>写入期间暂时清掉线程的中断标志、写完还回去：NIO 通道遇到中断标志会直接关闭（ClosedByInterruptException），
+     * 而会话恰恰常在被停止后收尾时落盘（停止会中断执行线程），不清的话这次状态就写不进去。</p>
      */
     private static void writeAtomic(Path target, byte[] data) throws IOException {
+        final boolean interrupted = Thread.interrupted();
+        try {
+            writeAtomic0(target, data);
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    private static void writeAtomic0(Path target, byte[] data) throws IOException {
         Path dir = target.getParent();
         if (dir != null && !Files.exists(dir)) {
             Files.createDirectories(dir);

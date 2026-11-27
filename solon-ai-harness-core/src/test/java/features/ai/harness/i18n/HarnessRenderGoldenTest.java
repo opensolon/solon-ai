@@ -42,6 +42,7 @@ import org.noear.solon.ai.i18n.testkit.GoldenFiles;
 import org.noear.solon.lang.Nullable;
 import reactor.core.Disposable;
 
+import java.lang.reflect.Constructor;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,8 +53,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Executor;
 
 /**
  * harness-core 对模型 / 用户可见文本的渲染快照
@@ -138,55 +138,23 @@ public class HarnessRenderGoldenTest {
         depth.set(Boolean.TRUE);
         try {
             out.put("task_nested" + suffix, talent.task(HarnessFixtures.taskOp("explore", 1), cwd, "s1", tag).getContent());
-            out.put("multitask_nested" + suffix, talent.multitask(Collections.singletonList(HarnessFixtures.taskOp("explore", 1)), cwd, "s1", tag).getContent());
+            out.put("task_start_nested" + suffix, talent.taskStart(HarnessFixtures.taskOp("explore", 1), cwd, "s1", tag).getContent());
         } finally {
             depth.remove();
         }
 
-        out.put("multitask_empty" + suffix, talent.multitask(Collections.emptyList(), cwd, "s1", tag).getContent());
+        //后台任务：没有可等的
+        out.put("task_wait_none" + suffix, talent.taskWait(null, null, "s1", tag).getContent());
 
-        //无效任务：未知子代理 + null 条目
+        //无效任务：未知子代理
         HarnessFixtures.bindTrace(s1, HarnessFixtures.trace(locale, false));
-        List<TaskTalent.MultiTaskOp> bad = new ArrayList<>();
-        bad.add(HarnessFixtures.taskOp("no-such-agent", 1));
-        bad.add(null);
-        out.put("multitask_invalid" + suffix, talent.multitask(bad, cwd, "s1", tag).getContent());
+        out.put("task_start_invalid" + suffix, talent.taskStart(HarnessFixtures.taskOp("no-such-agent", 1), cwd, "s1", tag).getContent());
 
-        //聚合：失败 + 三种建议
         ReActTrace trace = HarnessFixtures.trace(locale, false);
-        String[] advices = {"rate", "upstream", "timeout"};
-        for (String advice : advices) {
-            AtomicBoolean rate = new AtomicBoolean("rate".equals(advice));
-            AtomicBoolean timeout = new AtomicBoolean("timeout".equals(advice));
-            AtomicBoolean upstream = new AtomicBoolean("upstream".equals(advice));
-            CompletableFuture<String> failed = new CompletableFuture<>();
-            failed.completeExceptionally(new RuntimeException("boom"));
-            List<CompletableFuture<String>> futures = new ArrayList<>();
-            futures.add(CompletableFuture.completedFuture("ok"));
-            futures.add(failed);
-            out.put("aggregate_" + advice + suffix, HarnessFixtures.aggregate(talent, futures,
-                    HarnessFixtures.multitaskContext(trace, 2, rate, timeout, upstream)).getContent());
-        }
-
-        //聚合：主流程已取消
-        ReActTrace cancelled = HarnessFixtures.trace(locale, true);
-        List<CompletableFuture<String>> pending = new ArrayList<>();
-        pending.add(new CompletableFuture<>());
-        pending.add(new CompletableFuture<>());
-        out.put("aggregate_cancelled" + suffix, HarnessFixtures.aggregate(talent, pending,
-                HarnessFixtures.multitaskContext(cancelled, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())).getContent());
-
-        //聚合：中断
-        Thread.currentThread().interrupt();
-        try {
-            out.put("aggregate_interrupted" + suffix, HarnessFixtures.aggregate(talent, pending,
-                    HarnessFixtures.multitaskContext(trace, 2, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean())).getContent());
-        } finally {
-            Thread.interrupted();
-        }
+        renderBackground(out, talent, s1, trace, locale, tag, suffix);
 
         //未启动
-        Class<?>[] opType = {TaskTalent.MultiTaskOp.class, Locale.class};
+        Class<?>[] opType = {TaskTalent.SingleTaskOp.class, Locale.class};
         out.put("task_not_started" + suffix, (String) HarnessFixtures.invoke(talent, "notStarted", opType, HarnessFixtures.taskOp("explore", 3), locale));
         Thread.currentThread().interrupt();
         try {
@@ -197,38 +165,80 @@ public class HarnessRenderGoldenTest {
 
         //超长结果：落盘 / 纯截断
         String longText = HarnessFixtures.repeat('x', 20005);
-        Class<?>[] respType = {TaskTalent.MultiTaskOp.class, String.class, boolean.class, String.class, boolean.class,
+        Class<?>[] respType = {TaskTalent.SingleTaskOp.class, String.class, boolean.class, String.class,
                 String.class, Locale.class};
         out.put("task_result_spilled" + suffix, (String) HarnessFixtures.invoke(talent, "formatTaskResp", respType,
-                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
+                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, cwd, locale));
         out.put("task_result_truncated" + suffix, (String) HarnessFixtures.invoke(new TaskTalent(null), "formatTaskResp", respType,
-                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, false, cwd, locale));
+                HarnessFixtures.taskOp("explore", 1), "t1", true, longText, cwd, locale));
 
         renderResume(out, engine, talent, s1, trace, locale, suffix);
     }
 
-    /** 子任务续跑：跑起来过的失败、不存在、重复、仍在执行（走真实的预解析 / 执行入口，固定 task_id 保证快照稳定） */
+    /**
+     * 后台任务（task_start / task_wait / task_stop）的文案：启动提示、等待超时、等待中被取消 / 中断、找不到、停止。
+     * 不跑真实子代理：往父会话的后台队列里放一个不会被执行的任务（执行器什么都不做），固定 task_id 保证快照稳定。
+     */
+    static void renderBackground(Map<String, String> out, TaskTalent talent, AgentSession s1, ReActTrace trace,
+                                 Locale locale, String tag, String suffix) throws Throwable {
+        final String id = "task-00112233445566778899aabbccddeeff";
+        Class<?>[] planType = {AgentSession.class, TaskTalent.SingleTaskOp.class, String.class, Locale.class};
+        Object plan = HarnessFixtures.invoke(talent, "preparePlan", planType, s1, HarnessFixtures.taskOp("explore", 1), null, locale);
+        HarnessFixtures.set(plan, "taskId", id);
+
+        out.put("task_start_started" + suffix, (String) HarnessFixtures.invoke(TaskTalent.class, "renderStarted",
+                new Class<?>[]{plan.getClass(), String.class, Locale.class}, plan, "running", locale));
+        out.put("task_start_queued" + suffix, (String) HarnessFixtures.invoke(TaskTalent.class, "renderStarted",
+                new Class<?>[]{plan.getClass(), String.class, Locale.class}, plan, "queued", locale));
+
+        Object ctx = HarnessFixtures.callContext(trace);
+        Class<?> asyncType = Class.forName(TaskTalent.class.getName() + "$AsyncTask");
+        Constructor<?> asyncCtor = asyncType.getDeclaredConstructors()[0];
+        asyncCtor.setAccessible(true);
+        // 内部类：第一个参数是外部对象
+        Object task = asyncCtor.newInstance(talent, ctx, plan, s1);
+
+        Class<?> queueType = Class.forName(TaskTalent.class.getPackage().getName() + ".SubTaskQueue");
+        Class<?> jobType = Class.forName(queueType.getName() + "$Job");
+        Object queue = HarnessFixtures.invoke(queueType, "of", new Class<?>[]{AgentSession.class, boolean.class}, s1, true);
+        Executor idle = r -> { };
+        HarnessFixtures.invoke(queue, "submit", new Class<?>[]{jobType, int.class, Executor.class}, task, 0, idle);
+        // 执行器什么都不做：worker 永远不会取走它，保持「排队中」
+
+        HarnessFixtures.bindTrace(s1, trace);
+        out.put("task_wait_timeout" + suffix, talent.taskWait(null, 1, "s1", tag).getContent());
+        out.put("task_async_unknown" + suffix, talent.taskWait("task-ffffffffffffffffffffffffffffffff", null, "s1", tag).getContent());
+
+        Thread.currentThread().interrupt();
+        try {
+            out.put("task_wait_interrupted" + suffix, talent.taskWait(id, null, "s1", tag).getContent());
+        } finally {
+            Thread.interrupted();
+        }
+
+        HarnessFixtures.bindTrace(s1, HarnessFixtures.trace(locale, true));
+        out.put("task_wait_cancelled" + suffix, talent.taskWait(id, null, "s1", tag).getContent());
+
+        HarnessFixtures.bindTrace(s1, trace);
+        out.put("task_stop_done" + suffix, talent.taskStop(id, "s1", tag).getContent());
+    }
+
+    /** 子任务续跑：跑起来过的失败、不存在、仍在执行（走真实的预解析 / 执行入口，固定 task_id 保证快照稳定） */
     @SuppressWarnings("unchecked")
     static void renderResume(Map<String, String> out, HarnessEngine engine, TaskTalent talent, AgentSession s1,
                              ReActTrace trace, Locale locale, String suffix) throws Throwable {
         final String id = "task-0123456789abcdef0123456789abcdef";
-        Object ctx = HarnessFixtures.multitaskContext(trace, 1, new AtomicBoolean(), new AtomicBoolean(), new AtomicBoolean());
-        Class<?>[] planType = {AgentSession.class, TaskTalent.MultiTaskOp.class, String.class, Locale.class};
+        Object ctx = HarnessFixtures.callContext(trace);
+        Class<?>[] planType = {AgentSession.class, TaskTalent.SingleTaskOp.class, String.class, Locale.class};
 
-        TaskTalent.MultiTaskOp op = HarnessFixtures.taskOp("explore", 1);
+        TaskTalent.SingleTaskOp op = HarnessFixtures.taskOp("explore", 1);
         out.put("task_resume_failure" + suffix, (String) HarnessFixtures.invoke(talent, "startedResp",
-                new Class<?>[]{ctx.getClass(), TaskTalent.MultiTaskOp.class, String.class, boolean.class, String.class, String.class, boolean.class},
-                ctx, op, id, false, "ERROR: boom", "rate_limit", false));
+                new Class<?>[]{ctx.getClass(), TaskTalent.SingleTaskOp.class, String.class, boolean.class, String.class, String.class},
+                ctx, op, id, false, "ERROR: boom", "rate_limit"));
 
         op.task_id = id;
         out.put("task_resume_not_found" + suffix, (String) HarnessFixtures.get(
                 HarnessFixtures.invoke(talent, "preparePlan", planType, s1, op, null, locale), "invalidReason"));
-
-        TaskTalent.MultiTaskOp dup = HarnessFixtures.taskOp("explore", 2);
-        dup.task_id = id;
-        List<Object> plans = (List<Object>) HarnessFixtures.invoke(talent, "preparePlans",
-                new Class<?>[]{AgentSession.class, List.class, String.class, Locale.class}, s1, Arrays.asList(op, dup), null, locale);
-        out.put("task_resume_duplicate" + suffix, (String) HarnessFixtures.get(plans.get(1), "invalidReason"));
 
         // 跑起来过的子会话：归属本会话，且 trace 有原始提示词
         AgentSession sub = engine.getSessionProvider().getSession(id, null, true);
@@ -247,7 +257,7 @@ public class HarnessRenderGoldenTest {
         running.put(id, "s1");
         try {
             out.put("task_resume_busy" + suffix, (String) HarnessFixtures.invoke(talent, "runTask",
-                    new Class<?>[]{ctx.getClass(), plan.getClass(), boolean.class, String.class}, ctx, plan, false, id));
+                    new Class<?>[]{ctx.getClass(), plan.getClass()}, ctx, plan));
         } finally {
             running.remove(id);
         }

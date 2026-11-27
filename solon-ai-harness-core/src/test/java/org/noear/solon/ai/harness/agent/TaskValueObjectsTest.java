@@ -57,21 +57,19 @@ class TaskValueObjectsTest {
     @Test
     void wrapEventDelegatesToRealEventAndTaskOp() {
         AgentSession session = InMemoryAgentSession.of();
-        TaskTalent.SingleTaskOp op = new TaskTalent.MultiTaskOp();
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = "worker";
         op.description = "do the thing";
         op.prompt = "detailed prompt";
-        ((TaskTalent.MultiTaskOp) op).index = 3;
 
         AgentEvent real = stubEvent(session);
-        TaskWrapEvent wrapped = new TaskWrapEvent(null, "call-1", "task-1", (TaskTalent.MultiTaskOp) op, true, real);
+        TaskWrapEvent wrapped = new TaskWrapEvent(null, "call-1", "task-1", op, true, real);
 
         assertEquals("call-1", wrapped.getParentCallId());
+        assertTrue(wrapped.isBackground());
         assertEquals("task-1", wrapped.getTaskId());
-        assertEquals(3, wrapped.getTaskIndex());
         assertEquals("worker", wrapped.getTaskAgentName());
         assertEquals("do the thing", wrapped.getTaskDescription());
-        assertTrue(wrapped.isMultitask());
 
         // 委托给真实事件
         assertSame(real, wrapped.getRealEvent());
@@ -82,16 +80,11 @@ class TaskValueObjectsTest {
     }
 
     @Test
-    void singleTaskModeHasNoMultitaskFlag() {
-        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
-        op.agent_name = "solo";
-        op.description = "single";
-
+    void parentCallIdMayBeAbsent() {
         AgentEvent real = stubEvent(InMemoryAgentSession.of());
         TaskWrapEvent wrapped = new TaskWrapEvent(null, null, "task-2", null, false, real);
 
         assertNull(wrapped.getParentCallId(), "取不到父调用 id（文本模式、测试直调）时为 null");
-        assertFalse(wrapped.isMultitask());
         assertEquals("task-2", wrapped.getTaskId());
     }
 
@@ -107,24 +100,5 @@ class TaskValueObjectsTest {
         assertTrue(s.contains("explore"), s);
         assertTrue(s.contains("查找配置项"), s);
         assertTrue(s.startsWith("SingleTaskOp{"), s);
-    }
-
-    @Test
-    void multiTaskOpToStringIncludesIndex() {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
-        op.agent_name = "bash";
-        op.description = "运行构建";
-        op.index = 7;
-
-        String s = op.toString();
-        assertTrue(s.contains("MultiTaskOp{"), s);
-        assertTrue(s.contains("7"), s);
-        assertTrue(s.contains("bash"), s);
-    }
-
-    @Test
-    void taskOpDefaults() {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
-        assertEquals(1, op.index, "index 默认 1");
     }
 }

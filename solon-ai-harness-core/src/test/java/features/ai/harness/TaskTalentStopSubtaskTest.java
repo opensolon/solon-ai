@@ -134,8 +134,8 @@ public class TaskTalentStopSubtaskTest {
         }
     }
 
-    private static TaskTalent.MultiTaskOp op(int index, String prompt) {
-        TaskTalent.MultiTaskOp op = HarnessFixtures.taskOp("bash", index);
+    private static TaskTalent.SingleTaskOp op(int n, String prompt) {
+        TaskTalent.SingleTaskOp op = HarnessFixtures.taskOp("bash", n);
         op.prompt = prompt;
         return op;
     }
@@ -173,26 +173,27 @@ public class TaskTalentStopSubtaskTest {
         HarnessFixtures.invoke(trace.getOptions(), "setStreamSink", new Class<?>[]{FluxSink.class}, sinkRef.get());
         HarnessFixtures.bindTrace(engine.getSession("s1"), trace);
 
-        List<TaskTalent.MultiTaskOp> ops = new ArrayList<>();
-        ops.add(op(1, "sleep-task"));
-        ops.add(op(2, "queued-task"));
-
+        // 父代理：后台启动两个（第 2 个排队），然后等结果
+        AtomicReference<ToolResult> first = new AtomicReference<>();
         AtomicReference<ToolResult> result = new AtomicReference<>();
-        Thread parent = parentRun(engine.getSession("s1"), () -> result.set(talent.multitask(ops, ws.toString(), "s1", null)));
+        Thread parent = parentRun(engine.getSession("s1"), () -> {
+            first.set(talent.taskStart(op(1, "sleep-task"), ws.toString(), "s1", null));
+            talent.taskStart(op(2, "queued-task"), ws.toString(), "s1", null);
+            result.set(talent.taskWait(null, null, "s1", null));
+        });
         try {
             parent.start();
 
-            assertTrue(waitUntil(() -> Files.exists(ws.resolve("started")), 10_000), "第 1 条应已进入长命令");
+            assertTrue(waitUntil(() -> Files.exists(ws.resolve("started")), 10_000), "第 1 个应已进入长命令");
             // 用户按停止：与宿主 interrupt 同一入口
             assertTrue(SessionRuns.cancelAll(engine.getSession("s1")));
 
             parent.join(5_000);
-            assertFalse(parent.isAlive(), "放弃等待后 multitask 应立即返回");
-            String out = result.get().getContent();
-            Matcher m = TASK_ID.matcher(out);
-            assertTrue(m.find(), out);
+            assertFalse(parent.isAlive(), "停止后 task_wait 应立即返回");
+            assertTrue(result.get().isError(), result.get().getContent());
+            Matcher m = TASK_ID.matcher(first.get().getContent());
+            assertTrue(m.find(), first.get().getContent());
             String id = m.group(1);
-            assertTrue(out.contains("<failure_kind>interrupted</failure_kind>"), out);
 
             // 子代理被停下：长命令被打断（远早于 20 秒），运行锁释放后马上可以续跑
             Map<String, String> running = (Map<String, String>) HarnessFixtures.get(talent, "runningTasks");
@@ -263,7 +264,7 @@ public class TaskTalentStopSubtaskTest {
             assertTrue(result.get().isError(), out);
             assertTrue(out.contains("<failure_kind>interrupted</failure_kind>") && out.contains("<task_id>"), out);
             assertTrue(stillInterrupted.get(), "中断标志应还给父代理线程，父代理才会停下");
-            assertFalse(hasSubEnd(events), "停止后子代理的结束事件不应转给前端（否则实时显示成功）");
+            assertTrue(subEndsReadAsStopped(events), "转给前端的结束事件要能读出被停止（否则实时显示成功）");
             Thread.sleep(500);
             assertEquals(1, sleepRequests.get(), "被打断的子代理不应再请求模型");
         } finally {
@@ -298,7 +299,7 @@ public class TaskTalentStopSubtaskTest {
             assertTrue(result.get().isError(), out);
             assertTrue(out.contains("<failure_kind>interrupted</failure_kind>") && out.contains("<task_id>"), out);
             assertTrue(stillInterrupted.get(), "中断标志应还给父代理线程，父代理才不会多跑一步");
-            assertFalse(hasSubEnd(events), "停止后子代理的结束事件不应转给前端");
+            assertTrue(subEndsReadAsStopped(events), "转给前端的结束事件要能读出被停止（否则实时显示成功）");
         } finally {
             parent.interrupt();
             parentStream.dispose();
@@ -307,11 +308,11 @@ public class TaskTalentStopSubtaskTest {
 
     /**
      * 与宿主同序的两段式停止：先认领（推进取消代数、暂不打断），子代理恰好在这之后正常结束。
-     * 结束一刻判定父代理已停止：结束事件不转给前端，结果按中断报，两边一致。
+     * 结束一刻判定父代理已停止：结束事件照常转发但读得出被停止，结果按中断报，两边一致。
      */
     @Test
     @SuppressWarnings("unchecked")
-    public void endAfterClaimIsReportedAsInterruptedAndNotForwarded() throws Throwable {
+    public void endAfterClaimIsReportedAsInterrupted() throws Throwable {
         Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
         HarnessEngine engine = engine(sessions);
         TaskTalent talent = engine.getTaskTalent();
@@ -334,7 +335,7 @@ public class TaskTalentStopSubtaskTest {
             String out = result.get().getContent();
             assertTrue(result.get().isError(), out);
             assertTrue(out.contains("<failure_kind>interrupted</failure_kind>"), out);
-            assertFalse(hasSubEnd(events), "判定为停止的结束事件不应转给前端");
+            assertTrue(subEndsReadAsStopped(events), "转给前端的结束事件要能读出被停止（否则实时显示成功）");
 
             Matcher m = TASK_ID.matcher(out);
             assertTrue(m.find(), out);
@@ -352,8 +353,8 @@ public class TaskTalentStopSubtaskTest {
     }
 
     /**
-     * multitask：结束事件已转给前端（已定为成功）之后父代理才被停止。放弃等待时不再改判为中断，
-     * 等它收尾，模型收到的、子会话记下的与前端看到的一致（都是成功）。
+     * 后台任务：结束事件已转给前端（已定为成功）之后父代理才被停止。停止不再改判为中断，
+     * 子会话记下的与前端看到的一致（都是成功）。
      */
     @Test
     @SuppressWarnings("unchecked")
@@ -366,26 +367,29 @@ public class TaskTalentStopSubtaskTest {
         // 前端一收到子代理的结束事件就按停止（在 worker 线程上同步发生，落在「已转发、未收尾」的窗口里）
         Disposable parentStream = bindParentStream(engine, events, () -> SessionRuns.cancelAll(engine.getSession("s1")));
 
-        List<TaskTalent.MultiTaskOp> ops = new ArrayList<>();
-        ops.add(op(1, "quick-task"));
-
-        AtomicReference<ToolResult> result = new AtomicReference<>();
-        Thread parent = parentRun(engine.getSession("s1"), () -> result.set(talent.multitask(ops, ws.toString(), "s1", null)));
+        AtomicReference<ToolResult> started = new AtomicReference<>();
+        Thread parent = parentRun(engine.getSession("s1"), () -> {
+            started.set(talent.taskStart(op(1, "quick-task"), ws.toString(), "s1", null));
+            talent.taskWait(null, null, "s1", null);
+        });
         try {
             parent.start();
             parent.join(10_000);
             assertFalse(parent.isAlive());
 
             assertTrue(hasSubEnd(events), "结束事件应已转给前端");
-            String out = result.get().getContent();
-            assertTrue(out.contains("<result_status>success</result_status>"), out);
-            assertFalse(out.contains("<failure_kind>"), out);
-
-            Matcher m = TASK_ID.matcher(out);
-            assertTrue(m.find(), out);
+            for (Object e : events) {
+                if (isSubEnd(e)) {
+                    assertNull(TaskTalent.failureKindOf((RunEndEvent) ((TaskWrapEvent) e).getRealEvent()), "正常结束不能读成失败或被停止");
+                }
+            }
+            Matcher m = TASK_ID.matcher(started.get().getContent());
+            assertTrue(m.find(), started.get().getContent());
+            Map<String, String> running = (Map<String, String>) HarnessFixtures.get(talent, "runningTasks");
+            assertTrue(waitUntil(running::isEmpty, 5_000), "子代理应已收尾");
             Map<String, Object> meta = (Map<String, Object>) sessions.get(m.group(1)).getContext().get(TaskTalent.META_SUBTASK);
             assertEquals(TaskTalent.STATUS_SUCCESS, meta.get("status"), String.valueOf(meta));
-            assertTrue(stillInterrupted.get(), "等完应把中断标志还给父代理线程");
+            assertTrue(stillInterrupted.get(), "停止留下的中断标志应还在父代理线程上");
         } finally {
             parent.interrupt();
             parentStream.dispose();
@@ -432,6 +436,16 @@ public class TaskTalentStopSubtaskTest {
 
     private static boolean isSubEnd(Object e) {
         return e instanceof TaskWrapEvent && ((TaskWrapEvent) e).getRealEvent() instanceof RunEndEvent;
+    }
+
+    /** 转给前端的子代理结束事件（可能没有：父流已取消时不转）都读得出「被停止」 */
+    private static boolean subEndsReadAsStopped(List<Object> events) {
+        for (Object e : events) {
+            if (isSubEnd(e) && TaskTalent.isStopKind(TaskTalent.failureKindOf((RunEndEvent) ((TaskWrapEvent) e).getRealEvent())) == false) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean hasSubEnd(List<Object> events) {

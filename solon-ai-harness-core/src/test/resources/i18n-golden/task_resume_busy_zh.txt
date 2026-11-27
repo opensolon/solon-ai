@@ -1,1 +1,1 @@
-<task_result><description>d1</description><agent_name>explore</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: 子任务 task-0123456789abcdef0123456789abcdef 仍在执行中，请等它结束后再接着做。]]></result_content></task_result>
+<task_result><description>d1</description><agent_name>explore</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: 任务 task-0123456789abcdef0123456789abcdef 仍在执行中，请等它结束后再接着做。]]></result_content></task_result>

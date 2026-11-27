@@ -62,7 +62,7 @@ final class CliI18nRender {
     }
 
     static String bashStart(TerminalTalent t, String tag, String cmd) throws Exception {
-        return t.bashStart(cmd, null, 1000, 64000, 120000, null, tag).getContent();
+        return t.bashStart(cmd, null, 1000, 64000, 120000, null, null, tag).getContent();
     }
 
     static String exec(TerminalTalent t, String tag, String cmd, String cwd, int timeoutMs, int max) {

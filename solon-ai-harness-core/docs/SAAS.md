@@ -410,7 +410,7 @@ public class AdminController {
 
 | 资源 | 归属 | 说明 |
 |---|---|---|
-| 子代理执行器（`task` / `multitask`） | 每引擎一个（缺省上限 64 线程），或宿主注入的共享执行器 | 空闲不占线程；单次并发由 `subagentDefaultConcurrency`（缺省 5）或模型 `concurrency` 控制 |
+| 子代理执行器（`task_start`） | 每引擎一个（缺省上限 64 线程），或宿主注入的共享执行器 | 空闲不占线程；每个会话的后台并发由 `subagentDefaultConcurrency`（缺省 5）或模型 `concurrency` 控制 |
 | goal 轮次线程池 | 每个 GoalExtension 一个 | `roundConcurrency`（缺省 4）；空闲不占线程 |
 | goal 节拍 job | 每个 GoalExtension 一个（1 秒） | 有活跃 goal 才注册 |
 | loop job | **每个任务一个** | 用 `maxTasks` + `quota` 控总量 |

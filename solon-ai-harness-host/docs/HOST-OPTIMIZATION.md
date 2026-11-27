@@ -101,7 +101,7 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 - 首次绑定引擎：登记执行器 → 恢复 goal。queue 插件没有「有积压的会话」索引，重启后的积压在该会话下次提交 / 管理操作时续发；
   需要立即续发的宿主在 `warmup` 之后自行触发（soloncode 现有 `WebQueueDispatcher` 的枚举逻辑即此）。
 - 调度窗口内或 `prepare` 期间被取消：不开流、`finished(CANCELLED)`，非派发轮次补一次续发（`CANCEL_STREAM` 保留的排队不会卡住）。
-- 行动证据：「内部工具（goal/task/multitask/memory）不算行动证据、失败调用不算」是框架规则（修 `GoalOutcome.done(ReActResponse)`）。
+- 行动证据：「内部工具（goal/task 系列/memory）不算行动证据、失败调用不算」是框架规则（修 `GoalOutcome.done(ReActResponse)`）。
 
 ## 六、里程碑
 
@@ -188,7 +188,7 @@ Builder：`engines`（必需）、`sink`、`executor`、`wrap(BiFunction<String,
 ## 十、第三轮：让所有入口都只剩「协议适配」（2026-11-08）
 
 **问题**：soloncode 有 5 套编排（Web+IM 已用 HarnessHost；桌面、无头、命令行、`/web/run` 各写一套），
-同一条规则写在多处已经走样（桌面端 goal 的行动证据只排除了 goal 工具，框架口径排除 goal/task/multitask/memory）。
+同一条规则写在多处已经走样（桌面端 goal 的行动证据只排除了 goal 工具，框架口径排除 goal/task 系列/memory）。
 
 **原则**：不要过度设计——只做有真实使用方、且能在本仓验证的改动；每项改动先读代码核实前提。
 

@@ -1,0 +1,4 @@
+等待超时，任务仍在后台运行。当前状态：
+<background_tasks>
+<task><task_id>task-00112233445566778899aabbccddeeff</task_id><description>d1</description><status>queued</status></task>
+</background_tasks>

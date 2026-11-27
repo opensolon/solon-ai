@@ -1,0 +1,1 @@
+<task_result><description>d1</description><agent_name>no-such-agent</agent_name><result_status>failure</result_status><result_content><![CDATA[ERROR: 未知的子代理类型 'no-such-agent'。]]></result_content></task_result>

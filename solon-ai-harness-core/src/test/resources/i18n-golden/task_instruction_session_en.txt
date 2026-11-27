@@ -6,13 +6,14 @@
   - "plan": Planning expert for designing the logical path, execution steps, and resource plan of complex tasks (no file write permission)
 </available_agents>
 
-## Session-only Subagents (available in this session only; also invoked via task / multitask)
+## Session-only Subagents (available in this session only; also invoked via task / task_start)
 <session_agents>
   - "helper": helper desc
 </session_agents>
 
 ## Task Assignment Strategy:
-1. **Prefer parallelism**: When a task can be split into independent units that do not interfere with each other (e.g., developing different modules, searching multiple sources), use `multitask` to save time.
-2. **Atomicity**: Each subtask should have clear boundaries.
+1. **Prefer parallelism**: When a task can be split into independent units that do not interfere with each other (e.g., developing different modules, searching multiple sources), start each one in the background with `task_start` (one task per call), then collect the results with `task_wait`. For a single task, just use `task`.
+2. **Atomicity**: Each task should have clear boundaries.
 3. **Context awareness**: The prompt must contain all the background the task needs; subagents cannot see the full history of the main session.
-4. **Continue a subtask**: The `task_id` in a result lets you continue that subtask (the subagent keeps its earlier context): after a failure, pass it to retry from where it stopped (in multitask, include only the failed ones); after success, pass it to ask follow-up questions or add requirements. A `failure_kind` of `rate_limit` or `upstream_unavailable` means the subagent has already retried internally, so lower the concurrency or try later, and if it keeps failing, end this turn and tell the user.
+4. **Continue a task**: The `task_id` in a result lets you continue that task (the subagent keeps its earlier context): after a failure, pass it to retry from where it stopped; after success, pass it to ask follow-up questions or add requirements. A `failure_kind` of `rate_limit` or `upstream_unavailable` means the subagent has already retried internally, so start fewer tasks at once or try later, and if it keeps failing, end this turn and tell the user.
+5. **Background tasks**: After starting them, you may do work that does not conflict with them (do not modify the same files they work on); when there is nothing else to do, call `task_wait`. Do not poll. Before giving the final answer, collect or stop every background task: when this turn ends, the ones not collected are cancelled (their `task_id` can still be continued later).

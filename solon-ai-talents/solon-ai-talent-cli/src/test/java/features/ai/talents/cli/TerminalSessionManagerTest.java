@@ -1,5 +1,6 @@
 package features.ai.talents.cli;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -112,6 +113,61 @@ public class TerminalSessionManagerTest {
             assertFalse(second.running());
             assertTrue(second.timedOut(), second.output());
         } finally {
+            deleteRecursively(workDir);
+        }
+    }
+
+    /** 按发起方结束：只停该发起方仍在运行的会话，别的发起方与无归属的不动；会话记录保留 */
+    @Test
+    public void terminateOwnedByStopsOnlyThatOwner() throws Exception {
+        if (isWindows()) {
+            return;
+        }
+        Path workDir = Files.createTempDirectory("solon-ai-command-session-owner-");
+        TerminalSessionManager manager = new TerminalSessionManager();
+        TerminalSessionManager.CommandSnapshot a1 = manager.exec("sleep 30", workDir, null, 0, 1_000, 60_000, "a");
+        TerminalSessionManager.CommandSnapshot a2 = manager.exec("sleep 30", workDir, null, 0, 1_000, 60_000, "a");
+        TerminalSessionManager.CommandSnapshot b = manager.exec("sleep 30", workDir, null, 0, 1_000, 60_000, "b");
+        TerminalSessionManager.CommandSnapshot none = manager.exec("sleep 30", workDir, null, 0, 1_000, 60_000);
+        try {
+            assertEquals(2, manager.terminateOwnedBy("a", "owner stopped"));
+            assertEquals(0, manager.terminateOwnedBy("a", "again"), "已结束的不再计数");
+            assertEquals(0, manager.terminateOwnedBy(null, "null"), "null 不匹配无归属的会话");
+
+            TerminalSessionManager.CommandSnapshot s = manager.writeStdin(a1.sessionId(), "", 0, 1_000);
+            assertFalse(s.running());
+            assertTrue(s.terminated());
+            assertEquals("owner stopped", s.terminateReason());
+            assertFalse(manager.writeStdin(a2.sessionId(), "", 0, 1_000).running());
+            assertTrue(manager.writeStdin(b.sessionId(), "", 0, 1_000).running());
+            assertTrue(manager.writeStdin(none.sessionId(), "", 0, 1_000).running());
+        } finally {
+            manager.terminate(b.sessionId(), "cleanup", 1_000);
+            manager.terminate(none.sessionId(), "cleanup", 1_000);
+            deleteRecursively(workDir);
+        }
+    }
+
+    /** 等待中被中断：立即返回并保留中断标志（代理被停止时靠它停下，吞掉就会接着推理） */
+    @Test
+    public void waitKeepsInterruptFlag() throws Exception {
+        if (isWindows()) {
+            return;
+        }
+        Path workDir = Files.createTempDirectory("solon-ai-command-session-interrupt-");
+        TerminalSessionManager manager = new TerminalSessionManager();
+        TerminalSessionManager.CommandSnapshot s = manager.exec("sleep 30", workDir, null, 0, 1_000, 60_000);
+        try {
+            long begin = System.currentTimeMillis();
+            Thread.currentThread().interrupt();
+            TerminalSessionManager.CommandSnapshot w = manager.writeStdin(s.sessionId(), null, 10_000, 1_000);
+            boolean flag = Thread.interrupted();
+            assertTrue(flag, "中断标志应保留");
+            assertTrue(System.currentTimeMillis() - begin < 5_000, "中断后应立即返回");
+            assertTrue(w.running());
+        } finally {
+            Thread.interrupted();
+            manager.terminate(s.sessionId(), "cleanup", 1_000);
             deleteRecursively(workDir);
         }
     }

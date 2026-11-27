@@ -575,7 +575,7 @@ public Result<Boolean> stop(String tenant, String sid, Context ctx) {
 | 对象 | 停止后的表现 |
 |---|---|
 | 当前一轮 | 停下。靠线程中断实现：卡在不可中断的阻塞调用里时，要等这次调用返回才真正结束（`finished` 也在那时才到） |
-| 子代理（`task` / `multitask`） | 一起停下，按失败返回、可凭 `task_id` 接着做（core README §6.3）。收尾完成前会话不可删（§7.2） |
+| 子代理（`task` / `task_start`） | 一起停下，按失败返回、可凭 `task_id` 接着做（core README §6.3）。收尾完成前会话不可删（§7.2） |
 | 排队 | 清空。想保留排队用 `RunHandle.cancel()` 或 `admin.interrupt(sid, CANCEL_STREAM)` |
 | 插话 | 插不进被停的那一轮；`STEER` 输入按 §4.7 处理（会话已空闲就直接开新一轮） |
 | 待审批卡 | 不撤销：挂起时没有在跑的轮次，返回 `false`，卡仍可 `decide` |
@@ -814,7 +814,7 @@ public class AdminController {
 | 结果 | `RunOutcome.getResultText()`；出错抛给插件参与熔断，被中断或没有最终回答时本轮跳过 |
 | 停止 | `host.interrupt` / `admin.interrupt` 同样能停 |
 | 续发 | 结束后自动续发积压 |
-| goal 完成证据 | 只数成功、且不是内部工具（goal / task / multitask / memory）的调用（`GoalOutcome.isEvidenceTool`） |
+| goal 完成证据 | 只数成功、且不是内部工具（goal / task / task_start / task_wait / task_stop / memory）的调用（`GoalOutcome.isEvidenceTool`） |
 
 后台轮次没人在线等，常见做法是在 `runFinished` 里发通知：
 

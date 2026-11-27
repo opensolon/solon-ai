@@ -177,16 +177,6 @@ public class TaskTalentResumeTest {
         ToolResult other = talent.task(op(id, "继续"), ws.toString(), "s2", null);
         assertTrue(other.isError() && !other.getContent().contains("<task_id>"), other.getContent());
 
-        // 同一次 multitask 里重复续跑同一任务：只认第一条
-        List<TaskTalent.MultiTaskOp> ops = new ArrayList<>();
-        for (int i = 1; i <= 2; i++) {
-            TaskTalent.MultiTaskOp m = HarnessFixtures.taskOp("explore", i);
-            m.task_id = id;
-            ops.add(m);
-        }
-        String multi = talent.multitask(ops, ws.toString(), "s1", null).getContent();
-        assertTrue(multi.contains("<index>2</index><description>d2</description>"), multi);
-
         // 不限次数、不看上次成败：已成功的任务也能接着做（追问）
         meta(engine.getSessionProvider().getSession(id, null, false)).put("status", "success");
         for (int i = 0; i < 3; i++) {

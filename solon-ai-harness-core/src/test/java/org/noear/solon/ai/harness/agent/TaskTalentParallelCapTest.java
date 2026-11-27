@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * multitask 并行上限契约测试
+ * 后台子任务（task_start）并行上限契约测试
  *
  * <p>锁定三个点：</p>
  * <ol>

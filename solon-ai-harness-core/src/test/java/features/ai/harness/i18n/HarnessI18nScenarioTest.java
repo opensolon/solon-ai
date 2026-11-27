@@ -79,7 +79,7 @@ public class HarnessI18nScenarioTest {
     public void testTaskDescriptionFollowsDefaultLocale() {
         TaskTalent talent = HarnessFixtures.engine(workspace).getTaskTalent();
         String zh = talent.description(null);
-        assertEquals("多任务调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），支持并行处理以提高效率。", zh);
+        assertEquals("子代理调度专家：将复杂任务拆解并委派给专项子代理（如 explore, plan, bash 等），互不依赖的任务可在后台并行。", zh);
 
         Locale saved = AiI18n.getDefaultLocale();
         AiI18n.setDefaultLocale(Locale.ENGLISH);
@@ -119,7 +119,7 @@ public class HarnessI18nScenarioTest {
             AgentSession session = engine.getSession("s1");
             HarnessFixtures.bindTrace(session, HarnessFixtures.trace(locale, false));
 
-            String out = engine.getTaskTalent().multitask(Collections.singletonList(op("explore")),
+            String out = engine.getTaskTalent().task(op("explore"),
                     workspace.toString(), "s1", AiI18n.toTag(locale)).getContent();
 
             String reason = expect(locale, "ERROR: 任务执行失败: boom",
@@ -151,7 +151,7 @@ public class HarnessI18nScenarioTest {
             AgentSession session = engine.getSession("s1");
             HarnessFixtures.bindTrace(session, HarnessFixtures.trace(locale, false));
 
-            String out = engine.getTaskTalent().multitask(Collections.singletonList(op("explore")),
+            String out = engine.getTaskTalent().task(op("explore"),
                     workspace.toString(), "s1", AiI18n.toTag(locale)).getContent();
 
             String reason = expect(locale, "ERROR: 子代理 'explore' 定义加载失败: boom",
@@ -234,12 +234,11 @@ public class HarnessI18nScenarioTest {
                 .startsWith("You are a professional Git commit message assistant."));
     }
 
-    static TaskTalent.MultiTaskOp op(String agent) {
-        TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+    static TaskTalent.SingleTaskOp op(String agent) {
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
         op.agent_name = agent;
         op.description = "d1";
         op.prompt = "p1";
-        op.index = 1;
         return op;
     }
 

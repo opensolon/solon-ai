@@ -20,12 +20,11 @@ import org.junit.jupiter.api.Test;
 import org.noear.solon.ai.harness.agent.TaskTalent;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 
 /**
  * TaskTalent 防死锁守卫契约测试
  *
- * 1. 深度守卫：子代理线程内再调用 task/multitask 必须被拒绝（返回 ERROR 字符串，不抛异常、不触达引擎）
+ * 1. 深度守卫：子代理线程内再调用 task / task_start 必须被拒绝（返回 ERROR 字符串，不抛异常、不触达引擎）
  * 2. 顶层不误伤：无守卫标记时应越过守卫触达引擎
  *
  * @author bai
@@ -71,19 +70,17 @@ public class TaskTalentGuardTest {
     }
 
     @Test
-    public void nestedMultitaskRejected() throws Exception {
+    public void nestedTaskStartRejected() throws Exception {
         markSubagentThread();
         try {
             TaskTalent talent = new TaskTalent(null);
 
-            java.util.List<TaskTalent.MultiTaskOp> tasks = new ArrayList<>();
-            TaskTalent.MultiTaskOp op = new TaskTalent.MultiTaskOp();
+            TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
             op.agent_name = "general";
             op.prompt = "x";
             op.description = "x";
-            tasks.add(op);
 
-            String result = talent.multitask(tasks, "/tmp", "session-x", null).getContent();
+            String result = talent.taskStart(op, "/tmp", "session-x", null).getContent();
 
             Assertions.assertNotNull(result);
             Assertions.assertTrue(result.startsWith("ERROR:"), "应返回 ERROR 字符串: " + result);

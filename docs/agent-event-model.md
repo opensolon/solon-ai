@@ -67,9 +67,9 @@ Agent 层没有统一的 `AgentEventType` 或 `AgentEventGroup`。消费事件�
 - `reasonId`：关联一次 ReAct Reason 回合，可见于 Reason、工具和计划事件。
 - `callId`：关联一次本地工具调用。
 - `Node`：只存在于 Team 的节点边界及 Supervisor 事件中，标识协作图节点；成员 Agent 事件本身不携带父 Team 或 Node 标识。
-- `TaskWrapEvent`（Harness 扩展）：当 `solon-ai-harness` 的 `task` / `multitask` 转发子代理流时，包装事件额外提供 `getParentRunId()`、`getTaskId()`、`getTaskIndex()`、`getTaskAgentName()`、`getTaskDescription()` 和 `isMultitask()`；子事件本身的 `getRunId()` 仍是子代理 runId。
+- `TaskWrapEvent`（Harness 扩展）：当 `solon-ai-harness` 的 `task` / `task_start` 转发子代理流时，包装事件额外提供 `getParentRunId()`、`getTaskId()`、`getParentCallId()`、`getTaskAgentName()`、`getTaskDescription()` 和 `isBackground()`；子事件本身的 `getRunId()` 仍是子代理 runId。
 
-当前 Agent 核心事件 API 没有单独的 invocationId/resumeId，也没有 Team 成员事件到父 Team 节点的稳定关联字段。需要区分恢复批次或并行 Team 成员归属时，消费方应在传输 DTO 或外围执行上下文中补充关联信息。例外是 Harness 的 `TaskWrapEvent`：它专门为 `task` / `multitask` 子代理转发提供了 `parentRunId` 和 `taskId` 等关联字段。
+当前 Agent 核心事件 API 没有单独的 invocationId/resumeId，也没有 Team 成员事件到父 Team 节点的稳定关联字段。需要区分恢复批次或并行 Team 成员归属时，消费方应在传输 DTO 或外围执行上下文中补充关联信息。例外是 Harness 的 `TaskWrapEvent`：它专门为 `task` / `task_start` 子代理转发提供了 `parentRunId` 和 `taskId` 等关联字段。
 
 `getMeta()` 返回事件内部按需创建的可变 Map，不是只读快照。`AgentEvent`、`Session`、`Trace` 等都是运行态对象。向 SSE、WebSocket 或消息队列转发时，应投影为自己的 DTO，不要直接把事件对象当作稳定的 JSON 协议。
 
@@ -290,20 +290,20 @@ TeamStartEvent（父 runId）
 
 `solon-ai-harness` 沿用 ReAct 事件模型，而不是另建一套生命周期。`HarnessEngine.prompt(...)` 返回 `ReActRequest`，主代理以及 Harness 创建的子代理也都是 `ReActAgent`，所以主流程仍使用 `RunStartEvent`、`Reason*`、`Action*`、`ToolCall*` 和 `RunEndEvent`。
 
-Harness 的扩展点出现在 `task` / `multitask` 调度子代理时：为了把子代理过程合并到父代理的事件流，`TaskTalent` 会把每个子代理事件包装为 `TaskWrapEvent`。由此形成两层事件：
+Harness 的扩展点出现在 `task` / `task_start` 调度子代理时：为了把子代理过程合并到父代理的事件流，`TaskTalent` 会把每个子代理事件包装为 `TaskWrapEvent`。由此形成两层事件：
 
 ```text
 父 ReAct 事件（未包装，父 runId）
-  -> ToolCallStartEvent（task / multitask）
+  -> ToolCallStartEvent（task）
   -> TaskWrapEvent（子 RunStartEvent）
   -> TaskWrapEvent（子 Reason / Action / ToolCall 事件）*
   -> TaskWrapEvent（子 RunEndEvent）
-  -> ToolCallEndEvent（task / multitask 的结果回到父 ReAct）
+  -> ToolCallEndEvent（task 的结果回到父 ReAct）
   -> ...父 ReAct 继续执行
   -> RunEndEvent（未包装，父代理最终结果）
 ```
 
-这个顺序表示一次正常的单任务调用。`multitask` 中多个子任务并发执行，不同任务的 `TaskWrapEvent` 可以交错；同一个 `taskId` 内仍按该子代理的事件顺序观察。
+这个顺序表示一次正常的同步 `task` 调用。后台任务（`task_start`）不同：`task_start` 的工具结果先回到父 ReAct，它的子代理事件随后才陆续到达，与父代理自己的事件、其他后台任务的事件交错（父流的 sink 对 `next` 已串行化）；同一个 `taskId` 内仍按该子代理的事件顺序观察。需要区分两种方式时看 `isBackground()`（以本次调用为准：同一任务先 `task_start`、再带 `task_id` 用 `task` 接着做，两次调用的事件分别为 `true` / `false`）。后台任务跟着父代理这一轮走，这一轮结束前未结束的会被取消，所以它的事件不会晚于父 `RunEndEvent`。
 
 `TaskWrapEvent` 继承 `AbsAgentEvent`，并保留原始子事件。主要 API 如下：
 
@@ -313,11 +313,10 @@ Harness 的扩展点出现在 `task` / `multitask` 调度子代理时：为了�
 | `getParentRunId()` | 调度该任务的父 ReAct 运行 `runId` |
 | `getRunId()` | 子代理事件的 `runId`，不是父运行 ID |
 | `getTaskId()` | 子任务标识（即子会话 ID；带 `task_id` 续跑时沿用原值） |
-| `getParentCallId()` | 发起本次委派的父 `task` / `multitask` 工具调用 id（等于父流工具事件的 `callId`）；取不到时为 `null` |
-| `getTaskIndex()` | `multitask` 中的任务序号；`task` 路径为 `1` |
+| `getParentCallId()` | 发起本次委派的父 `task` / `task_start` 工具调用 id（等于父流工具事件的 `callId`）；取不到时为 `null` |
 | `getTaskAgentName()` | 任务选择的子代理名称 |
 | `getTaskDescription()` | 任务摘要 |
-| `isMultitask()` | 是否来自 `multitask` 调度 |
+| `isBackground()` | 是否为后台任务：由 `task_start` 发起为 `true`，由同步 `task` 发起为 `false` |
 
 包装器的 `getText()` 委托给原始事件，但具体类型不会被“摊平”：`TaskWrapEvent` 包装了 `RunEndEvent`，它本身仍不是 `RunEndEvent`。此外，包装器自身的 `getMeta()` 不等于原始事件的元数据；如需读取子事件的 `reasonId`、`callId`、Trace、Metrics 或元数据，应先调用 `getRealEvent()`。
 
@@ -357,13 +356,13 @@ engine.prompt("并行检查这些模块").stream()
 消费 Harness 事件时还要注意：
 
 - `engine.prompt(...).stream()` 返回的仍是父代理的 `Flux<AgentEvent>`，不是 `Flux<TaskWrapEvent>`。直接 `.ofType(RunEndEvent.class)` 只会匹配未包装的父终态，不会误取子代理终态。
-- 只有父运行采用 `stream()`，且 `task` / `multitask` 实际启动子代理时，子事件才会进入父流。使用 `engine.prompt(...).call()` 时没有面向调用方的子事件流。
+- 只有父运行采用 `stream()`，且 `task` / `task_start` 实际启动子代理时，子事件才会进入父流。使用 `engine.prompt(...).call()` 时没有面向调用方的子事件流。
 - 子代理使用独立的 Session 和 `runId`。应使用 `getParentRunId()` 关联父运行，并使用 `getTaskId()` 区分同一父运行中的子任务；不要依赖 `agentName` 或最近出现的父工具事件推断归属。
-- 同一子任务可以被模型带 `task_id` 续跑多次（同一轮或跨轮），`taskId` 不变，子代理的 `runId` 也不变。按「每次调用一组」展示时，分组键用 `parentCallId + taskId`（一次 `multitask` 的多个子任务共用 `parentCallId`）；`parentCallId` 为 `null` 时退回按 `taskId` 分组。事后回放同样按调用切分：子会话消息带调用戳 `TaskTalent.META_PARENT_CALL_ID`，父工具结果的 `TaskTalent.META_SUBTASKS` 索引项带这次调用自己的 `status` / `failureKind`。
+- 同一子任务可以被模型带 `task_id` 续跑多次（同一轮或跨轮），`taskId` 不变，子代理的 `runId` 也不变。按「每次调用一组」展示时，分组键用 `parentCallId + taskId`（每次 `task` / `task_start` 调用各有自己的 `parentCallId`）；`parentCallId` 为 `null` 时退回按 `taskId` 分组。事后回放同样按调用切分：子会话消息带调用戳 `TaskTalent.META_PARENT_CALL_ID`，父工具结果的 `TaskTalent.META_SUBTASKS` 索引项带这次调用自己的 `status` / `failureKind`。
 - 子代理的 `RunEndEvent` 会被包装，它只表示该子任务结束。Harness 的最终响应仍从未包装的父 `RunEndEvent` 获取。
-- 子代理未处理异常不会作为单独的包装错误事件透传。此时该任务可能没有包装的子 `RunEndEvent`；`TaskTalent` 会把失败转换为 `task` / `multitask` 的工具结果，父 ReAct 是否继续由后续流程决定。
+- 子代理未处理异常不会作为单独的包装错误事件透传。此时该任务可能没有包装的子 `RunEndEvent`；`TaskTalent` 会把失败转换为 `task` / `task_wait` 的工具结果，父 ReAct 是否继续由后续流程决定。
 - 父流取消后不再转发子事件，也不补造子代理或父代理的结束事件。
-- `TaskWrapEvent` 和 `getRealEvent()` 都是运行态对象。跨进程传输时，应投影 `parentRunId`、`parentCallId`、`taskId`、任务信息、原始事件类型和所需载荷，而不是直接序列化整个对象。
+- `TaskWrapEvent` 和 `getRealEvent()` 都是运行态对象。跨进程传输时，应投影 `parentRunId`、`parentCallId`、`taskId`、`background`、任务信息、原始事件类型和所需载荷，而不是直接序列化整个对象。
 
 ## 五、ReAct 生命周期
 
@@ -502,7 +501,7 @@ List<AgentEvent> firstEvents = agent.prompt(query).stream()
 7. Team 流可包含并行且交错的成员事件；成员事件没有父 Team/Node 关联字段，不能仅靠现有标识无歧义还原并行嵌套关系。
 8. 主动取消后不保证任何结束事件；未处理异常通过 `onError` 终止，也不补发顶层结束事件，局部边界也可能不完整。
 9. Agent 层仅包装七种白名单 Chat 事件，且异常终态还可能产生合成 Delta；不要把 Agent Delta 当作完整 Chat 事件流。
-10. Harness 的 `TaskWrapEvent` 只包装通过 `task` / `multitask` 回传的子代理事件；消费时必须通过 `getRealEvent()` 读取原始事件，并用 `parentRunId` + `taskId` 建立父子关联。
+10. Harness 的 `TaskWrapEvent` 只包装通过 `task` / `task_start` 回传的子代理事件；消费时必须通过 `getRealEvent()` 读取原始事件，并用 `parentRunId` + `taskId` 建立父子关联。
 
 ## 九、Agent 事件与 Chat 事件的边界
 

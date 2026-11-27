@@ -83,7 +83,7 @@ public final class GoalOutcome {
     }
 
     /**
-     * 一次工具调用能否作为行动证据：内部工具（goal 自身、子代理委派 task / multitask、记忆）不算。
+     * 一次工具调用能否作为行动证据：内部工具（goal 自身、子代理委派 task / task_start 等、记忆）不算。
      *
      * <p>这是框架规则，不是宿主选项：自定义执行器从流事件里数证据时也用它（再加上「只数成功调用」），
      * 与 {@link #done(ReActResponse)} 同一口径。</p>
@@ -95,8 +95,7 @@ public final class GoalOutcome {
             return false;
         }
         return GoalTalent.isGoalTool(toolName) == false
-                && TaskTalent.TOOL_TASK.equals(toolName) == false
-                && TaskTalent.TOOL_MULTITASK.equals(toolName) == false
+                && TaskTalent.isTaskTool(toolName) == false
                 && MemoryTalent.isMemoryTool(toolName) == false;
     }
 

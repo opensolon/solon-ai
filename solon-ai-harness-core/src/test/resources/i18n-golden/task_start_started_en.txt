@@ -1,0 +1,2 @@
+<task_started><task_id>task-00112233445566778899aabbccddeeff</task_id><description>d1</description><agent_name>explore</agent_name><status>running</status></task_started>
+The task is running in the background. Use task_wait to collect its result (without task_id it returns whichever finishes first) and task_stop to stop it. Background tasks not collected when this turn ends are cancelled.

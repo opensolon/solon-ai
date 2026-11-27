@@ -36,7 +36,7 @@ import java.util.Set;
  *
  * <p>用到该智能体时转成本轮的选择，与 {@code HarnessInput#selectedSkill} / {@code HarnessInput#selectedMcp}
  * 同一语义：收窄可见范围，并预加载选中技能的正文。三种用法都生效：选择器或 {@code @提及} 选中它对话
- * （含 goal / loop 等程序轮次）、被 {@code task} / {@code multitask} 委派。输入里的显式选择优先于声明。</p>
+ * （含 goal / loop 等程序轮次）、被 {@code task} / {@code task_start} 委派。输入里的显式选择优先于声明。</p>
  *
  * <p>生效条件：声明非空；{@code tools} 分组展开后含 {@code skill} / {@code mcp}，且智能体与引擎都没有禁用它
  * （与 {@link AgentFactory} 挂载工具同口径）。不存在的名字（MCP 还有已停用的服务）直接剔除；

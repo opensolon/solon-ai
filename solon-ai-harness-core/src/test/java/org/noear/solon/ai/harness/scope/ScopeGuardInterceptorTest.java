@@ -42,7 +42,8 @@ class ScopeGuardInterceptorTest {
 
         Set<String> full = ToolName.expandRuntime(Collections.singletonList(ToolName.TOOL_ALL_FULL.getName()));
         assertTrue(full.contains("task"));
-        assertTrue(full.contains("multitask"));
+        assertTrue(full.containsAll(Arrays.asList("task_start", "task_wait", "task_stop")));
+        assertFalse(full.contains("multitask"));
         assertTrue(full.contains("call_tool"));
         assertTrue(full.contains(ToolName.TOOL_MCP.getName()), "mcp 标记保留，供直连工具判断");
 

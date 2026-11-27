@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * 委派时的视野：子代理自己声明了技能 / MCP 就用自己的，没有才继承父代理本轮的选择。
  *
- * <p>TaskPlan / MultitaskContext 是私有结构，经反射调用真实的 preparePlan 与 applyScope，不复制产品逻辑。</p>
+ * <p>TaskPlan / CallContext 是私有结构，经反射调用真实的 preparePlan 与 applyScope，不复制产品逻辑。</p>
  */
 class TaskTalentDeclaredSelectionTest {
     @TempDir
@@ -49,7 +49,7 @@ class TaskTalentDeclaredSelectionTest {
         ReActTrace parent = HarnessFixtures.trace(null, false);
         parent.getOptions().getToolContext().put(SkillTalent.CTX_SKILLS_SELECTED, Arrays.asList("beta"));
         parent.getOptions().getToolContext().put(McpGatewayTalent.CTX_MCPS_SELECTED, Arrays.asList("m2"));
-        Object ctx = HarnessFixtures.multitaskContext(parent, 1, null, null, null);
+        Object ctx = HarnessFixtures.callContext(parent);
 
         assertChild(engine, session, ctx, "declared", Arrays.asList("alpha"), Arrays.asList("m1"));
         // 只声明了技能：MCP 仍继承父代理
@@ -64,7 +64,7 @@ class TaskTalentDeclaredSelectionTest {
         engine.getAgentManager().addAgent(agent("plain", null, null));
         AgentSession session = engine.getSession("s1");
 
-        Object ctx = HarnessFixtures.multitaskContext(HarnessFixtures.trace(null, false), 1, null, null, null);
+        Object ctx = HarnessFixtures.callContext(HarnessFixtures.trace(null, false));
 
         assertChild(engine, session, ctx, "declared", Arrays.asList("alpha"), Arrays.asList("m1"));
         assertChild(engine, session, ctx, "plain", null, null);
@@ -76,7 +76,7 @@ class TaskTalentDeclaredSelectionTest {
         AgentSession session = engine.getSession("s1");
         SessionAgents.putIfAbsent(session, agent("temp", Arrays.asList("beta"), null), SessionAgents.MAX_PER_SESSION);
 
-        Object ctx = HarnessFixtures.multitaskContext(HarnessFixtures.trace(null, false), 1, null, null, null);
+        Object ctx = HarnessFixtures.callContext(HarnessFixtures.trace(null, false));
 
         assertChild(engine, session, ctx, "temp", Arrays.asList("beta"), null);
     }
@@ -86,7 +86,7 @@ class TaskTalentDeclaredSelectionTest {
     private static void assertChild(HarnessEngine engine, AgentSession session, Object ctx, String agentName,
                                     List<String> skills, List<String> mcps) throws Throwable {
         TaskTalent.TaskPlan plan = (TaskTalent.TaskPlan) HarnessFixtures.invoke(engine.getTaskTalent(), "preparePlan",
-                new Class<?>[]{AgentSession.class, TaskTalent.MultiTaskOp.class, String.class, Locale.class},
+                new Class<?>[]{AgentSession.class, TaskTalent.SingleTaskOp.class, String.class, Locale.class},
                 session, HarnessFixtures.taskOp(agentName, 1), null, null);
         assertNull(plan.invalidReason, agentName);
 

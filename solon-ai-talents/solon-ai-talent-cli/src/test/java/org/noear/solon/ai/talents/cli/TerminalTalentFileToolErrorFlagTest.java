@@ -111,14 +111,14 @@ public class TerminalTalentFileToolErrorFlagTest {
             TerminalTalent t = newTalent(workDir);
             String cwd = workDir.toString();
 
-            ToolResult violation = t.bashStart("exit 3", null, 1000, 64000, 120000, cwd, null);
+            ToolResult violation = t.bashStart("exit 3", null, 1000, 64000, 120000, cwd, null, null);
             assertTrue(violation.isError(), "安全校验拒绝算失败");
 
-            ToolResult ok = t.bashStart("echo hi", null, 5000, 64000, 120000, cwd, null);
+            ToolResult ok = t.bashStart("echo hi", null, 5000, 64000, 120000, cwd, null, null);
             assertFalse(ok.isError(), ok.getContent());
 
             // 与 bash 同口径：进程正常结束即成功，不论退出码
-            ToolResult nonZero = t.bashStart("ls __no_such_file__", null, 5000, 64000, 120000, cwd, null);
+            ToolResult nonZero = t.bashStart("ls __no_such_file__", null, 5000, 64000, 120000, cwd, null, null);
             assertFalse(nonZero.isError(), nonZero.getContent());
             assertTrue(nonZero.getContent().contains("exit_code: "), nonZero.getContent());
         } finally {
@@ -135,7 +135,7 @@ public class TerminalTalentFileToolErrorFlagTest {
         try {
             TerminalTalent t = newTalent(workDir);
 
-            ToolResult started = t.bashStart("sleep 5", null, 0, 64000, 300, workDir.toString(), null);
+            ToolResult started = t.bashStart("sleep 5", null, 0, 64000, 300, workDir.toString(), null, null);
             assertFalse(started.isError(), "仍在运行不算失败：" + started.getContent());
             String sessionId = sessionIdOf(started.getContent());
 

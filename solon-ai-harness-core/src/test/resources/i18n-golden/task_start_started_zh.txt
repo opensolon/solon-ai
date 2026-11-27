@@ -1,0 +1,2 @@
+<task_started><task_id>task-00112233445566778899aabbccddeeff</task_id><description>d1</description><agent_name>explore</agent_name><status>running</status></task_started>
+任务已在后台运行。用 task_wait 取回结果（不带 task_id 时返回最先完成的一个），需要时用 task_stop 停止。本轮结束时未取回的后台任务会被取消。
