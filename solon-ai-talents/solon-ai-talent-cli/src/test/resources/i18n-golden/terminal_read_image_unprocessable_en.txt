@@ -1,0 +1,1 @@
+Error: the image cannot be decoded, or is still over the send limit after downscaling; convert large WebP images to PNG or JPEG first.

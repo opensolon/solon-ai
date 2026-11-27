@@ -21,9 +21,12 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.ContextCompressionInterceptor;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.ChatResponse;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.ToolMessage;
+import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.util.RetryTask;
 import org.noear.solon.core.util.Assert;
@@ -192,9 +195,39 @@ public class CompressionUtil {
                 int totalLen = content.length();
                 content = content.substring(0, maxToolResultLength) + TRUNCATION_SUFFIX + ", " + totalLen + " chars total]";
             }
-            return AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_UTIL_OBSERVATION, "content", content);
+            return withMediaNotes(AgentI18n.fmt(locale, AgentI18nKeys.COMPRESS_UTIL_OBSERVATION, "content", content),
+                    ((ToolMessage) msg).getBlocks());
         }
-        return msg.getRole().name() + ": " + msg.getContent();
+        String line = msg.getRole().name() + ": " + msg.getContent();
+        if (msg instanceof UserMessage) {
+            return withMediaNotes(line, ((UserMessage) msg).getBlocks());
+        }
+        return line;
+    }
+
+    /**
+     * 摘要输入只有文本：用户附件与工具结果里的媒体各追加一行 {@code [Attached <mime>: <path>]}，
+     * 摘要里才留得住“这里曾有一张图”以及重新读取用的路径
+     */
+    private static String withMediaNotes(String line, List<ContentBlock> blocks) {
+        if (blocks == null || blocks.isEmpty()) {
+            return line;
+        }
+        StringBuilder sb = null;
+        for (ContentBlock block : blocks) {
+            if (block instanceof AbsMedia) {
+                AbsMedia<?> media = (AbsMedia<?>) block;
+                if (sb == null) {
+                    sb = new StringBuilder(line);
+                }
+                sb.append("\n[Attached ").append(Assert.isEmpty(media.getMimeType()) ? "media" : media.getMimeType());
+                if (Assert.isNotEmpty(media.getFilePath())) {
+                    sb.append(": ").append(media.getFilePath());
+                }
+                sb.append(']');
+            }
+        }
+        return sb == null ? line : sb.toString();
     }
 
     /**

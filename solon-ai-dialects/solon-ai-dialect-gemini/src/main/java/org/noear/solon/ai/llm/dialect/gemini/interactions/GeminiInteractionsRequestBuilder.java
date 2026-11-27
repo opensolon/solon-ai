@@ -308,9 +308,27 @@ public class GeminiInteractionsRequestBuilder {
             step.set("call_id", msg.getToolCallId());
         }
 
-        // result[] — 直接数组，每个元素是 FunctionResultSubcontent
+        // result[] — 直接数组，每个元素是 FunctionResultSubcontent（text / image）
         ONode resultArr = step.getOrNew("result").asArray();
-        resultArr.addNew().set("type", "text").set("text", msg.getContent());
+        if (msg.isMultiModal()) {
+            // Gemini 3+ 多模态函数响应；哪些图片留在这里由方言的 prepareRequestMedia 决定
+            for (ContentBlock block : msg.getBlocks()) {
+                if (block instanceof TextBlock) {
+                    if (Utils.isNotEmpty(block.getContent())) {
+                        resultArr.addNew().set("type", "text").set("text", block.getContent());
+                    }
+                } else if (block instanceof ImageBlock) {
+                    ONode imageNode = buildContentBlock(block);
+                    if (imageNode.isObject() && imageNode.getObject().size() > 0) {
+                        resultArr.add(imageNode);
+                    }
+                }
+            }
+        }
+
+        if (resultArr.getArray().isEmpty()) {
+            resultArr.addNew().set("type", "text").set("text", msg.getContent());
+        }
 
         return step;
     }

@@ -23,6 +23,7 @@ import org.noear.solon.ai.chat.ChatAccumulator;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.dialect.ChatDialects;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
+import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.MessageProtocolState;
@@ -195,6 +196,16 @@ public class AnthropicChatDialect extends AbstractChatDialect {
     }
 
     /**
+     * Anthropic Messages 的 tool_result.content 可以带 image 块，工具结果里的媒体按协议原样写出。
+     *
+     * @since 4.2.0
+     */
+    @Override
+    protected boolean keepsToolResultMedia(ChatConfig config, AbsMedia<?> media) {
+        return true;
+    }
+
+    /**
      * 构建 Messages 规范的请求体
      *
      * @param config   聊天配置
@@ -207,7 +218,7 @@ public class AnthropicChatDialect extends AbstractChatDialect {
      */
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
-        return requestBuilder.build(config, options, messages, isStream);
+        return requestBuilder.build(config, options, prepareRequestMedia(config, messages), isStream);
     }
 
     @Override

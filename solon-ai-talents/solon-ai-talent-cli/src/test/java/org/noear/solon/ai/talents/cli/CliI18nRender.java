@@ -1,5 +1,6 @@
 package org.noear.solon.ai.talents.cli;
 
+import org.noear.solon.ai.chat.content.ImageInputs;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.i18n.AiI18n;
@@ -16,6 +17,7 @@ import org.noear.solon.ai.talents.cli.i18n.CliI18n;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.Charset;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -301,6 +303,14 @@ final class CliI18nRender {
         Files.write(work.resolve("dup.txt"), "x\nx\n".getBytes(StandardCharsets.UTF_8));
         Files.write(work.resolve("empty.txt"), new byte[0]);
         Files.write(work.resolve("bin.dat"), new byte[]{0, 1, 2, 3, 0, 0, 5});
+        Files.write(work.resolve("broken.png"), new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3});
+        // 稀疏文件：只有 PNG 文件头，用来触发读图片的大小上限，不实际占用磁盘
+        try (RandomAccessFile huge = new RandomAccessFile(work.resolve("huge.png").toFile(), "rw")) {
+            huge.write(new byte[]{(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A});
+            huge.setLength(ImageInputs.MAX_SOURCE_BYTES + 1L);
+        }
+        // 只有文件头的 PNG：声明 20000x20000 像素，用来触发像素上限
+        Files.write(work.resolve("wide.png"), TerminalReadImageTest.pngHeader(20000, 20000));
         // 编码：GBK 中文（不是 UTF-8）；ASCII 里夹一段 GBK 和一个坏字节；带 BOM 的 UTF-16LE；
         // 无 BOM 的 UTF-16 大端（主编码设为会自动加 BOM 的 UTF-16 时无法原样写回）；大体是 UTF-8 夹两个坏字节
         Files.write(work.resolve("gbk.txt"), "// 中文\nint x = 1;\n".getBytes(Charset.forName("GBK")));
@@ -479,6 +489,9 @@ final class CliI18nRender {
         if (on(part, "file")) out.put("terminal_read_missing" + suffix, run(root, tag, () -> read(base, tag, "nope.txt", null, null)));
         if (on(part, "file")) out.put("terminal_read_binary" + suffix, run(root, tag, () -> read(base, tag, "bin.dat", null, null)));
         if (on(part, "file")) out.put("terminal_read_empty" + suffix, run(root, tag, () -> read(base, tag, "empty.txt", null, null)));
+        if (on(part, "file")) out.put("terminal_read_image_unprocessable" + suffix, run(root, tag, () -> read(base, tag, "broken.png", null, null)));
+        if (on(part, "file")) out.put("terminal_read_image_too_large" + suffix, run(root, tag, () -> read(base, tag, "huge.png", null, null)));
+        if (on(part, "file")) out.put("terminal_read_image_too_many_pixels" + suffix, run(root, tag, () -> read(base, tag, "wide.png", null, null)));
         TerminalTalent tiny = terminal(work, ShellMode.UNIX_SHELL, "bash");
         tiny.setMaxCharacterLimit(40);
         if (on(part, "file")) out.put("terminal_read_truncated" + suffix, run(root, tag, () -> read(tiny, tag, "a.txt", null, null)));

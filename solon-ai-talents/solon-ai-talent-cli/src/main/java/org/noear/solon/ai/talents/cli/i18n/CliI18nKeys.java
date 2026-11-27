@@ -122,6 +122,9 @@ public final class CliI18nKeys {
     public static final String TERMINAL_READ_BINARY = "terminal.read.binary";
     public static final String TERMINAL_READ_EMPTY = "terminal.read.empty";
     public static final String TERMINAL_READ_DIR = "terminal.read.dir";
+    public static final String TERMINAL_READ_IMAGE_TOO_LARGE = "terminal.read.image.too_large";
+    public static final String TERMINAL_READ_IMAGE_TOO_MANY_PIXELS = "terminal.read.image.too_many_pixels";
+    public static final String TERMINAL_READ_IMAGE_UNPROCESSABLE = "terminal.read.image.unprocessable";
     public static final String TERMINAL_READ_LINE_TRUNCATED = "terminal.read.line_truncated";
     public static final String TERMINAL_READ_OFFSET_OUT = "terminal.read.offset_out";
     public static final String TERMINAL_READ_MORE = "terminal.read.more";

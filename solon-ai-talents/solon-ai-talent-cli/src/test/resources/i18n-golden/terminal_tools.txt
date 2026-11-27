@@ -64,7 +64,7 @@ name: ls
 
 name: read
 --- description ---
-读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。
+读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。也能读图片（PNG/JPEG/GIF/WebP，按文件头识别）：图片本身会交给你查看，大图自动缩小，offset/limit 不适用；不要为了查看图片去安装图像库或自己生成缩略图。支持逻辑路径（如 @pool）。
 --- inputSchema ---
 {"type":"object","properties":{"file_path":{"type":"string","description":"文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。"},"limit":{"type":"integer","description":"（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。"},"offset":{"type":"integer","description":"（可选）开始读取的行号（默认从1开始索引）"}},"required":["file_path"]}
 

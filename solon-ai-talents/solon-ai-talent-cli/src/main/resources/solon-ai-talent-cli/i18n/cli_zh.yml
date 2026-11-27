@@ -197,6 +197,12 @@ terminal.read.empty: |-
   (文件内容为空)
 terminal.read.dir: |-
   错误：目标是目录，无法读取
+terminal.read.image.too_large: |-
+  错误：图片超过 {mb} MB 上限，请先缩小或压缩后再读取。
+terminal.read.image.too_many_pixels: |-
+  错误：图片尺寸 {size} px 超过 {mp} 百万像素上限，没有解码；请先缩小后再读取。
+terminal.read.image.unprocessable: |-
+  错误：图片无法解码，或缩小后仍超过发送上限；WebP 图片过大时请先转成 PNG 或 JPEG 再读取。
 terminal.read.line_truncated: |-
   …(单行过长已截断)
 terminal.read.offset_out: |-

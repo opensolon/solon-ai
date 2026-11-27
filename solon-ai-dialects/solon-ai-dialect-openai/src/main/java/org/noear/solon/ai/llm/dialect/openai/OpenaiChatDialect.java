@@ -58,6 +58,28 @@ public class OpenaiChatDialect extends AbstractChatDialect {
         return instance;
     }
 
+    private static final String[] MISTRAL_FAMILIES = {"mistral", "devstral", "codestral", "pixtral", "mixtral"};
+
+    /**
+     * Mistral 系列不允许 tool 消息后直接跟 user 消息（与 opencode 同口径，按模型名识别）。
+     *
+     * @since 4.2.0
+     */
+    @Override
+    protected boolean requiresAssistantAfterTool(ChatConfig config) {
+        if (config == null || config.getModel() == null) {
+            return false;
+        }
+
+        String model = config.getModel().toLowerCase(Locale.ROOT);
+        for (String family : MISTRAL_FAMILIES) {
+            if (model.contains(family)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static final String SNAPSHOT_STATE_KEY = "OpenaiStreamSnapshotState";
 
     /**

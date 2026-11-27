@@ -24,6 +24,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.AudioBlock;
+import org.noear.solon.ai.chat.content.Contents;
 import org.noear.solon.ai.chat.*;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
@@ -330,6 +331,412 @@ public abstract class AbstractChatDialect implements ChatDialect {
     }
 
 
+    //======================
+    // 工具结果里的媒体
+    //
+
+    /**
+     * 工具结果里的这个媒体能否原样留在工具结果里；不能的挪到紧随其后的一条用户消息。
+     *
+     * <p>缺省 false：OpenAI 官方 Chat Completions 规定 tool 消息只收文本。按协议能直接放进工具结果的方言
+     * （如 Anthropic、OpenAI Responses、Gemini 3+）覆写本方法。</p>
+     *
+     * @since 4.2.0
+     */
+    protected boolean keepsToolResultMedia(ChatConfig config, AbsMedia<?> media) {
+        return false;
+    }
+
+    /**
+     * 工具结果之后是否必须先有一条助手消息才能接用户消息（如 Mistral 系列）。为 true 时，
+     * 挪出来的媒体所在的用户消息之前先插一条 {@code assistant: "Done."}。
+     *
+     * @since 4.2.0
+     */
+    protected boolean requiresAssistantAfterTool(ChatConfig config) {
+        return false;
+    }
+
+    /**
+     * 整理本次请求里的媒体（只影响本次请求，不修改传入的历史），依次三步：
+     *
+     * <ol>
+     *     <li>发不出去的媒体换成文本说明（用户附件与工具结果都算，见 {@link #noteMedia}）；</li>
+     *     <li>控制媒体总量：张数或体积超限时从最早的开始删；</li>
+     *     <li>工具结果里放不下的媒体挪到用户消息（见 {@link #placeToolResultMedia}）。</li>
+     * </ol>
+     *
+     * <p>没有任何改动时返回原列表。</p>
+     *
+     * @since 4.2.0
+     */
+    protected List<ChatMessage> prepareRequestMedia(ChatConfig config, List<ChatMessage> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return messages;
+        }
+
+        messages = noteMedia(config, messages);
+        messages = boundRequestMedia(messages);
+        return placeToolResultMedia(config, messages);
+    }
+
+    /**
+     * 安置工具结果里的媒体（发不出去的已在第一步换成文本）：{@link #keepsToolResultMedia} 为 true 的原样保留；
+     * 其余的从工具结果里拿掉，收集起来，在这一段连续工具结果之后、下一条非工具消息之前插入一条用户消息
+     * （不插在工具结果中间，否则会拆散并行调用的结果）。
+     */
+    private List<ChatMessage> placeToolResultMedia(ChatConfig config, List<ChatMessage> messages) {
+        List<ChatMessage> out = null;
+        List<ContentBlock> pending = null;
+
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage m1 = messages.get(i);
+
+            if (m1 instanceof ToolMessage) {
+                ToolMessage tm = (ToolMessage) m1;
+                List<ContentBlock> moved = new ArrayList<>();
+                ToolMessage rewritten = rewriteToolResultMedia(config, tm, moved);
+
+                if (rewritten != tm && out == null) {
+                    out = new ArrayList<>(messages.subList(0, i));
+                }
+
+                if (out != null) {
+                    out.add(rewritten);
+                }
+
+                if (moved.isEmpty() == false) {
+                    if (pending == null) {
+                        pending = new ArrayList<>();
+                    }
+                    pending.add(TextBlock.of("Attached media from tool result (" + describeToolCall(tm) + "):"));
+                    pending.addAll(moved);
+                }
+                continue;
+            }
+
+            if (pending != null) {
+                appendMovedMedia(config, out, pending);
+                pending = null;
+            }
+
+            if (out != null) {
+                out.add(m1);
+            }
+        }
+
+        if (pending != null) {
+            appendMovedMedia(config, out, pending);
+        }
+
+        return out == null ? messages : out;
+    }
+
+    private void appendMovedMedia(ChatConfig config, List<ChatMessage> out, List<ContentBlock> pending) {
+        if (requiresAssistantAfterTool(config)) {
+            out.add(ChatMessage.ofAssistant("Done."));
+        }
+        out.add(ChatMessage.ofUser(new Contents().addBlocks(pending)));
+    }
+
+    /** 单次请求媒体张数上限（Anthropic：200k 上下文模型 100 张，其余 600 张） */
+    private static final int REQUEST_MEDIA_MAX_COUNT = 100;
+    /** 单次请求媒体总量上限（内联 base64 字符数，约 24MB；Anthropic 单次请求上限 32MB） */
+    private static final long REQUEST_MEDIA_MAX_CHARS = 24L * 1024 * 1024;
+    /** 超限时一次删掉的张数（整数倍）：切点要再放满一段才前移，不会每次请求都改动前缀导致提示词缓存失效 */
+    private static final int REQUEST_MEDIA_DROP_STEP = 8;
+
+    /**
+     * 控制单次请求里的媒体总量（用户附件与工具结果都算）：张数超过 {@link #REQUEST_MEDIA_MAX_COUNT}
+     * 或内联字符超过 {@link #REQUEST_MEDIA_MAX_CHARS} 时，删掉最早的 k×{@link #REQUEST_MEDIA_DROP_STEP} 张
+     * （取使剩下的张数与体积都不超上限的最小 k，最新的一张总是保留），换成文本说明，告诉模型需要时重新读取。
+     * 没有改动时返回原列表。
+     */
+    private List<ChatMessage> boundRequestMedia(List<ChatMessage> messages) {
+        List<Long> sizes = new ArrayList<>();
+        long chars = 0;
+        for (ChatMessage m1 : messages) {
+            for (ContentBlock block : blocksOf(m1)) {
+                if (isBoundable(block)) {
+                    long size = mediaCharsOf((AbsMedia<?>) block);
+                    sizes.add(size);
+                    chars += size;
+                }
+            }
+        }
+
+        // 按步长整段删，直到张数与体积都不超上限；最新的一张总是留着（单张就超限时删了也无济于事）
+        int dropCount = 0;
+        while (sizes.size() - dropCount > REQUEST_MEDIA_MAX_COUNT || chars > REQUEST_MEDIA_MAX_CHARS) {
+            int end = Math.min(sizes.size() - 1, dropCount + REQUEST_MEDIA_DROP_STEP);
+            if (end <= dropCount) {
+                break;
+            }
+            for (int i = dropCount; i < end; i++) {
+                chars -= sizes.get(i);
+            }
+            dropCount = end;
+        }
+        if (dropCount == 0) {
+            return messages;
+        }
+
+        List<ChatMessage> out = new ArrayList<>(messages.size());
+        int dropped = 0;
+        for (ChatMessage m1 : messages) {
+            if (dropped >= dropCount) {
+                out.add(m1);
+                continue;
+            }
+
+            List<ContentBlock> blocks = new ArrayList<>();
+            boolean changed = false;
+            for (ContentBlock block : blocksOf(m1)) {
+                if (dropped < dropCount && isBoundable(block)) {
+                    AbsMedia<?> media = (AbsMedia<?>) block;
+                    blocks.add(TextBlock.of("[" + mediaKindOf(media) + " removed from this request to save context: " + describeMedia(media)
+                            + REREAD_HINT));
+                    dropped++;
+                    changed = true;
+                } else {
+                    blocks.add(block);
+                }
+            }
+
+            out.add(changed ? withBlocks(m1, blocks) : m1);
+        }
+
+        return out;
+    }
+
+    /** 单张图片上限（内联 base64 字符数，5MiB；Anthropic API 与 Bedrock 单张上限 5MB，read 读图片的输出不超过它） */
+    private static final long MEDIA_MAX_IMAGE_CHARS = 5L * 1024 * 1024;
+
+    /** 媒体不在本次请求里时的提示：告诉模型可以重新读取，且不要凭记忆描述 */
+    private static final String REREAD_HINT = "; read it again if you still need it. Do not make claims about its contents from memory]";
+
+    /**
+     * 用户附件与工具结果里发不出去的媒体换成文本说明（放在总量控制之前，这些媒体不占总量）：
+     *
+     * <ul>
+     *     <li>会话持久化时被截断的（各方言写出时会跳过，不加说明的话模型不知道这里曾有附件）；</li>
+     *     <li>模型声明不接受的输入类型（{@link ChatConfig#acceptsInput}）；</li>
+     *     <li>单张超过 {@link #MEDIA_MAX_IMAGE_CHARS} 的图片（如 MCP 工具返回的大截图）：留在历史里会让之后每一轮都被服务端拒收。</li>
+     * </ul>
+     *
+     * <p>没有改动时返回原列表。</p>
+     */
+    private List<ChatMessage> noteMedia(ChatConfig config, List<ChatMessage> messages) {
+        List<ChatMessage> out = null;
+        for (int i = 0; i < messages.size(); i++) {
+            ChatMessage m1 = messages.get(i);
+            ChatMessage m2 = m1;
+
+            if (m1 instanceof UserMessage || m1 instanceof ToolMessage) {
+                boolean isTool = m1 instanceof ToolMessage;
+                List<ContentBlock> blocks = new ArrayList<>();
+                boolean changed = false;
+                for (ContentBlock block : blocksOf(m1)) {
+                    String note = block instanceof AbsMedia ? noteOf(config, (AbsMedia<?>) block, isTool) : null;
+                    if (note != null) {
+                        blocks.add(TextBlock.of(note));
+                        changed = true;
+                    } else {
+                        blocks.add(block);
+                    }
+                }
+                if (changed) {
+                    m2 = withBlocks(m1, blocks);
+                }
+            }
+
+            if (m2 != m1 && out == null) {
+                out = new ArrayList<>(messages.subList(0, i));
+            }
+            if (out != null) {
+                out.add(m2);
+            }
+        }
+
+        return out == null ? messages : out;
+    }
+
+    /** 发不出去时的文本说明；能发时返回 null */
+    private String noteOf(ChatConfig config, AbsMedia<?> media, boolean isTool) {
+        if (isMediaBlockPlayable(media) == false) {
+            return isTool
+                    ? "[" + mediaKindOf(media) + " not retained in conversation history: " + describeMedia(media) + REREAD_HINT
+                    : "[" + mediaKindOf(media) + " attachment not retained in conversation history: " + describeMedia(media) + "]";
+        }
+        if (acceptsMedia(config, media) == false) {
+            return unacceptedNote(media);
+        }
+        if (media instanceof ImageBlock && mediaCharsOf(media) > MEDIA_MAX_IMAGE_CHARS) {
+            return "[image omitted: " + describeMedia(media) + "; too large to send (" + mediaCharsOf(media)
+                    + " base64 chars, limit " + MEDIA_MAX_IMAGE_CHARS + ")]";
+        }
+        return null;
+    }
+
+    /** 是否参与总量控制：第一步之后留下的媒体都能发出去 */
+    private boolean isBoundable(ContentBlock block) {
+        return block instanceof AbsMedia && isMediaBlockPlayable(block);
+    }
+
+    private static List<ContentBlock> blocksOf(ChatMessage msg) {
+        List<ContentBlock> blocks = null;
+        if (msg instanceof UserMessage) {
+            blocks = ((UserMessage) msg).getBlocks();
+        } else if (msg instanceof ToolMessage) {
+            blocks = ((ToolMessage) msg).getBlocks();
+        }
+        return blocks == null ? Collections.emptyList() : blocks;
+    }
+
+    private static long mediaCharsOf(AbsMedia<?> media) {
+        return media.getData() == null ? 0 : media.getData().length();
+    }
+
+    /** 用新的内容块重建用户消息或工具结果（保留元信息与工具调用标识） */
+    private static ChatMessage withBlocks(ChatMessage msg, List<ContentBlock> blocks) {
+        if (msg instanceof ToolMessage) {
+            ToolMessage tm = (ToolMessage) msg;
+            // 文本块合成一个放在最前：ToolResult#getContent 只取第一个文本块，只写文本的协议才不会丢说明
+            StringBuilder text = new StringBuilder();
+            List<ContentBlock> others = new ArrayList<>();
+            for (ContentBlock block : blocks) {
+                if (block instanceof TextBlock) {
+                    if (Utils.isNotEmpty(block.getContent())) {
+                        if (text.length() > 0) {
+                            text.append("\n");
+                        }
+                        text.append(block.getContent());
+                    }
+                } else {
+                    others.add(block);
+                }
+            }
+            ToolResult result = new ToolResult();
+            result.addText(text.toString());
+            result.addBlocks(others);
+            result.setError(tm.isError());
+            if (Utils.isNotEmpty(tm.getMetadata())) {
+                result.metas().putAll(tm.getMetadata());
+            }
+            return new ToolMessage(result, tm.getName(), tm.getToolCallId(), tm.isReturnDirect());
+        }
+
+        Contents contents = new Contents().addBlocks(blocks);
+        if (Utils.isNotEmpty(msg.getMetadata())) {
+            contents.metas().putAll(msg.getMetadata());
+        }
+        return new UserMessage(contents);
+    }
+
+    /**
+     * 改写一条工具结果里的媒体；要挪到用户消息里的放进 {@code moved}。没有改动时返回原对象。
+     */
+    private ToolMessage rewriteToolResultMedia(ChatConfig config, ToolMessage msg, List<ContentBlock> moved) {
+        List<ContentBlock> blocks = msg.getBlocks();
+        if (blocks == null || blocks.isEmpty()) {
+            return msg;
+        }
+
+        boolean changed = false;
+        List<ContentBlock> kept = new ArrayList<>(blocks.size());
+
+        for (ContentBlock block : blocks) {
+            if ((block instanceof AbsMedia) == false) {
+                kept.add(block);
+                continue;
+            }
+
+            AbsMedia<?> media = (AbsMedia<?>) block;
+            if (keepsToolResultMedia(config, media)) {
+                kept.add(media);
+            } else {
+                moved.add(media);
+                changed = true;
+            }
+        }
+
+        if (changed == false) {
+            return msg;
+        }
+
+        if (moved.isEmpty() == false) {
+            kept.add(TextBlock.of("[" + moved.size() + " attachment(s) of this tool result are provided in the next user message]"));
+        }
+
+        return (ToolMessage) withBlocks(msg, kept);
+    }
+
+    /**
+     * 工具结果的纯文本（按顺序拼接全部文本块，没有文本块时用 {@link ToolMessage#getContent()}，不返回 null）。
+     * 供只接受字符串 tool content 的协议使用。
+     *
+     * @since 4.2.0
+     */
+    protected String toolMessageText(ToolMessage msg) {
+        StringBuilder text = new StringBuilder();
+        if (msg.getBlocks() != null) {
+            for (ContentBlock block : msg.getBlocks()) {
+                if (block instanceof TextBlock && Utils.isNotEmpty(block.getContent())) {
+                    if (text.length() > 0) {
+                        text.append("\n");
+                    }
+                    text.append(block.getContent());
+                }
+            }
+        }
+
+        if (text.length() == 0 && msg.getContent() != null) {
+            return msg.getContent();
+        }
+
+        return text.toString();
+    }
+
+    private static boolean acceptsMedia(ChatConfig config, AbsMedia<?> media) {
+        return config == null || config.acceptsInput(mediaKindOf(media));
+    }
+
+    private static String unacceptedNote(AbsMedia<?> media) {
+        return "[" + mediaKindOf(media) + " omitted: " + describeMedia(media)
+                + "; the current model does not accept " + mediaKindOf(media) + " input. Tell the user to switch to a model that supports it]";
+    }
+
+    private static String mediaKindOf(AbsMedia<?> media) {
+        if (media instanceof ImageBlock) {
+            return "image";
+        } else if (media instanceof AudioBlock) {
+            return "audio";
+        } else if (media instanceof VideoBlock) {
+            return "video";
+        } else {
+            return "media";
+        }
+    }
+
+    private static String describeMedia(AbsMedia<?> media) {
+        if (Utils.isNotEmpty(media.getFilePath())) {
+            return media.getFilePath();
+        }
+        if (Utils.isNotEmpty(media.getMimeType())) {
+            return media.getMimeType();
+        }
+        return mediaKindOf(media);
+    }
+
+    private static String describeToolCall(ToolMessage msg) {
+        StringBuilder buf = new StringBuilder();
+        buf.append(Utils.isEmpty(msg.getName()) ? "tool" : msg.getName());
+        if (Utils.isNotEmpty(msg.getToolCallId())) {
+            buf.append(", call_id=").append(msg.getToolCallId());
+        }
+        return buf.toString();
+    }
+
     public ONode buildChatMessageNode(ChatConfig config, ChatMessage chatMessage) {
         ONode oNode = new ONode();
         if (chatMessage instanceof AssistantMessage) {
@@ -457,7 +864,7 @@ public abstract class AbstractChatDialect implements ChatDialect {
             }
 
             n.getOrNew("messages").then(n1 -> {
-                for (ChatMessage m1 : messages) {
+                for (ChatMessage m1 : prepareRequestMedia(config, messages)) {
                     if (isSkippableThinkingOnlyMessage(config, m1) == false) {
                         n1.add(buildChatMessageNode(config, m1));
                     }

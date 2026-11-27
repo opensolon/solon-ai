@@ -20,6 +20,7 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.TextBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
@@ -180,6 +181,18 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
     }
 
     /**
+     * Responses 的 function_call_output.output 可以带 input_image，工具结果里的媒体留在原处。
+     * output 只有 input_text / input_image / input_file，用户消息的 input_audio 也只有部分网关支持（否则抛错），
+     * 所以音频、视频也不挪到用户消息，由写出时换成文本说明（见 OpenaiResponsesRequestBuilder）。
+     *
+     * @since 4.2.0
+     */
+    @Override
+    protected boolean keepsToolResultMedia(ChatConfig config, AbsMedia<?> media) {
+        return true;
+    }
+
+    /**
      * 构建 Responses 规范的请求体
      *
      * @param config   聊天配置
@@ -192,7 +205,7 @@ public class OpenaiResponsesDialect extends AbstractChatDialect {
      */
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
-        return requestBuilder.build(config, options, messages, isStream);
+        return requestBuilder.build(config, options, prepareRequestMedia(config, messages), isStream);
     }
 
     /**

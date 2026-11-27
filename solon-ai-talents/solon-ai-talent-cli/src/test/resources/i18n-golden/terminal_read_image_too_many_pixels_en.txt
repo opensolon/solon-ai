@@ -1,0 +1,1 @@
+Error: the image is 20000x20000 px, over the 50-megapixel limit, and was not decoded; shrink it before reading.

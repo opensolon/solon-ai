@@ -31,6 +31,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.ContentBlock;
 import org.noear.solon.ai.chat.content.Contents;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.message.*;
 import org.noear.solon.ai.chat.tool.FunctionTool;
 import org.noear.solon.ai.chat.tool.ToolCall;
@@ -1498,8 +1499,11 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
 
     /**
      * 估算消息中媒体块的 Token 开销。
-     * <p>纯 base64 media 的 content 投影为空，但仍会随请求发送；按 data/url 字符长度
-     * 保守换算（约 4 chars/token），避免 media-only 被记为 0 导致压缩误判。</p>
+     * <p>纯 base64 media 的 content 投影为空，但仍会随请求发送，不能记为 0。</p>
+     * <p>图片按视觉 token 估算：模型对一张图的计费只和像素有关（Anthropic 为 {@code ⌈w/28⌉ × ⌈h/28⌉}），
+     * 与 base64 长度无关——按字符数换算会把一张 300KB 的图估成约 10 万 token，干扰压缩判断。
+     * metas 带 width/height 时按公式算（上限 {@link #IMAGE_TOKEN_MAX}），否则按 {@link #IMAGE_TOKEN_DEFAULT} 计。
+     * 音频、视频仍按字符长度保守换算（约 4 chars/token）。</p>
      */
     private int estimateMediaTokens(List<ContentBlock> blocks) {
         if (Assert.isEmpty(blocks)) {
@@ -1512,7 +1516,9 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
             }
             AbsMedia<?> media = (AbsMedia<?>) block;
             String data = media.getData();
-            if (Utils.isNotEmpty(data)) {
+            if (media instanceof ImageBlock && (Utils.isNotEmpty(data) || Utils.isNotEmpty(media.getUrl()))) {
+                tokens += estimateImageTokens(media);
+            } else if (Utils.isNotEmpty(data)) {
                 // base64 体积大，按 4 chars ≈ 1 token 估算，并加 MIME 结构开销
                 tokens += Math.max(1, data.length() / 4) + 20;
             } else if (Utils.isNotEmpty(media.getUrl())) {
@@ -1522,6 +1528,37 @@ public class ContextCompressionInterceptor extends AbsReActInterceptor {
             }
         }
         return tokens;
+    }
+
+    /** 尺寸未知的图片按此估算（略高于标准档上限 1568） */
+    static final int IMAGE_TOKEN_DEFAULT = 1600;
+    /** 图片 token 估算上限（高分辨率档上限） */
+    static final int IMAGE_TOKEN_MAX = 4784;
+
+    /** 单张图片的 token 估算（见 {@link #estimateMediaTokens}） */
+    static int estimateImageTokens(AbsMedia<?> media) {
+        int width = intMeta(media, "width");
+        int height = intMeta(media, "height");
+        if (width <= 0 || height <= 0) {
+            return IMAGE_TOKEN_DEFAULT;
+        }
+        long tokens = (long) ((width + 27) / 28) * ((height + 27) / 28);
+        return (int) Math.min(tokens, IMAGE_TOKEN_MAX);
+    }
+
+    private static int intMeta(AbsMedia<?> media, String key) {
+        Object value = media.metas() == null ? null : media.metas().get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value != null) {
+            try {
+                return Integer.parseInt(String.valueOf(value).trim());
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     /**

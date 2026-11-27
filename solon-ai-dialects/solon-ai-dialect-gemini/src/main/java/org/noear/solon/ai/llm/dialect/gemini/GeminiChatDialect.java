@@ -18,6 +18,8 @@ package org.noear.solon.ai.llm.dialect.gemini;
 import org.noear.snack4.ONode;
 import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.*;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
@@ -34,8 +36,11 @@ import org.noear.solon.net.http.HttpTimeout;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Gemini 聊天模型方言
@@ -411,7 +416,55 @@ public class GeminiChatDialect extends AbstractChatDialect {
      */
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options, List<ChatMessage> messages, boolean isStream) {
-        return requestBuilder.build(config, options, messages, isStream);
+        return requestBuilder.build(config, options, prepareRequestMedia(config, messages), isStream);
+    }
+
+    /**
+     * Gemini 3 及以后支持多模态函数响应（functionResponse.parts），但只接受 png / jpeg / webp 图片（另有 pdf、text/plain）；
+     * 其他模型（含无法识别版本的网关模型名）与其余媒体（gif、音频、视频）挪到用户消息，用户消息的 inlineData 都能承载。
+     */
+    @Override
+    protected boolean keepsToolResultMedia(ChatConfig config, AbsMedia<?> media) {
+        return supportsMultimodalFunctionResponse(config) && isFunctionResponseMedia(media);
+    }
+
+    private static boolean isFunctionResponseMedia(AbsMedia<?> media) {
+        if ((media instanceof ImageBlock) == false) {
+            return false;
+        }
+
+        String mime = media.getMimeType();
+        if (Utils.isEmpty(mime)) {
+            return true; // 写出时按 image/jpeg
+        }
+
+        mime = mime.toLowerCase(Locale.ROOT);
+        return "image/png".equals(mime) || "image/jpeg".equals(mime) || "image/jpg".equals(mime) || "image/webp".equals(mime);
+    }
+
+    private static final Pattern GEMINI_MAJOR = Pattern.compile("gemini-(\\d+)");
+
+    /**
+     * 模型是否支持多模态函数响应：模型名里的 gemini-N 主版本 ≥ 3；识别不出版本时按不支持处理。
+     * Interactions 方言同口径。
+     */
+    static boolean supportsMultimodalFunctionResponse(ChatConfig config) {
+        if (config == null || config.getModel() == null) {
+            return false;
+        }
+
+        Matcher matcher = GEMINI_MAJOR.matcher(config.getModel().toLowerCase(Locale.ROOT));
+        while (matcher.find()) {
+            try {
+                if (Integer.parseInt(matcher.group(1)) >= 3) {
+                    return true;
+                }
+            } catch (NumberFormatException ignore) {
+                // 超长数字，按不识别处理
+            }
+        }
+
+        return false;
     }
 
     @Override

@@ -20,6 +20,8 @@ import org.noear.solon.Utils;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatOptions;
 import org.noear.solon.ai.chat.ChatAccumulator;
+import org.noear.solon.ai.chat.content.AbsMedia;
+import org.noear.solon.ai.chat.content.ImageBlock;
 import org.noear.solon.ai.chat.dialect.AbstractChatDialect;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
@@ -175,7 +177,16 @@ public class GeminiInteractionsDialect extends AbstractChatDialect {
     @Override
     public ONode buildRequestJson(ChatConfig config, ChatOptions options,
                                    List<ChatMessage> messages, boolean isStream) {
-        return requestBuilder.build(config, options, messages, isStream);
+        return requestBuilder.build(config, options, prepareRequestMedia(config, messages), isStream);
+    }
+
+    /**
+     * Gemini 3 及以后的 function_result.result 可以放图片（只有 text / image 两种内容项）；
+     * 其他模型与音频、视频挪到用户消息（user_input 都能承载）。
+     */
+    @Override
+    protected boolean keepsToolResultMedia(ChatConfig config, AbsMedia<?> media) {
+        return GeminiChatDialect.supportsMultimodalFunctionResponse(config) && media instanceof ImageBlock;
     }
 
     @Override

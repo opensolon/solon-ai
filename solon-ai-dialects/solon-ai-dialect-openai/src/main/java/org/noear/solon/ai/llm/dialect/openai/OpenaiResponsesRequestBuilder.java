@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
 import org.noear.solon.ai.chat.tool.ToolCallJsonSanitizer;
+import org.noear.solon.ai.chat.content.AbsMedia;
 import org.noear.solon.ai.chat.content.AudioBlock;
 import org.noear.solon.ai.chat.content.BlobBlock;
 import org.noear.solon.ai.chat.content.ImageBlock;
@@ -335,7 +336,7 @@ public class OpenaiResponsesRequestBuilder {
     }
 
     /**
-     * 追加函数工具输出内容项。
+     * 追加函数工具输出内容项。音频、视频没有对应的内容项，换成一行文本说明（不静默丢掉）。
      *
      * @since 4.1
      */
@@ -370,6 +371,17 @@ public class OpenaiResponsesRequestBuilder {
                         .set("type", "input_file")
                         .set("file_data", fileData);
             }
+            return;
+        }
+
+        if (block instanceof AbsMedia) {
+            AbsMedia<?> media = (AbsMedia<?>) block;
+            String kind = block instanceof AudioBlock ? "audio" : "video";
+            String desc = Utils.isNotEmpty(media.getFilePath()) ? media.getFilePath()
+                    : (Utils.isNotEmpty(media.getMimeType()) ? media.getMimeType() : kind);
+            outputArray.addNew()
+                    .set("type", "input_text")
+                    .set("text", "[" + kind + " omitted: " + desc + "; function_call_output does not accept " + kind + "]");
         }
     }
 

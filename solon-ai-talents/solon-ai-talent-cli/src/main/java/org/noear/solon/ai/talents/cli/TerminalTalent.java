@@ -17,6 +17,8 @@ package org.noear.solon.ai.talents.cli;
 
 import org.noear.solon.Utils;
 import org.noear.solon.ai.annotation.ToolMapping;
+import org.noear.solon.ai.chat.content.ImageBlock;
+import org.noear.solon.ai.chat.content.ImageInputs;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.chat.tool.ToolResult;
@@ -1428,13 +1430,12 @@ public class TerminalTalent extends AbsTalent {
 
     // --- 3. 读取内容 ---
     /**
-     * 读取文件
+     * 读取文件：按文件头分流（同 opencode），图片走 {@link #readImage}（说明文本加图片块），其余走 {@link #readText}。
      *
-     * <p>文件不存在、是二进制、起始行越界，以及虚拟来源的目录、超过上限返回 {@link ToolResult#error(String)}
-     * （本地目录读取直接抛 IO 异常，框架同样按失败处理）；
-     * 空文件算成功。</p>
+     * <p>文件不存在、是二进制、起始行越界、图片超过上限或无法处理，以及虚拟来源的目录、超过上限返回
+     * {@link ToolResult#error(String)}（本地目录读取直接抛 IO 异常，框架同样按失败处理）；空文件算成功。</p>
      */
-    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。支持逻辑路径（如 @pool）。")
+    @ToolMapping(name = "read", description = "读取文件内容。修改文件前先通过此工具确认最新文本、缩进和换行符。默认一次性加载完整内容；仅当文件极长或需定位局部时，才使用 offset/limit 分页。也能读图片（PNG/JPEG/GIF/WebP，按文件头识别）：图片本身会交给你查看，大图自动缩小，offset/limit 不适用；不要为了查看图片去安装图像库或自己生成缩略图。支持逻辑路径（如 @pool）。")
     public ToolResult read(@Param(value = "file_path", description = "文件相对路径（如 'src/demo.md'）或逻辑路径（如 '@pool'）。'.' 表示当前根目录。") String filePath,
                        @Param(value = "offset", required = false, description = "（可选）开始读取的行号（默认从1开始索引）") Integer offset,
                        @Param(value = "limit", required = false, description = "（可选）需要读取的最大行数。不传表示完整读取。注意：单次读取受最大物理长度保护，如果触发截断，请根据输出提示调整 offset 分页读取。") Integer limit,
@@ -1455,6 +1456,16 @@ public class TerminalTalent extends AbsTalent {
             return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_MISSING));
         }
 
+        // 只按文件头判断是不是图片：没有或写错后缀的图片也能读，后缀是 .png 的文本仍按文本读
+        if (Files.isRegularFile(target) && ImageInputs.sniffMime(TerminalSupport.readHead(target, ImageInputs.SNIFF_BYTES)) != null) {
+            return readImageFile(target, filePath, locale);
+        }
+
+        return readText(target, filePath, offset, limit, locale);
+    }
+
+    /** 读本地文本文件（带行号、分页） */
+    private ToolResult readText(Path target, String filePath, Integer offset, Integer limit, Locale locale) throws IOException {
         if (support.isNotTextFileByName(target)) {
             return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_BINARY));
         }
@@ -1566,6 +1577,75 @@ public class TerminalTalent extends AbsTalent {
         warmupFile(target);
 
         return ToolResult.success(sb.toString());
+    }
+
+    // --- 3.1 读取图片（read 按文件头分流进来） ---
+
+    /** 读本地图片文件：原图超过 {@link ImageInputs#MAX_SOURCE_BYTES} 的不读 */
+    private ToolResult readImageFile(Path target, String filePath, Locale locale) throws IOException {
+        byte[] bytes = Files.size(target) > ImageInputs.MAX_SOURCE_BYTES ? null
+                : TerminalSupport.readUpTo(target, Files.size(target), ImageInputs.MAX_SOURCE_BYTES);
+        if (bytes == null) {
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_IMAGE_TOO_LARGE,
+                    "mb", ImageInputs.MAX_SOURCE_BYTES / (1024 * 1024)));
+        }
+        return readImage(bytes, ImageInputs.sniffMime(bytes), filePath, locale);
+    }
+
+    /**
+     * 读取图片：返回说明文本加图片块（{@link ImageBlock}），由对话方言决定怎么发给模型。
+     * 像素超限或无法处理时返回 {@link ToolResult#error(String)}。
+     *
+     * @param mime 按文件头识别出的类型（非 null）
+     */
+    private ToolResult readImage(byte[] bytes, String mime, String displayPath, Locale locale) {
+        if (mime == null) {
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_IMAGE_UNPROCESSABLE));
+        }
+
+        ImageInputs.Prepared image;
+        try {
+            image = ImageInputs.prepare(bytes, mime);
+        } catch (ImageInputs.PixelLimitException e) {
+            return ToolResult.error(CliI18n.fmt(locale, CliI18nKeys.TERMINAL_READ_IMAGE_TOO_MANY_PIXELS,
+                    "size", e.getWidth() + "x" + e.getHeight(), "mp", ImageInputs.MAX_SOURCE_PIXELS / 1_000_000));
+        } catch (IOException | RuntimeException e) {
+            image = null;
+        }
+        if (image == null) {
+            return ToolResult.error(CliI18n.get(locale, CliI18nKeys.TERMINAL_READ_IMAGE_UNPROCESSABLE));
+        }
+
+        String base64 = Base64.getEncoder().encodeToString(image.getBytes());
+        ImageBlock block = ImageBlock.ofBase64(base64, image.getMime()).filePath(displayPath);
+        if (image.hasSize()) {
+            block.metaAdd("width", image.getWidth()).metaAdd("height", image.getHeight());
+        }
+
+        return ToolResult.success(describeImage(displayPath, bytes.length, image)).addBlock(block);
+    }
+
+    /**
+     * 图片的说明文本：路径、类型、尺寸、字节数；缩放过的给出坐标换算倍数。
+     * 带上路径还有一个用处：会话持久化会截断大图，恢复后模型可以按路径重新读取。
+     */
+    static String describeImage(String path, long sourceBytes, ImageInputs.Prepared image) {
+        StringBuilder buf = new StringBuilder();
+        buf.append("<path>").append(path).append("</path>\n");
+        buf.append("<type>image</type>\n");
+        buf.append("<content>").append(image.getMime());
+        if (image.hasSize()) {
+            buf.append(", ").append(image.getWidth()).append("x").append(image.getHeight()).append(" px");
+        }
+        buf.append(", ").append(image.getBytes().length).append(" bytes");
+        if (image.isResized()) {
+            double factor = (double) image.getSourceWidth() / image.getWidth();
+            buf.append(String.format(Locale.ROOT,
+                    ". Downscaled from %dx%d px (%d bytes); multiply coordinates in this image by %.4f to get original pixel coordinates",
+                    image.getSourceWidth(), image.getSourceHeight(), sourceBytes, factor));
+        }
+        buf.append("</content>");
+        return buf.toString();
     }
 
     // --- 文件编码（read / edit / write 共用，保证同一份内容判断一致；grep 只认 UTF-16 BOM，见 TextEncodings） ---
@@ -2216,6 +2296,10 @@ public class TerminalTalent extends AbsTalent {
             bytes = readVirtualBytes(in);
         } catch (VirtualFileTooLargeException e) {
             return ToolResult.error(virtualFileTooLarge(locale));
+        }
+        String mime = ImageInputs.sniffMime(bytes);
+        if (mime != null) {
+            return readImage(bytes, mime, resource.getLogicalPath(), locale);
         }
         TextEncodings.Decoded encoding = detectEncoding(bytes, false);
         String text = encoding.displayText();

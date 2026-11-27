@@ -35,6 +35,9 @@ public class ChatConfig extends AiConfig {
     private Map<String, Object> defaultToolContext;
     private Map<String, Object> defaultOptions;
 
+    /** 模型接受的输入类型（如 text、image、audio、video）；null 或空列表表示未声明（不做限制） */
+    private List<String> inputModalities;
+
     //作为构建载体（方便转换）
     private transient ChatOptions modelOptions;
 
@@ -140,6 +143,54 @@ public class ChatConfig extends AiConfig {
      */
     public CacheControl getCacheControl() {
         return getModelOptions().cacheControl();
+    }
+
+    //======================
+    // 多模态输入
+    //
+
+    /**
+     * 模型接受的输入类型（如 text、image）；null 表示未声明
+     *
+     * @since 4.2.0
+     */
+    public List<String> getInputModalities() {
+        return inputModalities;
+    }
+
+    /**
+     * 设置模型接受的输入类型（如 text、image）；null 表示未声明（不做限制）
+     *
+     * @since 4.2.0
+     */
+    public void setInputModalities(List<String> inputModalities) {
+        this.inputModalities = inputModalities;
+    }
+
+    /**
+     * 是否接受某类输入：未声明（null 或空列表）返回 true（不做限制），声明了则按名称比较（大小写不敏感）
+     *
+     * @param modality 输入类型，如 image、audio、video
+     * @since 4.2.0
+     */
+    public boolean acceptsInput(String modality) {
+        if (inputModalities == null || modality == null) {
+            return true;
+        }
+
+        boolean declared = false;
+        for (String m : inputModalities) {
+            if (m == null || m.trim().isEmpty()) {
+                continue;
+            }
+            if (modality.equalsIgnoreCase(m.trim())) {
+                return true;
+            }
+            declared = true;
+        }
+
+        // 空列表按未声明处理（模型至少接受文本，「什么都不接受」没有意义）
+        return declared == false;
     }
 
     //======================

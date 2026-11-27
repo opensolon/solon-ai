@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.source.SearchResult;
 import org.noear.solon.ai.chat.content.ImageBlock;
@@ -173,7 +174,7 @@ public class DashscopeChatDialect extends AbstractChatDialect {
             }
 
             n.getOrNew("input").getOrNew("messages").then(n1 -> {
-                for (ChatMessage m1 : messages) {
+                for (ChatMessage m1 : prepareRequestMedia(config, messages)) {
                     ONode messageNode = buildChatMessageNode(config, m1);
                     if (!isEmptyAssistantReplay(m1, messageNode)) {
                         n1.add(messageNode);
@@ -516,6 +517,27 @@ public class DashscopeChatDialect extends AbstractChatDialect {
                 && Boolean.FALSE.equals(ctx.getRequest().getOptions().option("incremental_output"));
     }
 
+
+    /**
+     * DashScope 原生协议的 tool 消息 content 必须是字符串（官方文档：「Tool Message content string 必须为字符串格式」），
+     * 不能沿用父类的 OpenAI content 数组；工具结果里的媒体由 {@link #prepareRequestMedia} 先行挪走或换成文本。
+     *
+     * @since 4.2.0
+     */
+    @Override
+    protected void buildToolMessageNodeDo(ChatConfig config, ONode oNode, ToolMessage msg) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
+
+        if (Utils.isNotEmpty(msg.getName())) {
+            oNode.set("name", msg.getName());
+        }
+
+        if (Utils.isNotEmpty(msg.getToolCallId())) {
+            oNode.set("tool_call_id", msg.getToolCallId());
+        }
+
+        oNode.set("content", toolMessageText(msg));
+    }
 
     @Override
     protected void buildUserMessageNodeDo(ChatConfig config, ONode oNode, UserMessage msg) {

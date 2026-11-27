@@ -198,6 +198,12 @@ terminal.read.empty: |-
   (the file is empty)
 terminal.read.dir: |-
   Error: the target is a directory and cannot be read
+terminal.read.image.too_large: |-
+  Error: the image exceeds the {mb} MB limit; shrink or compress it before reading.
+terminal.read.image.too_many_pixels: |-
+  Error: the image is {size} px, over the {mp}-megapixel limit, and was not decoded; shrink it before reading.
+terminal.read.image.unprocessable: |-
+  Error: the image cannot be decoded, or is still over the send limit after downscaling; convert large WebP images to PNG or JPEG first.
 terminal.read.line_truncated: |-
   …(line too long, truncated)
 terminal.read.offset_out: |-

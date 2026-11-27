@@ -32,6 +32,7 @@ import org.noear.solon.ai.chat.event.ChatEventType;
 import org.noear.solon.ai.chat.event.ChatStreamContext;
 import org.noear.solon.ai.chat.message.AssistantMessage;
 import org.noear.solon.ai.chat.message.ChatMessage;
+import org.noear.solon.ai.chat.message.ToolMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
 import org.noear.solon.ai.chat.tool.ToolCall;
 import org.noear.solon.ai.chat.tool.ToolCallBuilder;
@@ -98,6 +99,27 @@ public class OllamaChatDialect extends AbstractChatDialect {
                 return config.getApiUrl() + "/api/chat";
             }
         }
+    }
+
+    /**
+     * Ollama 原生协议的 content 是字符串：tool 消息不能沿用父类的 OpenAI content 数组；
+     * tool 消息里的图片又会被静默丢掉（ollama/ollama#16038），所以媒体由 {@link #prepareRequestMedia} 先行挪到用户消息。
+     *
+     * @since 4.2.0
+     */
+    @Override
+    protected void buildToolMessageNodeDo(ChatConfig config, ONode oNode, ToolMessage msg) {
+        oNode.set("role", msg.getRole().name().toLowerCase());
+
+        if (Utils.isNotEmpty(msg.getName())) {
+            oNode.set("name", msg.getName());
+        }
+
+        if (Utils.isNotEmpty(msg.getToolCallId())) {
+            oNode.set("tool_call_id", msg.getToolCallId());
+        }
+
+        oNode.set("content", toolMessageText(msg));
     }
 
     @Override
@@ -601,7 +623,7 @@ public class OllamaChatDialect extends AbstractChatDialect {
             }
 
             n.getOrNew("messages").then(n1 -> {
-                for (ChatMessage m1 : messages) {
+                for (ChatMessage m1 : prepareRequestMedia(config, messages)) {
                     n1.add(buildChatMessageNode(config, m1));
                 }
             });

@@ -350,6 +350,23 @@ public class GeminiRequestBuilder {
                 responseNode.set("result", toolMessage.getContent());
                 n2.set("response", responseNode);
             }
+
+            // Gemini 3+ 多模态函数响应：媒体写进 functionResponse.parts。
+            // 哪些媒体留在这里由方言的 prepareRequestMedia 决定（缺省只有 Gemini 3+ 的 png/jpeg/webp）。
+            if (Utils.isNotEmpty(toolMessage.getBlocks())) {
+                ONode parts = null;
+                for (ContentBlock block : toolMessage.getBlocks()) {
+                    if (block instanceof AbsMedia) {
+                        if (parts == null) {
+                            parts = new ONode().asArray();
+                        }
+                        appendMediaPart(parts, (AbsMedia<?>) block);
+                    }
+                }
+                if (parts != null && parts.getArray().isEmpty() == false) {
+                    n2.set("parts", parts);
+                }
+            }
         });
     }
 

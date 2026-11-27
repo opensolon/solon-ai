@@ -1,0 +1,1 @@
+Error: the image exceeds the 20 MB limit; shrink or compress it before reading.
