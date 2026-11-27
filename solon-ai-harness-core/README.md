@@ -1167,8 +1167,8 @@ HarnessEngine.of("/data/work", ".solon/")
 |---|---|---|
 | `general` | `*` | 通用全能，其它子代理不合适时的默认解 |
 | `bash` | `list, read, bash` | 命令行执行（无文件写权限） |
-| `explore` | `code, list, read, grep, glob, skill, webfetch, websearch, codesearch` | 信息探索（无写权限） |
-| `plan` | `list, read, grep, glob, skill, webfetch, websearch, codesearch` | 方案规划（无写权限） |
+| `explore` | `code, list, read, grep, glob, lsp, bash, skill, webfetch, websearch, codesearch` | 信息探索（无写权限；`bash` 受定义里的 `permissionRules` 约束，只放行 `git log/show/diff/blame/status` 等只读命令，见 [docs/hitl.md](docs/hitl.md) §9.2） |
+| `plan` | `code, todo, list, read, grep, glob, lsp, bash, skill, webfetch, websearch, codesearch` | 方案规划（无写权限；`bash` 的规则与 `explore` 相同，只放行只读命令） |
 | `git-summary` | 无（`hidden: true`） | 生成提交摘要 |
 
 内置子代理默认全部注册。不想要某个，按名字禁用；想换成自己的版本，注册同名定义（`addAgent` 优先于挂载目录，也可在构建期 `mountAdd` 的目录里放同名文件）：
@@ -1431,7 +1431,7 @@ enabled: true
 | `hidden` | 不在列表里展示（按名字仍可调用，区别于 `enabled: false`） |
 | `primary` | 是否为主代理。**只有主代理能使用 `hitl`**：子代理即使配了 `hitl` 或 `**` 也不会被挂载（子代理挂起后无人能决策，而父代理正阻塞等待它，互等不可解） |
 | `enabled` | 是否启用；`false` 时列表不展示、按名字也调不到（§6.1） |
-| `permissionRules` | 权限规则（`toolName` / `behavior` / `pattern` / `priority`） |
+| `permissionRules` | 权限规则（`toolName` / `behavior` / `pattern` / `priority`）。主代理由 HITL 策略判定（ASK 弹卡）；子代理在每次工具执行前只按自己的规则判定，DENY 与 ASK 都直接拒绝，没有规则命中放行。写法与示例见 [docs/hitl.md](docs/hitl.md) §9 |
 
 > `memory` / `hooks` / `background` / `isolation` / `teamName` 已标记 `@Deprecated`，保留字段但不再解析。技能与 MCP 现在走**挂载**与 `engine.addMcpServer(...)`。
 
@@ -1604,7 +1604,7 @@ engine.addExtension(new HarnessExtension() {
 |---|---|---|---|---|
 | 1 | 工具可见性 | `agent.ToolName`、代理定义 `tools` / `disallowedTools` | 模型能看到哪些工具（看不到就调不了） | §7：`Builder.toolsAdd / disallowedToolsAdd`、`engine.allowTool / disallowTool` |
 | 2 | 输入级作用域 | `scope.InputScope`（由常驻的 `ScopeGuardInterceptor` 执行，优先级最高） | 这一次输入能用哪些工具 / 技能 / MCP / 模型；越界调用在执行前预填拒绝结果，HITL 也不会为它弹卡 | 引擎级 `scopeResolver`（推荐 `InputScopeResolver.byPrincipal`）或 `HarnessInput.scope(...)` |
-| 3 | 权限规则 | `permission.PermissionEngine` / `PermissionRule` | 对工具参数（命令、路径、域名）判 `ALLOW / DENY / ASK` | 由 hitl 策略内部调用；全局规则在策略上配 |
+| 3 | 权限规则 | `permission.PermissionEngine` / `PermissionRule` | 对工具参数（命令、路径、域名）判 `ALLOW / DENY / ASK`；shell 命令按段判定（任一段拒绝即拒绝） | 主代理由 hitl 策略内部调用，全局规则在策略上配；子代理由代理权限守卫在执行前判定，只用代理定义里的 `permissionRules`，ASK 按拒绝处理（[docs/hitl.md](docs/hitl.md) §9） |
 | 4 | 人工审批 | `hitl.*ToolStrategy` + `HITLInterceptor`；`hitl.RememberedApprovals` 记住会话级「总是允许」 | 规则判为 ASK 的调用挂起等人决定 | §9.2、`hitlEnabled(true)` |
 | 5 | 执行环境 | `TerminalTalent` 沙箱、`protectedStatePaths`、`cwdPolicy` | 工具真正执行时能碰哪些目录、哪些状态文件 | §1.2 配置表、§9.3、[SAAS.md](docs/SAAS.md) §5.1 / §5.2 |
 
@@ -1675,12 +1675,12 @@ org.noear.solon.ai.harness
 │
 ├── input/                        输入层：HarnessInput ★、InputOutcome ★（六态）、InputAttachments、InputOrigin、BusyPolicy、RejectReason、AgentMentions
 ├── command/                      命令框架：Command / CommandInput / CommandOutput / CommandRegistry / CommandDispatcher、Markdown 命令、builtin/
-├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent、ProjectRulesTalent（AGENTS.md）；SubTaskQueue / ProjectRulesInterceptor 包内
+├── agent/                        子代理（定义 → 注册 → 构建 → 委派）：AgentDefinition / ToolName、AgentManager / SessionAgents / GenerateTalent、AgentFactory、TaskTalent / TaskWrapEvent、ProjectRulesTalent（AGENTS.md）；SubTaskQueue / ProjectRulesInterceptor / AgentPermissionGuard 包内
 ├── scope/                        输入级作用域：InputScope / ScopeGuardInterceptor
 ├── spi/                          插件能力接口（只放接口，可带静态槽位访问方法）：InputBacklog / RunDispatch
 ├── session/                      会话事实与归属：SessionStatus / HarnessAttrs / SessionSelections；SessionOwnership / OwnerCheck / NotOwnerException
 ├── hitl/                         干预策略（Bash / Write / Web）、HitlCard、RememberedApprovals
-├── permission/                   权限引擎（PermissionRule / PermissionContext / PermissionBehavior / PermissionEngine）
+├── permission/                   权限引擎（PermissionRule / PermissionContext / PermissionBehavior / PermissionEngine）、ShellCommandLine（shell 命令静态切分）
 ├── i18n/                         引擎内建文案资源
 └── util/                         ErrorClassifier / HarnessIds / TraceUtil（含 reopen：让已结束的轨迹接着跑）
 ```

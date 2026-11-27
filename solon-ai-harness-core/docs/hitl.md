@@ -575,7 +575,7 @@ Agent 定义（Markdown 文件，含 YAML Front Matter）可以用 `permissionRu
 
 ### 9.2 YAML 配置示例
 
-**只读探索：bash 只放行只读命令**（内置 `explore` 的配置，参照 opencode 的 explore）：
+**只读探索：bash 只放行只读命令**（内置 `explore` 的配置，参照 opencode 的 explore；内置 `plan` 的 `permissionRules` 与此相同）：
 
 ```yaml
 ---
@@ -596,12 +596,8 @@ permissionRules:
   - { toolName: "bash", behavior: "allow", pattern: "tail *" }
   - { toolName: "bash", behavior: "allow", pattern: "wc *" }
   - { toolName: "bash", behavior: "allow", pattern: "grep *" }
-  # git log/show/diff 的 --output 会写文件
+  # git log/show/diff 的 --output 会写文件（白名单里唯一能写文件的参数）
   - { toolName: "bash", behavior: "deny", pattern: "git * --output*", priority: 10 }
-  # 读 .env 需用户确认（子代理无法确认，即拒绝），示例文件放行
-  - { toolName: "read", behavior: "ask", pattern: "*.env" }
-  - { toolName: "read", behavior: "ask", pattern: "*.env.*" }
-  - { toolName: "read", behavior: "allow", pattern: "*.env.example", priority: 10 }
 ---
 ```
 
@@ -613,8 +609,12 @@ permissionRules:
 | `git log; rm -rf x`、`git log \| sh` | 拒绝 | 第二段落到兜底拒绝 |
 | `git checkout main`、`git branch tmp`、`ls -la` | 拒绝 | 没有命中放行规则 |
 | `git log > out.txt`、`git log $OPTS` | 拒绝 | 写文件的重定向、变量展开：glob 不担保，ASK 在子代理里即拒绝 |
-| `git log --output=out.txt` | 拒绝 | 命中 priority 10 的拒绝 |
+| `git log --output=out.txt`、`git diff --output out.txt` | 拒绝 | 命中 priority 10 的拒绝（先于 priority 0 的放行判定） |
 | `git log $(rm x)`、`git log && (rm x)` | 拒绝 | 无法静态切分 |
+
+只有 shell 受限：`read`、`grep` 等其它工具没有规则命中，照常放行（工具范围由 `tools:` 决定）。
+
+没有共享规则的机制：`explore.md` 与 `plan.md` 各写一遍这套白名单，改动时两边一起改（`AgentDefaultTest` 会比对两份是否一致）。
 
 不建议写 `"git *": allow`：`git checkout`、`git commit`、`git push` 也会被放行；只读要靠列出具体子命令表达。
 

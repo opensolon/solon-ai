@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 代理权限守卫：子代理按代理定义里的 permissionRules 在执行前判定（deny / ask 都拒绝，没命中放行）；
- * 内置 explore 的规则只放行只读命令；真实运行中被拒的命令不会执行。
+ * 内置 explore / plan 的规则只放行只读命令；真实运行中被拒的命令不会执行。
  */
 public class AgentPermissionGuardTest {
     @TempDir
@@ -78,47 +78,55 @@ public class AgentPermissionGuardTest {
         return args;
     }
 
-    private static AgentPermissionGuard exploreGuard() {
+    /** 内置的只读子代理：两份定义各写一遍同一白名单 */
+    private static final String[] READ_ONLY_AGENTS = {"explore", "plan"};
+
+    private static AgentPermissionGuard builtinGuard(String agentName) {
         HarnessEngine engine = HarnessEngine.of(".", ".").sessionProvider((id, parentId, c) -> InMemoryAgentSession.of(id)).build();
-        AgentDefinition explore = engine.getAgentManager().getAgent("explore");
-        assertTrue(explore.getMetadata().hasPermissionRules(), "explore 应声明 permissionRules");
-        return new AgentPermissionGuard(PermissionContext.create().addRules(explore.getMetadata().getPermissionRules()));
+        AgentDefinition def = engine.getAgentManager().getAgent(agentName);
+        assertTrue(def.getMetadata().hasPermissionRules(), agentName + " 应声明 permissionRules");
+        return new AgentPermissionGuard(PermissionContext.create().addRules(def.getMetadata().getPermissionRules()));
     }
 
     @Test
-    void exploreAllowsReadOnlyGitAndPipes() {
-        AgentPermissionGuard g = exploreGuard();
-        for (String ok : new String[]{
-                "git log", "git log -5 --oneline", "git show HEAD:pom.xml", "git diff HEAD~1 -- src",
-                "git blame src/A.java | head -20", "git status", "git ls-files | wc -l",
-                "git rev-parse HEAD", "git shortlog -sn", "grep -rn foo src | wc -l",
-                "git log 2>/dev/null | tail -5", "git log --format='%h %s'"}) {
-            assertNull(g.denyReason("bash", cmd(ok), Locale.ROOT), ok);
+    void readOnlyAgentsAllowReadOnlyGitAndPipes() {
+        for (String agent : READ_ONLY_AGENTS) {
+            AgentPermissionGuard g = builtinGuard(agent);
+            for (String ok : new String[]{
+                    "git log", "git log -5 --oneline", "git show HEAD:pom.xml", "git diff HEAD~1 -- src",
+                    "git blame src/A.java | head -20", "git status", "git ls-files | wc -l",
+                    "git rev-parse HEAD", "git shortlog -sn", "grep -rn foo src | wc -l",
+                    "git log 2>/dev/null | tail -5", "git log --format='%h %s'"}) {
+                assertNull(g.denyReason("bash", cmd(ok), Locale.ROOT), agent + ": " + ok);
+            }
+            assertNull(g.denyReason("bash_start", cmd("git log -5"), Locale.ROOT), agent + ": bash_start 按 bash 的规则");
         }
-        assertNull(g.denyReason("bash_start", cmd("git log -5"), Locale.ROOT), "bash_start 按 bash 的规则");
     }
 
     @Test
-    void exploreDeniesWritesAndUnverifiable() {
-        AgentPermissionGuard g = exploreGuard();
-        for (String bad : new String[]{
-                "touch x", "rm -rf x", "ls -la", "git checkout main", "git commit -m x", "git branch tmp",
-                "git log; rm -rf x", "git log && touch x", "git log | sh", "git log > out.txt",
-                "git log --output=out.txt", "git diff --output out.txt", "git log $(rm x)", "git log `rm x`",
-                "git log && (rm x)", "git log $OPTS", "FOO=1 git log", "git -c core.pager=sh log"}) {
-            assertNotNull(g.denyReason("bash", cmd(bad), Locale.ROOT), bad);
+    void readOnlyAgentsDenyWritesAndUnverifiable() {
+        for (String agent : READ_ONLY_AGENTS) {
+            AgentPermissionGuard g = builtinGuard(agent);
+            for (String bad : new String[]{
+                    "touch x", "rm -rf x", "ls -la", "git checkout main", "git commit -m x", "git branch tmp",
+                    "mvn test", "git stash",
+                    "git log; rm -rf x", "git log && touch x", "git log | sh", "git log > out.txt",
+                    "git log --output=out.txt", "git diff --output out.txt", "git show -p HEAD --output=src/App.java", "git log $(rm x)", "git log `rm x`",
+                    "git log && (rm x)", "git log $OPTS", "FOO=1 git log", "git -c core.pager=sh log"}) {
+                assertNotNull(g.denyReason("bash", cmd(bad), Locale.ROOT), agent + ": " + bad);
+            }
+            assertNotNull(g.denyReason("bash_start", cmd("touch x"), Locale.ROOT), agent);
         }
-        assertNotNull(g.denyReason("bash_start", cmd("touch x"), Locale.ROOT));
     }
 
     @Test
-    void exploreEnvFilesFollowOpencode() {
-        AgentPermissionGuard g = exploreGuard();
-        assertNotNull(g.denyReason("read", file("conf/.env"), Locale.ROOT));
-        assertNotNull(g.denyReason("read", file("conf/.env.local"), Locale.ROOT));
-        assertNull(g.denyReason("read", file("conf/.env.example"), Locale.ROOT));
-        assertNull(g.denyReason("read", file("src/App.java"), Locale.ROOT));
-        assertNull(g.denyReason("grep", Collections.<String, Object>singletonMap("pattern", "x"), Locale.ROOT), "没写规则的工具放行");
+    void readOnlyAgentsLeaveNonShellToolsUnrestricted() {
+        for (String agent : READ_ONLY_AGENTS) {
+            AgentPermissionGuard g = builtinGuard(agent);
+            assertNull(g.denyReason("read", file("src/App.java"), Locale.ROOT), agent);
+            assertNull(g.denyReason("read", file("conf/.env"), Locale.ROOT), agent + " 不限制读 .env（与主代理一致）");
+            assertNull(g.denyReason("grep", Collections.<String, Object>singletonMap("pattern", "x"), Locale.ROOT), agent + " 没写规则的工具放行");
+        }
     }
 
     @Test
@@ -167,6 +175,7 @@ public class AgentPermissionGuardTest {
         AgentManager agents = engine.getAgentManager();
 
         assertTrue(hasGuard(AgentFactory.create(engine, agents.getAgent("explore")).build()), "explore 有规则");
+        assertTrue(hasGuard(AgentFactory.create(engine, agents.getAgent("plan")).build()), "plan 有规则");
         assertFalse(hasGuard(AgentFactory.create(engine, agents.getAgent("general")).build()), "没写规则的子代理不挂");
         assertFalse(hasGuard(engine.getMainAgent()), "主代理的代理规则走 HITL（ask 弹卡），不挂守卫");
 
@@ -208,6 +217,28 @@ public class AgentPermissionGuardTest {
             String m = toolMessages.get(i);
             assertTrue(m.contains("made" + i + ".txt") && (m.contains("代理") || m.contains("agent")), "返回守卫说明: " + m);
         }
+    }
+
+    @Test
+    void planSubagentRunsReadOnlyGitButNotWrites() throws Throwable {
+        Files.write(ws.resolve("seed.txt"), "SEED-LINE-42\n".getBytes(StandardCharsets.UTF_8));
+        HarnessEngine engine = engine();
+        HarnessFixtures.bindTrace(engine.getSession("s1"), HarnessFixtures.trace(null, false));
+
+        scriptedCommands.add("tail -n 1 seed.txt");
+        scriptedCommands.add("tail -n 1 seed.txt && touch made1.txt");
+
+        TaskTalent.SingleTaskOp op = new TaskTalent.SingleTaskOp();
+        op.agent_name = "plan";
+        op.description = "d";
+        op.prompt = "plan";
+        ToolResult r = engine.getTaskTalent().task(op, ws.toString(), "s1", null);
+        assertFalse(r.isError(), r.getContent());
+
+        assertFalse(Files.exists(ws.resolve("made1.txt")), "被拒的命令不得执行");
+        assertEquals(2, toolMessages.size(), toolMessages.toString());
+        assertTrue(toolMessages.get(0).contains("SEED-LINE-42"), "放行的命令真正执行: " + toolMessages.get(0));
+        assertTrue(toolMessages.get(1).contains("made1.txt"), "返回守卫说明: " + toolMessages.get(1));
     }
 
     // ---------- 假模型 ----------

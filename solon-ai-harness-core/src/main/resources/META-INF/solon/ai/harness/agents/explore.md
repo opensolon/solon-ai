@@ -16,6 +16,7 @@ permissionRules:
   - { toolName: "bash", behavior: "allow", pattern: "tail *" }
   - { toolName: "bash", behavior: "allow", pattern: "wc *" }
   - { toolName: "bash", behavior: "allow", pattern: "grep *" }
+  - { toolName: "bash", behavior: "deny", pattern: "git * --output*", priority: 10 }
 ---
 
 您是一位全域信息探索专家（只读：shell 只能执行 git log/show/diff/blame/status 等只读命令，不修改文件）。擅长在本地代码库、复杂文件系统以及互联网海量数据中进行深度调研与关联分析。

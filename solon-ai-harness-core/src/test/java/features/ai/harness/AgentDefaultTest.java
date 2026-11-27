@@ -70,22 +70,27 @@ public class AgentDefaultTest {
         Assertions.assertTrue(explore.getMetadata().getTools().contains("lsp"));
         Assertions.assertTrue(plan.getMetadata().getTools().contains("lsp"));
 
-        //explore 可执行只读命令（查 git 历史等）：只读由 permissionRules 兜底（子代理执行前判定，见 AgentPermissionGuardTest），提示词同步说明
-        Assertions.assertTrue(explore.getMetadata().getTools().contains("bash"));
-        Assertions.assertTrue(explore.getMetadata().hasPermissionRules());
-        Assertions.assertTrue(explore.getMetadata().getPermissionRules().stream().anyMatch(r ->
-                "bash".equals(r.toolName()) && r.behavior() == PermissionBehavior.DENY && !r.pattern().isPresent() && r.priority() < 0),
-                "explore 的 shell 兜底拒绝");
-        Assertions.assertTrue(explore.getSystemPrompt().contains("shell 受权限规则约束"));
+        //explore / plan 可执行只读命令（查 git 历史等）：只读由 permissionRules 兜底（子代理执行前判定，见 AgentPermissionGuardTest），提示词同步说明
+        for (AgentDefinition readOnly : Arrays.asList(explore, plan)) {
+            String name = readOnly.getMetadata().getName();
+            Assertions.assertTrue(readOnly.getMetadata().getTools().contains("bash"), name);
+            Assertions.assertTrue(readOnly.getMetadata().hasPermissionRules(), name);
+            Assertions.assertTrue(readOnly.getMetadata().getPermissionRules().stream().anyMatch(r ->
+                    "bash".equals(r.toolName()) && r.behavior() == PermissionBehavior.DENY && !r.pattern().isPresent() && r.priority() < 0),
+                    name + " 的 shell 兜底拒绝");
+            Assertions.assertTrue(readOnly.getSystemPrompt().contains("shell 受权限规则约束"), name);
+        }
+        //两份定义各写一遍同一白名单（没有共享规则的机制）：改一边必须同步改另一边
+        Assertions.assertEquals(explore.getMetadata().getPermissionRules(), plan.getMetadata().getPermissionRules(),
+                "explore 与 plan 的 shell 白名单应一致");
 
-        //explore / plan 的描述写着「只读」，不能有文件编辑工具；plan 也不执行命令
+        //explore / plan 的描述写着「只读」，不能有文件编辑工具
         for (AgentDefinition readOnly : Arrays.asList(explore, plan)) {
             for (String tool : Arrays.asList("edit", "write", "*", "**")) {
                 Assertions.assertFalse(readOnly.getMetadata().getTools().contains(tool),
                         readOnly.getMetadata().getName() + " 不应声明 " + tool);
             }
         }
-        Assertions.assertFalse(plan.getMetadata().getTools().contains("bash"));
     }
 
     /**
