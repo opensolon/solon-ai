@@ -21,9 +21,11 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionRule;
 import org.noear.solon.ai.util.Markdown;
+import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.lang.Preview;
-import org.yaml.snakeyaml.Yaml;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -36,6 +38,8 @@ import java.util.function.Consumer;
  * @since 3.9.5
  */
 public class AgentDefinition {
+    private static final Logger LOG = LoggerFactory.getLogger(AgentDefinition.class);
+
     public static final String AGENT_MAIN = "main";
     public static final String AGENT_GENERAL = "general";
 
@@ -140,7 +144,15 @@ public class AgentDefinition {
 
                 String pattern = ruleNode.get("pattern").getString();
                 int priority = ruleNode.get("priority").getInt();
-                PermissionBehavior behavior = PermissionBehavior.valueOf(behaviorStr.toUpperCase());
+                PermissionBehavior behavior;
+                try {
+                    behavior = PermissionBehavior.valueOf(behaviorStr.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException e) {
+                    // 写错一条只跳过这条，不让整个代理加载失败
+                    LOG.warn("Agent '{}' permission rule skipped: unknown behavior '{}' (expected allow / deny / ask)",
+                            definition.metadata.getName(), behaviorStr);
+                    continue;
+                }
 
                 if (pattern != null && !pattern.isEmpty()) {
                     rules.add(PermissionRule.withPattern(toolName, behavior, pattern, priority));
@@ -155,14 +167,7 @@ public class AgentDefinition {
     }
 
     public String toMarkdown() {
-        StringBuilder buf = new StringBuilder();
-        metadata.injectYamlFrontmatter(buf);
-
-        if (Assert.isNotEmpty(systemPrompt)) {
-            buf.append(systemPrompt);
-        }
-
-        return buf.toString();
+        return MarkdownUtil.toMarkdownWithMetadata(metadata.toFrontmatter(), systemPrompt);
     }
 
 
@@ -217,35 +222,45 @@ public class AgentDefinition {
         private String isolation;      // worktree
         private String teamName;       // 所属团队名称（用于团队成员）
 
-        protected void injectYamlFrontmatter(StringBuilder buf) {
+        /**
+         * 元数据的 front matter 视图（供 {@link MarkdownUtil#toMarkdownWithMetadata} 写出，{@link #fromParsedMarkdown} 读回）
+         *
+         * <p>permissionRules 由 Snack4 无法序列化，转成 {@code {toolName, behavior, pattern?, priority?}}；
+         * 自定义匹配器规则无法用 markdown 表达，不写（写成无模式会在读回后变成整个工具的规则）。</p>
+         */
+        protected Map<String, Object> toFrontmatter() {
             // 暂存 permissionRules，避免 Snack4 序列化不识别的类型
             List<PermissionRule> savedRules = this.permissionRules;
             this.permissionRules = null;
 
-            String yaml = new Yaml().dump(ONode.ofBean(this).toBean(Map.class));
-
-            this.permissionRules = savedRules;
-
-            if (Assert.isNotEmpty(yaml)) {
-                buf.append("---\n");
-                buf.append(yaml);
-
-                // 手动追加 permissionRules（Snack4 无法直接序列化 PermissionRule）
-                if (hasPermissionRules()) {
-                    buf.append("permissionRules:\n");
-                    for (PermissionRule rule : permissionRules) {
-                        buf.append("  - toolName: \"").append(rule.toolName()).append("\"\n");
-                        buf.append("    behavior: ").append(rule.behavior().name().toLowerCase()).append("\n");
-                        rule.pattern().ifPresent(p ->
-                                buf.append("    pattern: \"").append(p).append("\"\n"));
-                        if (rule.priority() != 0) {
-                            buf.append("    priority: ").append(rule.priority()).append("\n");
-                        }
-                    }
-                }
-
-                buf.append("---\n\n");
+            Map<String, Object> map;
+            try {
+                map = new LinkedHashMap<>(ONode.ofBean(this).toBean(Map.class));
+            } finally {
+                this.permissionRules = savedRules;
             }
+            map.remove("permissionRules");
+
+            if (hasPermissionRules()) {
+                List<Map<String, Object>> rules = new ArrayList<>();
+                for (PermissionRule rule : permissionRules) {
+                    if (rule.hasMatcher()) {
+                        continue;
+                    }
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("toolName", rule.toolName());
+                    item.put("behavior", rule.behavior().name().toLowerCase(Locale.ROOT));
+                    rule.pattern().ifPresent(p -> item.put("pattern", p));
+                    if (rule.priority() != 0) {
+                        item.put("priority", rule.priority());
+                    }
+                    rules.add(item);
+                }
+                if (rules.isEmpty() == false) {
+                    map.put("permissionRules", rules);
+                }
+            }
+            return map;
         }
 
         public void addPermissionRule(PermissionRule rule) {

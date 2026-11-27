@@ -116,6 +116,16 @@ hitl.web.deny: |-
 hitl.web.ask: |-
   Network access operation; manual confirmation is required.
 
+# ---- Agent permission rules (checked before a subagent runs a tool; subagents cannot ask for approval, so ask counts as deny) ----
+permission.agent.deny: |-
+  {tool} is denied by this agent's permission rules: {target}
+  Use an approach the rules allow; if it is really needed, state in your result what needs to be done and leave it to the main agent.
+permission.agent.ask: |-
+  This {tool} call needs user confirmation, which a subagent cannot request: {target}
+  (It is outside what this agent is allowed to run, or it contains constructs that cannot be verified, such as redirecting output into files, variable expansion, command substitution, or subshells.) Use a form the rules allow; if it is really needed, state in your result what needs to be done and leave it to the main agent.
+permission.agent.wait_input: |-
+  This agent's shell is restricted by permission rules and cannot send input to a running command.
+
 # ---- Commands ----
 command.unavailable: |-
   is only available in the CLI, not on Web/IM. Send /help to see the available commands.

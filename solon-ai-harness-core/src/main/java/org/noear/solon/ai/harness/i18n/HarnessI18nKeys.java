@@ -127,6 +127,15 @@ public final class HarnessI18nKeys {
     public static final String HITL_WEB_UNKNOWN_HOST = "hitl.web.unknown_host";
     public static final String HITL_WEB_DENY = "hitl.web.deny";
     public static final String HITL_WEB_ASK = "hitl.web.ask";
+    /**
+     * 变量：tool, target
+     */
+    public static final String PERMISSION_AGENT_DENY = "permission.agent.deny";
+    /**
+     * 变量：tool, target
+     */
+    public static final String PERMISSION_AGENT_ASK = "permission.agent.ask";
+    public static final String PERMISSION_AGENT_WAIT_INPUT = "permission.agent.wait_input";
     public static final String COMMAND_UNAVAILABLE = "command.unavailable";
     public static final String COMMAND_DISABLED = "command.disabled";
     public static final String COMMAND_SESSION_REQUIRED = "command.session_required";

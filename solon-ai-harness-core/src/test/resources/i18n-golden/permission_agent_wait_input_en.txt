@@ -1,0 +1,1 @@
+This agent's shell is restricted by permission rules and cannot send input to a running command.

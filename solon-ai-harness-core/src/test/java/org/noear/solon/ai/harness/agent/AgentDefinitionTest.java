@@ -228,6 +228,56 @@ class AgentDefinitionTest {
         assertTrue(mgr.hasAgent("hidden"));
     }
 
+    private static AgentDefinition parse(String src) {
+        return AgentDefinition.fromParsedMarkdown(
+                org.noear.solon.ai.util.MarkdownUtil.resolve(Arrays.asList(src.split("\\n"))));
+    }
+
+    @Test
+    void permissionRuleWithUnknownBehaviorIsSkippedNotFatal() {
+        AgentDefinition d = parse("---\nname: \"x\"\ntools: [\"bash\"]\npermissionRules:\n"
+                + "  - { toolName: \"bash\", behavior: \"alow\", pattern: \"git *\" }\n"
+                + "  - { toolName: \"bash\", behavior: \"deny\", priority: -100 }\n---\nbody");
+
+        assertEquals("x", d.getName());
+        assertEquals(1, d.getMetadata().getPermissionRules().size(), "写错的一条跳过，其余照常");
+        assertEquals(-100, d.getMetadata().getPermissionRules().get(0).priority());
+    }
+
+    @Test
+    void permissionPatternWithQuotesRoundTrips() {
+        AgentDefinition d = AgentDefinition.builder().name("x").build();
+        d.getMetadata().addPermissionRule(
+                org.noear.solon.ai.harness.permission.PermissionRule.allow("bash", "grep \"a\\b\" *"));
+
+        AgentDefinition back = parse(d.toMarkdown());
+        assertEquals(1, back.getMetadata().getPermissionRules().size());
+        assertEquals("grep \"a\\b\" *", back.getMetadata().getPermissionRules().get(0).pattern().get());
+    }
+
+    @Test
+    void toMarkdownRoundTripsListsRulesAndSkipsMatcherRules() {
+        AgentDefinition d = AgentDefinition.builder()
+                .name("rt")
+                .description("say \"hi\": x")
+                .toolsAdd("read", "bash")
+                .systemPrompt("body")
+                .build();
+        d.getMetadata().addPermissionRule(org.noear.solon.ai.harness.permission.PermissionRule.deny("bash").priority(-100));
+        d.getMetadata().addPermissionRule(org.noear.solon.ai.harness.permission.PermissionRule.allow("bash", "git log *"));
+        d.getMetadata().addPermissionRule(org.noear.solon.ai.harness.permission.PermissionRule.allowExact("bash", "command", "ls"));
+
+        String md = d.toMarkdown();
+        AgentDefinition back = parse(md);
+        assertEquals("rt", back.getName());
+        assertEquals("say \"hi\": x", back.getDescription());
+        assertEquals(Arrays.asList("read", "bash"), back.getMetadata().getTools(), md);
+        assertEquals("body", back.getSystemPrompt());
+        assertEquals(2, back.getMetadata().getPermissionRules().size(), "自定义匹配器规则无法用 markdown 表达，不写: " + md);
+        assertEquals(-100, back.getMetadata().getPermissionRules().get(0).priority());
+        assertEquals("git log *", back.getMetadata().getPermissionRules().get(1).pattern().get());
+    }
+
     @Test
     void managerRemoveByMountAliasAndClear() {
         AgentManager mgr = new AgentManager(null);

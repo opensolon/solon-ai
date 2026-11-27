@@ -1764,8 +1764,8 @@ public class HarnessEngine {
         // bash_start 与 bash 执行同一种命令（参数同为 command），必须用同一策略，否则模型换用 bash_start 就绕过审批；
         // bash_wait（写 stdin）与 bash_stop 只作用于已启动、启动时已审过的会话，不单独审批
         options.setHitlInterceptor(new HITLInterceptor()
-                .onTool("bash", bashStrategy)
-                .onTool("bash_start", bashStrategy)
+                .onTool(TerminalTalent.TOOL_BASH, bashStrategy)
+                .onTool(TerminalTalent.TOOL_BASH_START, bashStrategy)
                 .onApproved((HITLInterceptor.ApprovedHandler) (trace, toolName, args) -> {
                     PermissionRule rule = rememberedRuleOf(toolName, args);
                     if (rule == null) {
@@ -1788,9 +1788,9 @@ public class HarnessEngine {
         if (toolName == null || args == null) {
             return null;
         }
-        if ("bash_start".equals(toolName)) {
+        if (TerminalTalent.TOOL_BASH_START.equals(toolName)) {
             // BashToolStrategy 按 bash 求值：记成 bash 才能命中（同一条命令两个工具都放行）
-            toolName = "bash";
+            toolName = TerminalTalent.TOOL_BASH;
         }
         for (String key : new String[]{"command", "file_path"}) {
             Object v = args.get(key);

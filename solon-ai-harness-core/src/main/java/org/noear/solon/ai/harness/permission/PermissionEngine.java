@@ -15,6 +15,8 @@
  */
 package org.noear.solon.ai.harness.permission;
 
+import org.noear.solon.ai.talents.cli.TerminalTalent;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,6 +31,16 @@ import java.util.regex.Pattern;
  *
  * <p>评估工具调用请求是否应被放行、拒绝或需要人工介入。
  * 评估优先级：规则 priority 越大越优先；同 priority 下 DENY &gt; ALLOW &gt; ASK。</p>
+ *
+ * <p>glob 模式：{@code *} 匹配任意字符（含换行），{@code ?} 匹配单个字符，不区分大小写；
+ * 结尾的 {@code " *"} 也匹配空（{@code git log *} 匹配 {@code git log}，与 opencode 一致）。</p>
+ *
+ * <p>shell 命令（{@code bash} / {@code bash_start} 的 {@code command}）在配置了 glob 规则时按段判定
+ * （见 {@link ShellCommandLine}）：每段各自取第一条命中的规则，任一段 DENY 即 DENY，任一段 ASK 即 ASK，
+ * 全部 ALLOW 才 ALLOW——{@code git *} 放行不了 {@code git log; rm -rf x}，{@code rm *} 拒绝也躲不过 {@code ls && rm x}。
+ * 自定义匹配器（如记住的审批）始终按整条命令判断。glob 放行只担保它写明的命令本身：
+ * 命令含写文件的重定向或变量展开、或无法静态切分（命令替换、子 shell 等）时，靠 glob 得出的 ALLOW 降为 ASK。
+ * 未配置 glob 规则时与整条匹配完全一致。</p>
  *
  * @author noear
  * @since 4.0
@@ -62,13 +74,106 @@ public class PermissionEngine {
         List<PermissionRule> rules = new ArrayList<>(context.rules());
         Collections.sort(rules, RULE_COMPARATOR);
 
-        for (PermissionRule rule : rules) {
-            if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, toolName, args)) {
-                return rule.behavior() != null ? rule.behavior() : PermissionBehavior.ASK;
+        String command = shellCommandOf(toolName, args);
+        if (command != null && hasGlobRule(rules, toolName)) {
+            return evaluateShell(rules, toolName, args, command, defaultDecision);
+        }
+
+        PermissionRule hit = firstMatch(rules, toolName, args, extractInputText(args));
+        return behaviorOf(hit, defaultDecision);
+    }
+
+    /**
+     * shell 命令按段判定（见类注释）
+     */
+    private PermissionBehavior evaluateShell(List<PermissionRule> rules, String toolName, Map<String, Object> args,
+                                             String command, PermissionBehavior defaultDecision) {
+        ShellCommandLine line = ShellCommandLine.parse(command);
+
+        if (line.isOpaque()) {
+            // 无法切分：整条匹配；拒绝照常，glob 不能担保放行
+            PermissionRule hit = firstMatch(rules, toolName, args, command);
+            PermissionBehavior behavior = behaviorOf(hit, defaultDecision);
+            if (behavior == PermissionBehavior.ALLOW && (hit == null || hit.hasMatcher() == false)) {
+                return PermissionBehavior.ASK;
+            }
+            return behavior;
+        }
+
+        List<String> texts = line.getSegmentTexts();
+        if (texts.isEmpty()) {
+            return behaviorOf(firstMatch(rules, toolName, args, command), defaultDecision);
+        }
+
+        boolean anyAsk = false;
+        boolean globAllow = false;
+        for (String text : texts) {
+            PermissionRule hit = firstMatch(rules, toolName, args, text);
+            PermissionBehavior behavior = behaviorOf(hit, defaultDecision);
+            if (behavior == PermissionBehavior.DENY) {
+                return PermissionBehavior.DENY;
+            }
+            if (behavior == PermissionBehavior.ASK) {
+                anyAsk = true;
+            } else if (behavior == PermissionBehavior.ALLOW && isGlob(hit)) {
+                globAllow = true;
             }
         }
 
-        return defaultDecision;
+        if (anyAsk) {
+            return PermissionBehavior.ASK;
+        }
+        if (globAllow && (line.hasWriteRedirect() || line.hasExpansion())) {
+            return PermissionBehavior.ASK;
+        }
+        return PermissionBehavior.ALLOW;
+    }
+
+    /**
+     * 按排序后的规则取第一条命中的（text 为 glob 匹配的文本，自定义匹配器看完整参数）
+     */
+    private PermissionRule firstMatch(List<PermissionRule> rules, String toolName, Map<String, Object> args, String text) {
+        for (PermissionRule rule : rules) {
+            if (matchesToolName(rule.toolName(), toolName) && matchesPattern(rule, toolName, args, text)) {
+                return rule;
+            }
+        }
+        return null;
+    }
+
+    private static PermissionBehavior behaviorOf(PermissionRule hit, PermissionBehavior defaultDecision) {
+        if (hit == null) {
+            return defaultDecision;
+        }
+        return hit.behavior() != null ? hit.behavior() : PermissionBehavior.ASK;
+    }
+
+    private static boolean isGlob(PermissionRule rule) {
+        return rule != null && rule.hasMatcher() == false && rule.pattern().isPresent();
+    }
+
+    private boolean hasGlobRule(List<PermissionRule> rules, String toolName) {
+        for (PermissionRule rule : rules) {
+            if (isGlob(rule) && matchesToolName(rule.toolName(), toolName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * shell 工具的命令原文；非 shell 工具或没有命令时返回 null
+     */
+    private static String shellCommandOf(String toolName, Map<String, Object> args) {
+        if (args == null || (TerminalTalent.TOOL_BASH.equalsIgnoreCase(toolName) == false
+                && TerminalTalent.TOOL_BASH_START.equalsIgnoreCase(toolName) == false)) {
+            return null;
+        }
+        Object command = args.get(TerminalTalent.PARAM_COMMAND);
+        if (command instanceof String && ((String) command).trim().isEmpty() == false) {
+            return (String) command;
+        }
+        return null;
     }
 
     /**
@@ -121,7 +226,7 @@ public class PermissionEngine {
      * <p>匹配顺序：先检查自定义匹配器（{@link PermissionRule#hasMatcher()}），
      * 有则优先使用；否则走 glob 模式匹配。</p>
      */
-    private boolean matchesPattern(PermissionRule rule, String toolName, Map<String, Object> args) {
+    private boolean matchesPattern(PermissionRule rule, String toolName, Map<String, Object> args, String inputText) {
         // 1. 自定义匹配器优先
         if (rule.hasMatcher()) {
             return rule.matcher().get().test(toolName, args);
@@ -132,13 +237,11 @@ public class PermissionEngine {
         if (!patternOpt.isPresent()) {
             return true; // 无模式则匹配全部
         }
-        String pattern = patternOpt.get();
-        String inputText = extractInputText(args);
         if (inputText == null) {
             return false;
         }
-        String regex = globToRegex(pattern);
-        return Pattern.compile(regex, Pattern.CASE_INSENSITIVE).matcher(inputText).matches();
+        String regex = globToRegex(patternOpt.get());
+        return Pattern.compile(regex, Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(inputText).matches();
     }
 
     /**
@@ -159,9 +262,13 @@ public class PermissionEngine {
     }
 
     /**
-     * 将简单 glob 模式转换为正则表达式
+     * 将简单 glob 模式转换为正则表达式（结尾的 {@code " *"} 转为可选的 {@code ( .*)?}）
      */
     static String globToRegex(String glob) {
+        if (glob.length() > 2 && glob.endsWith(" *")) {
+            return globToRegex(glob.substring(0, glob.length() - 2)) + "( .*)?";
+        }
+
         StringBuilder regex = new StringBuilder();
         for (int i = 0; i < glob.length(); i++) {
             char c = glob.charAt(i);

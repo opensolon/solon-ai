@@ -7,6 +7,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.agent.AgentManager;
 import org.noear.solon.ai.harness.agent.BuiltinAgentI18n;
+import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.util.Markdown;
 import org.noear.solon.ai.util.MarkdownUtil;
 import org.noear.solon.core.util.Assert;
@@ -69,9 +70,13 @@ public class AgentDefaultTest {
         Assertions.assertTrue(explore.getMetadata().getTools().contains("lsp"));
         Assertions.assertTrue(plan.getMetadata().getTools().contains("lsp"));
 
-        //explore 可执行只读命令（查 git 历史等），只读靠提示词约束
+        //explore 可执行只读命令（查 git 历史等）：只读由 permissionRules 兜底（子代理执行前判定，见 AgentPermissionGuardTest），提示词同步说明
         Assertions.assertTrue(explore.getMetadata().getTools().contains("bash"));
-        Assertions.assertTrue(explore.getSystemPrompt().contains("shell 只能执行只读命令"));
+        Assertions.assertTrue(explore.getMetadata().hasPermissionRules());
+        Assertions.assertTrue(explore.getMetadata().getPermissionRules().stream().anyMatch(r ->
+                "bash".equals(r.toolName()) && r.behavior() == PermissionBehavior.DENY && !r.pattern().isPresent() && r.priority() < 0),
+                "explore 的 shell 兜底拒绝");
+        Assertions.assertTrue(explore.getSystemPrompt().contains("shell 受权限规则约束"));
 
         //explore / plan 的描述写着「只读」，不能有文件编辑工具；plan 也不执行命令
         for (AgentDefinition readOnly : Arrays.asList(explore, plan)) {

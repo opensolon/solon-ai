@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.intercept.HITLAction;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLDecision;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
+import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.lang.Nullable;
 
 import java.util.ArrayList;
@@ -108,7 +109,7 @@ public final class HitlCard {
      * <p>含 {@code bash_start}（异步启动命令，与 bash 同一套审批、同样带 command 参数）。</p>
      */
     public boolean isBash() {
-        return "bash".equals(toolName) || "bash_start".equals(toolName);
+        return TerminalTalent.isShellCommandTool(toolName);
     }
 
     /**

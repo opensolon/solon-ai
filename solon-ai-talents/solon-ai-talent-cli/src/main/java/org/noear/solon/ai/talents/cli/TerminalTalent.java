@@ -69,9 +69,31 @@ import org.noear.solon.lang.Nullable;
 public class TerminalTalent extends AbsTalent {
     public static final String TOOL_WRITE = "write";
     public static final String TOOL_EDIT = "edit";
+    /** @since 4.2.0 */
+    public static final String TOOL_BASH = "bash";
+    /** @since 4.2.0 */
+    public static final String TOOL_BASH_START = "bash_start";
+    /** @since 4.2.0 */
+    public static final String TOOL_BASH_WAIT = "bash_wait";
+    /** @since 4.2.0 */
+    public static final String TOOL_BASH_STOP = "bash_stop";
 
     public static final String PARAM_CONTENT = "content";
     public static final String PARAM_EDITS = "edits";
+    /** bash / bash_start 的命令参数 @since 4.2.0 */
+    public static final String PARAM_COMMAND = "command";
+    /** bash_wait 写入 stdin 的参数 @since 4.2.0 */
+    public static final String PARAM_CHARS = "chars";
+
+    /**
+     * 是否执行 shell 命令的工具（bash / bash_start：参数同为 command，审批与权限规则都按 bash 判定）。
+     * {@code bash_wait} / {@code bash_stop} 只作用于已启动的会话，不算。
+     *
+     * @since 4.2.0
+     */
+    public static boolean isShellCommandTool(@Nullable String toolName) {
+        return TOOL_BASH.equals(toolName) || TOOL_BASH_START.equals(toolName);
+    }
 
     /** 本轮会话工作目录（由宿主经工具上下文注入，并同步到 prompt 属性） */
     private static final String ATTR_CWD = "__cwd";
@@ -1052,7 +1074,7 @@ public class TerminalTalent extends AbsTalent {
      * 异步会话工具名称集合，用于过滤
      */
     private static final Set<String> ASYNC_BASH_TOOLS = new HashSet<>(Arrays.asList(
-            "bash_start", "bash_wait", "bash_stop"
+            TOOL_BASH_START, TOOL_BASH_WAIT, TOOL_BASH_STOP
     ));
 
     protected boolean isNotAsyncBash(String toolName){
@@ -1085,10 +1107,10 @@ public class TerminalTalent extends AbsTalent {
      * 由文本中的 {@code [exit_code=N]} 告诉模型自行判断。</p>
      */
     @ToolMapping(
-            name = "bash",
+            name = TOOL_BASH,
             description = "在当前终端执行非交互式命令。工具名叫 bash 仅为历史兼容，**实际 shell 未必是 bash**：请以系统提示中「Terminal 环境状态 → 终端类型」为准（可为 PowerShell / CMD / Unix shell），并按对应方言书写命令。支持逻辑路径（如 `cd @pool1/bin/tool/`）。多步逻辑可把多行脚本整段作为 command 传入，系统会按当前 shell 选择可靠的执行方案（必要时自动写入系统临时目录并在结束后删除）。含空格或特殊字符的参数请用引号包裹；输出编码由系统自动识别。"
     )
-    public ToolResult bash(@Param(value = "command", description = "要执行的指令。") String command,
+    public ToolResult bash(@Param(value = PARAM_COMMAND, description = "要执行的指令。") String command,
                            @Param(name = "timeout", required = false, defaultValue = "120000", description = "可选超时时间，单位为毫秒") Integer timeout,
                            @Param(name = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留首尾片段。读取大文件请改用 read 工具。") Integer maxOutputChars,
                            String __cwd,
@@ -1232,9 +1254,9 @@ public class TerminalTalent extends AbsTalent {
      * <p>命令会话记在发起它的代理会话（{@code __sessionId}）名下，见 {@link #stopCommandsOf}。</p>
      */
     @ToolMapping(
-            name = "bash_start",
+            name = TOOL_BASH_START,
             description = "启动 shell 命令会话。命令超过 yield_time_ms 仍未结束时不会失败，而是返回 session_id，后续可用 bash_wait 继续等待或输入（chars 参数）、bash_stop 终止。")
-    public ToolResult bashStart(@Param(value = "command", description = "要执行的 shell 命令。") String command,
+    public ToolResult bashStart(@Param(value = PARAM_COMMAND, description = "要执行的 shell 命令。") String command,
                             @Param(value = "workdir", required = false, description = "工作目录。默认使用当前工作区。") String workdir,
                             @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "先等待多久再把控制权交还给模型，单位毫秒。") Integer yieldTimeMs,
                             @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符输出，超出保留最新部分。") Integer maxOutputChars,
@@ -1316,10 +1338,10 @@ public class TerminalTalent extends AbsTalent {
      * 输出是固定格式的会话快照，不随语言变化，所以不取 {@code __locale}。</p>
      */
     @ToolMapping(
-            name = "bash_wait",
+            name = TOOL_BASH_WAIT,
             description = "继续等待仍在运行的命令会话，返回自上次读取后的新增输出或最终状态；也可通过 chars 向进程写入 stdin（应答确认、退出分页器等），不传时仅等待。")
     public ToolResult bashWait(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
-                               @Param(value = "chars", required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
+                               @Param(value = PARAM_CHARS, required = false, description = "可选。要写入 stdin 的文本；不传表示只等待新增输出。") String chars,
                                @Param(value = "yield_time_ms", required = false, defaultValue = "1000", description = "等待新增输出或进程结束的时长，单位毫秒。") Integer yieldTimeMs,
                                @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "本次最多返回多少字符新增输出，超出保留最新部分。") Integer maxOutputChars) throws IOException {
         TerminalSessionManager.CommandSnapshot snapshot =
@@ -1340,7 +1362,7 @@ public class TerminalTalent extends AbsTalent {
      *
      * <p>保持返回 String：终止正是本工具要做的事，结果恒为成功；会话不存在时直接抛异常（框架按失败处理）。</p>
      */
-    @ToolMapping(name = "bash_stop", description = "终止仍在运行的命令会话及其子进程树。")
+    @ToolMapping(name = TOOL_BASH_STOP, description = "终止仍在运行的命令会话及其子进程树。")
     public String bashStop(@Param(value = "session_id", description = "bash_start 返回的命令会话 id。") String sessionId,
                            @Param(value = "reason", required = false, description = "终止原因，便于日志诊断。") String reason,
                            @Param(value = "max_output_chars", required = false, defaultValue = "64000", description = "终止后最多返回多少字符新增输出。") Integer maxOutputChars) {

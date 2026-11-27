@@ -226,16 +226,24 @@ PermissionRule simple = PermissionRule.of("webfetch", PermissionBehavior.ASK);
 
 ### 4.3 glob 模式说明
 
-模式通过 `globToRegex()` 转换为正则表达式，与工具参数中提取的文本进行匹配：
+模式通过 `globToRegex()` 转换为正则表达式，与工具参数中提取的文本进行整体匹配（不区分大小写，`*` 可跨行）：
 
 | glob 模式 | 正则 | 匹配示例 |
 |-----------|------|----------|
-| `git push *` | `git\ push\ .*` | `git push origin main` |
+| `git push *` | `git push( .*)?` | `git push`、`git push origin main` |
 | `src/*.java` | `src/.*\.java` | `src/Main.java` |
-| `cat *` | `cat\ .*` | `cat README.md` |
-| `rm -rf *` | `rm\ \-rf\ .*` | `rm -rf /tmp/cache` |
+| `rm -rf *` | `rm -rf( .*)?` | `rm -rf /tmp/cache` |
 
-**参数提取字段优先级**：`command` > `file_path` > `path` > `content` > `url` > `link`
+- `*` 匹配任意字符，`?` 匹配单个字符；**结尾的 ` *` 也匹配空**（`git log *` 匹配单独的 `git log`，与 opencode 一致）。
+- **参数提取字段优先级**：`command` > `file_path` > `path` > `content` > `url` > `link`。
+
+**shell 命令按段匹配**（`bash` / `bash_start` 的 `command`，且配置了带 `pattern` 的规则时）：
+
+- 命令按 shell 语法切成多段（管道、`;`、`&&`、`||`、`&`、换行；引号内的符号是普通字符），每段去掉引号后用单个空格拼接再匹配。
+- 每段各自取第一条命中的规则：**任一段 DENY 即 DENY，任一段 ASK 即 ASK，全部 ALLOW 才 ALLOW**。所以 `git *` 放行不了 `git log; rm -rf x`，`rm *` 拒绝也躲不过 `ls && rm x`。
+- glob 放行只担保它写明的命令本身：命令含写文件的重定向（`>`、`>>`、`2>file`；`/dev/null` 与 `2>&1` 不算）或变量展开（`$VAR`），或无法静态切分（`$(...)`、反引号、`( ... )`、here-doc），由 glob 得出的 ALLOW 降为 ASK；拒绝照常生效。
+- 自定义匹配器规则（如「总是允许」记住的精确命令）始终按整条命令判断。
+- 没有带 `pattern` 的规则时与整条匹配完全一致。
 
 ### 4.4 添加规则
 
@@ -334,7 +342,8 @@ PermissionContext ctx7 = ctx.addDirectories(List.of(Path.of("/shared")));
 ```
 1. priority 越大越优先
 2. 同 priority 下 DENY > ALLOW > ASK
-3. 无规则匹配时返回 ASK
+3. 无规则匹配时返回 ASK（可用 evaluate 的 defaultDecision 参数指定）
+4. shell 命令按段判定（见 4.3）
 ```
 
 ### 6.2 默认规则
@@ -544,84 +553,132 @@ classifier.classify("");                 // DENY (空命令)
 
 ## 9. Agent 定义中的权限配置
 
-Agent 定义（Markdown 文件，含 YAML Front Matter）支持声明自己的权限规则。这些规则会作为 **delta** 通过 `AgentFactory` 注入到子 Agent 的 `Attrs` 中，在 HITL 策略评估时与全局规则合并。
+Agent 定义（Markdown 文件，含 YAML Front Matter）可以用 `permissionRules` 声明自己的权限规则。`AgentFactory` 把它们作为 **delta** 放进代理属性（`PermissionContext.ATTR_KEY`），主代理与子代理按不同方式生效：
+
+| 代理 | 由谁判定 | DENY | ASK | 没有规则命中 |
+|------|----------|------|-----|--------------|
+| 主代理 | HITL 策略（与全局规则合并，见 9.3） | 弹审批卡 | 弹审批卡 | 按策略默认（bash 默认放行） |
+| 子代理 | 代理权限守卫（执行前判定，只用代理自己的规则） | 拒绝 | **拒绝**（子代理不弹审批，没人能确认） | 放行 |
+
+> 子代理不挂 HITL：同步 `task` 在主代理的一次工具调用里跑完，没有机会弹卡；ASK 按拒绝处理，与 opencode 无人值守时 ask 即 deny 一致。被拒时工具不执行，模型收到说明（请换用规则允许的方式，确实需要时交由主代理处理）。
 
 ### 9.1 配置字段
 
-在 Agent 定义的 YAML Front Matter 中，有以下权限相关字段：
-
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `permissionRules` | List | Agent 级细粒度权限规则，支持 `priority` |
-| `mode` | String | 代理角色：`primary` 主代理 / `subagent` 子代理 / `all` 两者皆可 |
+| `permissionRules[].toolName` | String | 工具名，`*` 表示所有工具；`bash` 的规则同样约束 `bash_start` |
+| `permissionRules[].behavior` | String | `allow` / `deny` / `ask`（写错的一条跳过并告警，不影响整个代理加载） |
+| `permissionRules[].pattern` | String | 可选，glob（见 4.3）；不写表示匹配该工具的所有调用 |
+| `permissionRules[].priority` | int | 可选，默认 0，越大越先判定 |
+
+> 给值加引号（尤其是 `*`）：front matter 不是合法 YAML 时整段元数据都会被忽略（会打 warn 日志），代理的 tools 也会一起丢失。
 
 ### 9.2 YAML 配置示例
 
+**只读探索：bash 只放行只读命令**（内置 `explore` 的配置，参照 opencode 的 explore）：
+
 ```yaml
 ---
-name: explorer
-description: 只读探索代理
+name: "explore"
+tools: ["code", "list", "read", "grep", "glob", "lsp", "bash", "skill", "webfetch", "websearch", "codesearch"]
 permissionRules:
-  - toolName: "*"
-    behavior: deny
-    priority: -100
-  - toolName: read
-    behavior: allow
-    priority: 10
-  - toolName: glob
-    behavior: allow
-    priority: 10
-  - toolName: grep
-    behavior: allow
-    priority: 10
-  - toolName: bash
-    behavior: allow
-    pattern: "git *"
-    priority: 10
-  - toolName: bash
-    behavior: deny
-    pattern: "rm *"
-    priority: 100
+  # shell：兜底拒绝，只放行只读的 git 子命令与管道里常用的只读文本工具
+  - { toolName: "bash", behavior: "deny", priority: -100 }
+  - { toolName: "bash", behavior: "allow", pattern: "git log *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git show *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git diff *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git blame *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git status *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git ls-files *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git rev-parse *" }
+  - { toolName: "bash", behavior: "allow", pattern: "git shortlog *" }
+  - { toolName: "bash", behavior: "allow", pattern: "head *" }
+  - { toolName: "bash", behavior: "allow", pattern: "tail *" }
+  - { toolName: "bash", behavior: "allow", pattern: "wc *" }
+  - { toolName: "bash", behavior: "allow", pattern: "grep *" }
+  # git log/show/diff 的 --output 会写文件
+  - { toolName: "bash", behavior: "deny", pattern: "git * --output*", priority: 10 }
+  # 读 .env 需用户确认（子代理无法确认，即拒绝），示例文件放行
+  - { toolName: "read", behavior: "ask", pattern: "*.env" }
+  - { toolName: "read", behavior: "ask", pattern: "*.env.*" }
+  - { toolName: "read", behavior: "allow", pattern: "*.env.example", priority: 10 }
 ---
 ```
 
-### 9.3 合并规则
+| 命令 | 结果 | 原因 |
+|------|------|------|
+| `git log -5 --oneline`、`git log` | 放行 | 命中 `git log *`（结尾 ` *` 可匹配空） |
+| `git blame src/A.java \| head -20` | 放行 | 两段都命中放行规则 |
+| `git log 2>/dev/null` | 放行 | 丢弃输出不算写文件 |
+| `git log; rm -rf x`、`git log \| sh` | 拒绝 | 第二段落到兜底拒绝 |
+| `git checkout main`、`git branch tmp`、`ls -la` | 拒绝 | 没有命中放行规则 |
+| `git log > out.txt`、`git log $OPTS` | 拒绝 | 写文件的重定向、变量展开：glob 不担保，ASK 在子代理里即拒绝 |
+| `git log --output=out.txt` | 拒绝 | 命中 priority 10 的拒绝 |
+| `git log $(rm x)`、`git log && (rm x)` | 拒绝 | 无法静态切分 |
 
-Agent 级权限与全局权限的合并逻辑：
+不建议写 `"git *": allow`：`git checkout`、`git commit`、`git push` 也会被放行；只读要靠列出具体子命令表达。
+
+**git 运维：允许 git，禁止推送与强制重置**：
+
+```yaml
+permissionRules:
+  - { toolName: "bash", behavior: "deny", priority: -100 }
+  - { toolName: "bash", behavior: "allow", pattern: "git *" }
+  - { toolName: "bash", behavior: "deny", pattern: "git push *", priority: 100 }
+  - { toolName: "bash", behavior: "deny", pattern: "git reset --hard*", priority: 100 }
+```
+
+**拒绝清单：其余照常**（不写兜底，没命中的调用放行）：
+
+```yaml
+permissionRules:
+  - { toolName: "bash", behavior: "deny", pattern: "rm -rf *" }
+  - { toolName: "bash", behavior: "deny", pattern: "sudo *" }
+  - { toolName: "write", behavior: "deny", pattern: "*.env" }
+```
+
+拒绝清单在子代理上同样按段判定：`ls && rm -rf x` 被拒；`(rm -rf x)` 这类无法切分的写法无法核实是否含拒绝项，也不放行。
+
+### 9.3 合并与判定
 
 ```
 AgentFactory.create()
-  │
-  ├── 检查 metadata.hasPermissionRules()
-  │     └── 有 → 构建 PermissionContext delta → addRules(rules)
-  │
-  └── builder.attr("__permissionContext", delta)  ← 注入到 Agent Attrs
+  ├── metadata.hasPermissionRules() → PermissionContext delta
+  ├── builder.attr("__permissionContext", delta)          ← 主代理：HITL 策略读取
+  └── 非主代理 → AgentPermissionGuard（作用域守卫之后、HITL 之前）
 
-HITL 策略 resolveContext(trace):
-  ├── 全局 ctx ← permissionContextSupplier.get()  ← 最新的全局规则
-  ├── agent delta ← trace.getOptions().getAttrAs("__permissionContext")
-  │     └── delta.rules() 非空 → 追加到全局 rules
-  └── 返回合并后的 PermissionContext
+主代理 · HITL 策略 resolveContext(trace):
+  ├── 全局 ctx ← permissionContextSupplier.get()
+  ├── 追加 agent delta ← trace.getOptions().getAttrAs("__permissionContext")
+  └── 追加会话记住的「总是允许」
+
+子代理 · AgentPermissionGuard（每次工具调用执行前）:
+  ├── 只用 agent delta（不用全局规则：全局规则是给主代理审批用的，其中的 ask 会把子代理的调用全拒掉）
+  ├── bash_start 按 bash 的规则判定；有 shell 规则时 bash_wait 不得写入输入
+  └── DENY / ASK → 预填错误结果，工具不执行；其余放行
 ```
 
 > **关键语义**：
-> - Agent 级 `permissionRules` 与全局规则合并后统一按 `priority` 评估
-> - `priority` 越大越优先，同优先级下 `DENY > ALLOW > ASK`
-> - 默认行为建议使用低优先级通配规则，例如 `priority: -100`
+> - 合并后统一按 `priority` 评估，`priority` 越大越优先，同优先级下 `DENY > ALLOW > ASK`
+> - 「默认拒绝、个别放行」：一条低优先级（如 `-100`）的兜底拒绝 + 若干默认优先级的放行
+> - 主代理上 `BashToolStrategy` 的内置规则先于用户规则：只读命令直接放行、`/dev/` 等直接要审批，所以在主代理上 `deny "git *"` 拦不住 `git log`；子代理守卫只看代理规则，没有这层差别
+> - HITL 关闭时主代理不判定任何规则（子代理守卫不受 HITL 开关影响）
 
 ### 9.4 编程式配置
 
 ```java
-AgentDefinition definition = AgentDefinition.fromMarkdown(markdownStr);
+AgentDefinition definition = AgentDefinition.fromParsedMarkdown(MarkdownUtil.resolve(lines));
 
 // 或直接通过 Metadata 设置
-definition.getMetadata().addPermissionRule(PermissionRule.deny("*").priority(-100));
-definition.getMetadata().addPermissionRule(PermissionRule.allow("read").priority(10));
-definition.getMetadata().setMode("subagent");
+definition.getMetadata().addPermissionRule(PermissionRule.deny("bash").priority(-100));
+definition.getMetadata().addPermissionRule(PermissionRule.allow("bash", "git log *"));
+definition.getMetadata().addPermissionRule(PermissionRule.allow("bash", "git diff *"));
 
-// 创建 Agent（AgentFactory 自动注入权限 delta）
-ReActAgent.Builder builder = definition.builder(engine);
+// 注册后作为子代理使用（AgentFactory 自动注入 delta，并给子代理挂权限守卫）
+engine.getAgentManager().addAgent(definition);
 ```
+
+`toMarkdown()` 回写时 `permissionRules` 原样写出；自定义匹配器规则（`PermissionRule.of(tool, behavior, matcher, ...)`、`allowExact`）无法用 markdown 表达，不写出。
 
 ---
 

@@ -1,7 +1,7 @@
 ## Available Subagents
 <available_agents>
   - "bash": Bash command expert for command-line and terminal tasks such as git operations, builds, and tests
-  - "explore": Exploration expert: a composite agent capable of deep local file system analysis and web research (read-only: may run read-only commands such as git log/blame/diff; does not modify files)
+  - "explore": Exploration expert: a composite agent capable of deep local file system analysis and web research (read-only: the shell may only run read-only commands such as git log/show/diff/blame/status; does not modify files)
   - "general": General-purpose all-round expert for researching complex questions and executing multi-step tasks; also suited to handling several independent units of work in parallel
   - "plan": Planning expert for designing the logical path, execution steps, and resource plan of complex tasks (read-only: does not modify files or run commands)
 </available_agents>

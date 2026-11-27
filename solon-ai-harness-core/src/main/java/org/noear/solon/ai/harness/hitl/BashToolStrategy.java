@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.permission.PermissionBehavior;
 import org.noear.solon.ai.harness.permission.PermissionContext;
 import org.noear.solon.ai.harness.permission.PermissionEngine;
 import org.noear.solon.ai.harness.permission.PermissionRule;
+import org.noear.solon.ai.talents.cli.TerminalTalent;
 
 import org.noear.solon.core.util.Assert;
 
@@ -66,12 +67,12 @@ public class BashToolStrategy implements HITLStrategy {
 
     public BashToolStrategy() {
         // 规则1：空命令放行
-        internalRules.add(PermissionRule.of("bash", PermissionBehavior.ALLOW,
+        internalRules.add(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.ALLOW,
                 (toolName, args) -> Assert.isEmpty((String) args.get("command")),
                 null, INTERNAL_PRIORITY));
 
         // 规则2：注入与子 Shell 防御
-        addRule(PermissionRule.of("bash", PermissionBehavior.DENY,
+        addRule(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.DENY,
                 (toolName, args) -> {
                     String cmd = ((String) args.get("command")).trim();
                     return cmd.contains("`") || cmd.contains("$(") || cmd.contains("/dev/");
@@ -79,7 +80,7 @@ public class BashToolStrategy implements HITLStrategy {
                 null, INTERNAL_PRIORITY), l -> HarnessI18n.get(l, HarnessI18nKeys.HITL_BASH_INJECTION));
 
         // 规则3：系统级安全（绝对黑名单）
-        internalRules.add(PermissionRule.of("bash", PermissionBehavior.DENY,
+        internalRules.add(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.DENY,
                 (toolName, args) -> {
                     String cmd = ((String) args.get("command")).trim();
                     return cmd.matches(".*\\b(sudo|su|chown|chmod|chgrp|passwd|visudo)\\b.*");
@@ -87,7 +88,7 @@ public class BashToolStrategy implements HITLStrategy {
                 null, INTERNAL_PRIORITY)); // prompt=null，evaluate 中会生成包含命令的动态消息
 
         // 规则4：路径边界检查
-        addRule(PermissionRule.of("bash", PermissionBehavior.DENY,
+        addRule(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.DENY,
                 (toolName, args) -> {
                     String cmd = ((String) args.get("command")).trim();
                     return cmd.contains("../") || cmd.contains("..\\");
@@ -95,7 +96,7 @@ public class BashToolStrategy implements HITLStrategy {
                 null, INTERNAL_PRIORITY), l -> HarnessI18n.get(l, HarnessI18nKeys.HITL_PATH_TRAVERSAL));
 
         // 规则5：敏感系统文件
-        addRule(PermissionRule.of("bash", PermissionBehavior.DENY,
+        addRule(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.DENY,
                 (toolName, args) -> {
                     String cmd = ((String) args.get("command")).trim();
                     return cmd.contains("/etc/") || cmd.contains("/var/") || cmd.contains("/root/")
@@ -104,7 +105,7 @@ public class BashToolStrategy implements HITLStrategy {
                 null, INTERNAL_PRIORITY), l -> HarnessI18n.get(l, HarnessI18nKeys.HITL_SENSITIVE_FILE));
 
         // 规则6a：只读命令自动放行
-        internalRules.add(PermissionRule.of("bash", PermissionBehavior.ALLOW,
+        internalRules.add(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.ALLOW,
                 (toolName, args) -> {
                     String cmd = (String) args.get("command");
                     return cmd != null && commandClassifier.isSearchOrReadCommand(cmd.trim());
@@ -112,7 +113,7 @@ public class BashToolStrategy implements HITLStrategy {
                 null, INTERNAL_PRIORITY));
 
         // 规则6b：不完整命令拒绝
-        addRule(PermissionRule.of("bash", PermissionBehavior.DENY,
+        addRule(PermissionRule.of(TerminalTalent.TOOL_BASH, PermissionBehavior.DENY,
                 (toolName, args) -> {
                     String cmd = (String) args.get("command");
                     return cmd != null && commandClassifier.isIncompleteCommand(cmd.trim());
@@ -179,7 +180,7 @@ public class BashToolStrategy implements HITLStrategy {
         // 阶段1：内置规则优先匹配（仅在启用时生效）
         if (internalRulesEnabled) {
             for (PermissionRule rule : internalRules) {
-                if (rule.hasMatcher() && rule.matcher().get().test("bash", args)) {
+                if (rule.hasMatcher() && rule.matcher().get().test(TerminalTalent.TOOL_BASH, args)) {
                     return toResult(rule, args, locale);
                 }
             }
@@ -187,7 +188,7 @@ public class BashToolStrategy implements HITLStrategy {
 
         // 阶段2：用户配置规则 + 内置规则合并，委托引擎评估
         PermissionContext merged = ctx.addRules(internalRules);
-        PermissionBehavior decision = permissionEngine.evaluate("bash", args, merged, this.defaultDecision);
+        PermissionBehavior decision = permissionEngine.evaluate(TerminalTalent.TOOL_BASH, args, merged, this.defaultDecision);
 
         return toDefaultResult(decision, locale);
     }

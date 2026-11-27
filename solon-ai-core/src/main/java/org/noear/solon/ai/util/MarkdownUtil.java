@@ -16,8 +16,12 @@
 package org.noear.solon.ai.util;
 
 import org.noear.solon.core.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +32,7 @@ import java.util.Map;
  * @since 3.9.6
  */
 public class MarkdownUtil {
+    private static final Logger LOG = LoggerFactory.getLogger(MarkdownUtil.class);
 
     /**
      * 分析有元数据（YamlFrontmatter）的 markdown 文档
@@ -72,7 +77,8 @@ public class MarkdownUtil {
                         markdown.metadata.fill(loaded);
                     }
                 } catch (Exception e) {
-                    // 静默处理或记录日志
+                    // 元数据整段丢弃（正文照常解析）：告警，否则配置写错（如未加引号的 *）会无声失效
+                    LOG.warn("Markdown frontmatter is not valid YAML and was ignored: {}", e.getMessage());
                 }
             }
         }
@@ -90,12 +96,28 @@ public class MarkdownUtil {
         return markdown;
     }
 
+    /**
+     * 生成有元数据（YamlFrontmatter）的 markdown 文档
+     *
+     * <p>标量写成一行（字符串加双引号并转义）；列表与 Map 按 YAML 写出（标量列表为一行 {@code [a, b]}，
+     * 嵌套的列表 / Map 分行），由 {@link #resolve(List)} 读回后与原值一致。值为 null 的键不写。</p>
+     *
+     * @param metadata 元数据（值为标量、List、Map 及其嵌套）
+     * @param content  正文（null 表示无正文）
+     */
     public static String toMarkdownWithMetadata(Map<String, Object> metadata, String content) {
         StringBuilder buf = new StringBuilder();
         buf.append("---\n");
         for (Map.Entry<String, Object> entry : metadata.entrySet()) {
-            if (entry.getValue() != null) {
-                buf.append(entry.getKey()).append(": ").append(toYamlValue(entry.getValue())).append("\n");
+            Object value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+
+            if (value instanceof Collection || value instanceof Map) {
+                buf.append(new Yaml().dump(Collections.singletonMap(entry.getKey(), value)));
+            } else {
+                buf.append(entry.getKey()).append(": ").append(toYamlValue(value)).append("\n");
             }
         }
         buf.append("---\n\n");

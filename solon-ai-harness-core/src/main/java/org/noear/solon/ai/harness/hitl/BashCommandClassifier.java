@@ -16,6 +16,7 @@
 package org.noear.solon.ai.harness.hitl;
 
 import org.noear.solon.ai.harness.permission.PermissionBehavior;
+import org.noear.solon.ai.harness.permission.ShellCommandLine;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -35,7 +36,7 @@ import java.util.regex.Pattern;
  * <li><b>ASK</b> — 其他所有命令（交由人工确认）</li>
  * </ul>
  *
- * <p>只读判定按 shell 语法切分（识别单双引号与转义）：管道、{@code ; && || &} 与换行串联的每一段都必须是只读命令；
+ * <p>只读判定按 shell 语法切分（{@link ShellCommandLine}，识别单双引号与转义）：管道、{@code ; && || &} 与换行串联的每一段都必须是只读命令；
  * 命令替换、进程替换、子 shell、here-doc、写文件的重定向（{@code /dev/null} 与描述符复制除外）一律不算只读；
  * 白名单命令自带的写文件或执行能力（如 {@code find -delete/-exec}、{@code sed -i}、{@code sed w}、{@code awk system()}、
  * {@code sort -o}、{@code env cmd}、{@code git branch name}）也不算只读。判不准时一律按「非只读」处理。</p>
@@ -78,11 +79,6 @@ public class BashCommandClassifier {
     /** find 中会删除、执行命令或写文件的动作 */
     private static final Set<String> FIND_WRITE_ACTIONS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
         "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"
-    )));
-
-    /** 重定向到这些目标不写文件 */
-    private static final Set<String> DISCARD_TARGETS = Collections.unmodifiableSet(new HashSet<String>(Arrays.asList(
-        "/dev/null", "/dev/stdout", "/dev/stderr"
     )));
 
     /** 不完整命令检测正则（尾部有管道、逻辑运算符或分号；转义的 \; \| 是普通字符，如 find -exec ... \;） */
@@ -136,8 +132,13 @@ public class BashCommandClassifier {
             return false;
         }
 
-        List<List<String>> segments = new CommandLexer(command.trim()).parse();
-        if (segments == null || segments.isEmpty()) {
+        ShellCommandLine line = ShellCommandLine.parse(command.trim());
+        if (line.isOpaque() || line.hasWriteRedirect()) {
+            return false;
+        }
+
+        List<List<String>> segments = line.getSegments();
+        if (segments.isEmpty()) {
             return false;
         }
 
@@ -603,248 +604,5 @@ public class BashCommandClassifier {
             return GIT_WRITE_COMMANDS.contains(twoWord);
         }
         return false;
-    }
-
-    /**
-     * 命令切分器：识别单引号、双引号、$'...'、反斜杠转义，按管道、{@code ; && || &} 与换行切分为多段，每段为去引号后的词列表。
-     *
-     * <p>遇到无法静态判定为只读的结构（命令替换、进程替换、子 shell、here-doc、{@code <>}、写文件的重定向、未闭合引号）时，
-     * {@link #parse()} 返回 null。重定向目标不计入词列表。</p>
-     */
-    private static final class CommandLexer {
-        private static final int REDIRECT_NONE = 0;
-        private static final int REDIRECT_READ = 1;
-        private static final int REDIRECT_WRITE = 2;
-        private static final int REDIRECT_DUP = 3;
-
-        private final String cmd;
-        private final List<List<String>> segments = new ArrayList<>();
-        private List<String> words = new ArrayList<>();
-        private final StringBuilder word = new StringBuilder();
-        private boolean inWord;
-        private boolean wordQuoted;
-        private int redirect = REDIRECT_NONE;
-
-        CommandLexer(String cmd) {
-            this.cmd = cmd;
-        }
-
-        List<List<String>> parse() {
-            int n = cmd.length();
-            int i = 0;
-            while (i < n) {
-                char c = cmd.charAt(i);
-                char next = (i + 1 < n) ? cmd.charAt(i + 1) : '\0';
-
-                if (c == '\'') {
-                    int end = cmd.indexOf('\'', i + 1);
-                    if (end < 0) {
-                        return null;
-                    }
-                    word.append(cmd, i + 1, end);
-                    markQuoted();
-                    i = end + 1;
-                } else if (c == '$' && next == '\'') {
-                    i = readAnsiC(i + 2);
-                } else if (c == '"') {
-                    i = readDoubleQuoted(i + 1);
-                } else if (c == '\\') {
-                    if (next != '\n' && next != '\0') {
-                        word.append(next);
-                        markQuoted();
-                    }
-                    i += 2;
-                } else if (c == '`' || (c == '$' && next == '(') || c == '(' || c == ')') {
-                    // 命令替换、子 shell：无法静态判定
-                    return null;
-                } else if (c == ' ' || c == '\t' || c == '\r') {
-                    if (!flush()) {
-                        return null;
-                    }
-                    i++;
-                } else if (c == '\n' || c == ';') {
-                    if (!endSegment()) {
-                        return null;
-                    }
-                    i++;
-                } else if (c == '|') {
-                    if (!endSegment()) {
-                        return null;
-                    }
-                    i += (next == '|' || next == '&') ? 2 : 1;
-                } else if (c == '&') {
-                    if (next == '>') {
-                        // &> / &>> 同时重定向 stdout 与 stderr
-                        if (!flush()) {
-                            return null;
-                        }
-                        i += 2;
-                        if (i < n && cmd.charAt(i) == '>') {
-                            i++;
-                        }
-                        redirect = REDIRECT_WRITE;
-                    } else {
-                        if (!endSegment()) {
-                            return null;
-                        }
-                        i += (next == '&') ? 2 : 1;
-                    }
-                } else if (c == '>') {
-                    if (!dropFdPrefix()) {
-                        return null;
-                    }
-                    i++;
-                    if (i < n && cmd.charAt(i) == '(') {
-                        return null; // 进程替换
-                    }
-                    if (i < n && (cmd.charAt(i) == '>' || cmd.charAt(i) == '|')) {
-                        i++; // >> 追加、>| 强制覆盖
-                    }
-                    if (i < n && cmd.charAt(i) == '&') {
-                        i++;
-                        redirect = REDIRECT_DUP; // >&N 复制描述符；>&file 仍是写文件
-                    } else {
-                        redirect = REDIRECT_WRITE;
-                    }
-                } else if (c == '<') {
-                    if (!dropFdPrefix()) {
-                        return null;
-                    }
-                    i++;
-                    if (i < n && (cmd.charAt(i) == '(' || cmd.charAt(i) == '>')) {
-                        return null; // 进程替换、<> 读写打开
-                    }
-                    if (i < n && cmd.charAt(i) == '<') {
-                        if (i + 1 < n && cmd.charAt(i + 1) == '<') {
-                            i += 2; // <<< here-string
-                        } else {
-                            return null; // here-doc：正文按行跟在后面
-                        }
-                    } else if (i < n && cmd.charAt(i) == '&') {
-                        i++;
-                    }
-                    redirect = REDIRECT_READ;
-                } else {
-                    word.append(c);
-                    inWord = true;
-                    i++;
-                }
-
-                if (i < 0) {
-                    return null;
-                }
-            }
-
-            if (!endSegment()) {
-                return null;
-            }
-            return segments;
-        }
-
-        private void markQuoted() {
-            inWord = true;
-            wordQuoted = true;
-        }
-
-        /** 读 $'...'，返回闭合引号后一位；未闭合返回 -1 */
-        private int readAnsiC(int i) {
-            while (i < cmd.length()) {
-                char d = cmd.charAt(i);
-                if (d == '\\' && i + 1 < cmd.length()) {
-                    word.append(cmd.charAt(i + 1));
-                    i += 2;
-                } else if (d == '\'') {
-                    markQuoted();
-                    return i + 1;
-                } else {
-                    word.append(d);
-                    i++;
-                }
-            }
-            return -1;
-        }
-
-        /** 读 "..."，返回闭合引号后一位；未闭合或含命令替换返回 -1 */
-        private int readDoubleQuoted(int i) {
-            while (i < cmd.length()) {
-                char d = cmd.charAt(i);
-                char e = (i + 1 < cmd.length()) ? cmd.charAt(i + 1) : '\0';
-                if (d == '\\' && e != '\0') {
-                    if ("$`\"\\\n".indexOf(e) >= 0) {
-                        if (e != '\n') {
-                            word.append(e);
-                        }
-                    } else {
-                        word.append(d).append(e);
-                    }
-                    i += 2;
-                } else if (d == '`' || (d == '$' && e == '(')) {
-                    return -1; // 双引号内仍会展开
-                } else if (d == '"') {
-                    markQuoted();
-                    return i + 1;
-                } else {
-                    word.append(d);
-                    i++;
-                }
-            }
-            return -1;
-        }
-
-        /** 重定向前紧贴的纯数字是文件描述符（如 2>），不是参数 */
-        private boolean dropFdPrefix() {
-            if (inWord && !wordQuoted && isDigits(word)) {
-                word.setLength(0);
-                inWord = false;
-                return true;
-            }
-            return flush();
-        }
-
-        /** 结束当前词；若有待处理的重定向，则把该词当作重定向目标检查 */
-        private boolean flush() {
-            if (!inWord) {
-                return true;
-            }
-            String w = word.toString();
-            word.setLength(0);
-            inWord = false;
-            wordQuoted = false;
-
-            int pending = redirect;
-            redirect = REDIRECT_NONE;
-            switch (pending) {
-                case REDIRECT_WRITE:
-                    return DISCARD_TARGETS.contains(w);
-                case REDIRECT_DUP:
-                    return "-".equals(w) || isDigits(w);
-                case REDIRECT_READ:
-                    return true;
-                default:
-                    words.add(w);
-                    return true;
-            }
-        }
-
-        private boolean endSegment() {
-            if (!flush() || redirect != REDIRECT_NONE) {
-                return false; // 重定向缺目标
-            }
-            segments.add(words);
-            words = new ArrayList<>();
-            return true;
-        }
-
-        private static boolean isDigits(CharSequence s) {
-            if (s.length() == 0) {
-                return false;
-            }
-            for (int k = 0; k < s.length(); k++) {
-                if (!Character.isDigit(s.charAt(k))) {
-                    return false;
-                }
-            }
-            return true;
-        }
     }
 }

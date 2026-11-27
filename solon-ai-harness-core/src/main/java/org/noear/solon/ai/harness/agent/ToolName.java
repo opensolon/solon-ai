@@ -15,6 +15,7 @@
  */
 package org.noear.solon.ai.harness.agent;
 
+import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.lang.Preview;
 
 import java.util.*;
@@ -113,7 +114,11 @@ public enum ToolName {
         runtime("grep", "grep");
         runtime("ls", "ls");
         runtime("list", "ls");
-        runtime("bash", "bash", "bash_start", "bash_wait", "bash_stop");
+        runtime("bash",
+                TerminalTalent.TOOL_BASH,
+                TerminalTalent.TOOL_BASH_START,
+                TerminalTalent.TOOL_BASH_WAIT,
+                TerminalTalent.TOOL_BASH_STOP);
         runtime("skill", "skilllist", "skillsearch", "skillread", "skillrefresh");
         runtime("todo", "todoread", "todowrite");
         runtime("todoread", "todoread");
@@ -122,8 +127,8 @@ public enum ToolName {
         runtime("websearch", "websearch");
         runtime("codesearch", "codesearch");
         runtime("memory", "memory_search", "memory_recall", "memory_extract", "memory_prune", "memory_consolidate");
-        runtime("task", "task", "task_start", "task_wait", "task_stop");
-        runtime("subagent", "task", "task_start", "task_wait", "task_stop");
+        runtime("task", TaskTalent.TOOL_TASK, TaskTalent.TOOL_TASK_START, TaskTalent.TOOL_TASK_WAIT, TaskTalent.TOOL_TASK_STOP);
+        runtime("subagent", TaskTalent.TOOL_TASK, TaskTalent.TOOL_TASK_START, TaskTalent.TOOL_TASK_WAIT, TaskTalent.TOOL_TASK_STOP);
         runtime("generate", "generate");
         runtime("mcp", "search_tools", "list_server_tools", "get_tool_detail", "call_tool");
         runtime("openapi", "search_apis", "get_api_detail", "call_api");

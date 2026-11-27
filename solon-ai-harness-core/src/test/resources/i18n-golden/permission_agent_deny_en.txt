@@ -1,0 +1,2 @@
+bash is denied by this agent's permission rules: git log; rm -rf build
+Use an approach the rules allow; if it is really needed, state in your result what needs to be done and leave it to the main agent.

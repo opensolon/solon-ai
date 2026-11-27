@@ -125,10 +125,15 @@ public class AgentFactory {
         }
 
         // 注入 Agent 级权限 delta（仅 agent 自身的规则，不含全局规则）
-        // HITL 策略在 evaluate 时会通过 trace.getExtraAs 读取并合并
+        // 主代理：HITL 策略在 evaluate 时通过 trace.getOptions().getAttrAs 读取并合并（ask 弹审批卡）
+        // 子代理：不挂 HITL，由权限守卫在执行前判定（deny 与 ask 都拒绝）
         if (metadata.hasPermissionRules()) {
             PermissionContext agentCtx = PermissionContext.create().addRules(metadata.getPermissionRules());
             builder.attr(PermissionContext.ATTR_KEY, agentCtx);
+
+            if (isMain == false) {
+                builder.defaultInterceptorAdd(AgentPermissionGuard.INDEX, new AgentPermissionGuard(agentCtx));
+            }
         }
 
         builder.modelOptions(o -> {
